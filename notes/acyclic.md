@@ -91,6 +91,6 @@ After typing, per library, over its types and those it imports:
 
 ## Where it fits
 
-A slice late in [milestone 4](milestone-4.md), after classes, generics,
+A slice late in [milestone 4](history/milestone-4.md), after classes, generics,
 and flow facts, since it needs all three. Its errors are new, so it
 could start as warnings until the rules are agreed.

@@ -104,7 +104,7 @@ Decided below on 2026-10-29:
     it can't be exact.
 20. **Rust's `async`:** native `async fn` over Temper's `Promise`, or
     the state machine as for generators? Recommend native, as
-    milestone-3.md's `Future` plan suggests; generators get the state
+    ../history/milestone-3.md's `Future` plan suggests; generators get the state
     machine.
 21. **Where `@imu` is checked:** tempest's frontend doesn't check it
     yet. Recommend the frontend reports violations in Kotlin's words (a
@@ -224,7 +224,7 @@ New with that round, all Proposed:
     `CallMethod`, and `Omitted` with optional parameters? Recommend
     yes, as one chunk, before `to_tmpl`, so `to_tmpl` never emits the
     48 keys.
-    Built as recommended (2026-10-29); roadmap.md, "State".
+    Built as recommended (2026-10-29); ../history/tmpl-state.md.
 44. **Failure kinds beyond `Bubble`** (raised by the user, 2026-10-29,
     as team brainstorming): Temper may get custom exception types, but
     can't guarantee their payload (a message at best, delivered on a

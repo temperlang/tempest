@@ -1,5 +1,5 @@
 //! The core constructs that macros reduce everything to
-//! (notes/milestone-3.md), as node kinds of the shared tree, with their
+//! (notes/history/milestone-3.md), as node kinds of the shared tree, with their
 //! layouts:
 //!
 //! | Kind | Children | Data |

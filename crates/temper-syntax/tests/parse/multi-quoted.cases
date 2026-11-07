@@ -1,6 +1,6 @@
 # Multi-quoted strings and their scriptlet lines, written for our rules.
 # Cases named "rule: ..." are where we deliberately differ from Kotlin Temper;
-# see notes/testing-and-milestones.md. Format and updating: see tests/parse.rs.
+# see notes/kotlin-differences.md. Format and updating: see tests/parse.rs.
 
 === content lines with margins, and the string ends at a line without one
 let s = """

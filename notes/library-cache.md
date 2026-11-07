@@ -87,6 +87,7 @@ a dependency. That's cheap once the interface is in the cache.
 
 ## Implications now
 
-Not to build yet: tmpl doesn't exist until milestone 5. But tmpl's design
-should keep it easy to write out: ids rather than pointers, interned
-strings, no closures or host objects in the tree, and deterministic order.
+Not to build yet. tmpl, the cache's likely body
+([tmpl/overview.md](tmpl/overview.md)), keeps it easy to write out: ids
+rather than pointers, interned strings, no closures or host objects in
+the tree, and deterministic order.

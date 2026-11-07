@@ -50,6 +50,8 @@ flowchart LR
   tmplc["temper-tmpl"] --> frontend
   tmplc --> be["temper-be-* (seven)"]
   frontend --> lib["tempest (library)"]
+  frontend --> analysis["temper-analysis"]
+  analysis --> wasm
   be --> lib
   lib --> cli["tempest (command)"]
   lib --> wasm["temper-wasm (playground)"]
@@ -59,6 +61,7 @@ flowchart LR
 |---|---|
 | [`temper-syntax`](../../crates/temper-syntax/src/lib.rs) | Source to trees: literate files, lexing, parsing, the grammar step |
 | [`temper-frontend`](../../crates/temper-frontend/src/lib.rs) | Trees to a settled library: the settle loop, typing, the interpreter, and translation to tmpl |
+| [`temper-analysis`](../../crates/temper-analysis/src/lib.rs) | Editor queries over a settled library: diagnostics, hover, definition, and completion |
 | [`temper-tmpl`](../../crates/temper-tmpl/src/lib.rs) | tmpl itself, plus the lowerings and naming that every backend shares |
 | `temper-be-*` | One crate per language: tmpl in, source files out. Each depends only on `temper-tmpl` |
 | [`tempest`](../../crates/tempest/src/lib.rs) | The one list of backends and the one compile path, as a library; and the command, `build` and `test` |

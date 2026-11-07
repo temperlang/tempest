@@ -152,7 +152,7 @@ also presents it as its host's equality protocol is a surface question
 ([surface.md](surface.md)).
 
 **Gaps in tempest's typing today** (typing.md, "Operators defined in
-Temper"; milestone-4.md, "Operators defined by methods"), for slice 7:
+Temper"; ../history/milestone-4.md, "Operators defined by methods"), for slice 7:
 
 - **Not every `==` is resolved.** Typing checks a class's operator
   method only for a non-null first operand of a class or interface it
@@ -164,7 +164,7 @@ Temper"; milestone-4.md, "Operators defined by methods"), for slice 7:
   can translate it.
 - **Done:** typing records the choice (`Typing::resolved`, 2026-10-29),
   the frontend generates `@auto("==")`'s `eq` as a real member, as
-  Kotlin's `AddAutoMembers` does (2026-10-30; milestone-4.md,
+  Kotlin's `AddAutoMembers` does (2026-10-30; ../history/milestone-4.md,
   "`@auto("==")` members generated"), and the interpreter calls it, so
   each field's own `==` applies.
 - **Identity, for now:** `to_tmpl` translates a class's or interface's
@@ -209,7 +209,7 @@ only, not a node flag, so the `VAR` flags in the tables below are the
 declaration's; a node's flags are `MAY_BUBBLE` and `DERIVED` (its
 span's bit). Type arguments in `b` wait for subset B's generics. The
 schema's table is `crates/temper-tmpl/src/schema.rs`
-([roadmap.md](roadmap.md#state)).
+([history/tmpl-state.md](../history/tmpl-state.md#state)).
 
 ### Subset A's kinds
 

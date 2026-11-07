@@ -2,7 +2,7 @@
 # requires-python = ">=3.11"
 # ///
 """Counts the expressions typing leaves of unknown type, slice 7's measure
-(notes/milestone-4.md), with the calls it leaves unresolved and the `==`
+(notes/history/milestone-4.md), with the calls it leaves unresolved and the `==`
 uses that rely on identity, per file and in total.
 
 Covers Kotlin Temper's functional tests, each built as check_functional.py

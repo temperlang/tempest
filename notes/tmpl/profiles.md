@@ -10,7 +10,7 @@ classes with properties) to low-level (plain loops, explicit error
 results, state machines, closure conversion). Each backend declares a
 profile of what it handles natively; shared passes lower only what it
 lacks; a validator checks a tree against a profile. State machines are
-only a tmpl post-pass (milestone-3.md, flat frames).
+only a tmpl post-pass (../history/milestone-3.md, flat frames).
 
 - **Decided (2026-10-29): a profile is a set of independent features
   plus a few either-or choices.** Targets don't line up on one scale:

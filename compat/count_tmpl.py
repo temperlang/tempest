@@ -2,7 +2,7 @@
 # requires-python = ">=3.11"
 # ///
 """Counts the functional tests that translate cleanly to tmpl, and why the
-rest don't (notes/tmpl/roadmap.md, "State").
+rest don't (notes/history/tmpl-state.md).
 
 Builds each of Kotlin Temper's functional tests as check_functional.py
 builds it and runs `run-temper --tmpl` on it, which translates the library

@@ -6,12 +6,12 @@ Generated libraries must keep today's **public surface**, so existing users
 can't tell the difference. Private and non-exported members, function bodies,
 local names and file internals may change, and should get prettier. A *few*
 deliberate public changes are fine where there's good reason; each is listed
-under "Proposed changes" with its reason, for your sign-off.
+under "Proposed changes" with its reason, for the team's sign-off.
 
 Sources: the backend tests (`JsBackendTest`, `PyBackendTest`,
 `JavaBackendTest`, `RustBackendTest`, `CSharpBackendTest`, `CppBackendTest`,
 `LuaBackendTest`, plus translator and module-structure tests), the naming code,
-the runtimes, and real output in the chromarite checkout's `temper.out/`.
+the runtimes, and real output: Chromarite's `temper.out/`, built by Kotlin Temper.
 
 ## Rules shared by all backends
 
@@ -316,7 +316,7 @@ Proposed changes).
 
 ## Proposed changes
 
-Ordered by value; each needs your sign-off.
+Ordered by value; each needs the team's sign-off.
 
 1. **No numbered names where they're visible** (all backends). Parameter and
    type-parameter names become the source names: Java `@param x`, `<T>`;
@@ -353,7 +353,7 @@ Ordered by value; each needs your sign-off.
    - **Configuration apart from initialization:** today's
      `init(Some(config))` mixes them. Logging and async get their own
      optional setup, used only to change the defaults. For async, Rust's
-     `Promise` implements `Future` (see milestone-3.md), so Rust code
+     `Promise` implements `Future` (see history/milestone-3.md), so Rust code
      `.awaits` Temper promises on any executor; Temper's own `async`
      blocks run on a default runner unless the user hands over a spawner
      for theirs (tokio and the like). Whether `init` stays as a

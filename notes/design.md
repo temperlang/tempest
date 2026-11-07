@@ -6,18 +6,17 @@ Part of the [rewrite plan](README.md).
 
 Kotlin Temper allocates at least four objects per tree child (the node, an
 edge object, a copied position, a value or name), plus back-pointers, hash
-maps keyed by nodes, and two type representations. The new tree uses a few
-big arrays instead:
+maps keyed by nodes, and two type representations. The new tree
+(`temper-syntax`'s `tree`) uses a few big arrays instead:
 
 ```rust
-struct Tree {
-    kinds: Vec<NodeKind>,   // one byte-ish enum per node
+pub struct Tree {
+    kinds: Vec<NodeKind>,   // a small enum per node
     spans: Vec<Span>,       // u32 start, u32 end into the source
     first_child: Vec<u32>,  // children are a contiguous range in `children`
     child_count: Vec<u32>,
+    data: Vec<u32>,         // small payload: an index into a side table
     children: Vec<NodeId>,  // NodeId is a u32
-    data: Vec<NodeData>,    // small payload: symbol id, literal id, etc.
-    types: Vec<TypeId>,     // filled in as types settle; TypeId::UNKNOWN until then
 }
 ```
 
@@ -31,13 +30,14 @@ struct Tree {
   unreachable; they're freed with the arena. No per-node frees.
 - **One arena per library build.** Dropping a build frees everything at once,
   so there's no way to leak earlier builds the way Kotlin's watch mode did.
-- **Side tables** hold per-node facts that only some nodes need (resolved
-  binding, macro expansion record, diagnostics), as `Vec`s or maps keyed by
-  `NodeId`, rather than fields on every node.
+- **Side tables** hold per-node facts that only some nodes need (values,
+  names, origins, resolved bindings, types, diagnostics), as `Vec`s or
+  maps keyed by `NodeId`, rather than fields on every node; types live in
+  typing's tables, not in the tree.
 
 Why this is fast: walking children reads contiguous memory, most data fits in
 cache, and building a tree costs a handful of `Vec` growths instead of
-hundreds of thousands of small allocations. Prismora's (now Chromarite's) histogram showed ~80k
+hundreds of thousands of small allocations. Chromarite's histogram showed ~80k
 edge objects alone for one build of ~900 lines.
 
 ## 4. Parsing
@@ -81,7 +81,8 @@ Multi-quoted strings follow rules of our own where Kotlin's handling was
 flaky: blocks opened on scriptlet lines carry over to later ones in order
 and close when the string ends; a scriptlet line stays code after a `${...}`
 in it; each content part is its own statement. The full list is in
-testing-and-milestones.md, and examples in `tests/parse/multi-quoted.cases`.
+kotlin-differences.md, "Lexer and parser", and examples in
+`tests/parse/multi-quoted.cases`.
 
 The **grammar step** (`ast`, with the productions in `grammar`) turns the
 operator tree into the tree the settle loop works on, as Kotlin's
@@ -152,22 +153,15 @@ syntax macro, define, type, function macro, export, generate) with one loop.
 
 ### Work items
 
-Each node that isn't settled yet has a pending work item, which records what
-it's waiting for:
+Each piece of work that can't finish yet is a work item waiting on at
+most one fact (`engine`, a scheduler generic over the fact type). Today's
+facts (`settle::Fact`): a scope's declarations are complete, a class's
+scope is complete with what it inherits, a declaration's type is known,
+and an object literal's class is decided. Compile-time values and other
+libraries' exports would be more of the same.
 
-```rust
-enum Waiting {
-    Nothing,                 // ready to try now
-    Binding(SymbolId),       // name not declared yet (maybe a macro will declare it)
-    Type(NodeId),            // needs another node's type first
-    Value(NodeId),           // needs a compile-time value (constant, macro argument)
-    Module(ModuleId),        // import from a library that hasn't exported yet
-}
-```
-
-The loop keeps a ready queue. When a fact becomes known (a binding is
-declared, a node's type is fixed, a value is computed, a module exports), the
-items waiting on exactly that fact move to the ready queue. Nothing else is
+The loop keeps a ready queue. When a fact is published, the items
+waiting on exactly that fact move to the ready queue. Nothing else is
 revisited, which is the key difference from passes over whole modules.
 
 ### Steps
@@ -196,10 +190,11 @@ Processing a ready item tries one step:
   an error that names the cycle.
 - The queue is processed in **source order** within each priority, so output
   and error messages are deterministic.
-- When the ready queue empties with items still waiting, the loop is
-  **settled**. Each remaining item becomes an error (section 6), which may
-  unblock others (an error type is still a type), so the loop runs once more.
-  It then hands off to tmpl.
+- When the ready queue empties with items still waiting, the earliest
+  item whose wait can't end is **forced** to go on without its fact,
+  usually by making an error node (section 6), which may let others go
+  on (an error type is still a type). When nothing waits, the loop is
+  settled.
 
 ### Risks to design for
 
@@ -223,23 +218,20 @@ Processing a ready item tries one step:
   local recursive function whose type depends on itself breaks at the
   earliest item in source order, so output stays stable.
 - **Debugging:** a fixed point can't be dumped between stages the way a
-  pipeline can. Build a "why is this node still waiting, and on what chain?"
-  query early, and put that chain in errors for things that never settle.
+  pipeline can. `Engine::chain` answers "why is this item still waiting,
+  and on what chain?", for errors and debugging.
 
 ### As built so far
 
 `crates/temper-frontend` has the first slice (details and differences in
-[milestone-3.md](milestone-3.md)): a generic scheduler (`engine`) and
+[milestone-3.md](history/milestone-3.md)): a generic scheduler (`engine`) and
 kinds of work: reading a block's statements in order to find its
 declarations, visiting an expression to resolve names and expand macros,
 completing a class's scope with what it inherits, and inferring a
 declaration's type, in a second round once expansion has settled
-([milestone-4.md](milestone-4.md)). The facts they publish: a scope's
-declarations are complete, a class's scope is, a declaration's type is
-known, and an object literal's class is decided, the first macro that
-waits for types: it waits, in typing's round, for the type its place
-wants (typing.md, "Object literals and target typing"). A stuck item is forced to go on without its fact, the earliest first,
-rather than left to become an error.
+([milestone-4.md](history/milestone-4.md)). The object literal is the
+first macro that waits for types: it waits, in typing's round, for the
+type its place wants (typing.md, "Object literals and target typing").
 
 Not built yet: the **Evaluate at compile time** and **Inline** steps
 above ([compile-time.md](compile-time.md) has the plan). Built-in macros
@@ -413,8 +405,8 @@ with less:
 - **Shared lowerings** run on tmpl first, chosen by the backend's profile
   (section 7), and the shared naming pass names everything (section 8).
 - **The runtime support libraries** (`temper-core` for each language) are
-  copied from the Kotlin repo unchanged, which keeps runtime APIs
-  identical.
+  Kotlin Temper's, vendored in `vendor/temper/`, with a few fixes kept as
+  patches that each sync re-applies, which keeps runtime APIs identical.
 - **Idiomatic output:** real loops and conditionals, source names, no
   needless temporaries.
 

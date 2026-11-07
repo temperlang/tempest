@@ -146,4 +146,4 @@ references.
 - Tests: `crates/temper-frontend/tests/settle/*.cases`.
 
 More: [notes/design.md](../../notes/design.md), section 5, and
-[notes/milestone-3.md](../../notes/milestone-3.md).
+[notes/history/milestone-3.md](../../notes/history/milestone-3.md).

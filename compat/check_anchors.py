@@ -1,9 +1,9 @@
 # /// script
 # requires-python = ">=3.11"
 # ///
-"""Checks the links in docs/ and its folders, so they can't silently rot.
+"""Checks the links in the docs and notes, so they can't silently rot.
 
-    uv run compat/check_anchors.py [DOCS_DIR]
+    uv run compat/check_anchors.py [PATH...]
 
 - Every relative link must lead to a file or directory that exists.
 - A link to a heading, `(page.md#some-heading)` or `(#some-heading)`, must
@@ -17,7 +17,8 @@
   `main.rs` or `strings` for `strings.rs`, passes too.
 - Links never carry line numbers (`#L10`).
 
-Exits with 1 if anything is wrong. DOCS_DIR defaults to the repo's docs/.
+Exits with 1 if anything is wrong. PATH, files or folders, defaults to
+the README, docs/, notes/, and the playground's README.
 """
 
 import argparse
@@ -26,6 +27,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+DEFAULT = ["README.md", "docs", "notes", "site/playground/README.md"]
 LINK = re.compile(r"\]\(([^)\s]+)\)")
 CODE_LINK = re.compile(r"\[`([^`]+)`\]\(([^)\s]+)\)")
 DEFINERS = r"fn|struct|enum|const|type|trait|static|mod|macro_rules!|function|class|interface"
@@ -67,6 +69,7 @@ def anchors(page: Path) -> set[str]:
 
 def check(page: Path) -> list[str]:
     problems = []
+    where = page.relative_to(ROOT) if page.is_relative_to(ROOT) else page
     prose = re.sub(r"```.*?```", "", page.read_text(), flags=re.S)
     for target in LINK.findall(prose):
         if re.match(r"[a-z]+:", target):
@@ -74,11 +77,11 @@ def check(page: Path) -> list[str]:
         path, _, anchor = target.partition("#")
         file = (page.parent / path).resolve() if path else page
         if not file.exists():
-            problems.append(f"{page.name}: ({target}): no such file")
+            problems.append(f"{where}: ({target}): no such file")
         elif re.fullmatch(r"L\d+(-L\d+)?", anchor):
-            problems.append(f"{page.name}: ({target}): link the file and name the item, not a line")
+            problems.append(f"{where}: ({target}): link the file and name the item, not a line")
         elif anchor and file.suffix == ".md" and anchor not in anchors(file):
-            problems.append(f"{page.name}: ({target}): no such heading")
+            problems.append(f"{where}: ({target}): no such heading")
     for label, target in CODE_LINK.findall(prose):
         path = target.partition("#")[0]
         file = (page.parent / path).resolve()
@@ -88,17 +91,19 @@ def check(page: Path) -> list[str]:
             continue
         name = ident(label)
         if not defines(file.read_text(errors="replace"), name):
-            problems.append(f"{page.name}: [`{label}`]({target}): {path} doesn't define {name}")
+            problems.append(f"{where}: [`{label}`]({target}): {path} doesn't define {name}")
     return problems
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("docs", nargs="?", default=ROOT / "docs", type=Path)
+    parser.add_argument("paths", nargs="*", default=[ROOT / d for d in DEFAULT], type=Path)
     args = parser.parse_args()
     problems = []
-    for page in sorted(args.docs.rglob("*.md")):
-        problems += check(page)
+    for path in args.paths:
+        path = path.resolve()
+        for page in sorted(path.rglob("*.md")) if path.is_dir() else [path]:
+            problems += check(page)
     for p in problems:
         print(p)
     print(f"{len(problems)} problems" if problems else "Every link leads where it says.")

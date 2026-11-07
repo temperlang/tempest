@@ -168,7 +168,7 @@ fn check_properties(text: &str, kind: SourceKind, parsed: &Parsed) -> Result<(),
     Ok(())
 }
 
-/// Inputs on which Kotlin Temper's parser fails (testing-and-milestones.md,
+/// Inputs on which Kotlin Temper's parser fails (kotlin-differences.md,
 /// "Kotlin bugs found"): nesting that overflows its stack, at about 300
 /// nested calls or a 1000-term sum, and nesting that takes it exponential
 /// time, about 14 s for 22 nested `(`. Each parses here, run in a thread

@@ -1,8 +1,8 @@
 # Temper in Rust: rewrite plan
 
 Tempest, a skunkworks reimplementation of Temper. It keeps
-Temper's language, philosophy, functional-test behavior and generated public
-APIs, with a new implementation that is much simpler, smaller and faster. Kotlin
+Temper's language, philosophy, functional-test behavior, and generated public
+APIs, with a new implementation that is much simpler, smaller, and faster. Kotlin
 Temper stays the product meanwhile; core fixes keep landing there.
 
 For how tempest works today, start with [docs/internals/](../docs/internals/README.md).
@@ -26,10 +26,16 @@ This folder holds the plan in parts:
   ranges) from structured passes without a control-flow graph.
 - [testing-and-milestones.md](testing-and-milestones.md): how compatibility is
   checked, including semantics and error messages; milestones; risks.
-- [milestone-3.md](milestone-3.md): the settle loop: core constructs, tree
-  layout, names, and waiting and waking; and its status.
-- [milestone-4.md](milestone-4.md): types in the settle loop: its slices,
-  and their status.
+- [history/](history/README.md): finished plans and status logs.
+  - [milestones.md](history/milestones.md): milestones 1 to 6, from the
+    literate split to all seven backends.
+  - [milestone-3.md](history/milestone-3.md): the settle loop: core
+    constructs, tree layout, names, and waiting and waking; and its
+    status.
+  - [milestone-4.md](history/milestone-4.md): types in the settle loop:
+    its slices, and their status.
+  - [tmpl-state.md](history/tmpl-state.md): what tmpl and the backends
+    gained, chunk by chunk, to 2026-11-06.
 - [acyclic.md](acyclic.md): ruling out reference cycles at compile time,
   despite mutability (a design sketch).
 - [actors.md](actors.md): actors and isolation across backends, for
@@ -81,23 +87,10 @@ Non-goals:
 
 ## 2. How it works, end to end
 
-```text
-source files (.temper, .temper.md)
-  │ literate split: which lines are code, which are prose
-  │ lexer: tokens with byte spans
-  │ parser: operator precedence, straight into the tree
-  ▼
-tree (one per library build, in an arena)
-  │ settle loop: names, macro calls, types, inlining, compile-time values,
-  │              until nothing changes; leftovers become error nodes
-  ▼
-tmpl (backend IR: settled, typed, named for output)
-  │ shared lowering: control flow, failure handling, coroutines per backend needs
-  │ shared naming: readable, collision-free names
-  ▼
-output tree (shared, with source spans) → printer → source files + source maps
-  + copied runtime libraries
-```
-
-There are only three data structures a reader needs to learn: tokens, the
-tree, and tmpl.
+[docs/internals/](../docs/internals/README.md) walks through it, stage
+by stage. In short: source becomes tokens and a tree; the settle loop
+resolves names, expands macros, and infers types on that tree until
+nothing changes; the settled library either runs on the interpreter or
+becomes tmpl, the backend IR, which shared lowerings and naming prepare
+for each backend to print. Tokens, the tree, and tmpl are the only
+three data structures a reader needs to learn.

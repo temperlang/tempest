@@ -1,6 +1,6 @@
 # Milestone 3 plan: the settle loop
 
-Part of the [rewrite plan](README.md). It settles what the rest depends
+Part of the [rewrite plan](../README.md). It settles what the rest depends
 on: the core constructs every macro reduces to, the tree's layout, names,
 and how waiting work wakes up. What's built so far, and where it differs,
 is at the end.
@@ -8,7 +8,7 @@ is at the end.
 ## Core constructs
 
 After macro expansion, every function body is made of these, and only these
-need to be understood by flow typing ([typing.md](typing.md)), the
+need to be understood by flow typing ([typing.md](../typing.md)), the
 interpreter, and the lowering to tmpl:
 
 | Construct | Notes |
@@ -30,7 +30,7 @@ Lowered by macros into these: `when` (to `If` chains on a temporary), `&&`,
 
 Facts at `Orelse`: every `Call` that can fail is an implicit exit to the
 nearest `Orelse`, so its facts there are the merge of the facts at each such
-call ([typing.md](typing.md)).
+call ([typing.md](../typing.md)).
 
 Generators and async, from Kotlin Temper (`core.temper`, and the stage tests
 in `frontend/.../stage-tests/convert-coro/`):
@@ -91,7 +91,7 @@ but keep the design open to it. It doesn't (checked in `temper repl`,
 2026-10-25): the body runs up to the `yield`, which then fails, with or
 without a `break` that would have it inlined. So it's an error here for
 now ("Not supported yet: yield in a for … of body"); an idea for both,
-iterables providing generators, is in [kotlin-differences.md](kotlin-differences.md#changes-we-recommend-to-temper).
+iterables providing generators, is in [kotlin-differences.md](../kotlin-differences.md#changes-we-recommend-to-temper).
 
 Not fully resumable (an explicit stack for every call): that would need
 every builtin that calls back into Temper (`sorted`, `map`, …) to be
@@ -121,7 +121,7 @@ globals. `break`, `continue` and `return` are jumps within a function;
 out of a `for … of` body they still end its call, and the frame they
 reach jumps to a landing. `orelse` handlers are a table of op ranges.
 Messages and the 63 funtests are unchanged, and it runs 2.4–3× faster
-(size-and-speed.md). Fuel now counts ops run rather than nodes, and a
+(../size-and-speed.md). Fuel now counts ops run rather than nodes, and a
 class's supertypes are evaluated once, when first needed. Settling
 doesn't call the interpreter yet; when compile-time evaluation does,
 lowering will read the tree as it is then, and a function rewritten
@@ -164,7 +164,7 @@ began to wait. An `await` of a resolved promise goes straight on, and a
 broken one fails, for `orelse`. The first resolution wins. As in Kotlin,
 the queue runs even if the top level failed, and a failing block doesn't
 stop the others; the run reports the first failure, where Kotlin's
-interpreter loses it ([kotlin-differences.md](kotlin-differences.md#interpreter-core-and-std)). `PromiseBuilder` and
+interpreter loses it ([kotlin-differences.md](../kotlin-differences.md#interpreter-core-and-std)). `PromiseBuilder` and
 `Promise` are builtins, as core.temper isn't loaded. Differences from
 Kotlin: an `await` that would pause under a plain `next()` panics, since
 only the queue resumes blocks (Kotlin returns its internal "not yet");
@@ -195,7 +195,7 @@ response, as in the backends. `run-temper --test-server-port N` declares
 Kotlin's `TestWebServer` does (`{"method": "POST"}` as JSON for any path,
 404 and "not here" for paths starting `/missing`). Kotlin's interpreter
 fails both tests (issue 214), so this follows the backends. std's `post`
-ignores its MIME type ([kotlin-differences.md](kotlin-differences.md#interpreter-core-and-std)), so no `Content-Type` is
+ignores its MIME type ([kotlin-differences.md](../kotlin-differences.md#interpreter-core-and-std)), so no `Content-Type` is
 sent yet. Not yet: user-space connected functions (`functions/connected`
 now fails at run time with "No connected implementation of sum"), and
 on wasm, a path to the browser's `fetch`.
@@ -235,7 +235,7 @@ One arena per library build, of plain structs indexed by `u32`:
 - A macro expansion rewrites its own call node in place: it changes the
   kind and points at newly appended children. Replaced children become
   garbage, freed with the arena; nothing is freed one node at a time.
-- The parse result stays separate and unchanged (see design.md §4).
+- The parse result stays separate and unchanged (see ../design.md §4).
 
 ## Names
 
@@ -256,12 +256,12 @@ Much simpler than Kotlin Temper's `TemperName` hierarchy (`ParsedName`,
   already resolved to a `SymbolId` instead of text, so user locals can't
   capture it. No separate parsed and resolved name types.
 - **Names in generated code** belong to tmpl's naming pass for backends
-  (design.md §8), not the frontend.
+  (../design.md §8), not the frontend.
 
 ## Waiting and waking
 
 Each unsettled node has a work item recording the one fact it waits on
-(design.md §5): a binding, another node's type or value, a module's
+(../design.md §5): a binding, another node's type or value, a module's
 exports, or a macro having run. An index from each fact to the items
 waiting on it means a new fact wakes exactly those items; nothing is
 rescanned.
@@ -383,7 +383,7 @@ Fields may be `x: T = v` as well as `let`. `interface F(params): R;`,
 with no body, is Kotlin's `interface F { apply(params): R }`, which
 `@fun` makes a function type; the interpreter calls the function value
 itself, and the decorator is ignored for now (fun interfaces should become
-named function types; see language.md, "Function types and fun interfaces"). `new`, `as` and `is` are builtin
+named function types; see ../language.md, "Function types and fun interfaces"). `new`, `as` and `is` are builtin
 functions. `obj.x += 1` and `obj.x++` read `obj` once, through a temporary. A bare non-`var` field may be
 assigned only in its class's constructor, if it has no initializer; that's
 an error otherwise, reported, and the assignment isn't performed: its
@@ -415,7 +415,7 @@ interface's; a `@noProperty` parameter counts as private); "Cannot
 instantiate abstract type J"; and "`this` may only appear inside a type
 definition". Ours: an interface's backed property is an error; Kotlin
 accepts it, then fails at run time. Kotlin also misses a setter whose
-getter is implemented; we report it (both in [kotlin-differences.md](kotlin-differences.md#language-and-types)).
+getter is implemented; we report it (both in [kotlin-differences.md](../kotlin-differences.md#language-and-types)).
 
 Private members are usable anywhere in their class, on any instance, not
 just `this`, as a Kotlin Temper PR makes them. Kotlin's typer checks
@@ -490,7 +490,7 @@ of its test ("Not supported yet: case patterns, which need types"), so
 the `when` still works until that test runs: Kotlin keeps a pattern's
 tokens as a `postponedCase` call for a macro of the subject's type to
 decompose, which isn't written there either, and fails with type errors
-([kotlin-differences.md](kotlin-differences.md#language-and-types)). `T?` is a call of a hidden `?`
+([kotlin-differences.md](../kotlin-differences.md#language-and-types)). `T?` is a call of a hidden `?`
 builtin, `T` to the interpreter. `is` and `as` now check builtin types
 (`Int`, `String`, `List`…) instead of always passing.
 
@@ -499,12 +499,12 @@ is missing or null, in the callee, as Kotlin Temper does
 (`functions/defaulting`), header parameters' defaults included.
 
 **Object literals** (`classes.rs`; only object literals take names,
-and the `\a` markers don't outlive this step; see language.md, "Object
+and the `\a` markers don't outlive this step; see ../language.md, "Object
 literals, not named arguments"): `{ a: 1, b }` arrives as `new void(\a
 1, \b desugarPun())`, and `{ class: C, a: 1 }` as `new C(\a 1)`. As
 Kotlin's `ConvertObjectLiteralNew` does, by name and not by type
 inference, `void` becomes the class (since milestone 4, in typing's
-round, by the type wanted too: typing.md, "Object literals and target
+round, by the type wanted too: ../typing.md, "Object literals and target
 typing"), among those visible from the literal (imported ones too), whose constructor takes every given name:
 its constructor's parameters, or its header's; body fields don't count.
 None is "No signature matches", several "Multiple types have matching
@@ -581,7 +581,7 @@ evaluates the tag to tell a type from a function; we follow names
 instead (`let` names for a class, as imports make, are followed), so a
 tag computed some other way is taken as a function. Statements with a
 function tag are "not supported yet", where Kotlin crashes on a `TODO`
-([kotlin-differences.md](kotlin-differences.md#language-and-types)).
+([kotlin-differences.md](../kotlin-differences.md#language-and-types)).
 
 **Destructuring** `let { a, b as c, d is T } = x` lowers as Kotlin's
 `flattenMultiInit`, to `let t = x; let a = t.a; let c = t.b; let d: T
@@ -615,7 +615,7 @@ walk enters it (`let a = b + 1; let b = a + 1` runs `b`'s first and
 fails reading `a`; Kotlin also reports that at compile time, which we
 don't yet). Kotlin's rule scrambles statements that assign a top-level
 `var` (any `n++` makes every reader of `n` wait for it); we match it,
-and it's in [kotlin-differences.md](kotlin-differences.md#changes-we-recommend-to-temper). Across a module's files, the order is global:
+and it's in [kotlin-differences.md](../kotlin-differences.md#changes-we-recommend-to-temper). Across a module's files, the order is global:
 the interpreter runs each module's `top_levels`, and each file's root is
 reordered to match for printing. Kotlin also puts imports first; ours go
 before their readers anyway (see Modules). Uses are counted after name resolution, so a
@@ -657,7 +657,7 @@ the same way, so far only std `net`'s `sendRequest` (above); others,
 like `functions/connected`'s, need the test's host-language code.
 This is specialized for core and std; user-space connected code, outside
 them, is separate and not done yet, and std should move to it eventually
-(design.md, "Longer term").
+(../design.md, "Longer term").
 
 **Tests** (`testing.rs`): `test("name") { … }` is a top-level `let t# =
 new Pair(name, fn (test#: Test) { … })`, a block's own parameter kept and
@@ -836,5 +836,5 @@ Then the remaining language constructs
 destructuring and Kotlin's destructuring messages, and `case` patterns
 as far as they go without types.
 
-Target typing waits for static typing in milestone 4 (see language.md,
+Target typing waits for static typing in milestone 4 (see ../language.md,
 "Object literals, not named arguments").

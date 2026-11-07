@@ -399,7 +399,7 @@ alternating with the previous commit's binary, 15 runs each, gave the
 same times (13.2–16.4 against 13.2–19.9 ms), so that's machine drift.
 
 Flat frames (on `561b4d9`, 2026-10-25): the tree walk replaced by code
-lowered per function and run by one loop (milestone-3.md). Alternating
+lowered per function and run by one loop (history/milestone-3.md). Alternating
 the old and new `run-temper` directly, two invocations of 3 rounds of 3
 runs each, ranges of per-round medians: `loop` 0.18–0.23 µs against
 0.53–0.59 µs for the tree walk (2.5–3×), `calls` 0.32–0.36 against
@@ -618,8 +618,7 @@ JVM oracles).
 release, 14 KiB more) and 7 KiB to wasm (3 KiB gzipped), for ~180 more
 lines. Peak memory read 13.2–13.4 MiB for `13f4889`'s small binary and
 13.4 MiB for the new one, alternated three times, now over 822 files
-(770 KiB), since the inputs now include Chromarite and
-Ordable; rows before this one read fewer files.
+(770 KiB), since the inputs now include Chromarite and Ordable; rows before this one read fewer files.
 Inherited members, the class checks and private members on any instance
 then added 24 KiB natively (1877 KiB release, 52 KiB more) and 22 KiB to
 wasm (8 KiB gzipped), for ~600 more lines, many of them building
@@ -663,13 +662,13 @@ for both `d225dee`'s and the new small binary without `net`, alternated
 six times (828 files).
 
 Declared and inferred types as facts in the loop, and the first type
-errors (milestone-4.md; ~830 lines in `types.rs` and `typing.rs`), then
+errors (history/milestone-4.md; ~830 lines in `types.rs` and `typing.rs`), then
 added 20 KiB natively without `net` (1948 KiB release, 46 KiB more), 24
 KiB to `net`'s small binary, and 21 KiB to wasm (7 KiB gzipped), against
 `b0db559` built the same way (1098, 2315 and 812 KiB). Peak memory read
 15.1–15.2 MiB for both, alternated nine times (828 files).
 
-Flow facts for null checks (milestone-4.md; ~290 lines in `flow.rs`,
+Flow facts for null checks (history/milestone-4.md; ~290 lines in `flow.rs`,
 and ~50 more in `typing.rs`) then added 8 KiB natively without `net`
 (1961 KiB release, 14 KiB more), 4 KiB to `net`'s small binary, and 8
 KiB to wasm (2 KiB gzipped), against `9f65728` built the same way (1118,
@@ -677,7 +676,7 @@ KiB to wasm (2 KiB gzipped), against `9f65728` built the same way (1118,
 15.2–15.4 MiB for the new, alternated six times (828 files).
 
 Builtin operators' and `console.log`'s signatures, and what may bubble
-(milestone-4.md; ~400 lines in `typing/signatures.rs` and
+(history/milestone-4.md; ~400 lines in `typing/signatures.rs` and
 `typing/bubbles.rs`, and ~40 more in `typing.rs` and `types.rs`), then
 added 12 KiB natively without `net` (1981 KiB release, 19 KiB more), 8
 KiB to `net`'s small binary, and 10 KiB to wasm (3 KiB gzipped), against

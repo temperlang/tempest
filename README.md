@@ -4,8 +4,7 @@ A from-scratch implementation of [Temper](https://temperlang.dev/) in Rust
 (edition 2024): the same language, behavior, and generated APIs as Temper
 today, from a much smaller, simpler, and faster compiler. See
 [docs/internals/](docs/internals/README.md) for how it works, stage by stage,
-[DESIGN.md](DESIGN.md) for the design, and [notes/](notes/README.md) for
-the plan.
+and [notes/](notes/README.md) for the design and the plan.
 
 ## Status
 
@@ -27,7 +26,10 @@ the plan.
   `tempest test -b`, in C++, C#, Java, JavaScript, Lua, Python, and
   Rust, run by each language's own tools ([notes/switch-over.md](notes/switch-over.md)).
 - **How it works:** [docs/internals/](docs/internals/README.md) walks through each stage,
-  from source to seven languages, with diagrams and links into the code.
+  from source to seven languages, with diagrams and links into the code;
+  [notes/](notes/README.md) indexes the design notes behind it: the
+  settle loop, typing, tmpl, compile-time evaluation, language
+  decisions, API compatibility, testing, and code style.
 - **Coming:** the language server and CLI parity ([notes/switch-over.md](notes/switch-over.md)).
 
 ## Try it
@@ -106,8 +108,8 @@ DIR` for a checkout):
 and `compat/check_*.py`, `fuzz_*.py`, and `bench_*.py` for each stage.
 Scripts run with [uv](https://docs.astral.sh/uv/), for Python 3.11+.
 
-CI runs formatting, clippy, a check of the docs' links, every crate's
-tests with each language's toolchain (`tempest test -b` on small
+CI runs formatting, clippy, a check of the docs' and notes' links,
+every crate's tests with each language's toolchain (`tempest test -b` on small
 fixture libraries for every backend among them), the wasm build, and
 the functional tests, all on Rust 1.85.0, the workspace's
 `rust-version`. A nightly job tests C++ on

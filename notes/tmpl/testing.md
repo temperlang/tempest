@@ -22,7 +22,7 @@ Proposed, in order of when they're worth building:
   checking that translation never panics, output validates, and passes
   are deterministic; and random valid tmpl from the schema, lowered
   under random profiles.
-- **A tmpl interpreter, later** (milestone-3.md): run a program before
+- **A tmpl interpreter, later** (../history/milestone-3.md): run a program before
   and after lowering and compare output, and compare with the
   frontend's interpreter on the functional tests.
 

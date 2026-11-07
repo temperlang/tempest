@@ -1,4 +1,4 @@
-//! Static types, the first slice of milestone 4 (notes/milestone-4.md):
+//! Static types, the first slice of milestone 4 (notes/history/milestone-4.md):
 //! declared and inferred types of declarations as facts in the settle
 //! loop, and the type errors Kotlin Temper reports for literals, locals,
 //! parameters, calls of known functions, conditions and returns.

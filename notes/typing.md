@@ -48,7 +48,7 @@ How each construct is handled:
   ```
 
   Kotlin Temper rejects this today; this design handles it naturally,
-  and tempest does, for null checks so far (milestone-4.md).
+  and tempest does, for null checks so far (history/milestone-4.md).
 - **Loops:** iterate the body until the environment at the loop head stops
   changing. To guarantee that quickly, ranges *widen* after a couple of rounds
   (an interval that keeps growing becomes unknown in that direction).
@@ -87,7 +87,7 @@ itself doesn't change.
 ## Null-check and `is` narrowing: the rules
 
 What tempest does today (`flow.rs`); the status and how it was checked
-are in [milestone-4.md](milestone-4.md). A *fact* says a declaration
+are in [milestone-4.md](history/milestone-4.md). A *fact* says a declaration
 isn't null, and maybe that it's of a type `T`, from `a is T`. A use of
 `a: String?` where a fact holds is a `String`; a use of `i: I` where a
 fact with `T` holds is a `T` (`narrowed` in `typing.rs`), as in Kotlin
@@ -235,7 +235,7 @@ invariant.
 ## Generic types
 
 What tempest does today (`types.rs`, `typing.rs`), the first step of
-milestone 4's generics slice; status in [milestone-4.md](milestone-4.md).
+milestone 4's generics slice; status in [milestone-4.md](history/milestone-4.md).
 
 - **Written types:** `List<Int>`, `Map<String, Int>` and `Box<String>`
   for a user's `class Box<T>` are generic types given arguments, shown
@@ -321,7 +321,7 @@ signature with the receiver's type arguments put in for its class's type
 parameters; and a builtin generic type's generic method, as `ls.map(f)`
 for core's `Listed.map<O>(transform: fn (T): O): List<O>`, likewise,
 with the method inherited as the receiver's type sees it ("Builtin
-types' members", below); status in [milestone-4.md](milestone-4.md).
+types' members", below); status in [milestone-4.md](history/milestone-4.md).
 
 - **Solving:** with as many type arguments as the function has type
   parameters, each binds to its argument, `T` to `Int32` in
@@ -434,7 +434,7 @@ Decided 2026-10-29:
 ## List literals and target typing
 
 What tempest does today (`typing/targets.rs`), the start of milestone 4's
-target typing slice; status in [milestone-4.md](milestone-4.md). Kotlin
+target typing slice; status in [milestone-4.md](history/milestone-4.md). Kotlin
 Temper sees a list literal as a call of `<listT extends AnyValue>(listT,
 listT, …) -> List<listT>`, solved per call.
 
@@ -490,7 +490,7 @@ listT, …) -> List<listT>`, solved per call.
 
 What tempest does today (`typing/targets.rs`), the second step of
 milestone 4's target typing slice; status in
-[milestone-4.md](milestone-4.md). These are Kotlin Temper's rules
+[milestone-4.md](history/milestone-4.md). These are Kotlin Temper's rules
 (`Typer.preTypeFunTree`, `applicationOrderForActuals`):
 
 - **Where a trailing block goes:** where a call's last argument is a
@@ -612,7 +612,7 @@ milestone 4's target typing slice; status in
 
 What tempest does today (`typing/object_literals.rs`), a step of
 milestone 4's target typing slice; status in
-[milestone-4.md](milestone-4.md). Kotlin Temper picks an object
+[milestone-4.md](history/milestone-4.md). Kotlin Temper picks an object
 literal's class by names alone, while macros expand
 (`ConvertObjectLiteralNew`); tempest decides it by the type wanted and
 the names together (language.md, "Object literals, not named arguments"):
@@ -654,7 +654,7 @@ the names together (language.md, "Object literals, not named arguments"):
 ## Function types
 
 What tempest does today (`fn_subtype` in `types.rs`); status in
-[milestone-4.md](milestone-4.md). Kotlin Temper compares function types
+[milestone-4.md](history/milestone-4.md). Kotlin Temper compares function types
 part by part, its parameters contravariant and its result covariant, as
 interfaces keyed by how many required and optional parameters they take
 and whether they may bubble. Tempest reports a function type `S` where a
@@ -699,7 +699,7 @@ interfaces", below).
 
 What tempest does today (`fun_subtype` in `types.rs`,
 `typing/fun_interfaces.rs`, and `typing/targets.rs`); status in
-[milestone-4.md](milestone-4.md). An interface marked `@fun`, as `@fun
+[milestone-4.md](history/milestone-4.md). An interface marked `@fun`, as `@fun
 interface Mapper<A, B>(a: A): B;`, is a named function type (language.md,
 "Function types and fun interfaces"): its type stands for its `apply`'s
 signature, with the type's arguments put in, so a `Mapper<Int32,
@@ -816,7 +816,7 @@ since Kotlin's `Never<T>` is a subtype of fewer types, but a backend
 can't get its fallback type, and a `Never<A>` used as an unrelated `B`
 isn't reported. Before code generation (milestone 5), or reporting that,
 `Never` should carry its `T`, with the rules above, likely alongside the
-generics slice in [milestone-4.md](milestone-4.md).
+generics slice in [milestone-4.md](history/milestone-4.md).
 
 **Open: is `Never` covariant?** Kotlin honors its `@out`, so there
 `Never<Sub>` is a `Never<Super>`; tempest ignores `@out` (above). Only
@@ -852,7 +852,7 @@ doesn't report.
   (`Fact::Type`), published once its initializer's type is known;
   declared types need no waiting. Anything not worked out is unknown and
   causes no error, so typing can grow a piece at a time. Status and
-  differences from Kotlin are in [milestone-4.md](milestone-4.md).
+  differences from Kotlin are in [milestone-4.md](history/milestone-4.md).
 
 ## Joins, and sealed types and `when`
 
@@ -883,7 +883,7 @@ scan; other checks, of `==`, don't count. Otherwise a missing `else` is
 ## Builtins' signatures
 
 What tempest does today (`typing/signatures.rs`), as Kotlin Temper does;
-status in [milestone-4.md](milestone-4.md). Operators have variants, in
+status in [milestone-4.md](history/milestone-4.md). Operators have variants, in
 this order (Kotlin's `BuiltinOperatorSpecs.kt`):
 
 - `+`, `-` and `*`: `(Int32, Int32) -> Int32`, then `Int64` and
@@ -1071,7 +1071,7 @@ typing", above). Module-level code and `test` bodies may bubble.
 ## Classes' types
 
 What tempest does today (`typing/members.rs`), as Kotlin Temper does;
-status in [milestone-4.md](milestone-4.md).
+status in [milestone-4.md](history/milestone-4.md).
 
 **Values.** A class or interface without type parameters is a type:
 `new C(…)` is a `C`, and so is `this` in `C`'s members. A generic
@@ -1254,7 +1254,7 @@ guarantee, are a follow-up there.
 What tempest reports for `x is T` and `x as T` (`typing/rtti.rs`), as
 Kotlin Temper's `TypeFuns.kt` (`problems`) does, in its words and at its
 positions: the check's span, or in `when (x) { is T -> … }`, `T`'s.
-Status in [milestone-4.md](milestone-4.md). Let `S` be `x`'s type, from
+Status in [milestone-4.md](history/milestone-4.md). Let `S` be `x`'s type, from
 flow facts where they narrow it, or for a name Kotlin folds to a
 literal (`let s: AnyValue = "a"`), the literal's type, and `T` the
 target with any `?` dropped. Rules 1 to 5 judge the check's non-null
@@ -1364,7 +1364,7 @@ comes through generics, as `a[0]` for `a: List<Void>` (slice 5).
 
 ## Every expression typed
 
-Slice 7's goal ([milestone-4.md](milestone-4.md)), since tmpl needs
+Slice 7's goal ([milestone-4.md](history/milestone-4.md)), since tmpl needs
 each expression's type (`typing/exprs.rs`). Once checking is done,
 typing works out every expression's type, so `Typing::expr` gives it,
 and resolves every call ("Resolutions", below).

@@ -1,6 +1,6 @@
 //! Scopes and symbols, and looking names up in them.
 //!
-//! Names are kept simple (notes/milestone-3.md, "Names"): a name's text is
+//! Names are kept simple (notes/history/milestone-3.md, "Names"): a name's text is
 //! an interned `NameId`; resolution is a side table from each use node to a
 //! [`SymbolId`]; and symbols are one flat table of plain structs. Macros
 //! that mean a particular builtin insert a name already resolved to its

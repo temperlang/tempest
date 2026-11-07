@@ -1,9 +1,9 @@
 # Milestone 4 plan: types in the settle loop
 
-Part of the [rewrite plan](README.md). Types become facts in the settle
+Part of the [rewrite plan](../README.md). Types become facts in the settle
 loop, enough for most functional tests in-process, with the type errors
 Kotlin Temper reports, in its words, and what backends will need from
-types. How typing should work is in [typing.md](typing.md); how the loop
+types. How typing should work is in [typing.md](../typing.md); how the loop
 works, in [milestone-3.md](milestone-3.md).
 
 ## Order and decisions (2026-10-29)
@@ -30,16 +30,16 @@ Decisions that shape that work:
 
 - **Object literals:** the class is decided only once the expected type
   is known, with name matching deferred as long, and a disagreement
-  between them an error (language.md, "Object literals, not named
+  between them an error (../language.md, "Object literals, not named
   arguments").
 - **Target typing wherever an expected type could help,** not only for
   object literals: object, list, and function literals at least, and
   also `new Box()`, `[]`, `null`, `bubble()`, `panic()`, and other
-  places where it fits (typing.md, "Target typing: where it applies").
+  places where it fits (../typing.md, "Target typing: where it applies").
 - **The expected type never chooses between overloads,** for now, and
   there's no overloading on return type.
 - **Function types will be named only:** the plan is for Temper to keep
-  only `@fun` interfaces and drop bare function types (language.md,
+  only `@fun` interfaces and drop bare function types (../language.md,
   "Function types and fun interfaces"). Tempest keeps bare ones for
   now, to match the tests, but new code shouldn't lean on them, and
   design work should keep the named-only future in mind.
@@ -48,7 +48,7 @@ Decisions that shape that work:
   literals and references to declared functions and methods take their
   interface from the type wanted; a function literal with no type wanted
   is an error for now; bare function types stay structural. Done
-  2026-10-29 (below, "Named `@fun` interfaces nominal"; typing.md, "Fun
+  2026-10-29 (below, "Named `@fun` interfaces nominal"; ../typing.md, "Fun
   interfaces").
 - **`return` in a block lambda** at an `@inlineUnrealizedGoal`
   parameter, as core's `forEach`'s, returns from the function around
@@ -60,9 +60,9 @@ Decisions that shape that work:
   `forEach`'s parameter type today.
 - **Trailing blocks:** the user prefers that a trailing block go only to
   the last function-typed parameter, and only where every parameter
-  after it is optional (stricter than Kotlin's rule; typing.md, "Where a
+  after it is optional (stricter than Kotlin's rule; ../typing.md, "Where a
   trailing block goes"). Kotlin's rule stays while Kotlin's tests rely
-  on it; reassess later (testing-and-milestones.md, "Risks and open
+  on it; reassess later (../testing-and-milestones.md, "Risks and open
   questions").
 - **Size and speed** rows every few chunks, or sooner where a change may
   matter, not every chunk.
@@ -74,7 +74,7 @@ Each its own chunk, roughly in this order:
 1. **Declared and inferred types** of literals, locals, parameters, calls
    of known functions and results, with Kotlin's errors for them. Done
    (2026-10-27); status below.
-2. **Flow facts** (typing.md): null checks narrowing locals, so a nullable
+2. **Flow facts** (../typing.md): null checks narrowing locals, so a nullable
    value where a non-null one is wanted can be reported as Kotlin does.
    Done (2026-10-27) for locals that aren't `var`; status below.
 3. **Builtins' signatures:** operators, `console.log`, and the builtin
@@ -96,7 +96,7 @@ Each its own chunk, roughly in this order:
    loading core, listed there.
 5. **Generics:** type arguments, and generic calls solved per call site,
    including `Never<T>` carrying its `T`, with Kotlin's rules
-   (typing.md), in place of the plain bottom type. First step done
+   (../typing.md), in place of the plain bottom type. First step done
    (2026-10-28): generic types written out, as `List<Int>`, and type
    parameters as types; then run-time checks of generic types, calls
    of generic functions solved from their arguments and type
@@ -111,7 +111,7 @@ Each its own chunk, roughly in this order:
    types they stand for (2026-10-29); status below, with what's left.
 6. **Target typing** for object, list and function literals, which Kotlin
    Temper doesn't do yet, with trailing blocks placed while typing rather
-   than at run time (language.md, "Object literals, not named arguments").
+   than at run time (../language.md, "Object literals, not named arguments").
    Wanted by the user (2026-10-28). The expected type, from a declared
    variable, field, or return type, a known callee's parameter, or a
    list's element type, picks an object literal's class (an interface
@@ -138,14 +138,14 @@ Each its own chunk, roughly in this order:
    which fails only at run time; and a declaration whose type a cycle
    leaves unknown, reported as such rather than Kotlin's "Cannot assign
    to String from Top".
-8. **No reference cycles** ([acyclic.md](acyclic.md)): an error for a
+8. **No reference cycles** ([acyclic.md](../acyclic.md)): an error for a
    mutable reference whose type could lead back to its owner, and for
    `this` escaping a constructor. Temper has always planned this, but
    Kotlin Temper doesn't do it yet, so the rules need agreeing with the
    team first; maybe warnings at first. After tmpl (decided
    2026-10-29). Its first part is done: no `this` in a constructor
    until every field is set (agreed by the team and done 2026-11-02;
-   [typing.md](typing.md), "Fields first").
+   [typing.md](../typing.md), "Fields first").
 
 Left from milestone 3 that needs types: `case` patterns, and string
 tags that evaluate to a class other than through names. "Void
@@ -156,7 +156,7 @@ decomposes them, which Kotlin Temper hasn't either (it keeps a
 `postponedCase` call for a macro no type defines), so they're for the
 team first; and a string tag is told apart while macros expand, before
 typing, so a tag that isn't a name, such as `Builder<String>"…"` (which
-also needs generics), needs macros that wait for types (design.md,
+also needs generics), needs macros that wait for types (../design.md,
 "Macros must be able to wait for types"). No Temper sources scanned
 (Kotlin Temper's repo, Chromarite and Ordable) use either.
 
@@ -178,7 +178,7 @@ what it can, children first, as Kotlin's `TypeChecker` does. Types of
 expressions go into a side table by node, so the tree doesn't change.
 Macros that need types will interleave with this round once there are
 any, so keep typing's results facts that a waiting macro can be woken by
-(design.md, "Macros must be able to wait for types").
+(../design.md, "Macros must be able to wait for types").
 
 **Unknown is quiet.** A type typing hasn't worked out, such as a
 member's, a method call's or a generic one's, never causes an error, and
@@ -222,7 +222,7 @@ The functional tests, std, Chromarite and Ordable get no others.
 - Parameters' defaults aren't checked yet.
 - Kotlin folds `let` constants before checking, so its messages may name
   the value's type rather than the declared one (in
-  [kotlin-differences.md](kotlin-differences.md#changes-we-recommend-to-temper)); ours use the declared type.
+  [kotlin-differences.md](../kotlin-differences.md#changes-we-recommend-to-temper)); ours use the declared type.
 
 `x++`'s result now spans `x`, where Kotlin reports a type error about it.
 
@@ -233,7 +233,7 @@ in `types.rs`. The fuzz test (`mutated_inputs_settle`) covers typing too.
 
 ## Status: flow facts
 
-`flow.rs` has the pass (typing.md's flow facts, for null checks only so
+`flow.rs` has the pass (../typing.md's flow facts, for null checks only so
 far): before inferring, one walk over each file, in evaluation order,
 carries the set of declarations known not to be null, merging where
 control flow merges, and marks the uses it reaches with a fact. A use of
@@ -268,8 +268,8 @@ either: only one that reads a parameter or an assigned `var` is
 `if` whose condition is a null check or `is` check of a name, negated at
 most once, so it reports errors for narrowing through `&&`, `||`, `while`
 or double negation, and after an early `return`, which this accepts (in
-[kotlin-differences.md](kotlin-differences.md#changes-we-recommend-to-temper)). A `var` isn't narrowed in either; that
-needs facts that assignments and closures undo (typing.md). `is`
+[kotlin-differences.md](../kotlin-differences.md#changes-we-recommend-to-temper)). A `var` isn't narrowed in either; that
+needs facts that assignments and closures undo (../typing.md). `is`
 narrows to its type too since 2026-10-28 (below). `panic()` doesn't yet
 count as always leaving.
 
@@ -284,7 +284,7 @@ in Kotlin Temper's repo.
 
 `typing/signatures.rs` has the operators' variants, as Kotlin declares
 them, and `console.log`'s; `typing/bubbles.rs`, what may bubble. The
-rules are in [typing.md](typing.md), "Builtins' signatures" and "What
+rules are in [typing.md](../typing.md), "Builtins' signatures" and "What
 may bubble".
 
 **Now reported**, as Kotlin does, in its words and at its positions:
@@ -302,7 +302,7 @@ assign to Int32 from Float64", as in Kotlin; `**` is always a `Float64`.
 Functions' types record `throws Bubble`, written as Kotlin does,
 `fn (Int32): Int32` and with no parameters `fn: Int32`, but bubbling as
 Temper writes it, `fn (Int32): Int32 throws Bubble`, since 2026-10-28
-(typing.md, "Checking semantics and messages"), where Kotlin writes
+(../typing.md, "Checking semantics and messages"), where Kotlin writes
 `fn (Int32): (Int32 | Bubble)`.
 
 **Differences from Kotlin,** where it reports more, until later slices:
@@ -337,7 +337,7 @@ bubbled without `throws Bubble` now declares it.
 ## Status: classes, first part
 
 `typing/members.rs` has classes' types; the rules are in
-[typing.md](typing.md), "Classes' types". A class or interface without
+[typing.md](../typing.md), "Classes' types". A class or interface without
 type parameters is a type (`TypeData::Class`), with what it extends
 registered for subtyping; `this`, `new C(…)`, members read and called
 (`c.x`, `c.m(…)`, `C.m(…)`, bare names in the class), and member
@@ -374,7 +374,7 @@ with classes named as written (Kotlin says `C__0`):
 
 Kotlin reports `obj.f(x)` for a field `f` holding a function as
 "Member f defined in C incompatible with usage"; tempest types it as a
-call of the field's value ([kotlin-differences.md](kotlin-differences.md#bugs-in-kotlin-temper)).
+call of the field's value ([kotlin-differences.md](../kotlin-differences.md#bugs-in-kotlin-temper)).
 
 **Left for later parts of this slice:**
 
@@ -403,7 +403,7 @@ repo, two get new ones, each also reported by Kotlin
 (`Boolean`, `Int32`, `Int64`, `Float64` and `String`) from the vendored
 `core.temper`, parsing just those classes once per process, when typing
 first needs one; `typing/members.rs` types `x.m(…)`, `x.p` and static
-`T.m(…)` and `T.p` with them. The rules are in [typing.md](typing.md),
+`T.m(…)` and `T.p` with them. The rules are in [typing.md](../typing.md),
 "Builtin types' members". Tempest doesn't load core as a library yet;
 this reads only signatures, and the interpreter still runs these methods
 natively.
@@ -448,7 +448,7 @@ Temper's repo.
 (`MEMBER_OPERATOR_EQ` and `MEMBER_OPERATOR_CMP` in `core.rs`), and `==`,
 `!=`, `<=>` and the comparisons with an object as first operand call it,
 in the interpreter (`class_operator` in `interp.rs`) and in typing
-(`typing/signatures.rs`). The rules are in [typing.md](typing.md),
+(`typing/signatures.rs`). The rules are in [typing.md](../typing.md),
 "Operators defined in Temper". Before, the interpreter compared objects
 by identity (or `@auto("==")`), and `<` on objects failed ("Can't compare
 these"); Kotlin's JS backend calls the methods, as tempest now does.
@@ -465,7 +465,7 @@ with classes named as written:
 **What may bubble** in an operator's arguments now matches Kotlin in
 more cases: an argument that fits isn't skipped any more because another
 doesn't (`mi(n) - "a"`), and where the first argument fits no variant,
-all are looked into (`"a" - mi(n)`, `k == mk(n)`); typing.md, "What may
+all are looked into (`"a" - mi(n)`, `k == mk(n)`); ../typing.md, "What may
 bubble".
 
 **Differences from Kotlin,** where it reports more, until later:
@@ -475,7 +475,7 @@ bubble".
 - A function's, generic class's or `AnyValue` operand (above).
 - `when (k) { k -> … }` on a class without such a method is reported at
   the case, where Kotlin spans from the subject to the case
-  ([kotlin-differences.md](kotlin-differences.md#bugs-in-kotlin-temper)).
+  ([kotlin-differences.md](../kotlin-differences.md#bugs-in-kotlin-temper)).
 
 **Tests:** in `tests/settle/class-types.cases` and `builtins.cases`, and
 two cases in `run.cases` whose `==` on a class without `eq` is now
@@ -502,7 +502,7 @@ as core's `map<O>(transform: fn (T): O): List<O>`, no longer reports
 A feature, on top of the restructuring above. `typing/members.rs` now
 types a bodiless method from its signature, as any other, and
 `typing/overrides.rs` checks overrides; the rules are in
-[typing.md](typing.md), "Classes' types".
+[typing.md](../typing.md), "Classes' types".
 
 **Now reported**, as Kotlin does, in its words and at its positions,
 with classes named as written:
@@ -538,7 +538,7 @@ Temper's repo, Chromarite and Ordable).
 A feature. Flow facts (`flow.rs`) now also record, for a use that an
 `is` check reaches, the type it checked, and typing (`narrowed` in
 `typing.rs`) gives the use that type; the rules are in
-[typing.md](typing.md), "Null-check and `is` narrowing: the rules".
+[typing.md](../typing.md), "Null-check and `is` narrowing: the rules".
 With that, a class's or interface's value is a subtype only of what it
 extends (`types.rs`), and an operator whose first operand is an
 interface's value is checked as one of a class's (`operator_method` in
@@ -558,7 +558,7 @@ A use that `if (i is D)` narrows is a `D`, so `takeD(i)`, `i.dm()` and
 
 **Differences from Kotlin:**
 
-- Narrowing reaches as far as null checks' does (typing.md), past
+- Narrowing reaches as far as null checks' does (../typing.md), past
   `&&`, `||`, double negation and early exits, where Kotlin reports
   "Expected subtype of D, but got I".
 - `d is I` for `d: D` already an `I` keeps `d` a `D`; Kotlin makes it an
@@ -583,7 +583,7 @@ ones, both also reported by Kotlin (stage test `define/when-block`).
 A feature. `typing/rtti.rs` checks each `x is T` and `x as T` (and `is
 T` cases of `when`) as Kotlin's `TypeFuns.kt` (`problems`) does, and
 `typing/bubbles.rs` reports `x as T` that may bubble; the rules are in
-[typing.md](typing.md), "Run-time type checks" and "What may bubble".
+[typing.md](../typing.md), "Run-time type checks" and "What may bubble".
 
 **Now reported**, as Kotlin does, in its words and at its positions,
 with classes named as written:
@@ -642,10 +642,10 @@ A semantic fix. `x is T?` is now true for null and for a `T`, and `x as
 T?` lets null through, in the interpreter (`Val::NullableType` in
 `interp.rs`, where `T?` was `T`), in checks (`typing/rtti.rs`), in
 bubbling and in narrowing (`flow.rs`); the rules are in
-[typing.md](typing.md), "Nullable targets". Kotlin's interpreter and
+[typing.md](../typing.md), "Nullable targets". Kotlin's interpreter and
 generated code already do this, but its type checker drops the `?`, as
 tempest's checks and interpreter did
-([kotlin-differences.md](kotlin-differences.md#changes-we-recommend-to-temper)).
+([kotlin-differences.md](../kotlin-differences.md#changes-we-recommend-to-temper)).
 
 **Search first:** of the Temper sources in Kotlin Temper's repo
 (functional tests, std, stage and other tests), Chromarite, Ordable and
@@ -670,7 +670,7 @@ updated outputs in `class-types.cases` and `flow.cases`.
 
 A feature, from milestone 3's leftovers. `check_not_void` in
 `typing.rs` reports a `Void` value stored or passed; the rules are in
-[typing.md](typing.md), "`Void` as a value".
+[typing.md](../typing.md), "`Void` as a value".
 
 **Now reported**, as Kotlin does, in its words and at its positions:
 
@@ -707,7 +707,7 @@ valid sources anyway.
 The generics slice's first step: `types.rs` has type parameters
 (`TypeData::Param`, with their bounds) and generic types given
 arguments (`TypeData::Applied`), and `typing.rs` reads them from type
-expressions. The rules are in [typing.md](typing.md), "Generic types".
+expressions. The rules are in [typing.md](../typing.md), "Generic types".
 
 **Now reported**, as Kotlin does, in its words and at its positions,
 apart from names (Kotlin writes `T__0` and `Box__3`, tempest `T` and
@@ -748,7 +748,7 @@ reported as "Expected subtype of T, but got T?".
 - Function types compared part by part (Kotlin reports `fn (Int32):
   List<Int32>` as a `fn (Int32): List<String>`): done (below, "Function
   types compared part by part").
-- `Never<T>` carrying its `T` (typing.md), list literals' types, and
+- `Never<T>` carrying its `T` (../typing.md), list literals' types, and
   Kotlin's "Type formal <listT extends AnyValue> cannot bind to Void" for
   `[b()]`; bounds that are type parameters (`<T, U extends T>`).
 - Run-time checks that need users' supertypes with arguments, as Kotlin's
@@ -769,14 +769,14 @@ stage.
 ## Status: run-time checks of generic types
 
 A feature. `typing/rtti.rs` now checks `x is T` and `x as T` where
-either type is generic; the rules are in [typing.md](typing.md),
+either type is generic; the rules are in [typing.md](../typing.md),
 "Run-time type checks".
 
 **Decided:** a type parameter's value is judged by its bound, all that's
 known of it at run time, so `x is Dog` for `x: T`, `T extends Animal`,
 is a downcast, allowed, and narrows `x` to `Dog`, as before. Kotlin
 says the types are unrelated, which reads as a bug
-([kotlin-differences.md](kotlin-differences.md#bugs-in-kotlin-temper)):
+([kotlin-differences.md](../kotlin-differences.md#bugs-in-kotlin-temper)):
 the check is on the value's class, which erasure doesn't touch, and it
 works as `a is Dog` for `a: Animal` does. So `x is Int` for an unbounded
 `T` is the `@mayDowncastTo(false)` error, "from T", where Kotlin says
@@ -798,7 +798,7 @@ as written:
 "Type parameters cannot be targeted …" also gains ", because a type
 argument's run-time type can't be checked", as the erasure error does;
 Kotlin's wording ends at "checks" for both
-([kotlin-differences.md](kotlin-differences.md#changes-we-recommend-to-temper)).
+([kotlin-differences.md](../kotlin-differences.md#changes-we-recommend-to-temper)).
 The parser now keeps `@out` and `@in` on type parameters
 (`TYPE_PARAM_VARIANT` in `core.rs`) for this, and `types.rs` knows which
 of core's generic types are classes, which are `@mayDowncastTo(false)`,
@@ -830,7 +830,7 @@ solves each call of a generic function declared by `let` from its type
 arguments, `id<Int>(x)`, or else its arguments' types (`unify` in
 `types.rs`), so the call's type is the result with the bindings put in,
 and checks the bindings and arguments as Kotlin's solver does. The rules
-are in [typing.md](typing.md), "Generic calls".
+are in [typing.md](../typing.md), "Generic calls".
 
 **Now reported**, as Kotlin does, in its words and at its positions,
 apart from names (Kotlin writes `T__0`, tempest `T`):
@@ -877,7 +877,7 @@ repo, Chromarite and Ordable).
 A feature, the generics slice's next step: generic classes' values and
 members, generic methods, and generic calls solved from the type their
 place wants (`typing/members.rs`, `typing/generic_calls.rs`). The rules
-are in [typing.md](typing.md), "Generic types" and "Generic calls".
+are in [typing.md](../typing.md), "Generic types" and "Generic calls".
 
 **Now reported**, as Kotlin does, in its words and at its positions,
 apart from names (Kotlin writes `T__0` and `Box__2`, tempest `T` and
@@ -896,7 +896,7 @@ apart from names (Kotlin writes `T__0` and `Box__2`, tempest `T` and
 - A method's explicit type arguments, `o.first<String>(ss)`, bind as
   written; Kotlin fails ("Member first defined in Order incompatible
   with usage", "Expected function type, but got Invalid"), a bug
-  ([kotlin-differences.md](kotlin-differences.md#bugs-in-kotlin-temper)).
+  ([kotlin-differences.md](../kotlin-differences.md#bugs-in-kotlin-temper)).
 - A generic call that's an argument, `takeLS(wrap(1))` for `takeLS(xs:
   List<String>)`, is "Expected subtype of List<String>, but got
   List<Int32>"; Kotlin reports nothing, a bug (same place).
@@ -942,7 +942,7 @@ as types that name the type's own type parameters, and
 the receiver's type arguments put in, looking up an inherited member in
 `Listed` or `Mapped`. `a[i]` is typed and checked as `a.get(i)`, for a
 class's value too, as Kotlin desugars it. The rules are in
-[typing.md](typing.md), "Builtin types' members".
+[typing.md](../typing.md), "Builtin types' members".
 
 **Now reported**, as Kotlin does, in its words and at its positions:
 results where stored ("Cannot assign to String from Int32" for `ls[0]`,
@@ -1005,7 +1005,7 @@ Sup2<T, String>` and `interface Sup2<T, U> extends Sup<U>`, is a
 calls (`unwrap(sh)` binds `T` to `String` for `unwrap<T>(x:
 Holder<T>)` and `class StrHolder extends Holder<String>`), types
 inherited members (`sh.describe(x: T)` takes a `String`), and judges
-run-time checks. The rules are in [typing.md](typing.md), "Generic
+run-time checks. The rules are in [typing.md](../typing.md), "Generic
 types". `Types::is_subtype` and `unify` now take `&mut self`, as
 seeing a supertype may make a new type.
 
@@ -1028,13 +1028,13 @@ apart from names (Kotlin writes `Sup__0` and `T__12`, tempest `Sup` and
   unwrap(sh)` reports the argument; tempest binds `T` to `String` and
   reports "Cannot assign to Int32 from String" at the initializer, as
   for a `GenHolder<String>`, which Kotlin binds
-  ([kotlin-differences.md](kotlin-differences.md#bugs-in-kotlin-temper)).
+  ([kotlin-differences.md](../kotlin-differences.md#bugs-in-kotlin-temper)).
 - A type error about a use an `is` check narrows, as `let y: Sup<Int> =
   s` in `if (s is Sub<String>) { … }`, is at the use, where Kotlin
   reports it at an empty position at the end of the branch (same
   place).
 - As before, a pair of arguments that only variance tells apart, as
-  `Sub<Dog>` where a `Sup<Animal>` is wanted, isn't reported (typing.md,
+  `Sub<Dog>` where a `Sup<Animal>` is wanted, isn't reported (../typing.md,
   "Type parameters are invariant"). A scan with such pairs reported
   found no Temper sources that rely on it.
 
@@ -1068,7 +1068,7 @@ supertypes, seeing a supertype's member as the class sees it
 `sigInContext` does: in `class N<U> extends J<List<U>>`, `J<T>`'s `g(x:
 T): T` must be overridden as `g(x: List<U>): List<U>`. And `classes.rs`
 reports a type parameter of an interface's method, as Kotlin does while
-expanding the declaration. The rules are in [typing.md](typing.md),
+expanding the declaration. The rules are in [typing.md](../typing.md),
 "Classes' types".
 
 **Now reported**, as Kotlin does, in its words and at its positions,
@@ -1085,7 +1085,7 @@ apart from names (Kotlin writes `U__11` and `B__5`, tempest `U` and
 - A generic method's override is compared with its type parameters
   paired by position, so `h<U>(x: U): U` overrides `h<T>(x: T): T`;
   Kotlin compares type parameters by identity and reports every such
-  override as differing ([kotlin-differences.md](kotlin-differences.md#changes-we-recommend-to-temper)).
+  override as differing ([kotlin-differences.md](../kotlin-differences.md#changes-we-recommend-to-temper)).
   Their bounds aren't compared yet.
 - As before, a field is reported spanning it, where Kotlin's position
   is empty, at its name, and a result that may bubble is written `Int32
@@ -1115,7 +1115,7 @@ A feature, the generics slice's next step. `types.rs` (`fn_subtype`)
 now compares two function types part by part, as Kotlin does, with
 parameters contravariant and results covariant, but reports only what
 that rejects, as for generic types' arguments. The rules are in
-[typing.md](typing.md), "Function types". Messages write an optional
+[typing.md](../typing.md), "Function types". Messages write an optional
 parameter as Kotlin does, `fn (Int32, _?: Int32): Int32`.
 
 **Now reported**, as Kotlin does, in its words and at its positions,
@@ -1135,11 +1135,11 @@ Bubble`):
   `let o3: fn (Int): Int = o2`, for `let o2: fn (Int, Int): Int = opt`,
   says "from fn (Int32, Int32): Int32", where Kotlin names `opt`'s type,
   "fn (Int32, _?: Int32): Int32", as for other folded constants
-  ([kotlin-differences.md](kotlin-differences.md#changes-we-recommend-to-temper)).
+  ([kotlin-differences.md](../kotlin-differences.md#changes-we-recommend-to-temper)).
 - Kotlin reports `let g: fn (Int): Boolean = h`, for `let h: (fn (Int):
   Boolean)? = null`, naming its internal types ("Expected subtype of
   Fn__1006<Int32, Boolean>, but got Fn__1006<Int32, Boolean>?"), a bug
-  ([kotlin-differences.md](kotlin-differences.md#bugs-in-kotlin-temper));
+  ([kotlin-differences.md](../kotlin-differences.md#bugs-in-kotlin-temper));
   tempest doesn't report it, as for any nullable name Kotlin might fold.
   A nullable function where a function is wanted, not folded, is
   reported as Kotlin does ("Cannot assign to fn (Int32): Boolean from
@@ -1147,7 +1147,7 @@ Bubble`):
 - What only Kotlin's variance accepts, as `fn (Int32): Dog` as a `fn
   (Int32): Animal`, passes, as in Kotlin, but isn't known to be a
   subtype, until it's settled whether function types are invariant too
-  (typing.md). A scan reporting such pairs found no Temper sources that
+  (../typing.md). A scan reporting such pairs found no Temper sources that
   rely on it (function literals passed as arguments aren't checked yet).
 - Kotlin reports a function where a `@fun` interface is wanted whose
   `apply` doesn't fit ("Cannot assign to Pred from fn (String):
@@ -1177,7 +1177,7 @@ type wanted. `typing/core_members.rs` reads a method's own type
 parameters (`CoreType::Own`), `typing/members.rs` gives each a symbol
 of its own the first time a call needs it (`core_generic_method`, with
 `Scopes::unnamed_type_param`), and `typing/generic_calls.rs` solves and
-checks the call. The rules are in [typing.md](typing.md), "Builtin
+checks the call. The rules are in [typing.md](../typing.md), "Builtin
 types' members" and "Generic calls".
 
 **Now reported**, as Kotlin does, in its words and at its positions,
@@ -1211,7 +1211,7 @@ tempest `O` and `fn (Int32): O`):
   argument.
 - `ls.map<String>(toStr)` binds as written, where Kotlin fails ("Member
   map defined in List | Listed incompatible with usage"), as for users'
-  methods ([kotlin-differences.md](kotlin-differences.md#bugs-in-kotlin-temper)).
+  methods ([kotlin-differences.md](../kotlin-differences.md#bugs-in-kotlin-temper)).
 
 **Tests:** in `tests/settle/builtins.cases` ("builtin generic methods'
 own type parameters are solved per call") and `types.cases` ("a type
@@ -1236,7 +1236,7 @@ its elements against the type wanted, as Kotlin's solver does for a list
 literal, which it sees as a call of `<listT extends AnyValue>(listT, …)
 -> List<listT>`. A field's initializer is now solved from the type
 wanted too, as Kotlin does, for generic calls as well. The rules are in
-[typing.md](typing.md), "List literals and target typing".
+[typing.md](../typing.md), "List literals and target typing".
 
 **Now reported**, as Kotlin does, in its words and at its positions,
 apart from names (Kotlin writes `Animal__0`, tempest `Animal`):
@@ -1255,7 +1255,7 @@ apart from names (Kotlin writes `Animal__0`, tempest `Animal`):
   `List<Int?>` is wanted, and `[n, 1]`, for `n: Int?`, where a
   `List<Int?>` is wanted, is "Actual arguments do not match signature:
   … expected [Int32, Int32], but got [Int32?, Int32]", a bug
-  ([kotlin-differences.md](kotlin-differences.md#bugs-in-kotlin-temper));
+  ([kotlin-differences.md](../kotlin-differences.md#bugs-in-kotlin-temper));
   tempest accepts them, as a `List<Int32?>`.
 - Elements without a common type tempest knows leave the element type
   unknown, where Kotlin finds their common supertype: `[d, c]`, for a
@@ -1307,7 +1307,7 @@ type its place wants (`generic_calls.rs`, `wanted_literal_arg`), so
 `ls.map { x => … }` takes `x` as the list's element type. A literal's
 result is checked against the one wanted, and calls with a function
 literal argument are now checked, each argument at the parameter it's
-placed at. The rules are in [typing.md](typing.md), "Function literals
+placed at. The rules are in [typing.md](../typing.md), "Function literals
 and target typing".
 
 **Now reported**, as Kotlin does, in its words and at its positions,
@@ -1337,7 +1337,7 @@ apart from where noted:
   "Expected subtype of List<String>, but got List<Int32>"; and it
   accepts `opts(fn (x: Int): Int { x }) { x => x.length }`, valid, which
   Kotlin rejects
-  ([kotlin-differences.md](kotlin-differences.md#bugs-in-kotlin-temper)).
+  ([kotlin-differences.md](../kotlin-differences.md#bugs-in-kotlin-temper)).
 - A function argument Kotlin skips where it folds the call, or where the
   call is a `test` block's last expression, is reported: so Kotlin's CLI
   test `testing/error` gets "Expected subtype of fn: String, but got fn:
@@ -1377,7 +1377,7 @@ records where it places each call's trailing block
 calls alike, and the interpreter's lowering passes the arguments in that
 order, with null for skipped parameters, which take their defaults; its
 own run-time placement is gone. The rules are in
-[typing.md](typing.md), "Function literals and target typing".
+[typing.md](../typing.md), "Function literals and target typing".
 
 **Also fixed:** typing didn't place a block at a parameter past the
 other arguments, so in `h(1) { x => "a" }`, for `let h(n: Int, s: String
@@ -1386,7 +1386,7 @@ and went unchecked; it now goes to `g`, with `s` taking its default, as
 Kotlin's `applicationOrderForActuals` places it, so `x` is an `Int32`
 and its result is "Expected subtype of Int32, but got String". Kotlin's
 typer crashes on that call, a bug
-([kotlin-differences.md](kotlin-differences.md#bugs-in-kotlin-temper));
+([kotlin-differences.md](../kotlin-differences.md#bugs-in-kotlin-temper));
 `o.m(1) { … }`, `o.h(2, "e") { … }`, and the generic `Runner.k("x", 3) {
 s => … }` run the same in both.
 
@@ -1409,7 +1409,7 @@ bubble, from the function type its place wants; now its `return`s and
 what may bubble in it are checked against that type, as Kotlin's
 `TypeChecker.checkFun` does with the literal's inferred type. A
 `return`'s value is also typed from the result wanted, as a list
-literal's (`return []`). The rules are in [typing.md](typing.md),
+literal's (`return []`). The rules are in [typing.md](../typing.md),
 "Function literals and target typing" and "What may bubble".
 
 **Now reported**, as Kotlin does, in its words and at its positions,
@@ -1439,7 +1439,7 @@ apart from where noted:
   return 5; } }`, it returns from that function, a difference at run
   time; decided 2026-10-29 to match Kotlin there, with a clear error
   elsewhere ("Order and decisions", above;
-  [kotlin-differences.md](kotlin-differences.md#language-and-types)).
+  [kotlin-differences.md](../kotlin-differences.md#language-and-types)).
 - Literals at core's `forEach`, an `@inlineUnrealizedGoal` parameter
   whose type tempest doesn't read yet, aren't checked: Kotlin inlines
   them, so `ls.forEach { x => bubble(); }` is reported in a function
@@ -1475,7 +1475,7 @@ the same function type (`fun_subtype` in `types.rs`); called as one
 trailing block, as a function type does (`wanted_fn` and
 `placed_params` in `typing/targets.rs`). A function is no longer any
 other class's or interface's value, nor theirs a function. The rules are
-in [typing.md](typing.md), "Fun interfaces".
+in [typing.md](../typing.md), "Fun interfaces".
 
 **Now reported**, as Kotlin does, in its words and at its positions,
 apart from names (Kotlin writes `Pred__0`) and where noted:
@@ -1506,7 +1506,7 @@ a function".
   and also where a list literal's element type is a `@fun` interface
   (`[fn (x) { x > 0 }]` where a `List<Mapper<Int, Boolean>>` is
   wanted), a bug
-  ([kotlin-differences.md](kotlin-differences.md#bugs-in-kotlin-temper)).
+  ([kotlin-differences.md](../kotlin-differences.md#bugs-in-kotlin-temper)).
   Where an argument binds a type parameter one way and the function
   another, as `applyM("a", isPos)`, the parameter is unknown, as for
   other conflicts ("Builtin generic methods", above), so it isn't
@@ -1538,7 +1538,7 @@ interface.
 ## Status: object literals' class from the type wanted
 
 A feature, target typing's next step (slice 6), and the first macro
-that waits for types (design.md, "Macros must be able to wait for
+that waits for types (../design.md, "Macros must be able to wait for
 types"). An object literal without `class: C` keeps its `\a` markers
 through expansion, its puns made names, while its values settle as any
 others do, and is noted with its scope (`Settle::object_literals`).
@@ -1554,7 +1554,7 @@ its values' places want, wait for that fact, so a nested literal or a
 `[]` value waits for the outer literal's class. Values held in
 temporaries, where they run in another order than the parameters', take
 what their uses' places want. With `class: C`, it's placed while macros
-expand, as before. The rules are in [typing.md](typing.md), "Object
+expand, as before. The rules are in [typing.md](../typing.md), "Object
 literals and target typing".
 
 **Now:** where a class is wanted, maybe nullable or generic, the literal
@@ -1566,7 +1566,7 @@ new error "A is wanted here, but these properties fit Mark's
 constructor", at the literal, where Kotlin, which picks by names alone,
 reports "Cannot assign to A from Mark" (or "Expected subtype of A, but
 got Mark" as an argument) at the same position
-([kotlin-differences.md](kotlin-differences.md#changes-we-recommend-to-temper)).
+([kotlin-differences.md](../kotlin-differences.md#changes-we-recommend-to-temper)).
 None of the 722 directories of Temper sources scanned gets it. Without a
 type wanted, or with a builtin type or a type parameter wanted, Kotlin's
 rule by names applies, with its errors, as before.
@@ -1580,7 +1580,7 @@ errors, nor does any of the 722 directories of Temper sources scanned
 one fixture's errors changed, as an object literal's errors now come
 after expansion's; `tempest test` passes Chromarite's 56 tests and
 Ordable's 36. Settle time and peak memory are unchanged beyond noise
-([size-and-speed.csv](size-and-speed.csv)).
+([size-and-speed.csv](../size-and-speed.csv)).
 
 **Left for the generics slice,** in rough order:
 
@@ -1596,7 +1596,7 @@ Ordable's 36. Settle time and peak memory are unchanged beyond noise
 - Kotlin's argument error for a bare `T` result solved from the type
   wanted where no argument binds `T` ("Users' generic supertypes",
   above).
-- Variance, once it's settled (typing.md, "Type parameters are
+- Variance, once it's settled (../typing.md, "Type parameters are
   invariant").
 
 **Left for target typing (slice 6),** in rough order:
@@ -1622,7 +1622,7 @@ Ordable's 36. Settle time and peak memory are unchanged beyond noise
 ## Status: named `@fun` interfaces nominal
 
 A feature, as decided ("Order and decisions", above), needed before
-tmpl; the rules are in [typing.md](typing.md), "Fun interfaces", and
+tmpl; the rules are in [typing.md](../typing.md), "Fun interfaces", and
 the code in `typing/fun_interfaces.rs`. Two `@fun` interfaces' types of
 different declarations are never each other's (`fun_subtype`); where
 one would fit but for the names, "A Pred isn't a Check; to adapt it,
@@ -1635,7 +1635,7 @@ documented declaration rules (only `AnyValue` as a supertype, one
 `apply`, no other members, no `@json`) and no `is` or `as` on one are
 checked; Kotlin checks none but `apply`'s type parameters. The long form
 works as the short. All are deliberate differences
-([kotlin-differences.md](kotlin-differences.md#changes-we-recommend-to-temper)).
+([kotlin-differences.md](../kotlin-differences.md#changes-we-recommend-to-temper)).
 
 **Tests:** "named @fun interfaces are nominal", "@fun interfaces keep
 Kotlin Temper's rules for them", and "a function literal needs a type
@@ -1658,7 +1658,7 @@ also `@fun` on a class is silently ignored, not reported.
 
 Slice 7 begins, with the measure the plan calls for, resolutions
 recorded for tmpl, and the biggest causes of unknown types fixed
-([typing.md](typing.md), "Every expression typed" and "Resolutions").
+([typing.md](../typing.md), "Every expression typed" and "Resolutions").
 
 **The count:** `uv run compat/count_untyped.py [LIBRARY ...]`, over
 `run-temper --untyped`, gives per file and in total the expressions of
@@ -1732,7 +1732,7 @@ builtin generic types, which Kotlin reports as unnecessary.
 The first item left above: the frontend generates the `eq` that
 `@auto("==")` makes as a real member, as Kotlin's `AddAutoMembers` does
 (`classes.rs`, `make_auto_eq`), so it resolves as any member does and
-`to_tmpl` translates it as any method (typing.md, "Operators defined in
+`to_tmpl` translates it as any method (../typing.md, "Operators defined in
 Temper"):
 
 - **A class's own** `@auto("==")`, with no `@operator("==")` method or
