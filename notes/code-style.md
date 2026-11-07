@@ -44,7 +44,9 @@ then prefer:
 1. Widely used crates with good maintenance.
 2. Among those, ones that compile fast and pull in few transitive crates.
 
-Today tempest has one: `ureq` (approved 2026-10-26), the interpreter's
+Today tempest has four. The language server (`temper-lsp`, native
+only) uses `lsp-types`, `serde`, and `serde_json` (approved 2026-11-07).
+The other is `ureq` (approved 2026-10-26), the interpreter's
 web client for std `net` (`temper-frontend/src/web_client.rs`), pinned to
 3.1.2 as Kotlin Temper's Rust backend has it. It's behind the cargo
 feature `net`, on by default and off in `temper-wasm`, where requests fail

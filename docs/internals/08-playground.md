@@ -49,6 +49,9 @@ The answer is one JSON object, shaped like this:
 ```
 
 `analyze` gives just `{"diagnostics": [...]}`, and `finish` the rest.
+Every export, and why it's a plain C ABI with JSON rather than
+wasm-bindgen, is in [the wasm API, in detail](detail/08-playground.md#the-wasm-api)
+and [its decisions](detail/08-playground.md#a-plain-c-abi-not-wasm-bindgen).
 
 Run shows the interpreter's results beside the generated JavaScript's,
 run in a worker of its own. So the playground is also a quick check that
@@ -66,6 +69,14 @@ two very different ways of running a program agree.
   generated JavaScript, with the runtime from `vendor/temper/be-js/`.
 - [`build.py`](../../site/playground/build.py): builds the wasm and bundles
   the page. GitHub Pages publishes it from `main`.
+
+The messages between the page and its workers, the limits on runaway
+code, CodeMirror's part, and permalinks are in
+[the page's messages](detail/08-playground.md#the-pages-messages),
+[limits](detail/08-playground.md#limits-fuel-a-stale-timer-a-fresh-instance),
+[CodeMirror](detail/08-playground.md#codemirror-6-with-a-stream-language),
+and [permalinks](detail/08-playground.md#permalinks-in-the-url-fragment),
+in detail.
 
 ## Editor queries
 
@@ -116,7 +127,8 @@ the wasm converts once, at its boundary, with
 [`Position`](../../crates/temper-analysis/src/lib.rs) and
 [`byte_offset`](../../crates/temper-analysis/src/lib.rs). A query
 waits until the worker has settled the text on screen, so positions
-always match.
+always match. How a query finds what's at a position, and what it
+costs: [temper-analysis, in detail](detail/09-language-server.md#temper-analysis).
 
 ## `watch` and a language server
 
@@ -148,6 +160,9 @@ flowchart LR
   line and UTF-16 column positions converted at its boundary as the
   wasm's are.
 
+How `watch` might look, and what it needs first:
+[watch, in detail](detail/08-playground.md#watch-planned).
+
 ## Where in the code
 
 - [`compile`](../../crates/temper-wasm/src/lib.rs) and [`compile_into`](../../crates/temper-wasm/src/lib.rs): everything in one call; [`analyze`](../../crates/temper-wasm/src/lib.rs) and [`finish`](../../crates/temper-wasm/src/lib.rs): the same in the playground's two halves.
@@ -160,3 +175,7 @@ flowchart LR
 More: [site/playground/README.md](../../site/playground/README.md), and
 [notes/design.md](../../notes/design.md), section 11, on watch and the
 language server.
+
+**In detail:** [Wasm and the playground in detail](detail/08-playground.md):
+each decision with its alternatives, the wasm API and the page's
+messages, sizes, the tests, and known weaknesses.

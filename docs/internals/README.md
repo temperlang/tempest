@@ -112,6 +112,20 @@ goldens at every stage, such as its
 
 ## Going deeper
 
+Each page has a companion in [`detail/`](detail/) that goes a level
+further: every important decision with its alternatives, pros and cons,
+and reasons (and how Kotlin Temper does it), the main types and
+functions, the tests that pin it, and known weaknesses:
+[syntax](detail/01-syntax.md),
+[the settle loop](detail/02-settle-loop.md),
+[typing](detail/03-typing.md),
+[the interpreter](detail/04-interpreter.md),
+[tmpl](detail/05-tmpl.md),
+[backends](detail/06-backends.md),
+[the command and driver](detail/07-cli.md),
+[the playground](detail/08-playground.md), and
+[the language server and editors](detail/09-language-server.md).
+
 The design notes explain the why: [notes/README.md](../../notes/README.md)
 for the goals, [notes/design.md](../../notes/design.md) for the whole
 design, [notes/typing.md](../../notes/typing.md) for typing, and

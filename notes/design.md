@@ -302,9 +302,9 @@ split out someday, but for now it ships with the compiler.
 ## 6. Errors
 
 - Every diagnostic has a span and message, and is collected, never thrown.
-- An unresolvable node becomes an **error node**. Its type is the expected
-  type when one is known, otherwise `Never`, so surrounding code keeps
-  checking without a cascade of follow-on errors.
+- An unresolvable node becomes an **error node**. Its type is unknown,
+  which never causes an error itself, so surrounding code keeps checking
+  without a cascade of follow-on errors.
 - Backends translate an error node into a runtime failure carrying the
   message (`throw`, `panic!`, `raise`, …). The rest of the library still
   works, matching Temper's philosophy.

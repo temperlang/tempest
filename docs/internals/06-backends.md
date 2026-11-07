@@ -31,6 +31,10 @@ Every backend crate has much the same files:
 | `runtime.rs` | The runtime's files, copied beside the output by `tempest build` |
 | `tools.rs` | Natively, how the language runs built libraries' tests, for `tempest test -b`: finding its tools, their command lines, and reading their results |
 
+Which lowerings each backend runs, in what order, and how the seven
+differ: [the pipeline](detail/06-backends.md#the-pipeline-each-backend-runs)
+and [per-backend choices](detail/06-backends.md#per-backend-choices).
+
 A crate's `BACKEND`, a [`Backend`](../../crates/temper-tmpl/src/backend.rs), is all
 that tools see of it: its name, its comment syntax, its runtime's
 files, its naming rules, its `translate` function, whether `build`
@@ -42,7 +46,8 @@ ones ([the command](07-cli.md#one-compile-path)).
 
 Each language's runtime is vendored from Temper in `vendor/temper/`,
 with a few fixes kept as patches in `vendor/temper-patches/`. So
-generated code calls the same runtime APIs as before.
+generated code calls the same runtime APIs as before
+([runtimes and their patches, in detail](detail/06-backends.md#kotlins-runtimes-vendored-with-patches)).
 
 ## Worked example
 
@@ -94,7 +99,9 @@ shared [`spill`](../../crates/temper-tmpl/src/spill.rs) pass does the
 ordering part for C#, C++, and Lua; each backend's translator does the
 rest. C++ also keeps its own order of evaluation explicit, since C++
 leaves the order of a call's arguments open
-([`effects`](../../crates/temper-be-cpp/src/effects.rs)).
+([`effects`](../../crates/temper-be-cpp/src/effects.rs)). Which
+translator hoists what:
+[in detail](detail/06-backends.md#profiles-pick-the-shared-lowerings).
 
 ## Where in the code
 
@@ -115,8 +122,15 @@ leaves the order of a call's arguments open
   backends' tests share: test programs, goldens, and finding each
   language's tools. Tests run the generated code with each language's
   own tools and strict checkers, and skip with a message when a tool is
-  missing.
+  missing ([the tests, in detail](detail/06-backends.md#tests)).
 
 More: [notes/design.md](../../notes/design.md), section 9, and
 [notes/api-compat.md](../../notes/api-compat.md) on the public API each
 backend keeps.
+
+## In detail
+
+[Backends, in detail](detail/06-backends.md): the decisions all seven
+share, with alternatives and trade-offs; each backend's pipeline,
+choices, and naming rules side by side; the tests; and known
+weaknesses.

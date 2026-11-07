@@ -1,0 +1,384 @@
+# Backends, in detail
+
+A backend takes a tmpl program and writes one language's source and
+package files. Tempest has seven, one crate each: `temper-be-cpp`,
+`-csharp`, `-java`, `-js`, `-lua`, `-py`, and `-rust`, from about 5,600
+to 9,800 lines each. Each depends only on
+[`temper-tmpl`](../../../crates/temper-tmpl/src/lib.rs).
+[The overview page](../06-backends.md) shows `triple.temper` in all
+seven languages; [tmpl's detail page](05-tmpl.md) covers the IR and
+the lowerings backends share. This page covers what the seven share,
+where they differ, why, and how they're tested.
+
+## Contents
+
+- [Where it sits](#where-it-sits)
+- [Shared decisions](#shared-decisions)
+  - [Compatible API, prettier bodies](#compatible-api-prettier-bodies)
+  - [A small tree and printer per language](#a-small-tree-and-printer-per-language)
+  - [Profiles pick the shared lowerings](#profiles-pick-the-shared-lowerings)
+  - [One naming pass, rules as data](#one-naming-pass-rules-as-data)
+  - [Operators and connected declarations as tables](#operators-and-connected-declarations-as-tables)
+  - [Kotlin's runtimes, vendored, with patches](#kotlins-runtimes-vendored-with-patches)
+  - [Pluggable: a description per backend](#pluggable-a-description-per-backend)
+  - [Each language runs its own tests](#each-language-runs-its-own-tests)
+- [The pipeline each backend runs](#the-pipeline-each-backend-runs)
+- [Per-backend choices](#per-backend-choices)
+- [Naming rules by backend](#naming-rules-by-backend)
+- [The main types and functions](#the-main-types-and-functions)
+- [Tests](#tests)
+- [Known weaknesses and plans](#known-weaknesses-and-plans)
+
+## Where it sits
+
+```mermaid
+flowchart LR
+  registry["temper-driver's Registry"] -->|"BACKEND"| translate["translate(program, variant)"]
+  translate --> lower["Shared lowerings, by profile"]
+  lower --> names["naming::assign_checked with names::RULES"]
+  names --> tx["translate.rs: Translator, per module"]
+  tx --> ops["ops.rs: operators"]
+  tx --> conn["connected.rs: core and std"]
+  tx --> tree["tree.rs: output tree"]
+  tree --> print["Printer"]
+  print --> files["Source files, package files, tests"]
+  registry -->|"tools"| run["tools.rs: run the language's tests"]
+```
+
+## Shared decisions
+
+Each says what was chosen, the alternatives, pros and cons, how Kotlin
+Temper does it, and whose call it was: *team-agreed*, *tempest's* (the
+user's call), or *open*.
+
+### Compatible API, prettier bodies
+
+**Chosen:** what a library's users can see (layout, package files,
+public names and signatures, the runtime it calls) matches what Kotlin
+Temper writes for that language. Function bodies are free to read
+better: source names, real loops, no needless temporaries or labels.
+Where Kotlin's output is unsafe or wrong, tempest's differs on purpose,
+and each crate's `lib.rs` doc comment says where.
+
+**Alternatives:** a fresh API per language, or byte-for-byte Kotlin
+output.
+
+**Pros:** existing users of Temper-built libraries can't tell the
+difference; reviewers can read the generated code.
+
+**Cons:** inherits Kotlin's API choices, including ones tempest would
+change ([notes/api-compat.md](../../../notes/api-compat.md),
+"Proposed changes", lists eleven).
+
+**Status:** tempest's goal from the start; the API rules per language
+are in api-compat.md. Changing a public API needs the Temper team.
+
+### A small tree and printer per language
+
+**Chosen:** each backend has its own hand-written output tree and
+printer (`tree.rs`, about 900 to 1,950 lines), which adds parentheses
+only where precedence needs them and lays code out in the language's
+usual style.
+
+**Alternatives:** Kotlin's generated per-language ASTs (from
+`*.out-grammar` files, about 42,000 generated lines over seven
+backends), or one shared output tree and printer.
+
+**Pros:** small, readable, no code generator; each printer can follow
+its language's conventions (rustfmt's widths, PEP 8's blank lines,
+Lua's `end`s), which share little.
+
+**Cons:** seven printers repeat helpers: float literals in four or
+more, string concatenation parts in six, host wrappers in six. The
+"shared document builder" in the size plan
+([size-and-speed.md](../../../notes/size-and-speed.md)) wasn't built.
+
+**Status:** tempest's ([design.md](../../../notes/design.md),
+section 9).
+
+### Profiles pick the shared lowerings
+
+**Chosen:** each backend's [`Profile`](../../../crates/temper-tmpl/src/profile.rs)
+says what it keeps natively, and its `translate` calls the shared
+lowerings it lacks ([tmpl's page](05-tmpl.md#the-shared-lowerings)
+lists them). Anything still language-specific stays in the backend.
+
+**Pros:** a fix to generators, switches, or evaluation order lands
+once for every backend that uses it.
+
+**Cons:** statements inside expressions (an `orelse`, a block's value)
+are still mostly hoisted by each translator: C#'s `hoist` and `sink`,
+C++'s `pending` and `temporary`, Java's `spilled`, JS's `pre` list,
+Lua's and Python's own. Only the first step, keeping earlier operands
+in order (`spill`), is shared, and only C#, C++, and Lua use it. So
+profiles don't yet describe what each translator does
+([the pipeline](#the-pipeline-each-backend-runs)).
+
+**Kotlin Temper** chooses through each backend's `SupportNetwork`
+while building its per-backend TmpL. **Status:** the principle "what
+more than one backend needs belongs in tmpl" is the user's, 2026-11-06
+([notes/tmpl/roadmap.md](../../../notes/tmpl/roadmap.md)).
+
+### One naming pass, rules as data
+
+**Chosen:** names come from tmpl's shared pass,
+[`assign_checked`](../../../crates/temper-tmpl/src/naming.rs), by a
+`RULES` constant in each backend's `names.rs`
+([table below](#naming-rules-by-backend)). The checked form fails, as a
+`NotYet`, where an export's name would have to change. A backend never
+invents a name string; for helpers it asks the pass for hints.
+
+**Pros:** no `x__123` names; numbers only on real clashes; dependents
+spell another library's names from its interface.
+
+**Cons:** each new scoping quirk is a new switch in `NamingRules`.
+
+**Kotlin Temper** names per backend (`selectNames`), numbering
+compiler-made and many local names.
+
+### Operators and connected declarations as tables
+
+**Chosen:** `ops.rs` spells each of tmpl's 69 operators;
+`connected.rs` maps core's (and some of std's) connected declarations,
+keyed by qname, to the language's runtime. Each backend's
+`tests/tables.rs` checks that every operator is spelled and that each
+key names a connected declaration.
+
+**Pros:** what a backend does with core is one sorted table, checked
+against core's own declarations.
+
+**Cons:** the tables are code (templates and closures), so they can't
+be shared or diffed across backends as data.
+
+**Kotlin Temper** keeps the same in each backend's `SupportNetwork` and
+helper files.
+
+### Kotlin's runtimes, vendored, with patches
+
+**Chosen:** each language's `temper-core` (and parts of std's host
+code) is copied from Kotlin Temper into `vendor/temper/` by
+`compat/sync_temper.py`, with tempest's fixes kept as patches in
+`vendor/temper-patches/` (23 so far) that each sync re-applies. Each
+backend's `runtime.rs` embeds its runtime's files for `tempest build`
+to write beside the output. CI checks the copy is current
+(`sync_temper.py --check`).
+
+**Pros:** generated code calls the same runtime APIs as Kotlin's, so
+both compilers' output can mix; fixes are visible as patches and meant
+for upstream.
+
+**Cons:** the copy was taken from a Kotlin branch,
+`connected-type-fallback`, not `main` ([`vendor/temper/SOURCE.md`](../../../vendor/temper/SOURCE.md)).
+And some patches add API (a top-level turn and `awakeUpon` for Java,
+`awake_upon` for Rust, async for Lua), while six backends' package
+files still name `temper-core` 0.6.0, the version Kotlin publishes
+without them. A tempest-built package built against the published
+runtime may not compile (the audit's A1). C++ declares no runtime
+version at all. See [weaknesses](#known-weaknesses-and-plans).
+
+**Status:** vendoring is tempest's; each patch says whether it's
+upstream, in an open Kotlin PR (#532 for one turn at a time), or still
+to offer.
+
+### Pluggable: a description per backend
+
+**Chosen:** each crate exports `BACKEND`, a
+[`Backend`](../../../crates/temper-tmpl/src/backend.rs): name, comment
+syntax, runtime files, naming rules, a `translate` function, whether
+`build` writes it by default (all but C++, as Kotlin), and its
+[`Tools`](../../../crates/temper-tmpl/src/backend.rs).
+[`Registry`](../../../crates/temper-driver/src/lib.rs) in
+`temper-driver` lists them, one cargo feature each; the frontend and
+tmpl never do.
+
+**Pros:** adding a backend is one crate, one registry line, and its
+name in [`KNOWN`](../../../crates/temper-driver/src/lib.rs); the wasm
+build leaves out runtimes and tools.
+
+**Cons:** each crate also defines a `Variant` struct (profile, rules,
+and version fields that differ by backend) and a `VARIANTS` list that
+nothing reads.
+
+**Status:** tempest's ("Pluggable backends": frontend and tmpl never
+list or count backends).
+
+### Each language runs its own tests
+
+**Chosen:** each crate's `tools.rs` says how its language runs a built
+library's tests for `tempest test -b`, through
+[`Tools`](../../../crates/temper-tmpl/src/backend.rs)'s `test` (and an
+optional `prepare`), with shared helpers in tmpl's
+[`tools`](../../../crates/temper-tmpl/src/tools.rs). Most
+read JUnit XML; Rust reads what `cargo test` prints, and Java a
+line-per-test runner it compiles. `temper-driver`'s
+[`test_run`](../../../crates/temper-driver/src/test_run.rs) runs them
+for any backend that has them, summarizing as the interpreter's runner
+does.
+
+| Backend | How its tests run |
+|---|---|
+| C++ | CMake on the `CMakeLists.txt` tempest writes, its test target, then the program, which writes JUnit XML |
+| C# | `dotnet test --logger:junit` in the `tests` project, then `dotnet build-server shutdown` |
+| Java | `javac` on runtime, std, and libraries, then JUnit 5's launcher from Maven's local repository (Kotlin runs Maven, which needs the network) |
+| JavaScript | Mocha with its xunit reporter, packages linked under `temper.out/js/node_modules` |
+| Lua | Each library's `tests/init-test.lua` with LuaUnit, writing JUnit XML |
+| Python | `python3 -m temper_core.testing result.xml`, as Kotlin's `RunPython` |
+| Rust | `cargo test`, offline, one shared target directory |
+
+**Cons:** the backends' own CI tests (`tests/functional.rs`, about
+6,500 lines over seven crates) mostly run tools with their own
+commands rather than through `tools.rs`, so `tempest test -b` for
+Python, Lua, C++, and JS is checked only by the real-library runs in
+CI and locally.
+
+## The pipeline each backend runs
+
+Every backend's `translate` starts the same way: shared lowerings,
+then the naming pass, then its own translator, module by module.
+
+| Backend | Profile: native | Generators | Lowerings, in order |
+|---|---|---|---|
+| C++ | `SWITCH` | state machines | errors, coroutines, cells, naming (for its effects analysis), `spill_with` (what its order of evaluation needs), naming again |
+| C# | none | C# iterators | errors, switches, `spill_with` (`panic()`), naming |
+| Java | statements in expressions, `SWITCH` | state machines | errors, coroutines, cells, switches on `Int64` only, naming |
+| JavaScript | `RUNS_TYPE_ERRORS` | `function*` | errors, switches, naming |
+| Lua | `RUNS_TYPE_ERRORS` | coroutines | errors, switches, `spill`, naming |
+| Python | statements in expressions, `RUNS_TYPE_ERRORS` | generators | errors, switches, naming |
+| Rust | statements in expressions, `SWITCH` | state machines | errors, coroutines, cells, naming |
+
+Read across, the order is the same everywhere: errors, coroutines,
+cells, switches, spill, naming. That's by care: each list is written
+out by hand in its crate. And "statements in expressions" means
+"handles them somehow": Rust has block expressions, but Java's and
+Python's translators hoist them, and JS lacks the feature yet neither
+spills nor fails; its translator hoists and orders operands itself.
+
+## Per-backend choices
+
+| | C++ | C# | Java | JavaScript | Lua | Python | Rust |
+|---|---|---|---|---|---|---|---|
+| **Target** | C++14, as Kotlin | .NET 6 (`net6.0`) | Java 17 | ES modules, Node | Lua 5.1 declared; tested on 5.4.6 and LuaJIT | Python 3.11+ | `rust-version` 1.71.1, as Kotlin; tested on 1.85.0 |
+| **Package** | `init.hpp`/`.cpp` per module, `main.cpp`, `test.cpp`, plus a CMake project (Kotlin writes none) | `src` and `program` projects, `ROOTGlobal` class, a file per type | Maven `pom.xml`, `NAMEGlobal` and `NAMEMain`, a file per type | `package.json`, `.internal.js` modules re-exported by public ones | `init.lua` per library, a rockspec | `pyproject.toml`, a package, `__all__` | a crate, `Cargo.toml` |
+| **Failure (`orelse`)** | `try`/`catch` of `TemperBubble` | `try`/`catch`; `panic()` uncaught | `try`/`catch (RuntimeException)`; `panic()` an `AssertionError` | `try`/`catch` | `temper.pcall` | `try`/`except Exception`; `panic()` a `BaseException` | `Result` and `?`, closures for complex bodies |
+| **Null** | null `shared_ptr` or `NullableParam` | `T?` | `@Nullable`, boxed | `T \| null` (JSDoc) | `temper.null` (Lua's `nil` can't be a table value) | `T \| None` | `Option<T>` |
+| **Statements in expressions** | translator, after `spill_with` | translator (`hoist`, `sink`), after `spill_with` | translator (`spilled`) | translator (`pre`, `t$0`) | translator, after `spill` | translator (`:=` for `??`) | native block expressions |
+| **Order of evaluation** | its own analysis ([`effects`](../../../crates/temper-be-cpp/src/effects.rs)), since C++ leaves argument order open | left to right | left to right | left to right | left to right | left to right | left to right |
+| **Checked by** | `g++ -Wall -Wextra -Wpedantic -Werror` and more; ASan, UBSan, TSan | `csc`, nullable references, warnings and analyzers as errors | `javac -Xlint:all -Werror` | `tsc --checkJs --strict` | `luac`, LuaLS | mypy and pyright, strict | `cargo build`, clippy |
+| **Notable** | module `var`s under a lock; shifts defined for every count; only exports in headers | parameter names are API, never renamed; culture-invariant formatting | lists that may hold null via `Core.listOf` | source maps ([`translate_with_source_maps`](../../../crates/temper-be-js/src/lib.rs)) | `goto` only for `continue` and jumps out of inner loops; LuaCATS annotations | module privates start with `_` | module state safe across threads; `Arc<String>` strings |
+
+Each row is from the crate's `lib.rs` doc comment and its profile;
+the per-language API rules are in
+[api-compat.md](../../../notes/api-compat.md), and the as-built notes
+per backend in [notes/tmpl/profiles.md](../../../notes/tmpl/profiles.md).
+
+## Naming rules by backend
+
+| Rule | C++ | C# | Java | JS | Lua | Python | Rust |
+|---|---|---|---|---|---|---|---|
+| Private prefix | | | | | | `_` | |
+| Raw keywords | | `@` | | | | | `r#` |
+| Block-scoped locals | yes | yes | yes | yes | yes | no | no |
+| Locals share a name only with the same type | | | | | | yes | |
+| Init's lambdas avoid module names | yes | | yes | | | | |
+| Members prefixed (storage `_name`) | | | | | | yes | |
+| Fields apart from methods | | | | | | | yes |
+| Types apart from functions and `let`s | | yes | yes | | | | |
+
+Every backend escapes a reserved word with a trailing `_`. Case per
+kind of declaration (`snake_case`, `PascalCase`, or as written) is each
+`RULES`' `case` function.
+
+## The main types and functions
+
+Per crate, the same items:
+
+| Language | Variant | Description | `translate` | Naming rules | Module translation | Test tools | Runtime files |
+|---|---|---|---|---|---|---|---|
+| C++ | [`CPP`](../../../crates/temper-be-cpp/src/lib.rs) | [`BACKEND`](../../../crates/temper-be-cpp/src/lib.rs) | [`translate`](../../../crates/temper-be-cpp/src/lib.rs) | [`RULES`](../../../crates/temper-be-cpp/src/names.rs) | [`module`](../../../crates/temper-be-cpp/src/translate.rs) | [`TOOLS`](../../../crates/temper-be-cpp/src/tools.rs) | [`FILES`](../../../crates/temper-be-cpp/src/runtime.rs) |
+| C# | [`CSHARP`](../../../crates/temper-be-csharp/src/lib.rs) | [`BACKEND`](../../../crates/temper-be-csharp/src/lib.rs) | [`translate`](../../../crates/temper-be-csharp/src/lib.rs) | [`RULES`](../../../crates/temper-be-csharp/src/names.rs) | [`module`](../../../crates/temper-be-csharp/src/translate.rs) | [`TOOLS`](../../../crates/temper-be-csharp/src/tools.rs) | [`FILES`](../../../crates/temper-be-csharp/src/runtime.rs) |
+| Java | [`JAVA`](../../../crates/temper-be-java/src/lib.rs) | [`BACKEND`](../../../crates/temper-be-java/src/lib.rs) | [`translate`](../../../crates/temper-be-java/src/lib.rs) | [`RULES`](../../../crates/temper-be-java/src/names.rs) | [`module`](../../../crates/temper-be-java/src/translate.rs) | [`TOOLS`](../../../crates/temper-be-java/src/tools.rs) | [`FILES`](../../../crates/temper-be-java/src/runtime.rs) |
+| JavaScript | [`JS`](../../../crates/temper-be-js/src/lib.rs) | [`BACKEND`](../../../crates/temper-be-js/src/lib.rs) | [`translate`](../../../crates/temper-be-js/src/lib.rs) | [`RULES`](../../../crates/temper-be-js/src/names.rs) | [`module`](../../../crates/temper-be-js/src/translate.rs) | [`TOOLS`](../../../crates/temper-be-js/src/tools.rs) | [`FILES`](../../../crates/temper-be-js/src/runtime.rs) |
+| Lua | [`LUA`](../../../crates/temper-be-lua/src/lib.rs) | [`BACKEND`](../../../crates/temper-be-lua/src/lib.rs) | [`translate`](../../../crates/temper-be-lua/src/lib.rs) | [`RULES`](../../../crates/temper-be-lua/src/names.rs) | [`module`](../../../crates/temper-be-lua/src/translate.rs) | [`TOOLS`](../../../crates/temper-be-lua/src/tools.rs) | [`FILES`](../../../crates/temper-be-lua/src/runtime.rs) |
+| Python | [`PY`](../../../crates/temper-be-py/src/lib.rs) | [`BACKEND`](../../../crates/temper-be-py/src/lib.rs) | [`translate`](../../../crates/temper-be-py/src/lib.rs) | [`RULES`](../../../crates/temper-be-py/src/names.rs) | [`module`](../../../crates/temper-be-py/src/translate.rs) | [`TOOLS`](../../../crates/temper-be-py/src/tools.rs) | [`FILES`](../../../crates/temper-be-py/src/runtime.rs) |
+| Rust | [`RUST`](../../../crates/temper-be-rust/src/lib.rs) | [`BACKEND`](../../../crates/temper-be-rust/src/lib.rs) | [`translate`](../../../crates/temper-be-rust/src/lib.rs) | [`RULES`](../../../crates/temper-be-rust/src/names.rs) | [`module`](../../../crates/temper-be-rust/src/translate.rs) | [`TOOLS`](../../../crates/temper-be-rust/src/tools.rs) | [`FILES`](../../../crates/temper-be-rust/src/runtime.rs) |
+
+Also worth knowing: each crate's `NotYet` (what it doesn't cover yet;
+`translate` returns it, never panics); its `ops.rs` `unspelled` (the
+operators it lacks, which its `tables.rs` test expects empty) and
+`connected.rs` `TABLE`; C++'s [`Effects`](../../../crates/temper-be-cpp/src/effects.rs)
+and [`needing_temporaries`](../../../crates/temper-be-cpp/src/effects.rs),
+[`cmake_lists`](../../../crates/temper-be-cpp/src/lib.rs), and
+[`test_main`](../../../crates/temper-be-cpp/src/lib.rs); and Java's
+[`pom`](../../../crates/temper-be-java/src/lib.rs) and
+[`main_class`](../../../crates/temper-be-java/src/lib.rs).
+
+Shared by the driver: [`checked`](../../../crates/temper-driver/src/lib.rs)
+(to tmpl and validated), [`with_std`](../../../crates/temper-driver/src/lib.rs)
+(std's naming interface for a backend), and
+[`translate`](../../../crates/temper-driver/src/lib.rs). Shared by the
+tests: [`temper-be-testkit`](../../../crates/temper-be-testkit/src/lib.rs).
+
+## Tests
+
+| Test | What it pins | Where |
+|---|---|---|
+| Goldens | Each covered functional test's and shared program's output, file by file, in `tests/goldens/` (93 for C++ to 404 for C#); `UPDATE_SNAPSHOTS=1` rewrites them for review | each crate's `tests/functional.rs` |
+| Runs | The output runs with the language's own tools against the vendored runtime and logs what Kotlin's backend is expected to log; tests run as tests compare their failures with `expectedFailures` | each crate's `tests/functional.rs` |
+| Strict checkers | The checkers in [the table above](#per-backend-choices), on every case; ill-typed programs' output is skipped, as Kotlin's | each crate's `tests/functional.rs` |
+| Sanitizers | C++ under ASan, UBSan, and TSan; `module-state` from 8 threads on every backend that has threads | `temper-be-cpp`'s `tests/functional.rs`; testkit's `threads_expected` |
+| Tables | Every operator spelled; every connection keyed by a real connected declaration | each crate's `tests/tables.rs` |
+| Host code | A library's own connected functions and classes, with host files, as is and under `--no-connected` | each crate's `tests/host/` and `CONNECTED` cases |
+| Against the interpreter | The shared programs log on the interpreter what each backend must log | [`programs_log_as_the_interpreter_does`](../../../crates/temper-be-testkit/tests/programs.rs) |
+| Kotlin's layout | `tempest build`'s `temper.out` matches Kotlin's: every path, each runtime's files, package names and versions, with differences listed and justified | [`temper_out_is_kotlins`](../../../crates/tempest/tests/kotlin_layout.rs) |
+| Real libraries | Hrefine, Chromarite, Ordable, Kelpto, and Wherewith pass their tests on all seven locally; in CI, Chromarite and Ordable on C#, Java, JS, Lua, and Python | CI's `tempest test -b` steps |
+
+A missing tool skips its test with a message, unless
+`TEMPEST_REQUIRE_CHECKERS` is set, as in CI, where it fails.
+
+**Not covered:** the declared MSRV (generated crates say 1.71.1; CI
+builds them with 1.85.0); PUC Lua 5.1 (LuaJIT runs the Lua tests);
+C#'s `net48` side, and Java 8; output built against the published
+0.6.0 runtimes rather than the patched copies; and `tempest test -b`
+through each `tools.rs` in the backends' own test suites.
+
+## Known weaknesses and plans
+
+- **Runtime version against patches.** Package files name `temper-core`
+  0.6.0 while the output needs patched API. Options: a distinct
+  pre-release runtime version until the patches land upstream, or
+  saying plainly that output targets the patched runtimes. C++ should
+  name its runtime version too.
+- **Untested MSRV and older targets.** One CI job on Rust 1.71.1, or a
+  newer MSRV (api-compat.md, proposed change 11); C#'s `net48` and .NET
+  8 are a to-do in [roadmap.md](../../../notes/tmpl/roadmap.md)
+  ("State").
+- **Hoisting in every translator.** The rest of the planned `hoist`
+  pass would let translators handle only statements and plain
+  expressions; then profiles could say truthfully which backends keep
+  statements inside expressions.
+- **Hand-written pipelines.** One `prepare(program, profile)` in tmpl,
+  in a fixed order, validated in debug builds; C++'s double naming pass
+  could then share one map.
+- **Rust builds code as strings.** Its nullables write
+  `if let Some(x) = x` as a path whose text starts with `let`, parse
+  that text back, and the printer special-cases it, though the tree has
+  `Expr::Let`; a tuple is a call of an empty path. Plan: use `Expr::Let`
+  and add a tuple expression; goldens unchanged.
+- **Java decides nullability by text.** Whether a field's type is
+  nullable is read from its printed type (`@Nullable …`) and a list of
+  primitive names; it should come from the `TypeId`.
+- **Dead and repeated code.** `VARIANTS` in all seven crates, never
+  read; `NotYet` and its `Display` in each; `Variant` fields that differ
+  only in which version they carry; std special-cased by the name
+  `"std"` in several crates. Plans: delete `VARIANTS`, one `NotYet` in
+  tmpl, and one way to ask whether a library is std, each as
+  restructuring.
+- **Seven printers.** Helpers shared by several (float literals, string
+  parts, host wrappers) could move to tmpl first, a shared printer core
+  later.
+- **Long functions.** Several translators' `module` functions run to
+  400 lines, and Rust's and Java's `lib.rs` mix packaging with
+  translation; splitting packaging out is restructuring for later.
+- **Stale comments.** C++'s variant doc still says a program needing
+  statements out of expressions is `NotYet` because the hoisting pass
+  isn't built, though `spill` and its translator handle them now.

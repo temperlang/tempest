@@ -36,7 +36,11 @@ flowchart LR
 Types are interned: each distinct type is stored once and named by a
 `TypeId`, so comparing types is comparing two numbers. An unknown type
 never causes an error. Whatever typing can't work out simply goes
-unchecked, rather than producing a cascade of complaints.
+unchecked, rather than producing a cascade of complaints. The
+trade-offs are in [one interned type representation](detail/03-typing.md#one-interned-type-representation)
+and [unknown is never an error](detail/03-typing.md#unknown-is-never-an-error);
+how inference and the loop fit together, in
+[types inside the settle loop](detail/03-typing.md#types-inside-the-settle-loop-and-on-demand).
 
 ## Worked example
 
@@ -68,7 +72,8 @@ value is only of the wrong type, so the interpreter runs it as written
 and logs `42`, as JavaScript, Lua, and Python do. The statically typed
 backends, whose compilers would reject it, fail there instead, with the
 message. Either way, the rest of the library still builds and runs
-([tmpl's errors](05-tmpl.md#shared-lowerings)).
+([tmpl's errors](05-tmpl.md#shared-lowerings)). Why messages follow
+Kotlin Temper's: [checks after inference](detail/03-typing.md#checks-after-inference-deeper-errors-first-in-kotlins-words).
 
 ## Where typing lives
 
@@ -90,6 +95,9 @@ values in [`Types`](../../crates/temper-frontend/src/types.rs).
 | `sealed.rs`, `rtti.rs` | Sealed types and `when`, and run-time type checks |
 | `exprs.rs`, `resolve.rs` | Recording every expression's type and every call's target |
 
+Some of these change which programs compile, on purpose; their status
+is in [language changes typing makes](detail/03-typing.md#language-changes-typing-makes).
+
 ## Where in the code
 
 - [`find_flow_facts`](../../crates/temper-frontend/src/flow.rs): flow facts.
@@ -99,8 +107,12 @@ values in [`Types`](../../crates/temper-frontend/src/types.rs).
 - [`check_types`](../../crates/temper-frontend/src/typing.rs): the checks, then recording ([`type_all_exprs`](../../crates/temper-frontend/src/typing/exprs.rs)).
 - [`Typing::expr`](../../crates/temper-frontend/src/typing.rs) and [`Typing::resolved`](../../crates/temper-frontend/src/typing.rs): what later stages read.
 - [`coverage`](../../crates/temper-frontend/src/typing/exprs.rs): what's left untyped, for `run-temper --untyped`.
-- Tests: `crates/temper-frontend/tests/settle/types.cases`, `flow.cases`, and `class-types.cases`.
+- Tests: `crates/temper-frontend/tests/settle/types.cases`, `flow.cases`, and `class-types.cases` ([all the tests](detail/03-typing.md#tests)).
 
 More: [notes/typing.md](../../notes/typing.md) has the rules in full, and
 [notes/language.md](../../notes/language.md) the language decisions they
 follow.
+
+**In detail:** [Typing in detail](detail/03-typing.md): each decision
+with its alternatives and Kotlin Temper's way, the main types, the
+tests, and known weaknesses.

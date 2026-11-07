@@ -3,8 +3,10 @@
 Many compilers run fixed stages: resolve names, then expand macros,
 then check types. Temper can't do that cleanly, because a macro may
 declare a name that another statement needs, and a macro may need a
-type before it knows what to produce. So tempest has no stages. It has
-one loop of small work items, and each item says what it's waiting for.
+type before it knows what to produce. So instead of fixed stages, tempest
+has one scheduler of small work items, and each item says what it's
+waiting for. It runs in two rounds (names and macros, then typing),
+with a few whole-tree passes between and after them.
 
 ## Work items and facts
 
@@ -38,7 +40,10 @@ runaway macro.
 The scheduler ([`Engine`](../../crates/temper-frontend/src/engine.rs))
 knows nothing about Temper. It just orders items, records waits, and
 wakes waiters. What the steps do is in [`settle`](../../crates/temper-frontend/src/settle.rs)
-and the files it calls.
+and the files it calls. Why it's built this way, and how Kotlin Temper's
+stages compare, is in
+[work items instead of stages](detail/02-settle-loop.md#work-items-waiting-on-facts-instead-of-stages)
+and [forcing the earliest stuck item](detail/02-settle-loop.md#deterministic-order-and-forcing-the-earliest-stuck-item).
 
 ## The kinds of work
 
@@ -63,7 +68,9 @@ handful of *core constructs*: `Block`, `If`, `Loop`, `Let`, `Fn`,
 `Call`, `Assign`, `Return`, `Class`, and a few more
 ([`core`](../../crates/temper-frontend/src/core.rs) lists them all, with
 their layouts). Whatever a macro produces is visited afterwards, so
-nothing under a macro call is touched before the macro runs.
+nothing under a macro call is touched before the macro runs. More on
+[builtin macros](detail/02-settle-loop.md#builtin-macros-in-rust-rewriting-in-place)
+and [decorators](detail/02-settle-loop.md#decorators-matched-by-name).
 
 ## Worked example
 
@@ -131,11 +138,12 @@ console.log("x = ${x}");
 ```
 
 That took 27 steps, and no stage order was needed for the forward
-references.
+references. How a block is read before it's visited is in
+[the detailed page](detail/02-settle-loop.md#reading-a-block-before-visiting-it).
 
 ## Where in the code
 
-- [`settle`](../../crates/temper-frontend/src/settle.rs): sets up one item per file, runs the loop twice (expansion, then typing), and orders top levels. Between the rounds, [`drop_dead_branches`](../../crates/temper-frontend/src/dead_branches.rs) keeps only the live branch of an `if (false)`.
+- [`settle`](../../crates/temper-frontend/src/settle.rs): sets up one item per file, runs the loop twice (expansion, then typing), and orders top levels. Between the rounds, [`drop_dead_branches`](../../crates/temper-frontend/src/dead_branches.rs) keeps only the live branch of an `if (false)`. Why two rounds: [two rounds, and passes between and after](detail/02-settle-loop.md#two-rounds-and-passes-between-and-after).
 - [`run`](../../crates/temper-frontend/src/settle.rs): the loop itself, dispatching each kind of work.
 - [`read_block`](../../crates/temper-frontend/src/settle.rs) and [`head`](../../crates/temper-frontend/src/settle.rs): reading a block's statements.
 - [`expr`](../../crates/temper-frontend/src/settle.rs): visiting an expression; [`lookup`](../../crates/temper-frontend/src/settle.rs) and [`resolve_name`](../../crates/temper-frontend/src/settle.rs) find what a name means.
@@ -143,7 +151,11 @@ references.
 - [`Scopes`](../../crates/temper-frontend/src/scope.rs): scopes and symbols.
 - [`expand`](../../crates/temper-frontend/src/macros.rs): dispatch to each macro, such as [`expand_let`](../../crates/temper-frontend/src/macros.rs) and [`desugar_operation`](../../crates/temper-frontend/src/macros.rs); the list is [`Macro`](../../crates/temper-frontend/src/builtins.rs).
 - [`Library`](../../crates/temper-frontend/src/library.rs): the arena all of this rewrites, with diagnostics as values.
-- Tests: `crates/temper-frontend/tests/settle/*.cases`.
+- Tests: `crates/temper-frontend/tests/settle/*.cases` ([all the tests](detail/02-settle-loop.md#tests)).
 
 More: [notes/design.md](../../notes/design.md), section 5, and
 [notes/history/milestone-3.md](../../notes/history/milestone-3.md).
+
+**In detail:** [The settle loop in detail](detail/02-settle-loop.md):
+each decision with its alternatives and Kotlin Temper's way, imports,
+the main types, the tests, and known weaknesses.

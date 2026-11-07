@@ -37,12 +37,17 @@ flowchart LR
   from the loop at each `yield` and picks up from there on `next()`. An
   `async` block is a generator too, run from a queue, which also pauses
   at an `await` of a promise that isn't resolved yet.
-- **Bounded.** Optional fuel stops a run after a number of steps (tests
-  and the playground set it), and calls nest at most 2000 deep (500 in
-  the browser), so runaway code can't hang a test run or crash a tab.
+- **Bounded.** Optional fuel stops a run after a number of steps (the
+  playground sets it; `tempest test` doesn't yet), and calls nest at most 2000 deep (500 in
+  the browser), so runaway code can't hang a test run or crash a tab
+  ([limits, in detail](detail/04-interpreter.md#limits-fuel-call-depth-and-nesting)).
+
+Why each of these, and what else was considered:
+[decisions, in detail](detail/04-interpreter.md#decisions).
 
 Host code (`@connected` functions) runs only where the interpreter
-implements it: std's `Date.today()`, `regex`, and `net`, for now.
+implements it: std's `Date.today()`, `regex`, and `net`, for now
+([builtins and connected code](detail/04-interpreter.md#builtins-and-connected-code)).
 
 ## Worked example
 
@@ -72,7 +77,8 @@ triple(14) = 42
 library's top level, then each module's tests, and reports them as
 JUnit XML, the same report std's test runner gives in every language.
 `tempest test` reads those results into one summary
-([the CLI page](07-cli.md) says more).
+([the CLI page](07-cli.md) says more). What tests pin the interpreter
+itself: [its tests, in detail](detail/04-interpreter.md#tests).
 
 ## Where in the code
 
@@ -85,3 +91,9 @@ JUnit XML, the same report std's test runner gives in every language.
 
 Later, the same interpreter is meant to evaluate constants and macros
 written in Temper during settling ([notes/compile-time.md](../../notes/compile-time.md)).
+
+## In detail
+
+[The interpreter, in detail](detail/04-interpreter.md): each design
+decision with its alternatives and trade-offs, the main types, the
+tests, speed, and known weaknesses.

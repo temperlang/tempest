@@ -31,7 +31,9 @@ All reading goes through one [`Sources`](../../crates/temper-frontend/src/source
 value, so the compiler never touches the file system itself. It stacks
 layers: the disk, std built in, or files in memory. The playground uses
 memory, and the language server puts unsaved editor buffers in front of
-the disk.
+the disk. Why, and how the search differs from Kotlin's (ignore files,
+configs read rather than run), is in
+[the detailed page](detail/07-cli.md#one-sources-value-for-every-read).
 
 ## One compile path
 
@@ -43,7 +45,7 @@ flowchart LR
   translate --> files["Files"]
 ```
 
-Every caller takes the same three steps, from
+Callers take these three steps, from
 [`temper-driver`](../../crates/temper-driver/src/lib.rs):
 [`checked`](../../crates/temper-driver/src/lib.rs) turns a settled library
 into tmpl and validates it, [`with_std`](../../crates/temper-driver/src/lib.rs)
@@ -51,10 +53,14 @@ gives it std's names as the backend spells them, and
 [`translate`](../../crates/temper-driver/src/lib.rs) runs one backend from
 the [`Registry`](../../crates/temper-driver/src/lib.rs), which holds each
 built-in backend crate's `BACKEND`, one per cargo feature, all on by
-default. Which backends `build` writes without `-b`, and which names
+default. (`build` sets std's names itself rather than calling
+`with_std`.) Which backends `build` writes without `-b`, and which names
 this build lacks, come from the registry and the list of
 [`KNOWN`](../../crates/temper-driver/src/lib.rs) names, not lists of
-their own.
+their own. The trade-offs are in
+[the registry](detail/07-cli.md#a-registry-built-at-startup-from-cargo-features),
+[a backend as plain data](detail/07-cli.md#a-backend-is-a-struct-of-function-pointers),
+and [one compile path](detail/07-cli.md#one-compile-path), in detail.
 
 ## `test` and `build`
 
@@ -87,6 +93,12 @@ flowchart TD
 - **Errors never stop either command.** Every error is reported, the
   code is still written, and the tests still run; a test fails only if
   it reaches an error. The exit status is 1 whenever there were errors.
+
+Each command step by step, the tools each backend runs, and why
+imported libraries are settled again in each importer:
+[the commands, in detail](detail/07-cli.md#the-commands-step-by-step),
+[each language's own tools](detail/07-cli.md#each-languages-own-tools-without-package-managers-where-possible),
+and [libraries settled on their own](detail/07-cli.md#each-library-settled-on-its-own-with-what-it-imports).
 
 ## Worked example
 
@@ -155,7 +167,7 @@ Tests passed: 1 of 2
 - [`test_dir`](../../crates/temper-frontend/src/library_tests.rs), [`test_library`](../../crates/temper-frontend/src/library_tests.rs), and [`Tally`](../../crates/temper-frontend/src/library_tests.rs): tests on the interpreter, and the summary.
 - [`work_root`](../../crates/temper-frontend/src/project.rs), [`find_libraries`](../../crates/temper-frontend/src/project.rs), and [`load_library`](../../crates/temper-frontend/src/project.rs): finding and loading libraries.
 - [`program`](../../crates/temper-frontend/src/stdlib.rs) in `stdlib`: std, built in, as its own library.
-- Tests: `crates/tempest/tests/` (the CLI, and the layout of `temper.out`).
+- Tests: `crates/tempest/tests/` (the CLI, and the layout of `temper.out`); [all the tests](detail/07-cli.md#tests).
 
 ## Dynamic backends (future work)
 
@@ -165,8 +177,14 @@ first as external processes, each given a library as tmpl in a
 versioned, serialized form and answering with its files (and running
 its tests), so a backend can live in its own repository and language;
 then as DLLs, only if processes prove too slow. The wasm build keeps a
-fixed list of built-in backends.
+fixed list of built-in backends. What has to change first:
+[dynamic backends, in detail](detail/07-cli.md#dynamic-backends-planned).
 
-`watch`, `run`, `repl`, and the rest of Temper's commands come later;
+`watch`, `run`, `repl`, and the rest of Temper's commands come later
+([parity with Kotlin's `temper`](detail/07-cli.md#parity-with-kotlins-temper));
 [the next page](08-playground.md) says how `watch` will reuse all this,
 and [page 9](09-language-server.md) how `lsp` does.
+
+**In detail:** [The tempest command in detail](detail/07-cli.md): each
+decision with its alternatives and Kotlin Temper's way, the main types,
+the tests, and known weaknesses.

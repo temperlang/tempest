@@ -38,6 +38,11 @@ Errors are values all the way through. An operator with a missing
 operand stays in the tree with an error attached, so the rest of the
 file still parses and still gets checked.
 
+Why each step is a port of Kotlin Temper's, and what that costs, is in
+[the detailed page](detail/01-syntax.md#port-kotlins-front-end-step-by-step),
+along with [bracket recovery](detail/01-syntax.md#bracket-recovery) and
+[errors and depth limits](detail/01-syntax.md#errors-as-values-and-bounded-depth).
+
 ## Worked example
 
 The lexer sees `triple.temper` as tokens. The first few:
@@ -102,7 +107,9 @@ flat arrays of node kinds, spans, data, and children, addressed by
 layout and comments. The settle loop works on a copy built by the
 grammar step, whose nodes remember where they came from. Its
 [`NodeKind`](../../crates/temper-syntax/src/tree.rs) already lists the
-core constructs that macros will reduce everything to.
+core constructs that macros will reduce everything to. The trade-offs
+are in [one tree type](detail/01-syntax.md#one-tree-type-in-flat-arrays)
+and [two copies](detail/01-syntax.md#two-copies-the-parse-tree-and-the-working-tree).
 
 ## Where in the code
 
@@ -115,6 +122,10 @@ core constructs that macros will reduce everything to.
 - [`write_ast`](../../crates/temper-syntax/src/print.rs): trees as text, for tests.
 - [`add_file`](../../crates/temper-frontend/src/library.rs) in the frontend runs all of the above for each file and copies the result into the library's tree.
 - Tests: `crates/temper-syntax/tests/parse/` and `tests/ast/` hold the
-  cases, many of them taken from Temper's own tests.
+  cases, many of them taken from Temper's own tests ([all the tests](detail/01-syntax.md#tests)).
 
 More: [notes/design.md](../../notes/design.md), sections 3 and 4.
+
+**In detail:** [Syntax in detail](detail/01-syntax.md): each decision
+with its alternatives and Kotlin Temper's way, the main types, the
+tests, and known weaknesses.

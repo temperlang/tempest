@@ -30,7 +30,9 @@ a channel; the loop waits for the next message or a timer, whichever
 comes first. Messages are `serde_json` values, and their params and
 results `lsp-types`' structs; no async runtime. Only the native
 `tempest` uses the crate, so the wasm build, which answers the
-playground itself, doesn't carry it or those crates.
+playground itself, doesn't carry it or those crates. What this costs
+(no cancellation, one request at a time) and the alternatives:
+[one synchronous loop, in detail](detail/09-language-server.md#one-synchronous-loop).
 
 ## What gets analyzed
 
@@ -57,6 +59,11 @@ playground itself, doesn't carry it or those crates.
   definition into std writes std's sources once, read-only, to a
   directory in the system's temporary directory, and points there.
 
+What makes a unit stale, and the costs of settling it whole each time:
+[units and staying current](detail/09-language-server.md#units-and-staying-current)
+and [the whole library settled again](detail/09-language-server.md#the-whole-library-settled-again-on-each-pause),
+in detail.
+
 ## The queries
 
 Each is a method of `Analysis`, shared by the server and the playground:
@@ -79,6 +86,9 @@ Each is a method of `Analysis`, shared by the server and the playground:
   brackets open at the cursor from the text
   ([`open_brackets`](../../crates/temper-analysis/src/signatures.rs)),
   since a call being typed hasn't settled into a call yet.
+
+How a query finds what's at a position:
+[temper-analysis, in detail](detail/09-language-server.md#finding-whats-at-a-position).
 
 ## The VS Code extension
 
@@ -119,9 +129,16 @@ Each is a method of `Analysis`, shared by the server and the playground:
   preview (rendering, live updates, and scroll sync both ways).
   How to install and build: [editors/vscode/README.md](../../editors/vscode/README.md).
 
+Why each part of the extension is built as it is:
+[the VS Code extension, in detail](detail/09-language-server.md#the-vs-code-extension).
+
 ## Where in the code
 
 - [`temper-lsp`](../../crates/temper-lsp/src/lib.rs): the server; [`serve`](../../crates/temper-lsp/src/lib.rs), [`read_message`](../../crates/temper-lsp/src/lib.rs), and [`write_message`](../../crates/temper-lsp/src/lib.rs).
 - [`temper-analysis`](../../crates/temper-analysis/src/lib.rs): the queries, with [`members`](../../crates/temper-analysis/src/members.rs), [`references`](../../crates/temper-analysis/src/references.rs), [`symbols`](../../crates/temper-analysis/src/symbols.rs), and [`signatures`](../../crates/temper-analysis/src/signatures.rs).
 - Tests: `crates/temper-analysis/tests/analysis.rs` (the queries) and `crates/temper-lsp/tests/lsp.rs` (a scripted session with the server).
-- `editors/vscode/`: the grammars, the extension, and their tests.
+- `editors/vscode/`: the grammars, the extension, and their tests ([all the tests](detail/09-language-server.md#tests)).
+
+**In detail:** [The language server and editors in detail](detail/09-language-server.md):
+each decision with its alternatives and Kotlin Temper's way, the main
+types, the tests, and known weaknesses.

@@ -28,7 +28,9 @@ Rust types are generated. tmpl also has a text form that reads back
 exactly ([`write`](../../crates/temper-tmpl/src/text/write.rs) and
 [`read`](../../crates/temper-tmpl/src/text/read.rs)), which the goldens
 use, and a [`validate`](../../crates/temper-tmpl/src/validate.rs)
-that checks a program's rules, each problem with its code.
+that checks a program's rules, each problem with its code. Why
+columns, a text form, and coded rules:
+[decisions, in detail](detail/05-tmpl.md#decisions).
 
 ## Worked example
 
@@ -90,6 +92,7 @@ value's type, the `Error` keeps the value as written, for the
 lowering below to settle. Classes, function values, and
 defaults have files of their own: `to_tmpl_classes.rs`,
 `to_tmpl_functions.rs`, and `to_tmpl_defaults.rs`.
+[`to_tmpl`, in detail](detail/05-tmpl.md#from-the-frontend-to_tmpl).
 
 ## Shared lowerings
 
@@ -109,6 +112,9 @@ lists backends.
 | [`switches::to_if_chains`](../../crates/temper-tmpl/src/switches.rs) | A `Switch` as `if`s | C#, JS, Lua, Python, and Java for `Int64` |
 | [`spill`](../../crates/temper-tmpl/src/spill.rs) and [`spill_with`](../../crates/temper-tmpl/src/spill.rs) | Keeps evaluation order when a backend moves statements out of an expression | C#, C++, Lua |
 | [`naming::assign`](../../crates/temper-tmpl/src/naming.rs) | Pretty, collision-free names by each language's [`NamingRules`](../../crates/temper-tmpl/src/naming.rs) | all seven |
+
+Why profiles and hand-picked lowerings, rather than one fixed
+pipeline: [in detail](detail/05-tmpl.md#profiles-and-lowerings-each-backend-calls).
 
 The naming pass is why there are no `x__123` names in the output.
 `triple#1` becomes `_triple` in Python (module-private, so it starts
@@ -133,6 +139,12 @@ for source maps.
 - [`Profile`](../../crates/temper-tmpl/src/profile.rs), [`Features`](../../crates/temper-tmpl/src/profile.rs), and [`CoroutineStrategy`](../../crates/temper-tmpl/src/coroutines.rs): a backend's choices.
 - [`Backend`](../../crates/temper-tmpl/src/backend.rs): what tools need of a backend, which each backend crate exports as `BACKEND` ([backends](06-backends.md)).
 - [`to_tmpl`](../../crates/temper-frontend/src/to_tmpl.rs), [`translate_with`](../../crates/temper-frontend/src/to_tmpl.rs) (modules, then classes, then members, then bodies), [`stmt_or_gap`](../../crates/temper-frontend/src/to_tmpl.rs), and [`expr`](../../crates/temper-frontend/src/to_tmpl.rs).
-- Tests: `crates/temper-tmpl/tests/` (round trips, naming, spill) and `crates/temper-frontend/tests/to_tmpl.rs`.
+- Tests: `crates/temper-tmpl/tests/` (round trips, naming, spill) and `crates/temper-frontend/tests/to_tmpl.rs` ([what each pins](detail/05-tmpl.md#tests)).
 
 More: [notes/tmpl/](../../notes/tmpl/README.md), one file per topic.
+
+## In detail
+
+[tmpl, in detail](detail/05-tmpl.md): each design decision with its
+alternatives and trade-offs, `to_tmpl`'s rounds, the shared lowerings,
+the main types, the tests, and known weaknesses.

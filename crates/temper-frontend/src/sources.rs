@@ -17,8 +17,8 @@
 //! listing merges theirs. So the binaries use the disk with std built in
 //! ([`Sources::standard`]), `--std DIR` mounts a directory at std's root
 //! instead ([`Sources::with_std_dir`]), and the wasm build and tests use
-//! memory with std built in ([`Sources::memory`]). Watch mode or a
-//! language server can later put a memory layer of unsaved editor buffers
+//! memory with std built in ([`Sources::memory`]). The language server
+//! (and later watch mode) puts a memory layer of unsaved editor buffers
 //! before the disk, at the same prefix, to overlay it.
 //!
 //! Paths are `/`-joined strings, as the rest of the frontend keeps them.
