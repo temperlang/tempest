@@ -13,11 +13,11 @@ and tempest's language server, `tempest lsp`, for:
 - the outline (document symbols), and signature help in calls.
 
 And a rendered preview of literate Temper, as VS Code's own Markdown
-preview does for `.md`: "Temper: Open Preview" (Ctrl+Shift+V, or
-Cmd+Shift+V on macOS) in place of the editor, "Temper: Open Preview to
-the Side" (Ctrl+K V) or the editor title's preview button beside it.
-It updates as you type, highlights Temper code blocks as the editor
-does, and scrolls with the editor both ways. It renders with VS Code's
+preview does for `.md`: "Temper: Open Markdown Preview" (Ctrl+Shift+V,
+or Cmd+Shift+V on macOS) in place of the editor, "Temper: Open Markdown
+Preview to the Side" (Ctrl+K V) or the editor title's preview button
+beside it. It updates as you type, highlights Temper code blocks as the
+editor does, and scrolls with the editor both ways. It renders with VS Code's
 built-in Markdown extension, so needs that enabled. Relative images and
 links work; links to the web open in the browser; nothing remote loads
 in the preview itself, and scripts in the document don't run.

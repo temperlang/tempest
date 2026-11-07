@@ -82,13 +82,13 @@
       },
       {
         "command": "temper.showPreview",
-        "title": "Open Preview",
+        "title": "Open Markdown Preview",
         "category": "Temper",
         "icon": "$(open-preview)"
       },
       {
         "command": "temper.showPreviewToSide",
-        "title": "Open Preview to the Side",
+        "title": "Open Markdown Preview to the Side",
         "category": "Temper",
         "icon": "$(open-preview)"
       }
