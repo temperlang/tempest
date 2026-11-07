@@ -192,7 +192,7 @@ fn runs(program: &str, args: &[&str]) -> bool {
 
 /// The host's target triple, as rustc gives it.
 fn host() -> Option<String> {
-    let rustc = env::var("RUSTC").unwrap_or_else(|_| "rustc".into());
+    let rustc = temper_tmpl::tools::tool("RUSTC", "rustc");
     let out = Command::new(rustc).arg("-vV").output().ok()?;
     (String::from_utf8_lossy(&out.stdout).lines())
         .find_map(|l| l.strip_prefix("host: "))
@@ -462,7 +462,7 @@ fn cargo_test_failures(stdout: &str) -> Option<Vec<kit::TestFailure>> {
 /// Cargo, in the workspace, offline, with its own target directory.
 fn cargo(root: &Path, args: &[&str]) -> Output {
     let (command, rest) = args.split_first().unwrap();
-    Command::new(env::var("CARGO").unwrap_or_else(|_| "cargo".into()))
+    Command::new(temper_tmpl::tools::tool("CARGO", "cargo"))
         .arg(command)
         .arg("--offline")
         .args(rest)

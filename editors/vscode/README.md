@@ -19,12 +19,17 @@ and likewise `linux-arm64`, `darwin-x64`, `darwin-arm64`, `win32-x64`,
 and `win32-arm64`. The universal `temper-VERSION.vsix` has none, and
 uses `tempest` on `PATH`. CI's Binaries workflow builds them all.
 
-Install one with `code --install-extension temper-linux-x64-0.0.1.vsix`,
-or in VS Code, the Extensions view's `...` menu, "Install from VSIX...".
+Install one with `code --install-extension temper-linux-x64-VERSION.vsix`,
+or in VS Code, the Extensions view's `...` menu, "Install from VSIX...",
+then reload the window ("Developer: Reload Window") so the new one runs.
+Each build has its own VERSION, package.json's major and minor with the
+minutes since 2026 as the patch, so a new package always replaces an
+older one.
 
-The server is the first of: **Temper: Server Path**
-(`temper.server.path`), if set; the bundled tempest; `tempest` on
-`PATH`. With none, the extension says so. **Temper: Server Args**
+The server is **Temper: Server Path** (`temper.server.path`), a path
+or a name on `PATH`, if set; else the bundled tempest, then `tempest`
+on `PATH`. If there's none, or it doesn't start, an error says what was
+tried and how to fix it, with a button to open the setting. **Temper: Server Args**
 (`temper.server.args`) adds arguments, as `["--std", "/path/to/std"]`.
 "Temper: Restart Language Server" restarts it; its log is in the Output
 panel's "Temper" channel.
@@ -38,8 +43,8 @@ cargo build --profile small -p tempest
 uv run editors/vscode/build.py --tempest target/small/tempest --test
 ```
 
-This writes `editors/vscode/out/temper-0.0.1.vsix` and
-`out/temper-linux-x64-0.0.1.vsix` (on Linux x64), and with `--test`,
+This writes `editors/vscode/out/temper-VERSION.vsix` and
+`out/temper-linux-x64-VERSION.vsix` (on Linux x64), and with `--test`,
 runs the tests in a real VS Code. `--binaries DIR` bundles each
 `DIR/tempest-RUST_TARGET/tempest[.exe]` in its platform's package.
 

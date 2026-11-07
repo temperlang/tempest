@@ -1,34 +1,39 @@
-//! `tempest lsp`, driven as an editor drives it: a scripted JSON-RPC
-//! session over the child's stdin and stdout, on a library folder with a
+//! The language server, driven as an editor drives `tempest lsp`: a
+//! scripted JSON-RPC session over a stream, on a library folder with a
 //! `config.temper.md` and two files.
 
 use serde_json::{Value as Json, json};
 use std::io::BufReader;
+use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
-use tempest::lsp::{path_to_uri, read_message, write_message};
+use std::thread::JoinHandle;
+use temper_lsp::{path_to_uri, read_message, write_message};
 
 struct Client {
-    child: Child,
-    input: ChildStdin,
-    output: BufReader<ChildStdout>,
+    /// The server, whose result is its exit code.
+    server: JoinHandle<u8>,
+    input: TcpStream,
+    output: BufReader<TcpStream>,
     next: u32,
     /// Notifications that came while waiting for a response.
     notes: Vec<Json>,
 }
 
 impl Client {
+    /// The server on a thread, with as much stack as `tempest` gives
+    /// it, over a loopback socket, as an editor's pipes.
     fn start() -> Client {
-        let mut child = Command::new(env!("CARGO_BIN_EXE_tempest"))
-            .arg("lsp")
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .spawn()
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let input = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        let (stream, _) = listener.accept().unwrap();
+        let reader = stream.try_clone().unwrap();
+        let server = std::thread::Builder::new()
+            .stack_size(64 << 20)
+            .spawn(move || temper_lsp::serve(reader, stream, None))
             .unwrap();
-        let input = child.stdin.take().unwrap();
-        let output = BufReader::new(child.stdout.take().unwrap());
+        let output = BufReader::new(input.try_clone().unwrap());
         Client {
-            child,
+            server,
             input,
             output,
             next: 1,
@@ -87,7 +92,7 @@ impl Client {
     fn finish(mut self) -> i32 {
         assert_eq!(self.request("shutdown", Json::Null), Json::Null);
         self.notify("exit", Json::Null);
-        self.child.wait().unwrap().code().unwrap()
+        self.server.join().unwrap().into()
     }
 }
 
@@ -343,7 +348,7 @@ fn utf16_positions_and_a_lone_file() {
 fn exit_without_shutdown_fails() {
     let mut client = Client::start();
     client.notify("exit", Json::Null);
-    assert_eq!(client.child.wait().unwrap().code(), Some(1));
+    assert_eq!(client.server.join().unwrap(), 1);
 }
 
 #[test]
@@ -365,7 +370,7 @@ fn definition_into_std() {
         target.contains("tempest-std-") && target.ends_with("regex.temper.md"),
         "{def}"
     );
-    let path = tempest::lsp::uri_to_path(target);
+    let path = temper_lsp::uri_to_path(target);
     let text = std::fs::read_to_string(&path).unwrap();
     let line = num_at(&def, &["range", "start", "line"]) as usize;
     assert!(text.lines().nth(line).unwrap().contains("Regex"), "{def}");

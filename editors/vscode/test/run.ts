@@ -23,6 +23,11 @@ async function main(extensionDir: string, cachePath: string, suite: string, vers
   try {
     mkdirSync(workspace);
     for (const [name, text] of Object.entries(files)) writeFileSync(path.join(workspace, name), text);
+    // VS Code's built-in AI features, which `--disable-extensions` leaves
+    // on, log for a GitHub sign-in again and again; off, the log is ours.
+    const user = path.join(scratch, "user-data", "User");
+    mkdirSync(user, { recursive: true });
+    writeFileSync(path.join(user, "settings.json"), JSON.stringify({ "chat.disableAIFeatures": true }));
     await runTests({
       version,
       cachePath,

@@ -1,5 +1,5 @@
 //! The `tempest` command, a thin layer over the other crates, which do
-//! the work as libraries.
+//! the work as libraries: argument parsing and output.
 //!
 //!     tempest build [-w DIR] [-b BACKEND]... [--no-connected] [--verbose] [--std DIR]
 //!     tempest test [-b interp|BACKEND] [--verbose] [--std DIR] [DIR]
@@ -21,7 +21,7 @@
 //! another backend, `-b py` say, it builds the libraries for that backend
 //! as `build` does, saying what each needs that isn't covered yet, then
 //! runs the tests of those that built with the language's own tools
-//! ([`test_run`]), reporting as on the interpreter; tests of a library
+//! ([`temper_driver::test_run`]), reporting as on the interpreter; tests of a library
 //! that didn't build count as not run. Std modules are built in ([`temper_frontend::stdlib`]), or
 //! come from `--std`'s directory, to test against another copy.
 //!
@@ -31,7 +31,7 @@
 //! (`csharp`, `java`, `js`, `lua`, `py`, and `rust`), writing
 //! `temper.out/BACKEND/LIBRARY/…` laid out as Kotlin Temper's `temper
 //! build` does, with each backend's runtime beside the libraries
-//! ([`build`]). What it doesn't cover yet, it says, per library, and fails.
+//! ([`temper_driver::build`]). What it doesn't cover yet, it says, per library, and fails.
 //!
 //! **Errors** don't stop any command, as in Kotlin Temper: every error is
 //! reported, and each fails only where it runs (tmpl's `Error`), so
@@ -56,12 +56,12 @@
 //! module has a source map beside it, as Kotlin's has, naming the
 //! sources by their paths relative to the package.
 //!
-//! `lsp` serves an editor over stdio as a language server ([`tempest::lsp`]):
+//! `lsp` serves an editor over stdio as a language server ([`temper_lsp`]):
 //! diagnostics as you type, hover, go to definition, completion, find
 //! references, rename, document symbols, and signature help, over the
 //! library around each open file.
 //!
-//! Each backend is a cargo feature, all on by default ([`tempest`]); one
+//! Each backend is a cargo feature, all on by default ([`temper_driver`]); one
 //! left out says so and fails.
 //!
 //! Exits with 0 on success, 1 on failure, and 2 on a usage error.
@@ -70,13 +70,14 @@ use std::cell::OnceCell;
 use std::io::{self, Write};
 use std::path::Path;
 use std::process::ExitCode;
+use std::sync::OnceLock;
+use temper_driver::{Registry, build, test_run};
 use temper_frontend::library::Library;
 use temper_frontend::library_tests::{Tally, test_dir};
 use temper_frontend::project::{load_imports, source_kind, work_root};
 use temper_frontend::settle::settle;
 use temper_frontend::sources::Sources;
 use temper_tmpl::Backend;
-use tempest::{NAMES, build, test_run};
 
 const USAGE: &str =
     "usage: tempest build [-w DIR] [-b BACKEND]... [--no-connected] [--verbose] [--std DIR]
@@ -204,7 +205,7 @@ fn test_on(sources: &Sources, dir: &str, backend: &'static Backend, verbose: boo
             tally.not_run += tests;
         }
     }
-    for (name, result) in test_run::run(backend.name, &dir, &tested) {
+    for (name, result) in test_run::run(backend, &dir, &tested) {
         match result {
             Ok(tests) => {
                 let failing = tests.results.iter().any(|(_, f)| f.is_some());
@@ -247,7 +248,7 @@ fn lsp(args: &[String]) -> u8 {
         [flag, dir] if flag == "--std" => Some(dir.clone()),
         _ => return usage(),
     };
-    tempest::lsp::serve(io::stdin(), io::stdout().lock(), std_dir)
+    temper_lsp::serve(io::stdin(), io::stdout().lock(), std_dir)
 }
 
 /// `tempest build [-w DIR] [-b BACKEND]... [--no-connected] [--verbose]
@@ -283,10 +284,7 @@ fn build_command(args: &[String]) -> u8 {
         }
     }
     if backends.is_empty() {
-        backends = tempest::DEFAULT
-            .iter()
-            .filter_map(|n| tempest::backend(n))
-            .collect();
+        backends = registry().defaults();
     }
     let sources = match std_dir {
         Some(std_dir) => Sources::with_std_dir(&std_dir),
@@ -313,12 +311,18 @@ fn build_command(args: &[String]) -> u8 {
     }
 }
 
+/// The backends this run has, built in.
+fn registry() -> &'static Registry {
+    static REGISTRY: OnceLock<Registry> = OnceLock::new();
+    REGISTRY.get_or_init(Registry::built_in)
+}
+
 /// A backend this build has, by name, or else the exit code: 1 for one
 /// it was built without, saying so, or 2 for a name that isn't one.
 fn named(name: &str) -> Result<&'static Backend, u8> {
-    match tempest::backend(name) {
+    match registry().get(name) {
         Some(backend) => Ok(backend),
-        None if NAMES.contains(&name) => {
+        None if registry().lacks(name) => {
             eprintln!("tempest: built without the {name} backend");
             Err(1)
         }
@@ -383,7 +387,8 @@ fn generate(args: &[String], backend: &Backend) -> u8 {
             .as_ref())
         .map_err(|e| format!("std: {e}"))
     };
-    let program = tempest::checked(&settled, name).and_then(|p| tempest::with_std(p, backend, std));
+    let program = temper_driver::checked(&settled, name)
+        .and_then(|p| temper_driver::with_std(p, backend, std));
     let program = match program {
         Ok(program) => program,
         Err(e) => {
@@ -399,12 +404,12 @@ fn generate(args: &[String], backend: &Backend) -> u8 {
         .unwrap_or_else(|| ".".into());
     // Written files get source maps, which lead back to the sources.
     let maps = (out_dir.as_deref()).map(|d| {
-        tempest::sources_prefix(
+        temper_driver::sources_prefix(
             &Path::new(d).join(&program.library.name),
             &format!("{source_dir}/x"),
         )
     });
-    let generated = match tempest::translate(&program, backend, maps.as_deref()) {
+    let generated = match temper_driver::translate(&program, backend, maps.as_deref()) {
         Ok(files) => files,
         Err(e) => {
             eprintln!("{e}");

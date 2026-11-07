@@ -1,19 +1,15 @@
-//! What the `tempest` command does, as a library too: the one list of
-//! backends this build has ([`BACKENDS`]), and one way from a settled
+//! What tools share over the backends, as a library: the registry of
+//! backends this build has ([`Registry`]); one way from a settled
 //! library to each backend's files ([`checked`], [`with_std`],
-//! [`translate`]), which `tempest build` ([`build`]), the commands for one
-//! backend, and the playground's wasm (`temper-wasm`) all take.
-//! [`test_run`] runs built libraries' tests with each language's own
-//! tools, for `tempest test -b`. [`lsp`] is `tempest lsp`, a language
-//! server over [`temper_analysis`].
+//! [`translate`]), which `tempest build` ([`build`]), the commands for
+//! one backend, and the playground's wasm (`temper-wasm`) all take; and, natively, running built libraries'
+//! tests with each language's own tools ([`test_run`]), as each backend
+//! says ([`temper_tmpl::Tools`]).
 //!
-//! Each backend is a cargo feature (`cpp`, `csharp`, `java`, `js`, `lua`,
-//! `py`, and `rust`), all on by default.
+//! Each built-in backend is a cargo feature (`cpp`, `csharp`, `java`,
+//! `js`, `lua`, `py`, and `rust`), all on by default.
 
 pub mod build;
-// Native only: the wasm answers the playground's queries itself.
-#[cfg(any(unix, windows))]
-pub mod lsp;
 // Not in the wasm, which runs no tools.
 #[cfg(any(unix, windows))]
 pub mod test_run;
@@ -24,35 +20,63 @@ use temper_frontend::to_tmpl::to_tmpl;
 use temper_tmpl::naming::{Interface, assign};
 use temper_tmpl::{Backend, Profile, Program, validate};
 
-/// The backends this build has, alphabetically.
-pub const BACKENDS: &[&Backend] = &[
-    #[cfg(feature = "cpp")]
-    &temper_be_cpp::BACKEND,
-    #[cfg(feature = "csharp")]
-    &temper_be_csharp::BACKEND,
-    #[cfg(feature = "java")]
-    &temper_be_java::BACKEND,
-    #[cfg(feature = "js")]
-    &temper_be_js::BACKEND,
-    #[cfg(feature = "lua")]
-    &temper_be_lua::BACKEND,
-    #[cfg(feature = "py")]
-    &temper_be_py::BACKEND,
-    #[cfg(feature = "rust")]
-    &temper_be_rust::BACKEND,
-];
+/// Every backend's name, alphabetically, whether or not this build has
+/// it, so a name left out can say so; the playground's wasm numbers
+/// backends by their places here.
+pub const KNOWN: [&str; 7] = ["cpp", "csharp", "java", "js", "lua", "py", "rust"];
 
-/// Every backend's name, whether or not this build has it, so a name left
-/// out can say so.
-pub const NAMES: [&str; 7] = ["cpp", "csharp", "java", "js", "lua", "py", "rust"];
+/// The backends this run has: those built in, by cargo feature, and
+/// later those that join while it runs (docs/internals, "Dynamic
+/// backends").
+pub struct Registry {
+    backends: Vec<&'static Backend>,
+}
 
-/// What `build` translates for without `-b`: Kotlin's defaults, but for
-/// `data`, which tempest doesn't have.
-pub const DEFAULT: [&str; 6] = ["csharp", "java", "js", "lua", "py", "rust"];
+impl Registry {
+    /// The built-in backends, alphabetically.
+    pub fn built_in() -> Registry {
+        let backends = vec![
+            #[cfg(feature = "cpp")]
+            &temper_be_cpp::BACKEND,
+            #[cfg(feature = "csharp")]
+            &temper_be_csharp::BACKEND,
+            #[cfg(feature = "java")]
+            &temper_be_java::BACKEND,
+            #[cfg(feature = "js")]
+            &temper_be_js::BACKEND,
+            #[cfg(feature = "lua")]
+            &temper_be_lua::BACKEND,
+            #[cfg(feature = "py")]
+            &temper_be_py::BACKEND,
+            #[cfg(feature = "rust")]
+            &temper_be_rust::BACKEND,
+        ];
+        Registry { backends }
+    }
 
-/// A backend this build has, by name.
-pub fn backend(name: &str) -> Option<&'static Backend> {
-    BACKENDS.iter().copied().find(|b| b.name == name)
+    /// Every backend it has.
+    pub fn all(&self) -> &[&'static Backend] {
+        &self.backends
+    }
+
+    /// A backend it has, by name.
+    pub fn get(&self, name: &str) -> Option<&'static Backend> {
+        self.backends.iter().copied().find(|b| b.name == name)
+    }
+
+    /// What `build` translates for without `-b` ([`Backend::default`]).
+    pub fn defaults(&self) -> Vec<&'static Backend> {
+        self.backends
+            .iter()
+            .copied()
+            .filter(|b| b.default)
+            .collect()
+    }
+
+    /// Whether a name is a known backend's ([`KNOWN`]) that it lacks.
+    pub fn lacks(&self, name: &str) -> bool {
+        KNOWN.contains(&name) && self.get(name).is_none()
+    }
 }
 
 /// A settled library as tmpl, named `name`, and checked; or why not: what

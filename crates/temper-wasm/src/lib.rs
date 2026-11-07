@@ -29,13 +29,16 @@
 //! console.log(new TextDecoder().decode(out));
 //! ```
 //!
-//! Settling aside, it compiles as `tempest` does, through its library
-//! ([`tempest::checked`], [`tempest::with_std`], [`tempest::translate`]).
-//! Each backend is a cargo feature, all on by default, as in `tempest`.
+//! Settling aside, it compiles as `tempest` does, through
+//! `temper-driver` ([`temper_driver::checked`], [`temper_driver::with_std`],
+//! [`temper_driver::translate`]). Each backend is a cargo feature, all on
+//! by default, as in `tempest`.
 
 use std::cell::{OnceCell, RefCell};
 use std::fmt::Write;
+use std::sync::OnceLock;
 use temper_analysis::{Analysis, DeclKind, Position, byte_offset};
+use temper_driver::Registry;
 use temper_frontend::library::FileId;
 use temper_frontend::library_tests::{Tally, run_settled_tests};
 use temper_frontend::project::load_imports;
@@ -104,7 +107,7 @@ pub extern "C" fn run(ptr: *const u8, len: usize, markdown: u32) {
 
 /// Translates the input buffer, as a library named `main` from a file
 /// `main.temper` (or `main.temper.md`), with the std modules it imports,
-/// by the backend numbered by its place in [`tempest::NAMES`] (`0` for
+/// by the backend numbered by its place in [`temper_driver::KNOWN`] (`0` for
 /// C++, …, `6` for Rust), as `tempest py` and the rest do, and keeps the
 /// generated files as JSON, `{"files": [{"path": ..., "text":
 /// ...}, ...]}`, laid out as Kotlin's `temper.out/LANG` under it, or
@@ -137,9 +140,15 @@ pub extern "C" fn backends() {
     OUTPUT.with_borrow_mut(|out| *out = format!("[{}]", names.join(",")));
 }
 
-/// The backends this build has, alphabetically ([`tempest::BACKENDS`]).
+/// The backends this build has, alphabetically.
 pub fn built_in() -> impl Iterator<Item = &'static str> {
-    tempest::BACKENDS.iter().map(|b| b.name)
+    registry().all().iter().map(|b| b.name)
+}
+
+/// The backends this build has ([`Registry`]).
+fn registry() -> &'static Registry {
+    static REGISTRY: OnceLock<Registry> = OnceLock::new();
+    REGISTRY.get_or_init(Registry::built_in)
 }
 
 /// Settles the input buffer once, as `generate` does, and keeps all a
@@ -533,7 +542,7 @@ pub type Files = Vec<(String, String)>;
 
 /// What `generate` does, before the JSON.
 pub fn translate(source: &str, kind: SourceKind, backend: u32) -> Result<Files, String> {
-    let Some(&name) = tempest::NAMES.get(backend as usize) else {
+    let Some(&name) = temper_driver::KNOWN.get(backend as usize) else {
         return Err(format!("no backend {backend}"));
     };
     let file = match kind {
@@ -572,7 +581,7 @@ fn std_files(name: &str) -> Result<Files, String> {
 /// A settled library as tmpl, checked, or what went wrong, after its
 /// diagnostics.
 fn program(settled: &Settled) -> Result<Program, String> {
-    tempest::checked(settled, "main").map_err(|e| {
+    temper_driver::checked(settled, "main").map_err(|e| {
         let mut diagnostics = String::new();
         write_diagnostics(settled, &mut diagnostics);
         format!("{diagnostics}{e}")
@@ -584,9 +593,9 @@ fn program(settled: &Settled) -> Result<Program, String> {
 /// package's directory.
 fn generate_with(program: Program, name: &str) -> Result<Files, String> {
     let backend =
-        tempest::backend(name).ok_or_else(|| format!("built without the {name} backend"))?;
-    let program = tempest::with_std(program, backend, std_program)?;
-    tempest::translate(&program, backend, Some("../"))
+        (registry().get(name)).ok_or_else(|| format!("built without the {name} backend"))?;
+    let program = temper_driver::with_std(program, backend, std_program)?;
+    temper_driver::translate(&program, backend, Some("../"))
 }
 
 /// Files as `generate`'s JSON.
@@ -708,9 +717,9 @@ mod tests {
             let [source] = &test.sources()[..] else {
                 panic!("{path}: not one file");
             };
-            for (backend, &name) in tempest::NAMES.iter().enumerate() {
+            for (backend, &name) in temper_driver::KNOWN.iter().enumerate() {
                 let json = generate_source(source.text.clone(), backend as u32);
-                if tempest::backend(name).is_none() {
+                if registry().get(name).is_none() {
                     let error = format!("built without the {name} backend");
                     assert_eq!(json, format!("{{\"error\":{}}}", json_string(&error)));
                     continue;

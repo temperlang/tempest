@@ -10,18 +10,18 @@ license.workspace = true
 [lib]
 crate-type = ["cdylib", "rlib"]
 
-# Each backend is a feature, all on by default, as in `tempest`, whose
-# library compiles for it, so a smaller build can leave some out;
+# Each backend is a feature, all on by default, as in `temper-driver`,
+# whose compile path it takes, so a smaller build can leave some out;
 # `generate` then says so.
 [features]
 default = ["py", "rust", "js", "java", "csharp", "cpp", "lua"]
-py = ["tempest/py"]
-rust = ["tempest/rust"]
-js = ["tempest/js"]
-java = ["tempest/java"]
-csharp = ["tempest/csharp"]
-cpp = ["tempest/cpp"]
-lua = ["tempest/lua"]
+py = ["temper-driver/py"]
+rust = ["temper-driver/rust"]
+js = ["temper-driver/js"]
+java = ["temper-driver/java"]
+csharp = ["temper-driver/csharp"]
+cpp = ["temper-driver/cpp"]
+lua = ["temper-driver/lua"]
 
 [dependencies]
 # Without `net`: std `net` requests fail with "web client not supported here".
@@ -29,7 +29,7 @@ temper-frontend = { path = "../temper-frontend", default-features = false }
 temper-analysis = { path = "../temper-analysis" }
 temper-syntax = { path = "../temper-syntax" }
 temper-tmpl = { path = "../temper-tmpl" }
-tempest = { path = "../tempest", default-features = false }
+temper-driver = { path = "../temper-driver", default-features = false }
 
 [dev-dependencies]
 temper-be-testkit = { path = "../temper-be-testkit" }

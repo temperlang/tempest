@@ -414,7 +414,8 @@ So a backend is a `temper_tmpl::Backend` description (its name, runtime,
 naming rules, and `translate`), its profile and lowering choices, a table
 of how builtins and connected members map to its runtime, and a
 translator from tmpl to its tree. Backends are pluggable: the frontend
-and tmpl never list them; the `tempest` crate holds the one list.
+and tmpl never list them; `temper-driver`'s registry holds the one
+list.
 
 ## 11. CLI, watch and language server
 

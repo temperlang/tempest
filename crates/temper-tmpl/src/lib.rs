@@ -4,7 +4,9 @@
 //!
 //! This crate has no dependencies, and never lists backends:
 //!
-//! - [`Backend`], what tools need of a backend, and [`OutFile`];
+//! - [`Backend`], what tools need of a backend, and [`OutFile`]; with
+//!   [`Tools`], how a backend's language runs tests, natively, which
+//!   [`tools`]'s helpers (tool lookup, commands, and JUnit XML) serve;
 //! - [`Program`], with its tables: [`Nodes`], [`TypeTable`],
 //!   [`DeclTable`], and [`Strings`];
 //! - [`schema`], one table declaring every node kind, from which
@@ -45,10 +47,13 @@ pub mod source_map;
 pub mod spill;
 pub mod switches;
 pub mod text;
+// Not in wasm, which runs no tools.
+#[cfg(any(unix, windows))]
+pub mod tools;
 mod types;
 pub mod validate;
 
-pub use backend::{Backend, OutFile};
+pub use backend::{Backend, OutFile, TestResults, Tested, Tools};
 pub use builder::Builder;
 pub use decls::{Decl, DeclKind, DeclTable, Facts, Strings};
 pub use ids::{DeclId, FileId, NodeId, SourceFile, Span, StrId, TypeId};

@@ -23,19 +23,19 @@ flowchart LR
 
 ## One loop, no async
 
-The server is one plain loop, [`serve`](../../crates/tempest/src/lsp/mod.rs),
-in the `tempest` crate. A thread reads messages, each a
-`Content-Length` header and JSON, and hands them over a channel; the
-loop waits for the next message or a timer, whichever comes first.
-Messages are `serde_json` values, and their params and results
-`lsp-types`' structs; no async runtime. The module and those crates are
-native only (`cfg(any(unix, windows))`), so the wasm build, which
-answers the playground itself, doesn't carry them.
+The server is one plain loop, [`serve`](../../crates/temper-lsp/src/lib.rs),
+in the `temper-lsp` crate, which `tempest lsp` runs. A thread reads
+messages, each a `Content-Length` header and JSON, and hands them over
+a channel; the loop waits for the next message or a timer, whichever
+comes first. Messages are `serde_json` values, and their params and
+results `lsp-types`' structs; no async runtime. Only the native
+`tempest` uses the crate, so the wasm build, which answers the
+playground itself, doesn't carry it or those crates.
 
 ## What gets analyzed
 
 - **Open documents** live in memory, kept current by incremental sync:
-  each change replaces a range ([`apply_change`](../../crates/tempest/src/lsp/mod.rs)).
+  each change replaces a range ([`apply_change`](../../crates/temper-lsp/src/lib.rs)).
   They're a memory layer of
   [`Sources`](../../crates/temper-frontend/src/sources.rs) in front of
   the disk, so a library sees unsaved edits in every file.
@@ -50,8 +50,8 @@ answers the playground itself, doesn't carry them.
   A question about a stale file settles it first, so answers always
   match the text on screen.
 - **Positions** are LSP's lines and UTF-16 characters only at the
-  edge ([`offset_at`](../../crates/tempest/src/lsp/mod.rs),
-  [`position`](../../crates/tempest/src/lsp/mod.rs)); everything inside
+  edge ([`offset_at`](../../crates/temper-lsp/src/lib.rs),
+  [`position`](../../crates/temper-lsp/src/lib.rs)); everything inside
   counts bytes in a file.
 - **std** is built into the binary, so it has no files to open. Go to
   definition into std writes std's sources once, read-only, to a
@@ -92,8 +92,10 @@ Each is a method of `Analysis`, shared by the server and the playground:
 - **The client** ([`extension.ts`](../../editors/vscode/src/extension.ts))
   starts `tempest lsp` with `vscode-languageclient`. The server is
   `temper.server.path` if set, then the tempest bundled in the package,
-  then `tempest` on `PATH`
-  ([`findServer`](../../editors/vscode/src/server.ts)).
+  then `tempest` on `PATH`, only a file that's there
+  ([`search`](../../editors/vscode/src/server.ts)); none, or one that
+  doesn't start, is an error notification naming what was tried, with
+  a button to the setting.
 - **Packaging:** `editors/vscode/build.py` checks the types, bundles
   with esbuild, and runs `vsce package`: a universal `.vsix` without
   tempest, and one per platform with it in `bin/` (linux, darwin, and
@@ -106,7 +108,7 @@ Each is a method of `Analysis`, shared by the server and the playground:
 
 ## Where in the code
 
-- [`lsp`](../../crates/tempest/src/lib.rs): the server; [`serve`](../../crates/tempest/src/lsp/mod.rs), [`read_message`](../../crates/tempest/src/lsp/mod.rs), and [`write_message`](../../crates/tempest/src/lsp/mod.rs).
+- [`temper-lsp`](../../crates/temper-lsp/src/lib.rs): the server; [`serve`](../../crates/temper-lsp/src/lib.rs), [`read_message`](../../crates/temper-lsp/src/lib.rs), and [`write_message`](../../crates/temper-lsp/src/lib.rs).
 - [`temper-analysis`](../../crates/temper-analysis/src/lib.rs): the queries, with [`members`](../../crates/temper-analysis/src/members.rs), [`references`](../../crates/temper-analysis/src/references.rs), [`symbols`](../../crates/temper-analysis/src/symbols.rs), and [`signatures`](../../crates/temper-analysis/src/signatures.rs).
-- Tests: `crates/temper-analysis/tests/analysis.rs` (the queries) and `crates/tempest/tests/lsp.rs` (a scripted session with `tempest lsp`).
+- Tests: `crates/temper-analysis/tests/analysis.rs` (the queries) and `crates/temper-lsp/tests/lsp.rs` (a scripted session with the server).
 - `editors/vscode/`: the grammars, the extension, and their tests.

@@ -31,7 +31,7 @@ fn usage() {
     assert_eq!(tempest(&["test", "--std"]).0, 2);
     assert_eq!(tempest(&["test", "--bench"]).0, 2);
     assert_eq!(tempest(&["lsp", "--stdio-ish"]).0, 2);
-    for backend in ["py", "rust", "js", "java", "csharp", "cpp", "lua"] {
+    for backend in temper_driver::KNOWN {
         // A backend left out fails the same way whatever the arguments.
         let code = if built_in(backend) { 2 } else { 1 };
         assert_eq!(tempest(&[backend]).0, code);
@@ -58,24 +58,12 @@ fn usage() {
 
 /// Whether this build of `tempest` has a backend (a cargo feature).
 fn built_in(backend: &str) -> bool {
-    match backend {
-        "py" => cfg!(feature = "py"),
-        "rust" => cfg!(feature = "rust"),
-        "js" => cfg!(feature = "js"),
-        "java" => cfg!(feature = "java"),
-        "csharp" => cfg!(feature = "csharp"),
-        "cpp" => cfg!(feature = "cpp"),
-        "lua" => cfg!(feature = "lua"),
-        _ => unreachable!(),
-    }
+    temper_driver::Registry::built_in().get(backend).is_some()
 }
 
 #[test]
 fn backends_left_out() {
-    for backend in ["py", "rust", "js", "java", "csharp", "cpp", "lua"]
-        .into_iter()
-        .filter(|b| !built_in(b))
-    {
+    for backend in temper_driver::KNOWN.into_iter().filter(|b| !built_in(b)) {
         let (code, _, err) = tempest(&[backend, "a.temper"]);
         let expected = format!("tempest: built without the {backend} backend\n");
         assert_eq!((code, err.as_str()), (1, expected.as_str()));
@@ -659,7 +647,7 @@ fn test_a_library_in_cpp() {
 /// `tempest test -b BACKEND` on a small library, one test passing and
 /// one failing, on every backend whose tools run here: it builds, runs
 /// the language's own test tools, and reads their results, so each
-/// backend's runner in `test_run.rs` is tested on every push without the
+/// backend's runner (its crate's `tools` module) is tested on every push without the
 /// real libraries, which run nightly. A backend whose tools are missing is
 /// skipped, with a message, unless `TEMPEST_REQUIRE_CHECKERS` is set.
 #[test]

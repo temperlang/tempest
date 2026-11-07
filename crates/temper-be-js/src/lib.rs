@@ -46,6 +46,9 @@ pub mod connected;
 pub mod names;
 pub mod ops;
 pub mod runtime;
+// Not in wasm, which runs no tools.
+#[cfg(any(unix, windows))]
+pub mod tools;
 pub mod translate;
 pub mod tree;
 
@@ -109,6 +112,11 @@ pub const BACKEND: temper_tmpl::Backend = temper_tmpl::Backend {
     },
     rules: &JS.rules,
     translate: |p, maps| generate(p, &JS, maps).map_err(|e| e.to_string()),
+    default: true,
+    #[cfg(any(unix, windows))]
+    tools: Some(&tools::TOOLS),
+    #[cfg(not(any(unix, windows)))]
+    tools: None,
 };
 
 /// Translates a library, laid out as Kotlin's JS backend lays it out:

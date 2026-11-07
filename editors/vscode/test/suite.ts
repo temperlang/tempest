@@ -107,6 +107,21 @@ export async function run(): Promise<void> {
     assert.deepEqual(files.sort(), [shapes.toString(), uses.toString()].sort());
   });
 
+  // Last, as it stops the server: a tempest that isn't there says so,
+  // naming what was tried and the setting, rather than failing to spawn.
+  test("a missing tempest says what was tried", async () => {
+    const config = vscode.workspace.getConfiguration("temper");
+    await config.update("server.path", "/nowhere/tempest", vscode.ConfigurationTarget.Global);
+    try {
+      const message = await until("an error", () => api.error());
+      assert.match(message, /tried temper\.server\.path, \/nowhere\/tempest\)/);
+      assert.match(message, /Temper: Server Path/);
+      assert.equal(api.client(), undefined);
+    } finally {
+      await config.update("server.path", undefined, vscode.ConfigurationTarget.Global);
+    }
+  });
+
   let failed = 0;
   for (const [name, f] of tests) {
     try {

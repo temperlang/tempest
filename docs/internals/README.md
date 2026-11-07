@@ -49,13 +49,14 @@ flowchart LR
   syntax["temper-syntax"] --> frontend["temper-frontend"]
   tmplc["temper-tmpl"] --> frontend
   tmplc --> be["temper-be-* (seven)"]
-  frontend --> lib["tempest (library)"]
+  frontend --> driver["temper-driver"]
   frontend --> analysis["temper-analysis"]
+  be --> driver
+  analysis --> lsp["temper-lsp"]
   analysis --> wasm
-  analysis --> lib
-  be --> lib
-  lib --> cli["tempest (command)"]
-  lib --> wasm["temper-wasm (playground)"]
+  driver --> cli["tempest (command)"]
+  lsp --> cli
+  driver --> wasm["temper-wasm (playground)"]
 ```
 
 | Crate | Its job |
@@ -63,9 +64,11 @@ flowchart LR
 | [`temper-syntax`](../../crates/temper-syntax/src/lib.rs) | Source to trees: literate files, lexing, parsing, the grammar step |
 | [`temper-frontend`](../../crates/temper-frontend/src/lib.rs) | Trees to a settled library: the settle loop, typing, the interpreter, and translation to tmpl |
 | [`temper-analysis`](../../crates/temper-analysis/src/lib.rs) | Editor queries over a settled library: diagnostics, hover, definition, completion, references, rename, outlines, and signature help |
-| [`temper-tmpl`](../../crates/temper-tmpl/src/lib.rs) | tmpl itself, plus the lowerings and naming that every backend shares |
-| `temper-be-*` | One crate per language: tmpl in, source files out. Each depends only on `temper-tmpl` |
-| [`tempest`](../../crates/tempest/src/lib.rs) | The one list of backends and the one compile path, as a library; and the command, `build`, `test`, and `lsp` |
+| [`temper-tmpl`](../../crates/temper-tmpl/src/lib.rs) | tmpl itself, plus the lowerings and naming that every backend shares, and what a backend is to tools ([`Backend`](../../crates/temper-tmpl/src/backend.rs)), with the helpers their test runners share ([`tools`](../../crates/temper-tmpl/src/tools.rs)) |
+| `temper-be-*` | One crate per language: tmpl in, source files out, and natively, how the language runs tests (its `tools` module). Each depends only on `temper-tmpl` |
+| [`temper-driver`](../../crates/temper-driver/src/lib.rs) | The registry of backends, the one compile path, `build`, and running tests with any backend's tools |
+| [`temper-lsp`](../../crates/temper-lsp/src/lib.rs) | The language server, `tempest lsp` |
+| [`tempest`](../../crates/tempest/src/main.rs) | The command: argument parsing and output, for `build`, `test`, `lsp`, and one backend's files |
 | [`temper-wasm`](../../crates/temper-wasm/src/lib.rs) | The compiler as wasm, for the playground |
 
 ## Reading order

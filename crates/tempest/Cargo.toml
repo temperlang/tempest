@@ -1,45 +1,31 @@
 [package]
 name = "tempest"
-description = "The tempest command, Temper's CLI over the other crates, and its library: the backends list and the compile path"
+description = "The tempest command, Temper's CLI over the other crates: argument parsing and output"
 edition.workspace = true
 rust-version.workspace = true
 version.workspace = true
 publish.workspace = true
 license.workspace = true
 
-# Each backend is a feature, all on by default, so a smaller build can
-# leave some out; `tempest js` and such then say it wasn't built in.
-# `net` is temper-frontend's web client for std `net`.
+# Each backend is a feature, all on by default (temper-driver's), so a
+# smaller build can leave some out; `tempest js` and such then say it
+# wasn't built in. `net` is temper-frontend's web client for std `net`.
 [features]
 default = ["net", "py", "rust", "js", "java", "csharp", "cpp", "lua"]
 net = ["temper-frontend/net"]
-py = ["dep:temper-be-py"]
-rust = ["dep:temper-be-rust"]
-js = ["dep:temper-be-js"]
-java = ["dep:temper-be-java"]
-csharp = ["dep:temper-be-csharp"]
-cpp = ["dep:temper-be-cpp"]
-lua = ["dep:temper-be-lua"]
+py = ["temper-driver/py"]
+rust = ["temper-driver/rust"]
+js = ["temper-driver/js"]
+java = ["temper-driver/java"]
+csharp = ["temper-driver/csharp"]
+cpp = ["temper-driver/cpp"]
+lua = ["temper-driver/lua"]
 
 [dependencies]
-temper-analysis = { path = "../temper-analysis" }
-temper-be-cpp = { path = "../temper-be-cpp", optional = true }
-temper-be-csharp = { path = "../temper-be-csharp", optional = true }
-temper-be-java = { path = "../temper-be-java", optional = true }
-temper-be-js = { path = "../temper-be-js", optional = true }
-temper-be-lua = { path = "../temper-be-lua", optional = true }
-temper-be-py = { path = "../temper-be-py", optional = true }
-temper-be-rust = { path = "../temper-be-rust", optional = true }
+temper-driver = { path = "../temper-driver", default-features = false }
 temper-frontend = { path = "../temper-frontend", default-features = false }
-temper-syntax = { path = "../temper-syntax" }
+temper-lsp = { path = "../temper-lsp" }
 temper-tmpl = { path = "../temper-tmpl" }
-
-# `tempest lsp`'s messages; native only, so the wasm build (temper-wasm)
-# doesn't carry them.
-[target.'cfg(any(unix, windows))'.dependencies]
-lsp-types = "0.97"
-serde = "1"
-serde_json = "1"
 
 [dev-dependencies]
 temper-be-testkit = { path = "../temper-be-testkit" }

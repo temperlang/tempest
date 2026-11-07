@@ -40,7 +40,7 @@
 //!   compile with them, in the same `javac`. A test that runs as tests
 //!   (`TESTS`) compiles with std and JUnit 5.9.2's jars from Maven's
 //!   cache, as strictly, and runs through JUnit's launcher
-//!   ([`RUN_TESTS`]), its failures compared with its
+//!   ([`tools::RUN_TESTS`]), its failures compared with its
 //!   `expectedFailures`. Skipped, with a message, without
 //!   `javac` or `java`; with `TEMPEST_REQUIRE_CHECKERS` set, as in CI,
 //!   either missing fails it instead.
@@ -48,7 +48,7 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::{env, fs};
-use temper_be_java::{JAVA, OutFile, translate};
+use temper_be_java::{JAVA, OutFile, tools, translate};
 use temper_be_testkit::{self as kit, Case, Goldens};
 
 /// javac's options for generated code: Java 17, as Kotlin's `pom.xml`
@@ -281,55 +281,10 @@ public final class ModuleStateThreads {
 }
 ";
 
-/// JUnit's jars in Maven's cache, at the versions Kotlin's `pom.xml`
-/// names (`junit-jupiter` 5.9.2), with what they need to compile tests
-/// and run them through JUnit's launcher.
-const JUNIT: [&str; 7] = [
-    "org/junit/jupiter/junit-jupiter-api/5.9.2/junit-jupiter-api-5.9.2.jar",
-    "org/junit/jupiter/junit-jupiter-engine/5.9.2/junit-jupiter-engine-5.9.2.jar",
-    "org/junit/platform/junit-platform-commons/1.9.2/junit-platform-commons-1.9.2.jar",
-    "org/junit/platform/junit-platform-engine/1.9.2/junit-platform-engine-1.9.2.jar",
-    "org/junit/platform/junit-platform-launcher/1.9.2/junit-platform-launcher-1.9.2.jar",
-    "org/opentest4j/opentest4j/1.2.0/opentest4j-1.2.0.jar",
-    "org/apiguardian/apiguardian-api/1.1.2/apiguardian-api-1.1.2.jar",
-];
-
-/// Runs a library's tests through JUnit's launcher, printing what
-/// `kit::runner_failures` reads: what Kotlin's `RunJava` reads from
-/// surefire's reports.
-const RUN_TESTS: &str = "package tempest;
-
-import java.util.List;
-import org.junit.platform.launcher.Launcher;
-import org.junit.platform.launcher.core.LauncherFactory;
-import org.junit.platform.launcher.listeners.SummaryGeneratingListener;
-import org.junit.platform.launcher.listeners.TestExecutionSummary;
-
-import static org.junit.platform.engine.discovery.DiscoverySelectors.selectPackage;
-import static org.junit.platform.launcher.core.LauncherDiscoveryRequestBuilder.request;
-
-public final class RunTests {
-    private RunTests() {}
-
-    public static void main(String[] args) {
-        Launcher launcher = LauncherFactory.create();
-        SummaryGeneratingListener listener = new SummaryGeneratingListener();
-        launcher.execute(request().selectors(selectPackage(args[0])).build(), listener);
-        TestExecutionSummary summary = listener.getSummary();
-        System.out.println(\"ran \" + summary.getTestsFoundCount());
-        List<TestExecutionSummary.Failure> failures = summary.getFailures();
-        for (TestExecutionSummary.Failure failure : failures) {
-            String message = String.valueOf(failure.getException().getMessage());
-            System.out.println(
-                failure.getTestIdentifier().getDisplayName() + \"\\t\" + message.replace(\"\\n\", \"\\\\n\"));
-        }
-    }
-}
-";
-
 /// A run as tests, as Kotlin's `RunJava`: std's package and the
 /// library's main and test sources compiled with JUnit, its tests run
-/// through JUnit's launcher ([`RUN_TESTS`]), and their failures compared
+/// through JUnit's launcher ([`tools::RUN_TESTS`], as `tempest test -b
+/// java` runs them), and their failures compared
 /// with its `expectedFailures`.
 fn run_tests(
     failures: &mut Vec<String>,
@@ -339,15 +294,10 @@ fn run_tests(
     java: &str,
     runtime: &Path,
 ) {
-    let m2 = env::var_os("HOME").map(|h| PathBuf::from(h).join(".m2/repository"));
-    let jars: Vec<PathBuf> = (JUNIT.iter())
-        .filter_map(|j| m2.as_ref().map(|m| m.join(j)))
-        .filter(|j| j.exists())
-        .collect();
-    if jars.len() < JUNIT.len() {
+    let Ok(jars) = tools::junit_jars() else {
         kit::missing("JUnit 5.9.2's jars in ~/.m2 (as Kotlin's pom.xml names them)");
         return;
-    }
+    };
     let root = out.join("tests").join(&case.key);
     let mut sources = Vec::new();
     let std = translate(&kit::std_program(), &JAVA).unwrap_or_else(|e| panic!("std: {e}"));
@@ -361,7 +311,7 @@ fn run_tests(
     }
     let runner = root.join("tempest/RunTests.java");
     fs::create_dir_all(runner.parent().unwrap()).unwrap();
-    fs::write(&runner, RUN_TESTS).unwrap();
+    fs::write(&runner, tools::RUN_TESTS).unwrap();
     sources.push(runner);
     let classes = root.join("classes");
     let classpath = env::join_paths([runtime.to_path_buf()].iter().chain(&jars)).unwrap();
@@ -381,16 +331,27 @@ fn run_tests(
         ));
         return;
     }
-    let (package, _) = names(&case.library);
-    let classpath = env::join_paths([classes, runtime.to_path_buf()].iter().chain(&jars)).unwrap();
+    let classpath =
+        env::join_paths([classes.clone(), runtime.to_path_buf()].iter().chain(&jars)).unwrap();
     let run = Command::new(java)
         .current_dir(env!("CARGO_TARGET_TMPDIR"))
         .args(["-XX:TieredStopAtLevel=1", "-XX:+UseSerialGC", "-cp"])
         .arg(&classpath)
-        .args(["tempest.RunTests", &package])
+        .arg("tempest.RunTests")
+        .arg(&classes)
         .output()
         .unwrap();
-    let actual = kit::runner_failures(&String::from_utf8_lossy(&run.stdout));
+    let results = tools::results(&String::from_utf8_lossy(&run.stdout));
+    let actual = (!results.is_empty()).then(|| {
+        (results.into_iter())
+            .filter_map(|(name, cause)| {
+                Some(kit::TestFailure {
+                    name,
+                    cause: cause?,
+                })
+            })
+            .collect()
+    });
     kit::check_tests(failures, case, actual, &run, kit::test_name_words);
 }
 

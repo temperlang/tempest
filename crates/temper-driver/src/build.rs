@@ -22,9 +22,9 @@
 //!   C++ also gets a `CMakeLists.txt` per library, which Kotlin doesn't
 //!   write.
 //! - **Backends:** those `-b` names, or else Kotlin's defaults that
-//!   tempest has (`csharp`, `java`, `js`, `lua`, `py`, and `rust`; Kotlin's
-//!   `data` isn't one of tempest's, and `cpp`, as in Kotlin, is only
-//!   built when asked for).
+//!   tempest has ([`crate::Registry::defaults`]; Kotlin's `data` isn't
+//!   one of tempest's, and `cpp`, as in Kotlin, is only built when asked
+//!   for).
 //! - **Host code:** a library's files that aren't Temper go with its
 //!   program ([`temper_tmpl::host`]), for each backend to take those with
 //!   its extensions; `--no-connected` ([`Options::no_connected`]) has

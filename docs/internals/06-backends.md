@@ -29,12 +29,16 @@ Every backend crate has much the same files:
 | `connected.rs` | How each of core's `connected` declarations maps to the language's runtime, `temper-core` |
 | `tree.rs` | The output tree and its printer, which adds parentheses only where precedence needs them, and lays out code in the language's usual style |
 | `runtime.rs` | The runtime's files, copied beside the output by `tempest build` |
+| `tools.rs` | Natively, how the language runs built libraries' tests, for `tempest test -b`: finding its tools, their command lines, and reading their results |
 
 A crate's `BACKEND`, a [`Backend`](../../crates/temper-tmpl/src/backend.rs), is all
 that tools see of it: its name, its comment syntax, its runtime's
-files, its naming rules, and its `translate` function. The `tempest`
-crate keeps the one list of them, so adding a backend means one crate
-and one line there ([the command](07-cli.md)).
+files, its naming rules, its `translate` function, whether `build`
+writes it by default, and its `tools.rs`'s
+[`Tools`](../../crates/temper-tmpl/src/backend.rs) (`None` in wasm).
+`temper-driver`'s registry keeps the one list of them, so adding a
+backend means one crate, one line there, and its name among the known
+ones ([the command](07-cli.md#one-compile-path)).
 
 Each language's runtime is vendored from Temper in `vendor/temper/`,
 with a few fixes kept as patches in `vendor/temper-patches/`. So

@@ -363,7 +363,7 @@ fn newest(dir: &Path, prefix: &str) -> Option<PathBuf> {
 /// The SDK, .NET 6's targeting pack, and the runtime's packages, or what's
 /// missing.
 fn find_dotnet() -> Result<Dotnet, String> {
-    let dotnet = env::var("DOTNET").unwrap_or_else(|_| "dotnet".into());
+    let dotnet = temper_tmpl::tools::tool("DOTNET", "dotnet");
     let sdks = Command::new(&dotnet)
         .arg("--list-sdks")
         .output()

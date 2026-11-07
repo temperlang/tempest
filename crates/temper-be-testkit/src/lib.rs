@@ -17,7 +17,8 @@
 //!   backend's `tests/goldens/`, and with `UPDATE_SNAPSHOTS=1` writes new
 //!   output there instead.
 //! - **Tools:** [`tool`] finds one named by an environment variable or on
-//!   `PATH`; a missing one skips its test with a message ([`missing`]),
+//!   `PATH` ([`temper_tmpl::tools`], which backends' own test runners
+//!   share, as they share its JUnit XML reading); a missing one skips its test with a message ([`missing`]),
 //!   unless `TEMPEST_REQUIRE_CHECKERS` is set, as in CI, when it fails.
 //! - **Runtimes:** [`cached`] builds something once under
 //!   `CARGO_TARGET_TMPDIR`, keyed by a hash of its inputs, and keeps it
@@ -46,7 +47,7 @@ use temper_frontend::sources::Sources;
 use temper_frontend::to_tmpl::to_tmpl;
 use temper_tmpl::host::{Host, HostFile};
 use temper_tmpl::naming::{Interface, NamingRules, assign};
-use temper_tmpl::{Profile, Program, text, validate};
+use temper_tmpl::{Profile, Program, text, tools, validate};
 
 /// The functional tests tmpl's translation covers, by their paths.
 pub const COVERED: [&str; 7] = [
@@ -802,7 +803,7 @@ pub fn missing(what: &str) {
 /// `name`, if it runs with `arg` (such as `--version`), with what that
 /// printed.
 pub fn tool_with(var: &str, name: &str, arg: &str) -> Option<(String, String)> {
-    let candidate = env::var(var).unwrap_or_else(|_| name.to_string());
+    let candidate = tools::tool(var, name);
     let out = Command::new(&candidate).arg(arg).output().ok()?;
     let version = [out.stdout, out.stderr].concat();
     out.status
@@ -857,22 +858,7 @@ pub fn copy_dir(from: &Path, to: &Path, skip: &[&str]) {
     }
 }
 
-/// Every file with an extension under a directory, sorted; none if
-/// there's no such directory.
-pub fn files_with(dir: &Path, extension: &str, out: &mut Vec<PathBuf>) {
-    let Ok(entries) = fs::read_dir(dir) else {
-        return;
-    };
-    let mut entries: Vec<PathBuf> = entries.map(|e| e.unwrap().path()).collect();
-    entries.sort();
-    for path in entries {
-        if path.is_dir() {
-            files_with(&path, extension, out);
-        } else if path.extension().is_some_and(|e| e == extension) {
-            out.push(path);
-        }
-    }
-}
+pub use tools::files_with;
 
 /// Something built once, in `root`, and kept until its inputs change:
 /// `key` (a tool's version and options, say) and the paths and contents
@@ -960,136 +946,22 @@ pub fn runner_failures(stdout: &str) -> Option<Vec<TestFailure>> {
     })
 }
 
-/// The failures in JUnit XML, as Kotlin's `parseJunitResults` reads them.
+/// The failures in JUnit XML ([`tools::junit`]), as Kotlin's
+/// `parseJunitResults` reads them.
 pub fn junit_failures(xml: &str) -> Vec<TestFailure> {
-    let mut found = Vec::new();
-    let mut rest = xml;
-    while let Some(at) = rest.find("<testcase") {
-        rest = &rest[at + "<testcase".len()..];
-        let (attrs, closed) = tag_attrs(rest);
-        let name = attr(attrs, "name").unwrap_or_default();
-        let body = if closed {
-            ""
-        } else {
-            let end = rest.find("</testcase>").unwrap_or(rest.len());
-            &rest[..end]
-        };
-        let error = element(body, "error");
-        let failure = element(body, "failure");
-        let cause = match (error, failure) {
-            (Some((_, text)), _) => Some(text),
-            (None, Some((attrs, text))) => (attr(&attrs, "message"))
-                .or_else(|| attr(&attrs, "type"))
-                .or(Some(text)),
-            (None, None) => None,
-        };
-        if let Some(cause) = cause {
-            found.push(TestFailure { name, cause });
-        }
-    }
-    found
-}
-
-/// A start tag's attributes, from just past its name, and whether it
-/// closes itself.
-fn tag_attrs(after_name: &str) -> (&str, bool) {
-    let mut quote = None;
-    for (i, c) in after_name.char_indices() {
-        match (quote, c) {
-            (None, '\'' | '"') => quote = Some(c),
-            (Some(q), _) if q == c => quote = None,
-            (None, '>') => {
-                let attrs = &after_name[..i];
-                return match attrs.strip_suffix('/') {
-                    Some(attrs) => (attrs, true),
-                    None => (attrs, false),
-                };
-            }
-            _ => {}
-        }
-    }
-    (after_name, true)
-}
-
-/// An attribute's value, unescaped.
-fn attr(attrs: &str, name: &str) -> Option<String> {
-    let mut rest = attrs;
-    loop {
-        let at = rest.find(name)?;
-        let before = rest[..at].chars().next_back();
-        rest = &rest[at + name.len()..];
-        let after = rest.trim_start();
-        if before.is_some_and(char::is_whitespace) && after.starts_with('=') {
-            let value = after[1..].trim_start();
-            let q = value.chars().next()?;
-            let value = &value[1..];
-            let end = value.find(q)?;
-            return Some(unescape_xml(&value[..end]));
-        }
-    }
-}
-
-/// An element in `body`: its attributes and its text, unescaped.
-fn element(body: &str, tag: &str) -> Option<(String, String)> {
-    let open = format!("<{tag}");
-    let mut rest = body;
-    loop {
-        let at = rest.find(&open)?;
-        rest = &rest[at + open.len()..];
-        if rest.starts_with(|c: char| c.is_whitespace() || c == '>' || c == '/') {
-            break;
-        }
-    }
-    let (attrs, closed) = tag_attrs(rest);
-    if closed {
-        return Some((attrs.to_string(), String::new()));
-    }
-    let text = &rest[attrs.len() + 1..];
-    let text = &text[..text.find(&format!("</{tag}>")).unwrap_or(text.len())];
-    let text = match text.trim().strip_prefix("<![CDATA[") {
-        Some(cdata) => cdata.strip_suffix("]]>").unwrap_or(cdata).to_string(),
-        None => unescape_xml(text),
-    };
-    Some((attrs.to_string(), text))
-}
-
-fn unescape_xml(s: &str) -> String {
-    let mut out = String::new();
-    let mut rest = s;
-    while let Some(at) = rest.find('&') {
-        out.push_str(&rest[..at]);
-        rest = &rest[at..];
-        let Some(end) = rest.find(';') else { break };
-        let entity = &rest[1..end];
-        let c = match entity {
-            "amp" => Some('&'),
-            "lt" => Some('<'),
-            "gt" => Some('>'),
-            "quot" => Some('"'),
-            "apos" => Some('\''),
-            _ => match entity
-                .strip_prefix("#x")
-                .or_else(|| entity.strip_prefix("#X"))
-            {
-                Some(hex) => u32::from_str_radix(hex, 16).ok().and_then(char::from_u32),
-                None => (entity.strip_prefix('#'))
-                    .and_then(|d| d.parse().ok())
-                    .and_then(char::from_u32),
-            },
-        };
-        match c {
-            Some(c) => {
-                out.push(c);
-                rest = &rest[end + 1..];
-            }
-            None => {
-                out.push('&');
-                rest = &rest[1..];
-            }
-        }
-    }
-    out.push_str(rest);
-    out
+    (tools::junit(xml).into_iter())
+        .filter_map(|case| {
+            let cause = match (case.error, case.failure) {
+                (Some(error), _) => error.text,
+                (None, Some(failure)) => (failure.message).or(failure.kind).unwrap_or(failure.text),
+                (None, None) => return None,
+            };
+            Some(TestFailure {
+                name: case.name,
+                cause,
+            })
+        })
+        .collect()
 }
 
 /// Compares a run as tests with what its case expects, as Kotlin's

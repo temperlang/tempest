@@ -348,7 +348,8 @@ Built (2026-11-06): `tempest test -b BACKEND` builds the libraries into
 them as `std`, as Kotlin's, then runs each library's tests with the
 language's own tools, reading their results into the interpreter's
 summary (`Tests passed: N of M`), so `-b interp` and `-b py` print
-alike (`crates/tempest/src/test_run.rs`):
+alike (each backend crate's `src/tools.rs`, run by
+`crates/temper-driver/src/test_run.rs`):
 
 - **Python:** `python3 -m temper_core.testing result.xml` in the
   library's directory, as Kotlin's `RunPython`.

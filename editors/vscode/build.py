@@ -28,7 +28,10 @@
    if there is one, else Electron's headless Ozone platform.
 
 Install a .vsix with `code --install-extension out/temper-...vsix`, or in
-VS Code, Extensions, "...", "Install from VSIX...". See README.md.
+VS Code, Extensions, "...", "Install from VSIX...", then reload the
+window. Each build's VERSION is its own (package.json's major and minor,
+minutes since 2026 as the patch), so it replaces any older one. See
+README.md.
 """
 
 import argparse
@@ -39,7 +42,9 @@ import shutil
 import stat
 import subprocess
 import sys
+import time
 import zipfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -114,6 +119,18 @@ def host_target() -> str:
     return f"{system}-{arch}"
 
 
+# Every build gets its own version, so installing a new .vsix over an
+# older one always replaces it (VS Code keeps an installed version it
+# already has): package.json's major and minor, and as the patch, the
+# minutes since 2026, the same for every package of one build.
+STAMP = (int(time.time()) - int(datetime(2026, 1, 1, tzinfo=timezone.utc).timestamp())) // 60
+
+
+def build_version(base: str) -> str:
+    major, minor, _ = base.split(".", 2)
+    return f"{major}.{minor}.{STAMP}"
+
+
 def package(bin_dir: Path, target: str | None, tempest: Path | None) -> Path:
     """Writes a .vsix with `vsce package`, from a staging directory holding
     just what ships, and checks what it holds."""
@@ -123,6 +140,7 @@ def package(bin_dir: Path, target: str | None, tempest: Path | None) -> Path:
     stage.mkdir(parents=True)
     # The package needs only what VS Code reads, not the build's tools.
     shipped = {k: v for k, v in meta.items() if k not in ("devDependencies", "private")}
+    meta["version"] = shipped["version"] = build_version(meta["version"])
     shipped["files"] = [f for f in FILES if f not in ("package.json", "README.md")] + ["LICENSE.txt"] + (["bin/"] if tempest else [])
     for name in FILES:
         (stage / name).parent.mkdir(parents=True, exist_ok=True)

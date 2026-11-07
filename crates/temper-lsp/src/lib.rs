@@ -1,5 +1,6 @@
-//! `tempest lsp`: a language server over stdio, answering an editor's
-//! questions from [`temper_analysis`], as the playground does.
+//! Temper's language server, which `tempest lsp` runs over stdio,
+//! answering an editor's questions from [`temper_analysis`], as the
+//! playground does.
 //!
 //! - **Messages** are JSON-RPC 2.0, each after a `Content-Length` header
 //!   ([`read_message`], [`write_message`]), as `serde_json` values; params

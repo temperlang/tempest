@@ -1,11 +1,12 @@
 # 7. The tempest command
 
-The `tempest` crate is two things. As a library, it holds the one list
-of backends and the one way from a settled library to each backend's
-files, which the command and the playground's wasm both use. As a
-command, it's a thin layer over that, with Temper's two main commands:
-`test` runs a project's tests, and `build` writes every library in
-every language to `temper.out`. Temper's std library is built into the
+The `tempest` command is a thin layer, argument parsing and output, over
+the `temper-driver` crate, which holds the registry of backends, the one
+way from a settled library to each backend's files, and running tests
+with each language's tools; the playground's wasm uses it too.
+Temper's two main commands are `test`, which runs a project's tests,
+and `build`, which writes every library in every language to
+`temper.out`. Temper's std library is built into the
 binary, so it needs nothing beside it.
 
 ```text
@@ -15,8 +16,8 @@ tempest lsp
 ```
 
 `lsp` is a language server for editors, over stdin and stdout, on the
-same library finding and `Sources` as `test` and `build`; it has
-[a page of its own](09-language-server.md).
+same library finding and `Sources` as `test` and `build`; it's the
+`temper-lsp` crate, with [a page of its own](09-language-server.md).
 
 ## Finding libraries
 
@@ -42,15 +43,18 @@ flowchart LR
   translate --> files["Files"]
 ```
 
-Every caller takes the same three steps, from the
-[`tempest` library](../../crates/tempest/src/lib.rs):
-[`checked`](../../crates/tempest/src/lib.rs) turns a settled library
-into tmpl and validates it, [`with_std`](../../crates/tempest/src/lib.rs)
+Every caller takes the same three steps, from
+[`temper-driver`](../../crates/temper-driver/src/lib.rs):
+[`checked`](../../crates/temper-driver/src/lib.rs) turns a settled library
+into tmpl and validates it, [`with_std`](../../crates/temper-driver/src/lib.rs)
 gives it std's names as the backend spells them, and
-[`translate`](../../crates/tempest/src/lib.rs) runs one backend from
-[`BACKENDS`](../../crates/tempest/src/lib.rs), the list of each
-backend crate's `BACKEND`. Each backend is a cargo feature, all on by
-default.
+[`translate`](../../crates/temper-driver/src/lib.rs) runs one backend from
+the [`Registry`](../../crates/temper-driver/src/lib.rs), which holds each
+built-in backend crate's `BACKEND`, one per cargo feature, all on by
+default. Which backends `build` writes without `-b`, and which names
+this build lacks, come from the registry and the list of
+[`KNOWN`](../../crates/temper-driver/src/lib.rs) names, not lists of
+their own.
 
 ## `test` and `build`
 
@@ -71,8 +75,10 @@ flowchart TD
   its tests run with the language's own tools: Python's
   `temper_core.testing`, Mocha for JavaScript, LuaUnit, JUnit through
   `javac`, `dotnet test`, `cargo test`, or CMake and the test program
-  for C++. Their results are read back into the same summary, so `-b
-  interp` and `-b py` print alike.
+  for C++. Each backend crate says how, in its `tools` module, as its
+  `BACKEND`'s [`Tools`](../../crates/temper-tmpl/src/backend.rs), and
+  the driver just runs them. Their results are read back into the same
+  summary, so `-b interp` and `-b py` print alike.
 - **`build`** writes `temper.out/BACKEND/LIBRARY/…`, laid out as Temper
   always has, with package files (`pyproject.toml`, `Cargo.toml`,
   `package.json`, the pom, the `.csproj`s, and a rockspec), and each
@@ -140,15 +146,26 @@ Tests passed: 1 of 2
 
 ## Where in the code
 
-- [`lib.rs`](../../crates/tempest/src/lib.rs): [`BACKENDS`](../../crates/tempest/src/lib.rs), [`backend`](../../crates/tempest/src/lib.rs), and the compile path above.
+- [`temper-driver`](../../crates/temper-driver/src/lib.rs): the [`Registry`](../../crates/temper-driver/src/lib.rs), [`KNOWN`](../../crates/temper-driver/src/lib.rs), and the compile path above.
 - [`main.rs`](../../crates/tempest/src/main.rs): argument parsing, [`test`](../../crates/tempest/src/main.rs), [`test_on`](../../crates/tempest/src/main.rs) for a backend, [`build_command`](../../crates/tempest/src/main.rs), and [`lsp`](../../crates/tempest/src/main.rs).
-- [`serve`](../../crates/tempest/src/lsp/mod.rs): the language server.
-- [`build`](../../crates/tempest/src/build.rs): every library, each backend, in dependency order.
-- [`test_run::run`](../../crates/tempest/src/test_run.rs): each language's test tools.
+- [`serve`](../../crates/temper-lsp/src/lib.rs): the language server.
+- [`build`](../../crates/temper-driver/src/build.rs): every library, each backend, in dependency order.
+- [`run`](../../crates/temper-driver/src/test_run.rs) in `test_run`: any backend's test tools, as each backend crate's `tools` module gives them ([`Tools`](../../crates/temper-tmpl/src/backend.rs)), with JUnit XML and tool lookup shared in [`tools`](../../crates/temper-tmpl/src/tools.rs).
+- Tests: `crates/temper-driver/tests/` (dependencies between libraries, and the built-in runtimes).
 - [`test_dir`](../../crates/temper-frontend/src/library_tests.rs), [`test_library`](../../crates/temper-frontend/src/library_tests.rs), and [`Tally`](../../crates/temper-frontend/src/library_tests.rs): tests on the interpreter, and the summary.
 - [`work_root`](../../crates/temper-frontend/src/project.rs), [`find_libraries`](../../crates/temper-frontend/src/project.rs), and [`load_library`](../../crates/temper-frontend/src/project.rs): finding and loading libraries.
 - [`program`](../../crates/temper-frontend/src/stdlib.rs) in `stdlib`: std, built in, as its own library.
-- Tests: `crates/tempest/tests/` (the CLI, dependencies between libraries, and the layout of `temper.out`).
+- Tests: `crates/tempest/tests/` (the CLI, and the layout of `temper.out`).
+
+## Dynamic backends (future work)
+
+The registry is a list built at startup, not a table fixed at compile
+time, so backends that aren't built in can join it later. The plan:
+first as external processes, each given a library as tmpl in a
+versioned, serialized form and answering with its files (and running
+its tests), so a backend can live in its own repository and language;
+then as DLLs, only if processes prove too slow. The wasm build keeps a
+fixed list of built-in backends.
 
 `watch`, `run`, `repl`, and the rest of Temper's commands come later;
 [the next page](08-playground.md) says how `watch` will reuse all this,

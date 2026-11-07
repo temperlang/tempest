@@ -83,10 +83,12 @@ Each backend is a cargo feature, all on by default.
 | `temper-frontend` | Libraries to settled trees: the settle loop, typing, the interpreter, and tmpl translation |
 | `temper-analysis` | Editor queries over a settled library: diagnostics, hover, definition, and completion; depends on the frontend only |
 | `temper-tmpl` | tmpl, the backend IR ([notes/tmpl/](notes/tmpl/README.md)), with shared lowerings such as coroutines |
-| `temper-be-*` | One crate per backend, tmpl in and source out, each depending only on `temper-tmpl` |
+| `temper-be-*` | One crate per backend, tmpl in and source out, and how its language runs tests, each depending only on `temper-tmpl` |
 | `temper-be-testkit` | What the backends' tests share: programs, goldens, and tool discovery |
 | `temper-funtests` | Temper's functional tests, from `vendor/temper/` |
-| `tempest` | The command-line tool, and as a library, the one list of backends and the one compile path |
+| `temper-driver` | The registry of backends, the one compile path, `build`, and running tests with each backend's tools |
+| `temper-lsp` | The language server, `tempest lsp` |
+| `tempest` | The command-line tool: argument parsing and output |
 | `temper-wasm` | The compiler for the browser, the base of the playground |
 
 Also: `docs/` (how it works, stage by stage), `compat/` (scripts

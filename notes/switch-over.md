@@ -70,7 +70,8 @@ Risks to the date:
      clearly well used).
    - Status (2026-11-06): `tempest test -b BACKEND` builds into
      `temper.out` and runs the tests with the language's own tools
-     (`crates/tempest/src/test_run.rs`, C++ through CMake); `tempest
+     (each backend crate's `src/tools.rs`, run by
+     `crates/temper-driver/src/test_run.rs`, C++ through CMake); `tempest
      build -v` lists every gap in tmpl, not only the first; a library
      that doesn't build still counts its tests, as not run. Passing, all
      tests, all 28 cells: Hrefine (41), Chromarite (56), Ordable (36),

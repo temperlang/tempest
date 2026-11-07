@@ -1,11 +1,13 @@
 //! What tools need of a backend, in one description each backend crate
 //! exports as `BACKEND`, so a tool keeps one list of backends and loops
-//! over it. tmpl never lists backends; the `tempest` crate does.
+//! over it. tmpl never lists backends; `temper-driver`'s registry does.
 
 use crate::Program;
 use crate::naming::NamingRules;
+use std::path::Path;
 
-/// A backend: its name, runtime, naming, and translation.
+/// A backend: its name, runtime, naming, translation, and how its
+/// language runs tests.
 pub struct Backend {
     /// Its name on the command line and in `temper.out`, as Kotlin's.
     pub name: &'static str,
@@ -23,7 +25,38 @@ pub struct Backend {
     /// backend that writes source maps (JS) writes them, naming the
     /// sources by their paths after it.
     pub translate: fn(&Program, Option<&str>) -> Result<Vec<OutFile>, String>,
+    /// Whether `tempest build` builds for it without `-b`, as Kotlin's
+    /// defaults: all but C++.
+    pub default: bool,
+    /// How its language's own tools run built libraries' tests; `None`
+    /// in wasm, which runs no tools.
+    pub tools: Option<&'static Tools>,
 }
+
+/// How a backend runs the tests of libraries built in
+/// `temper.out/BACKEND` (`dir`, absolute) with its language's tools,
+/// each test's name and its failure if it failed, or why there are no
+/// results. `all` is every library built there, which tests may import.
+pub struct Tools {
+    /// Readies `dir` once, before any library's tests run.
+    pub prepare: Option<Prepare>,
+    /// Runs a library's tests.
+    pub test: fn(dir: &Path, library: &Tested, all: &[Tested]) -> TestResults,
+}
+
+/// Readies `temper.out/BACKEND` for tests, given every library built
+/// there.
+pub type Prepare = fn(dir: &Path, all: &[Tested]) -> Result<(), String>;
+
+/// A library that built, with how many tests it has.
+pub struct Tested {
+    pub name: String,
+    pub tests: usize,
+}
+
+/// Each test's name and its failure, if it failed; or why there are no
+/// results.
+pub type TestResults = Result<Vec<(String, Option<String>)>, String>;
 
 /// A generated file: its path relative to the output directory, and its
 /// text.
