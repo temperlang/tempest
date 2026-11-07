@@ -96,6 +96,18 @@ Each is a method of `Analysis`, shared by the server and the playground:
   ([`search`](../../editors/vscode/src/server.ts)); none, or one that
   doesn't start, is an error notification naming what was tried, with
   a button to the setting.
+- **The preview** ([`preview.ts`](../../editors/vscode/src/preview.ts))
+  of `.temper.md`, which VS Code's own Markdown preview skips for our
+  language: VS Code's Markdown engine renders it (the built-in
+  `markdown.api.render` command), [`highlightCodeBlocks`](../../editors/vscode/src/page.ts)
+  highlights its Temper blocks with the editor's grammar (a small
+  TextMate tokenizer, [`tokenize`](../../editors/vscode/src/highlight.ts)),
+  and a webview shows it under a strict CSP, updated as you type.
+  The engine marks each block with its source line (`data-line`);
+  [`topForLine`](../../editors/vscode/src/sync.ts) and its inverse
+  `lineForTop` interpolate between those marks to scroll the preview
+  with the editor and the editor with the preview, each side ignoring
+  the scrolls it caused, so neither echoes back.
 - **Packaging:** `editors/vscode/build.py` checks the types, bundles
   with esbuild, and runs `vsce package`: a universal `.vsix` without
   tempest, and one per platform with it in `bin/` (linux, darwin, and
@@ -103,7 +115,8 @@ Each is a method of `Analysis`, shared by the server and the playground:
   its release binaries.
 - **Tests in VS Code:** with `--test`, `test/suite.ts` runs in a real
   VS Code (`@vscode/test-electron`) against this platform's package,
-  checking diagnostics, hover, definition, completion, and rename.
+  checking diagnostics, hover, definition, completion, rename, and the
+  preview (rendering, live updates, and scroll sync both ways).
   How to install and build: [editors/vscode/README.md](../../editors/vscode/README.md).
 
 ## Where in the code

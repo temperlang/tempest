@@ -1,10 +1,11 @@
 // The Temper extension: starts `tempest lsp` and connects VS Code to it
 // with vscode-languageclient, which syncs documents (incrementally, as
 // the server asks), shows its diagnostics, and maps VS Code's providers
-// to LSP's requests.
+// to LSP's requests; and the preview of literate Temper (preview.ts).
 
 import * as vscode from "vscode";
 import { LanguageClient, type LanguageClientOptions, type ServerOptions } from "vscode-languageclient/node";
+import { type PreviewHook, registerPreview } from "./preview";
 import { type Found, notFound, notStarted, search } from "./server";
 
 let client: LanguageClient | undefined;
@@ -19,6 +20,8 @@ export interface Api {
   client(): LanguageClient | undefined;
   /** What the last failure to start said, if the last start failed. */
   error(): string | undefined;
+  /** For tests: the open preview of a `.temper.md`, if there is one. */
+  preview(uri: vscode.Uri): PreviewHook | undefined;
 }
 
 const OPEN_SETTING = "Open Setting";
@@ -86,8 +89,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<Api> {
       if (e.affectsConfiguration("temper.server")) void restart();
     }),
   );
+  const previews = registerPreview(context);
   await start(context, output);
-  return { server: () => server, client: () => client, error: () => lastError };
+  return { server: () => server, client: () => client, error: () => lastError, preview: (uri) => previews.get(uri) };
 }
 
 export async function deactivate(): Promise<void> {

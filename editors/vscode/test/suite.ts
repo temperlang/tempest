@@ -7,6 +7,7 @@
 import assert from "node:assert/strict";
 import * as vscode from "vscode";
 import type { Api } from "../src/extension";
+import type { FromPreview } from "../src/messages";
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -105,6 +106,59 @@ export async function run(): Promise<void> {
       return uri.toString();
     });
     assert.deepEqual(files.sort(), [shapes.toString(), uses.toString()].sort());
+  });
+
+  const notes = vscode.Uri.joinPath(folder, "notes.temper.md");
+  /** The preview's first message since `from` that `f` gives something for. */
+  const heard = <T>(what: string, from: number, f: (m: FromPreview) => T | undefined | false): Promise<T> =>
+    until(what, () => {
+      const messages = api.preview(notes)?.messages.slice(from) ?? [];
+      for (const m of messages) {
+        const found = f(m);
+        if (found) return found;
+      }
+      return undefined;
+    });
+  const heardCount = (): number => api.preview(notes)?.messages.length ?? 0;
+
+  test("preview: headings, highlighted Temper, and a relative image", async () => {
+    const editor = await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(notes));
+    assert.equal(editor.document.languageId, "temper-markdown");
+    await vscode.commands.executeCommand("temper.showPreviewToSide");
+    const shown = await heard("the preview", 0, (m) => m.type === "rendered" && m);
+    assert.equal(shown.headings[0], "Notes on shapes");
+    assert.equal(shown.headings.length, 61);
+    // `let noteName = "square";` and `let noteSide = 2;`: fenced and indented.
+    assert.ok(shown.highlighted >= 6, `${shown.highlighted} highlighted tokens`);
+    const images = await heard("the image", 0, (m) => m.type === "images" && m);
+    assert.deepEqual(images, { type: "images", loaded: 1, failed: 0 });
+  });
+
+  test("preview: an edit updates it", async () => {
+    const from = heardCount();
+    const edit = new vscode.WorkspaceEdit();
+    edit.insert(notes, new vscode.Position(1, 0), "\n## Added as typed\n");
+    assert.ok(await vscode.workspace.applyEdit(edit));
+    const version = (await vscode.workspace.openTextDocument(notes)).version;
+    const shown = await heard("the update", from, (m) => m.type === "rendered" && m.version === version && m);
+    assert.equal(shown.headings[1], "Added as typed");
+  });
+
+  test("preview: scrolls with the editor, and the editor with it", async () => {
+    const editor = vscode.window.visibleTextEditors.find((e) => e.document.uri.toString() === notes.toString());
+    assert.ok(editor, "the editor beside the preview");
+    let from = heardCount();
+    editor.revealRange(new vscode.Range(150, 0, 150, 0), vscode.TextEditorRevealType.AtTop);
+    const scrolled = await heard("the preview to follow", from, (m) => m.type === "scrolled" && m.line >= 140 && m);
+    assert.ok(scrolled.top > 1000, `scrolled to ${scrolled.top}`);
+    // A reader scrolls the preview back to the top: the editor follows,
+    // and its scrolling doesn't scroll the preview again.
+    from = heardCount();
+    await api.preview(notes)?.post({ type: "userScroll", top: 0 });
+    await until("the editor to follow", () => (editor.visibleRanges[0]?.start.line ?? 99) < 3);
+    await sleep(500);
+    const after = api.preview(notes)?.messages.slice(from) ?? [];
+    assert.ok(!after.some((m) => m.type === "scrolled"), JSON.stringify(after));
   });
 
   // Last, as it stops the server: a tempest that isn't there says so,

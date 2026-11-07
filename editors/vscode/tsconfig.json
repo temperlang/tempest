@@ -18,6 +18,7 @@
   "files": [
     "src/extension.ts",
     "src/server.test.ts",
+    "src/page.test.ts",
     "src/node.d.ts",
     "test/suite.ts",
     "test/run.ts",

@@ -19,6 +19,22 @@ async function main(extensionDir: string, cachePath: string, suite: string, vers
     "config.temper.md": "# Shapes\n",
     "shapes.temper": "/** A square's area. */\nexport let area(side: Int): Int { side * side }\n",
     "use.temper": "let a = area(3);\nlet b: String = a;\n",
+    // For the preview: a heading, Temper fenced and indented, an image
+    // beside it, and enough after to scroll.
+    "notes.temper.md": [
+      "# Notes on shapes",
+      "",
+      "![a dot](dot.svg)",
+      "",
+      "```temper",
+      'let noteName = "square";',
+      "```",
+      "",
+      "    let noteSide = 2;",
+      "",
+      ...Array.from({ length: 60 }, (_, i) => `## Section ${i + 1}\n\nAbout section ${i + 1}.\n`),
+    ].join("\n"),
+    "dot.svg": '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><circle cx="4" cy="4" r="4"/></svg>\n',
   };
   try {
     mkdirSync(workspace);

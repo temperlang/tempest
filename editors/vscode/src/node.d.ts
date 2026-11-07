@@ -20,6 +20,15 @@ declare const console: {
 };
 
 declare function setTimeout(callback: () => void, ms: number): unknown;
+declare function clearTimeout(timer: unknown): void;
+
+declare class TextDecoder {
+  decode(bytes: Uint8Array): string;
+}
+
+declare const crypto: {
+  getRandomValues<T extends Uint8Array>(bytes: T): T;
+};
 
 declare module "fs" {
   export function existsSync(path: string): boolean;
@@ -27,6 +36,7 @@ declare module "fs" {
   export function mkdtempSync(prefix: string): string;
   export function mkdirSync(path: string, options?: { recursive?: boolean }): void;
   export function writeFileSync(path: string, text: string): void;
+  export function readFileSync(path: string, encoding: "utf8"): string;
   export function chmodSync(path: string, mode: number): void;
   export function rmSync(path: string, options?: { recursive?: boolean; force?: boolean }): void;
 }
@@ -57,6 +67,7 @@ declare module "node:assert/strict" {
     equal<T>(actual: unknown, expected: T, message?: string): asserts actual is T;
     deepEqual(actual: unknown, expected: unknown, message?: string): void;
     match(text: string, pattern: RegExp, message?: string): void;
+    doesNotMatch(text: string, pattern: RegExp, message?: string): void;
   }
   const assert: Assert;
   export default assert;

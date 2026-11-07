@@ -9,12 +9,15 @@
    editors/vscode/node_modules, or with `--deps`, into that directory,
    linked from there, to keep them outside the work tree (as the
    playground's build.py does).
-2. Type-checks the TypeScript with tsc.
+2. Type-checks the TypeScript with tsc (the webview's, with the DOM, on
+   its own).
 3. Bundles the extension with esbuild into out/extension.js (CommonJS for
    VS Code's Node, vscode-languageclient included, `vscode` left to VS
-   Code), and the tests into out/.
-4. Runs the test of finding tempest (src/server.test.ts) with Node's own
-   test runner, and the grammars' check (check_grammar.py).
+   Code), the preview's webview script into out/preview.js, and the
+   tests into out/.
+4. Runs the tests of finding tempest (src/server.test.ts) and of the
+   preview's pure parts (src/page.test.ts) with Node's own test runner,
+   and the grammars' check (check_grammar.py).
 5. Packages with `vsce package`: out/temper-VERSION.vsix, the universal
    package, with no tempest; and a platform package,
    out/temper-TARGET-VERSION.vsix, for each tempest given, with it in
@@ -57,6 +60,8 @@ FILES = [
     "markdown-configuration.json",
     "README.md",
     "out/extension.js",
+    "out/preview.js",
+    "media/preview.css",
     "syntaxes/temper.tmLanguage.json",
     "syntaxes/temper-markdown.tmLanguage.json",
 ]
@@ -165,7 +170,7 @@ def package(bin_dir: Path, target: str | None, tempest: Path | None) -> Path:
     run(vsce, "package", "--no-dependencies", *targets, "--baseContentUrl", BASE_URL, "--out", vsix, cwd=stage)
     with zipfile.ZipFile(vsix) as z:
         names = set(z.namelist())
-        want = {"[Content_Types].xml", "extension.vsixmanifest", f"extension/{meta['main'].removeprefix('./')}"}
+        want = {"[Content_Types].xml", "extension.vsixmanifest", *(f"extension/{f}" for f in FILES if f != "README.md")}
         for contribution in meta["contributes"]["grammars"] + meta["contributes"]["languages"]:
             path = contribution.get("path") or contribution.get("configuration")
             if path:
@@ -214,14 +219,18 @@ def main() -> None:
     args = parser.parse_args()
     bin_dir = install(args.deps) / ".bin"
     run(bin_dir / "tsc", "-p", "tsconfig.json")
+    run(bin_dir / "tsc", "-p", "webview/tsconfig.json")
     shutil.rmtree(OUT, ignore_errors=True)
     OUT.mkdir()
     common = ["--bundle", "--platform=node", "--target=node18", "--log-level=warning"]
     run(bin_dir / "esbuild", "src/extension.ts", *common, "--minify", "--format=cjs", "--external:vscode", "--outfile=out/extension.js")
-    run(bin_dir / "esbuild", "src/server.test.ts", *common, "--format=esm", "--outfile=out/server.test.mjs")
+    run(bin_dir / "esbuild", "webview/preview.ts", "--bundle", "--platform=browser", "--target=es2022", "--log-level=warning", "--minify", "--format=iife", "--outfile=out/preview.js")
+    tests = ["server", "page"]
+    for name in tests:
+        run(bin_dir / "esbuild", f"src/{name}.test.ts", *common, "--format=esm", f"--outfile=out/{name}.test.mjs")
     run(bin_dir / "esbuild", "test/suite.ts", *common, "--format=cjs", "--external:vscode", "--outfile=out/test/suite.js")
     run(bin_dir / "esbuild", "test/run.ts", *common, "--format=cjs", "--outfile=out/test/run.js")
-    run("node", "--test", "out/server.test.mjs")
+    run("node", "--test", *(f"out/{name}.test.mjs" for name in tests))
     run(sys.executable, HERE / "check_grammar.py")
 
     bundles: dict[str, Path] = {}

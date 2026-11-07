@@ -1,0 +1,155 @@
+/* The literate Temper preview: Markdown in VS Code's theme colors, and
+   Temper's tokens (tm-*) and other languages' (hljs-*) in the colors of
+   VS Code's default themes. */
+
+:root {
+  --tm-comment: #008000;
+  --tm-string: #a31515;
+  --tm-escape: #ee0000;
+  --tm-number: #098658;
+  --tm-constant: #0000ff;
+  --tm-keyword: #0000ff;
+  --tm-control: #af00db;
+  --tm-type: #267f99;
+  --tm-function: #795e26;
+  --tm-variable: #001080;
+  --tm-decorator: #795e26;
+}
+
+body.vscode-dark,
+body.vscode-high-contrast:not(.vscode-high-contrast-light) {
+  --tm-comment: #6a9955;
+  --tm-string: #ce9178;
+  --tm-escape: #d7ba7d;
+  --tm-number: #b5cea8;
+  --tm-constant: #569cd6;
+  --tm-keyword: #569cd6;
+  --tm-control: #c586c0;
+  --tm-type: #4ec9b0;
+  --tm-function: #dcdcaa;
+  --tm-variable: #9cdcfe;
+  --tm-decorator: #dcdcaa;
+}
+
+body {
+  font-family: var(--vscode-markdown-font-family, var(--vscode-font-family, system-ui, sans-serif));
+  font-size: var(--vscode-markdown-font-size, 14px);
+  line-height: var(--vscode-markdown-line-height, 1.6);
+  color: var(--vscode-editor-foreground);
+  background: var(--vscode-editor-background);
+  padding: 0 26px;
+  max-width: 882px;
+  margin: 0 auto;
+  word-wrap: break-word;
+}
+
+#content > :first-child {
+  margin-top: 1em;
+}
+
+/* Room to scroll the last line to the top, as the editor can. */
+#content {
+  padding-bottom: 80vh;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  margin: 1.2em 0 0.6em;
+  line-height: 1.25;
+}
+
+h1, h2 {
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--vscode-widget-border, var(--vscode-panel-border, rgba(128, 128, 128, 0.35)));
+}
+
+h1 { font-size: 2em; }
+h2 { font-size: 1.5em; }
+h3 { font-size: 1.25em; }
+
+a {
+  color: var(--vscode-textLink-foreground);
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--vscode-textLink-activeForeground);
+  text-decoration: underline;
+}
+
+a:focus,
+input:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+hr {
+  border: 0;
+  height: 1px;
+  background: var(--vscode-widget-border, rgba(128, 128, 128, 0.35));
+}
+
+blockquote {
+  margin: 0 0 1em;
+  padding: 0 1em;
+  border-left: 4px solid var(--vscode-textBlockQuote-border);
+  background: var(--vscode-textBlockQuote-background);
+}
+
+img {
+  max-width: 100%;
+}
+
+table {
+  border-collapse: collapse;
+  margin-bottom: 1em;
+}
+
+th, td {
+  padding: 5px 10px;
+  border: 1px solid var(--vscode-widget-border, rgba(128, 128, 128, 0.35));
+}
+
+code {
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 0.9em;
+}
+
+:not(pre) > code {
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+  background: var(--vscode-textCodeBlock-background);
+}
+
+pre {
+  padding: 12px 16px;
+  border-radius: 4px;
+  overflow-x: auto;
+  background: var(--vscode-textCodeBlock-background);
+  line-height: 1.4;
+}
+
+/* Over the webview's own inline-code look. */
+pre code {
+  display: block;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  font-size: var(--vscode-editor-font-size, 0.9em);
+  color: var(--vscode-editor-foreground);
+  white-space: pre;
+}
+
+.tm-comment, .hljs-comment, .hljs-quote { color: var(--tm-comment); }
+.tm-string, .hljs-string, .hljs-regexp { color: var(--tm-string); }
+.tm-escape, .hljs-subst { color: var(--tm-escape); }
+.tm-number, .hljs-number { color: var(--tm-number); }
+.tm-constant, .hljs-literal { color: var(--tm-constant); }
+.tm-keyword, .hljs-keyword { color: var(--tm-keyword); }
+.tm-control { color: var(--tm-control); }
+.hljs-built_in { color: var(--tm-type); }
+.tm-type, .hljs-type, .hljs-title.class_ { color: var(--tm-type); }
+.tm-function, .hljs-title.function_, .hljs-title { color: var(--tm-function); }
+.tm-variable, .hljs-variable, .hljs-attr, .hljs-params { color: var(--tm-variable); }
+.tm-decorator, .hljs-meta { color: var(--tm-decorator); }
+.tm-operator { color: inherit; }

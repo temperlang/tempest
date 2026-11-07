@@ -1,7 +1,7 @@
 {
   "name": "temper",
   "displayName": "Temper",
-  "description": "Temper in VS Code: highlighting for .temper and literate .temper.md files, and tempest's language server for errors as you type, hover, go to definition, completion, references, rename, outlines, and signature help",
+  "description": "Temper in VS Code: highlighting for .temper and literate .temper.md files, a rendered preview of .temper.md, and tempest's language server for errors as you type, hover, go to definition, completion, references, rename, outlines, and signature help",
   "version": "0.0.1",
   "publisher": "temperlang",
   "license": "Apache-2.0 OR MIT",
@@ -79,8 +79,60 @@
       {
         "command": "temper.restartServer",
         "title": "Temper: Restart Language Server"
+      },
+      {
+        "command": "temper.showPreview",
+        "title": "Open Preview",
+        "category": "Temper",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "temper.showPreviewToSide",
+        "title": "Open Preview to the Side",
+        "category": "Temper",
+        "icon": "$(open-preview)"
       }
-    ]
+    ],
+    "keybindings": [
+      {
+        "command": "temper.showPreview",
+        "key": "ctrl+shift+v",
+        "mac": "cmd+shift+v",
+        "when": "editorLangId == temper-markdown"
+      },
+      {
+        "command": "temper.showPreviewToSide",
+        "key": "ctrl+k v",
+        "mac": "cmd+k v",
+        "when": "editorLangId == temper-markdown"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "temper.showPreviewToSide",
+          "when": "editorLangId == temper-markdown",
+          "group": "navigation"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "temper.showPreview",
+          "when": "resourceLangId == temper-markdown",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "temper.showPreview",
+          "when": "editorLangId == temper-markdown"
+        },
+        {
+          "command": "temper.showPreviewToSide",
+          "when": "editorLangId == temper-markdown"
+        }
+      ]
+    }
   },
   "devDependencies": {
     "@types/vscode": "1.91.0",

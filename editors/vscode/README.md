@@ -12,6 +12,16 @@ and tempest's language server, `tempest lsp`, for:
 - find references and rename, across the library's files;
 - the outline (document symbols), and signature help in calls.
 
+And a rendered preview of literate Temper, as VS Code's own Markdown
+preview does for `.md`: "Temper: Open Preview" (Ctrl+Shift+V, or
+Cmd+Shift+V on macOS) in place of the editor, "Temper: Open Preview to
+the Side" (Ctrl+K V) or the editor title's preview button beside it.
+It updates as you type, highlights Temper code blocks as the editor
+does, and scrolls with the editor both ways. It renders with VS Code's
+built-in Markdown extension, so needs that enabled. Relative images and
+links work; links to the web open in the browser; nothing remote loads
+in the preview itself, and scripts in the document don't run.
+
 ## Install
 
 Each platform's package bundles tempest: `temper-linux-x64-VERSION.vsix`,
@@ -56,9 +66,16 @@ runs the tests in a real VS Code. `--binaries DIR` bundles each
   which syncs documents incrementally and maps VS Code's features to
   LSP's requests. `src/server.ts` finds tempest, tested by
   `src/server.test.ts` under Node's test runner.
+- `src/preview.ts`: the preview, a webview of what VS Code's Markdown
+  engine renders (`markdown.api.render`); `src/page.ts` highlights its
+  Temper blocks (`src/highlight.ts`, a small TextMate tokenizer on
+  `syntaxes/temper.tmLanguage.json`) and builds the page and its CSP;
+  `webview/preview.ts` is its script, scrolling by the engine's
+  `data-line` marks (`src/sync.ts`); `media/preview.css` its look.
+  `src/page.test.ts` tests the pure parts under Node's test runner.
 - `test/suite.ts`: diagnostics (and an incremental edit), hover,
-  definition, completion, and rename, in a real VS Code on a small
-  library, run by `test/run.ts` with `@vscode/test-electron` against
+  definition, completion, rename, and the preview (rendered, updated,
+  and scrolled both ways), in a real VS Code on a small library, run by `test/run.ts` with `@vscode/test-electron` against
   the platform package as built, with its tempest. On Linux without a
   display, it runs under `xvfb-run`, or else Electron's headless mode.
 - `build.py`: type checks, bundles with esbuild, tests, and packages
