@@ -4,12 +4,16 @@
 //! [`translate`]), which `tempest build` ([`build`]), the commands for one
 //! backend, and the playground's wasm (`temper-wasm`) all take.
 //! [`test_run`] runs built libraries' tests with each language's own
-//! tools, for `tempest test -b`.
+//! tools, for `tempest test -b`. [`lsp`] is `tempest lsp`, a language
+//! server over [`temper_analysis`].
 //!
 //! Each backend is a cargo feature (`cpp`, `csharp`, `java`, `js`, `lua`,
 //! `py`, and `rust`), all on by default.
 
 pub mod build;
+// Native only: the wasm answers the playground's queries itself.
+#[cfg(any(unix, windows))]
+pub mod lsp;
 // Not in the wasm, which runs no tools.
 #[cfg(any(unix, windows))]
 pub mod test_run;

@@ -1,12 +1,13 @@
 # 8. Wasm, the playground, watch, and a language server
 
-The whole compiler also builds to wasm, about 4.3 MB (1.4 MB
+The whole compiler also builds to wasm, about 4.4 MB (1.4 MB
 gzipped), and runs in a browser with no server. The
 [playground](../../site/playground/README.md) uses it: type Temper on the
 left, and see errors, the program's output, its tests' results, and all
 seven backends' code on the right, updated as you type. The editor also
-underlines errors, shows types on hover, goes to definitions, and
-completes names.
+underlines errors, shows types on hover, goes to definitions (into
+std's sources too), completes names and members, finds references,
+renames, and shows a call's signature as you type its arguments.
 
 ```mermaid
 flowchart LR
@@ -15,7 +16,7 @@ flowchart LR
   analyze -->|"diagnostics, first"| editor
   analyze --> finish["finish: run and backends"]
   finish -->|"the rest"| editor
-  editor -->|"hover, definition, completions"| worker
+  editor -->|"hover, definition, completions, references, rename, signature help"| worker
   editor -->|"Run"| jsworker["JS worker: runs the generated JavaScript"]
 ```
 
@@ -84,11 +85,26 @@ settled again:
   signature with its parameters' names, and its doc comment; for other
   code, the smallest typed expression's type.
 - [`definition`](../../crates/temper-analysis/src/lib.rs): where a
-  name, or a member after `.`, is declared. In the playground, F12, or
-  Ctrl or Cmd and click.
+  name, or a member after `.`, is declared, through imports to what
+  they import. In the playground, F12, or Ctrl or Cmd and click; a
+  declaration in std opens std's file, read-only, on the right.
 - [`completions`](../../crates/temper-analysis/src/lib.rs): the
-  names in scope, innermost first, or after `x.`, the members of `x`'s
-  class.
+  names in scope, innermost first; after `x.`, the members of whatever
+  `x` is, with a generic class's type arguments filled in, and builtin
+  types' members from core; after a type's name, its statics; and in
+  an object literal, the property names its class takes.
+- [`references`](../../crates/temper-analysis/src/references.rs) and
+  [`rename`](../../crates/temper-analysis/src/references.rs):
+  Shift+F12 marks every use, and F2 renames them all; builtins and std
+  can't be renamed.
+- [`signature_help`](../../crates/temper-analysis/src/signatures.rs):
+  the signature of the call being typed, with the argument the cursor
+  is at, in a tooltip.
+- [`document_symbols`](../../crates/temper-analysis/src/symbols.rs):
+  a file's outline, for the language server.
+
+"No member" errors span `obj.name`, as Kotlin Temper's do; the editor
+underlines just the name.
 
 A query names the node at the position from each name's symbol
 ([`Scopes`](../../crates/temper-frontend/src/scope.rs)), each member
@@ -102,10 +118,11 @@ the wasm converts once, at its boundary, with
 waits until the worker has settled the text on screen, so positions
 always match.
 
-## Coming: `watch` and a language server
+## `watch` and a language server
 
-Neither exists yet. Both are meant to reuse what's here rather than add
-a second compiler:
+The language server, `tempest lsp`, exists ([page 9](09-language-server.md));
+`watch` doesn't yet. Both reuse what's here rather than add a second
+compiler:
 
 ```mermaid
 flowchart LR
@@ -123,19 +140,19 @@ flowchart LR
   library takes tens of milliseconds, rebuilding on each change is
   simplest: `watch` is then a loop around `build` or `test`, printing
   `Analysis::diagnostics`.
-- **Unsaved buffers** become a memory layer of
+- **Unsaved buffers** are a memory layer of
   [`Sources`](../../crates/temper-frontend/src/sources.rs) in front of
-  the disk, as the playground's source already is, so a build sees them
-  without writing files.
-- **A language server** wraps the same `Analysis` queries, with LSP's
+  the disk, as the playground's source is, so a build sees them
+  without writing files. The language server does this now.
+- **The language server** wraps the same `Analysis` queries, with LSP's
   line and UTF-16 column positions converted at its boundary as the
   wasm's are.
 
 ## Where in the code
 
 - [`compile`](../../crates/temper-wasm/src/lib.rs) and [`compile_into`](../../crates/temper-wasm/src/lib.rs): everything in one call; [`analyze`](../../crates/temper-wasm/src/lib.rs) and [`finish`](../../crates/temper-wasm/src/lib.rs): the same in the playground's two halves.
-- [`hover`](../../crates/temper-wasm/src/lib.rs), [`definition`](../../crates/temper-wasm/src/lib.rs), and [`completions`](../../crates/temper-wasm/src/lib.rs): the editor's queries as wasm exports, in UTF-16.
-- [`temper-analysis`](../../crates/temper-analysis/src/lib.rs): the queries themselves, in their own crate over the frontend only, for the playground now and a language server later. Tests: `crates/temper-analysis/tests/analysis.rs`.
+- [`hover`](../../crates/temper-wasm/src/lib.rs), [`definition`](../../crates/temper-wasm/src/lib.rs), [`completions`](../../crates/temper-wasm/src/lib.rs), [`references`](../../crates/temper-wasm/src/lib.rs), [`rename`](../../crates/temper-wasm/src/lib.rs), and [`signature_help`](../../crates/temper-wasm/src/lib.rs): the editor's queries as wasm exports, in UTF-16.
+- [`temper-analysis`](../../crates/temper-analysis/src/lib.rs): the queries themselves, in their own crate over the frontend only, for the playground and the language server. Tests: `crates/temper-analysis/tests/analysis.rs`.
 - [`std_program`](../../crates/temper-wasm/src/lib.rs): std, settled once and kept.
 - [`build.rs`](../../crates/temper-wasm/build.rs): a 16 MiB stack for the wasm build.
 - Older single-purpose calls, `parse`, `run`, and `generate`, are in the same file.

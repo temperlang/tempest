@@ -3,6 +3,7 @@
 //!
 //!     tempest build [-w DIR] [-b BACKEND]... [--no-connected] [--verbose] [--std DIR]
 //!     tempest test [-b interp|BACKEND] [--verbose] [--std DIR] [DIR]
+//!     tempest lsp [--std DIR]
 //!     tempest py [--out DIR] [--std DIR] FILE...
 //!     tempest rust [--out DIR] [--std DIR] FILE...
 //!     tempest js [--out DIR] [--std DIR] FILE...
@@ -55,6 +56,11 @@
 //! module has a source map beside it, as Kotlin's has, naming the
 //! sources by their paths relative to the package.
 //!
+//! `lsp` serves an editor over stdio as a language server ([`tempest::lsp`]):
+//! diagnostics as you type, hover, go to definition, completion, find
+//! references, rename, document symbols, and signature help, over the
+//! library around each open file.
+//!
 //! Each backend is a cargo feature, all on by default ([`tempest`]); one
 //! left out says so and fails.
 //!
@@ -75,6 +81,7 @@ use tempest::{NAMES, build, test_run};
 const USAGE: &str =
     "usage: tempest build [-w DIR] [-b BACKEND]... [--no-connected] [--verbose] [--std DIR]
        tempest test [-b interp|BACKEND] [--verbose] [--std DIR] [DIR]
+       tempest lsp [--std DIR]
        tempest py [--out DIR] [--std DIR] FILE...
        tempest rust [--out DIR] [--std DIR] FILE...
        tempest js [--out DIR] [--std DIR] FILE...
@@ -100,6 +107,7 @@ fn run(args: &[String]) -> u8 {
     match args.first().map(String::as_str) {
         Some("test") => test(&args[1..]),
         Some("build") => build_command(&args[1..]),
+        Some("lsp") => lsp(&args[1..]),
         Some("help" | "--help" | "-h") => {
             println!("{USAGE}");
             0
@@ -230,6 +238,16 @@ fn test_on(sources: &Sources, dir: &str, backend: &'static Backend, verbose: boo
     let _ = writeln!(out, "{}", tally.summary());
     let _ = out.flush();
     if ok && tally.all_passed() { 0 } else { 1 }
+}
+
+/// `tempest lsp [--std DIR]`: a language server on stdin and stdout.
+fn lsp(args: &[String]) -> u8 {
+    let std_dir = match args {
+        [] => None,
+        [flag, dir] if flag == "--std" => Some(dir.clone()),
+        _ => return usage(),
+    };
+    tempest::lsp::serve(io::stdin(), io::stdout().lock(), std_dir)
 }
 
 /// `tempest build [-w DIR] [-b BACKEND]... [--no-connected] [--verbose]

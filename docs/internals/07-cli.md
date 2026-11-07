@@ -11,7 +11,12 @@ binary, so it needs nothing beside it.
 ```text
 tempest test [-b interp|BACKEND] [-v] [DIR]
 tempest build [-w DIR] [-b BACKEND]... [-v]
+tempest lsp
 ```
+
+`lsp` is a language server for editors, over stdin and stdout, on the
+same library finding and `Sources` as `test` and `build`; it has
+[a page of its own](09-language-server.md).
 
 ## Finding libraries
 
@@ -24,8 +29,8 @@ is a module. Directories that `.gitignore` files list are skipped.
 All reading goes through one [`Sources`](../../crates/temper-frontend/src/sources.rs)
 value, so the compiler never touches the file system itself. It stacks
 layers: the disk, std built in, or files in memory. The playground uses
-memory, and a language server can later put unsaved editor buffers in
-front of the disk.
+memory, and the language server puts unsaved editor buffers in front of
+the disk.
 
 ## One compile path
 
@@ -136,7 +141,8 @@ Tests passed: 1 of 2
 ## Where in the code
 
 - [`lib.rs`](../../crates/tempest/src/lib.rs): [`BACKENDS`](../../crates/tempest/src/lib.rs), [`backend`](../../crates/tempest/src/lib.rs), and the compile path above.
-- [`main.rs`](../../crates/tempest/src/main.rs): argument parsing, [`test`](../../crates/tempest/src/main.rs), [`test_on`](../../crates/tempest/src/main.rs) for a backend, and [`build_command`](../../crates/tempest/src/main.rs).
+- [`main.rs`](../../crates/tempest/src/main.rs): argument parsing, [`test`](../../crates/tempest/src/main.rs), [`test_on`](../../crates/tempest/src/main.rs) for a backend, [`build_command`](../../crates/tempest/src/main.rs), and [`lsp`](../../crates/tempest/src/main.rs).
+- [`serve`](../../crates/tempest/src/lsp/mod.rs): the language server.
 - [`build`](../../crates/tempest/src/build.rs): every library, each backend, in dependency order.
 - [`test_run::run`](../../crates/tempest/src/test_run.rs): each language's test tools.
 - [`test_dir`](../../crates/temper-frontend/src/library_tests.rs), [`test_library`](../../crates/temper-frontend/src/library_tests.rs), and [`Tally`](../../crates/temper-frontend/src/library_tests.rs): tests on the interpreter, and the summary.
@@ -145,4 +151,5 @@ Tests passed: 1 of 2
 - Tests: `crates/tempest/tests/` (the CLI, dependencies between libraries, and the layout of `temper.out`).
 
 `watch`, `run`, `repl`, and the rest of Temper's commands come later;
-[the next page](08-playground.md) says how `watch` will reuse all this.
+[the next page](08-playground.md) says how `watch` will reuse all this,
+and [page 9](09-language-server.md) how `lsp` does.

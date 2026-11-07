@@ -16,6 +16,16 @@
 //! diagnostics, and naming hints) may come later, lazily computed, behind
 //! an optional cargo feature.
 
+mod members;
+mod references;
+mod signatures;
+mod symbols;
+
+pub use references::{Edit, KEYWORDS};
+pub use signatures::SignatureHelp;
+pub use symbols::DocSymbol;
+
+use members::Subst;
 use std::collections::HashMap;
 use temper_frontend::core::{
     self, CLASS_INTERFACE, LET_VAR, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD,
@@ -24,7 +34,7 @@ use temper_frontend::core::{
 use temper_frontend::library::{FileId, Level};
 use temper_frontend::scope::{BUILTINS, ScopeId, Scopes, SymbolId, SymbolKind};
 use temper_frontend::settle::Settled;
-use temper_frontend::types::{TypeData, TypeId, show_result};
+use temper_frontend::types::{self, TypeData, TypeId, show_result};
 use temper_frontend::typing::Resolved;
 use temper_syntax::adapt::CommentKind;
 use temper_syntax::ast::Value;
@@ -156,18 +166,55 @@ impl Analysis {
         let library = &self.settled.library;
         (library.diagnostics.iter())
             .map(|d| {
-                let (file, start) = library.locate(d.span.start);
+                // "No member" spans `obj.name`, as Kotlin's does; editors
+                // underline just the name.
+                let span = match d.message {
+                    temper_frontend::library::Message::NoMember(..) => {
+                        self.member_name_span(d.span)
+                    }
+                    _ => d.span,
+                };
+                let (file, start) = library.locate(span.start);
                 Problem {
                     level: d.level,
                     message: d.message.text(),
                     file,
                     span: Span {
                         start,
-                        end: start + d.span.end.saturating_sub(d.span.start),
+                        end: start + span.end.saturating_sub(span.start),
                     },
                 }
             })
             .collect()
+    }
+
+    /// The member's name in a `.` call with a library-wide span, or the
+    /// span itself if it isn't one.
+    fn member_name_span(&self, span: Span) -> Span {
+        let tree = &self.settled.library.tree;
+        let library = &self.settled.library;
+        let (file, _) = library.locate(span.start);
+        let Some(root) = library.files.get(file.0 as usize).map(|f| f.root) else {
+            return span;
+        };
+        let mut stack = vec![root];
+        while let Some(node) = stack.pop() {
+            let s = tree.span(node);
+            if s.start > span.start || s.end < span.end {
+                continue;
+            }
+            let children = tree.children(node);
+            if s == span && tree.kind(node) == NodeKind::Call && children.len() == 3 {
+                let dot = library
+                    .name(children[0])
+                    .is_some_and(|n| library.names.get(n) == ".");
+                if dot && tree.kind(children[2]) == NodeKind::Value {
+                    return tree.span(children[2]);
+                }
+            }
+            stack.extend(children);
+        }
+        span
     }
 
     /// What's at byte `offset` of `file`: the name there, with its
@@ -175,7 +222,10 @@ impl Analysis {
     /// smallest expression around it.
     pub fn hover(&self, file: FileId, offset: u32) -> Option<Hover> {
         let (node, target) = self.target(file, offset)?;
-        let span = self.local(node);
+        let span = match target {
+            Some(_) => self.name_span(node),
+            None => self.local(node),
+        };
         let Some(target) = target else {
             let t = self.settled.typing.expr(node)?;
             return Some(Hover {
@@ -190,30 +240,54 @@ impl Analysis {
             Target::Symbol(symbol) => {
                 let s = self.settled.scopes.symbol(symbol);
                 let name = self.settled.library.names.get(s.name).to_string();
-                let kind = self.kind(symbol);
-                let ty = match s.decl {
+                // An imported name is what it imports.
+                let decl = s.decl.map(|d| self.imported(d));
+                let kind = match decl == s.decl {
+                    true => self.kind(symbol),
+                    false => self.decl_kind(decl.unwrap_or(node), None),
+                };
+                let ty = match decl {
                     Some(decl) => self.decl_type(decl, &name, node),
                     None => self.settled.typing.expr(node).map(|t| self.show(t)),
                 };
-                (name, kind, ty, s.decl)
+                (name, kind, ty, decl)
             }
             Target::Member { call, key } => {
                 let name = self.settled.library.names.get(key).to_string();
+                let receiver = self.receiver_of(call);
                 match self.member(call) {
                     Some(Resolved::Decl(decl)) => {
                         let decl = *decl;
                         let kind = self.decl_kind(decl, None);
+                        let subst = match receiver.as_ref().and_then(|r| self.find_member(r, &name))
+                        {
+                            Some((m, subst)) if m == decl => subst,
+                            _ => Subst::new(),
+                        };
                         (
                             name.clone(),
                             kind,
-                            self.decl_type(decl, &name, call),
+                            self.decl_type_in(decl, &name, call, &subst),
                             Some(decl),
                         )
                     }
-                    _ => {
-                        let ty = self.settled.typing.expr(call).map(|t| self.show(t));
-                        (name, DeclKind::Builtin, ty, None)
-                    }
+                    _ => match receiver
+                        .as_ref()
+                        .and_then(|r| self.builtin_member(r, &name))
+                    {
+                        // A builtin type's member, as core declares it.
+                        Some(m) => {
+                            let kind = match m.is_method {
+                                true => DeclKind::Method,
+                                false => DeclKind::Field,
+                            };
+                            (name, kind, Some(m.detail), None)
+                        }
+                        None => {
+                            let ty = self.settled.typing.expr(call).map(|t| self.show(t));
+                            (name, DeclKind::Builtin, ty, None)
+                        }
+                    },
                 }
             }
         };
@@ -230,7 +304,7 @@ impl Analysis {
     /// declaration's name, in whichever file that is. None for builtins.
     pub fn definition(&self, file: FileId, offset: u32) -> Option<Location> {
         let decl = match self.target(file, offset)?.1? {
-            Target::Symbol(symbol) => self.settled.scopes.symbol(symbol).decl?,
+            Target::Symbol(symbol) => self.imported(self.settled.scopes.symbol(symbol).decl?),
             Target::Member { call, .. } => match self.member(call)? {
                 Resolved::Decl(decl) => *decl,
                 _ => return None,
@@ -244,8 +318,60 @@ impl Analysis {
         let (file, _) = self.settled.library.locate(tree.span(name).start);
         Some(Location {
             file,
-            span: self.local(name),
+            span: self.name_span(name),
         })
+    }
+
+    /// What an imported name's declaration, as `let { Regex } =
+    /// import("std/regex")`, imports: the exporting module's declaration,
+    /// through imports of imports; any other declaration itself.
+    pub(crate) fn imported(&self, decl: NodeId) -> NodeId {
+        let tree = &self.settled.library.tree;
+        let mut decl = decl;
+        for _ in 0..8 {
+            if tree.kind(decl) != NodeKind::Let {
+                break;
+            }
+            let (name, _, init) = core::let_parts(tree, decl);
+            // Destructuring gives each name a `let` of the module's name,
+            // at the same place.
+            let Some(init) = init.filter(|&i| {
+                tree.kind(i) == NodeKind::RightName && tree.span(i) == tree.span(name)
+            }) else {
+                break;
+            };
+            let next = (self.settled.scopes.resolved(init))
+                .and_then(|s| self.settled.scopes.symbol(s).decl);
+            match next {
+                Some(next) if next != decl => decl = next,
+                _ => break,
+            }
+        }
+        decl
+    }
+
+    /// A name's span in its file: just the name, where a declaration's
+    /// name node also spans its type, as `items: ListBuilder<T>`.
+    pub(crate) fn name_span(&self, node: NodeId) -> Span {
+        let span = self.local(node);
+        let library = &self.settled.library;
+        let (file, _) = library.locate(library.tree.span(node).start);
+        let text = (library.name(node).map(|n| library.names.get(n))).or_else(|| {
+            match library.value(node) {
+                Some(Value::Symbol(n)) => Some(library.names.get(*n)),
+                _ => None,
+            }
+        });
+        let source = self.source(file).unwrap_or("");
+        match (text, source.get(span.start as usize..span.end as usize)) {
+            (Some(name), Some(at)) if !name.is_empty() && at.starts_with(name) && at != name => {
+                Span {
+                    start: span.start,
+                    end: span.start + name.len() as u32,
+                }
+            }
+            _ => span,
+        }
     }
 
     /// The names in scope at byte `offset` of `file`, innermost first,
@@ -253,6 +379,9 @@ impl Analysis {
     /// before it, if its type is a class's.
     pub fn completions(&self, file: FileId, offset: u32) -> Vec<Completion> {
         let pos = self.global(file, offset);
+        if let Some(keys) = self.literal_completions(file, offset) {
+            return keys;
+        }
         if let Some(members) = self.member_completions(file, offset) {
             return members;
         }
@@ -287,98 +416,76 @@ impl Analysis {
         out
     }
 
-    /// Members after `name.` (or `name.prefix`) at `offset`, when `name`
-    /// is a declared local whose type is a class's.
+    /// Members after `x.` (or `x.prefix`) at `offset`: of the type of
+    /// whatever expression `x` is, or a type's statics after its name;
+    /// empty if that's unknown. `None` if there's no `.` before.
     fn member_completions(&self, file: FileId, offset: u32) -> Option<Vec<Completion>> {
-        let source = self
-            .settled
-            .library
-            .files
-            .get(file.0 as usize)?
-            .parsed
-            .source();
+        let source = self.source(file)?;
         let before = source.get(..offset as usize)?;
         let before = before.trim_end_matches(|c: char| c.is_alphanumeric() || c == '_');
-        let before = before.strip_suffix('.')?;
-        let object_end = before.len() as u32;
+        let before = before.trim_end().strip_suffix('.')?;
+        let object_end = before.trim_end().len() as u32;
+        if let Some(node) = self.receiver_node(file, object_end) {
+            if let Some(members) = self.members_after(node) {
+                return Some(members);
+            }
+        }
+        // Code too broken to type: a local's declared type.
         let object = before
             .rsplit(|c: char| !(c.is_alphanumeric() || c == '_'))
             .next()
             .filter(|o| !o.is_empty())?;
-        let pos = self.global(file, object_end);
-        let scope = self.scope_at(file, pos);
-        let name = self.settled.library.names.find(object)?;
-        let mut at = scope;
-        let scopes = &self.settled.scopes;
-        let symbol = loop {
-            let s = scopes.get(at?);
-            if let Some(&(_, symbol)) = s.names.iter().rev().find(|(n, _)| *n == name) {
-                break symbol;
-            }
-            at = s.parent;
-        };
-        let decl = scopes.symbol(symbol).decl?;
-        let t = *self.settled.typing.decls.get(&decl)?;
-        let types = &self.settled.typing.types;
-        let t = match types.get(t) {
-            TypeData::Nullable(inner) => *inner,
-            _ => t,
-        };
-        let base = match types.get(t) {
-            TypeData::Applied { base, .. } => *base,
-            _ => t,
-        };
-        let TypeData::Class(class) = *types.get(base) else {
+        let Some(symbol) = self.lookup(file, object_end, object) else {
             return Some(Vec::new());
         };
-        let class = scopes.symbol(class).decl?;
-        let mut out = Vec::new();
-        self.class_members(class, &mut out, &mut Vec::new());
-        Some(out)
+        let t = (self.settled.scopes.symbol(symbol).decl)
+            .and_then(|decl| self.settled.typing.decls.get(&decl).copied());
+        Some(match t.and_then(|t| self.receiver(t)) {
+            Some(r) => self.members_of(&r),
+            None => Vec::new(),
+        })
     }
 
-    /// A class's public instance members, then its supertypes'.
-    fn class_members(&self, class: NodeId, out: &mut Vec<Completion>, seen: &mut Vec<NodeId>) {
-        let tree = &self.settled.library.tree;
-        if tree.kind(class) != NodeKind::Class || seen.contains(&class) {
-            return;
-        }
-        seen.push(class);
-        let (_, supers, members) = core::class_parts(tree, class);
-        for &m in members {
-            let data = tree.data(m);
-            let role = data & ROLE_MASK;
-            if data & (core::MEMBER_STATIC | core::MEMBER_PRIVATE) != 0
-                || role == ROLE_CONSTRUCTOR
-                || role == ROLE_TYPE_PARAM
-            {
-                continue;
+    /// The symbol a name means at byte `offset` of `file`, if it's in
+    /// scope there.
+    pub(crate) fn lookup(&self, file: FileId, offset: u32, name: &str) -> Option<SymbolId> {
+        let pos = self.global(file, offset);
+        let name = self.settled.library.names.find(name)?;
+        let scopes = &self.settled.scopes;
+        let mut at = self.scope_at(file, pos);
+        loop {
+            let s = scopes.get(at?);
+            if let Some(&(_, symbol)) = s.names.iter().rev().find(|(n, _)| *n == name) {
+                return Some(symbol);
             }
-            let Some(name) = self.settled.library.name(tree.children(m)[0]) else {
-                continue;
-            };
-            let text = self.settled.library.names.get(name).to_string();
-            if out.iter().any(|c: &Completion| c.name == text) {
-                continue;
-            }
-            let detail = self.decl_type(m, &text, m);
-            out.push(Completion {
-                name: text,
-                kind: self.decl_kind(m, None),
-                detail,
-            });
+            at = s.parent;
         }
-        for &s in supers {
-            let s = match tree.kind(s) {
-                NodeKind::Call => tree.children(s).first().copied().unwrap_or(s),
-                _ => s,
-            };
-            if let Some(symbol) = self.settled.scopes.resolved(s) {
-                if let Some(decl) = self.settled.scopes.symbol(symbol).decl {
-                    self.class_members(decl, out, seen);
-                }
-            }
-        }
+    }
+
+    /// A file's source text.
+    pub(crate) fn source(&self, file: FileId) -> Option<&str> {
+        Some(
+            self.settled
+                .library
+                .files
+                .get(file.0 as usize)?
+                .parsed
+                .source(),
+        )
+    }
+
+    /// Whether a file is one of std's.
+    pub fn is_std(&self, file: FileId) -> bool {
+        (self.settled.library.files.get(file.0 as usize)).is_some_and(|f| {
+            f.path
+                .starts_with(&format!("{}/", temper_frontend::stdlib::DIR))
+        })
+    }
+
+    /// What a `.` call's object has members of.
+    fn receiver_of(&self, call: NodeId) -> Option<members::Receiver> {
+        let object = *self.settled.library.tree.children(call).get(1)?;
+        self.receiver(self.settled.typing.expr(object)?)
     }
 
     /// The innermost scope around a library-wide position in `file`.
@@ -550,6 +657,18 @@ impl Analysis {
     /// signature with its parameters' names, else its type, or else the
     /// type at `use_site`, which may be narrower (or the only one known).
     fn decl_type(&self, decl: NodeId, name: &str, use_site: NodeId) -> Option<String> {
+        self.decl_type_in(decl, name, use_site, &Subst::new())
+    }
+
+    /// [`Analysis::decl_type`], with type parameters in `subst` shown as
+    /// their arguments, as a generic class's members on its instances.
+    fn decl_type_in(
+        &self,
+        decl: NodeId,
+        name: &str,
+        use_site: NodeId,
+        subst: &Subst,
+    ) -> Option<String> {
         let tree = &self.settled.library.tree;
         let typing = &self.settled.typing;
         if tree.kind(decl) == NodeKind::Class {
@@ -570,13 +689,14 @@ impl Analysis {
                     // A getter reads as a field of its result type.
                     let t = (typing.decls.get(&decl).copied()).or_else(|| typing.expr(f));
                     return match t.map(|t| (t, typing.types.get(t))) {
-                        Some((_, TypeData::Fn { ret, .. })) => Some(self.show(*ret)),
-                        Some((t, _)) => Some(self.show(t)),
+                        Some((_, TypeData::Fn { ret, .. })) => Some(self.show_in(*ret, subst)),
+                        Some((t, _)) => Some(self.show_in(t, subst)),
                         None => typing.expr(use_site).map(|t| self.show(t)),
                     };
                 }
                 if tree.data(decl) & LET_VAR == 0 {
-                    return Some(self.signature(f, name, typing.decls.get(&decl).copied()));
+                    let t = typing.decls.get(&decl).copied();
+                    return Some(self.signature(f, name, t, subst));
                 }
             }
         }
@@ -585,28 +705,49 @@ impl Analysis {
             .get(&decl)
             .copied()
             .or_else(|| typing.expr(use_site))?;
-        Some(self.show(t))
+        Some(self.show_in(t, subst))
     }
 
     /// A function's signature, `name(a: Int32, b?: String): Boolean`.
-    fn signature(&self, f: NodeId, name: &str, t: Option<TypeId>) -> String {
+    fn signature(&self, f: NodeId, name: &str, t: Option<TypeId>, subst: &Subst) -> String {
+        let (params, ret) = self.signature_parts(f, t, subst);
+        let params: Vec<String> = params.into_iter().map(|(p, _)| p).collect();
+        format!("{name}({}): {ret}", params.join(", "))
+    }
+
+    /// A function's parameters, as `b?: String`, each with its type, and
+    /// its result type.
+    fn signature_parts(
+        &self,
+        f: NodeId,
+        t: Option<TypeId>,
+        subst: &Subst,
+    ) -> (Vec<(String, Option<TypeId>)>, String) {
         let tree = &self.settled.library.tree;
         let typing = &self.settled.typing;
         let (params, _, _) = core::fn_parts(tree, f);
-        let params: Vec<String> = (params.iter())
-            .map(|&p| {
+        let fn_type = t.or_else(|| typing.expr(f)).map(|t| typing.types.get(t));
+        let params = (params.iter().enumerate())
+            .map(|(i, &p)| {
                 let n = (self.settled.library.name(tree.children(p)[0]))
                     .map_or("_", |n| self.settled.library.names.get(n));
                 let optional = core::let_parts(tree, p).2.is_some();
-                let ty = typing.decls.get(&p).map_or("?".into(), |&t| self.show(t));
-                format!("{n}{}: {ty}", if optional { "?" } else { "" })
+                // The parameter's own type, or else the function type's.
+                let t = typing.decls.get(&p).copied().or_else(|| match fn_type {
+                    Some(TypeData::Fn { params, .. }) => params.get(i).map(|p| p.ty),
+                    _ => None,
+                });
+                let ty = t.map_or("?".into(), |t| self.show_in(t, subst));
+                (format!("{n}{}: {ty}", if optional { "?" } else { "" }), t)
             })
             .collect();
         let ret = match t.or_else(|| typing.expr(f)).map(|t| typing.types.get(t)) {
-            Some(TypeData::Fn { ret, throws, .. }) => show_result(self.show(*ret), *throws),
+            Some(TypeData::Fn { ret, throws, .. }) => {
+                show_result(self.show_in(*ret, subst), *throws)
+            }
             _ => "?".into(),
         };
-        format!("{name}({}): {ret}", params.join(", "))
+        (params, ret)
     }
 
     /// The doc comment just before a declaration, if any: `/** … */`
@@ -638,11 +779,7 @@ impl Analysis {
     }
 
     fn show(&self, t: TypeId) -> String {
-        let class_name = |b: SymbolId| {
-            let name = self.settled.scopes.symbol(b).name;
-            self.settled.library.names.get(name).to_string()
-        };
-        self.settled.typing.types.display(t, &class_name)
+        self.show_in(t, &Subst::new())
     }
 
     /// A node's span in its file.

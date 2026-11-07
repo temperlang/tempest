@@ -30,7 +30,13 @@ and [notes/](notes/README.md) for the design and the plan.
   [notes/](notes/README.md) indexes the design notes behind it: the
   settle loop, typing, tmpl, compile-time evaluation, language
   decisions, API compatibility, testing, and code style.
-- **Coming:** the language server and CLI parity ([notes/switch-over.md](notes/switch-over.md)).
+- **Editors:** `tempest lsp`, a language server (errors as you type,
+  hover, go to definition, completion, references, rename, outlines,
+  and signature help), and a VS Code extension with highlighting,
+  packaged per platform with tempest bundled
+  ([editors/vscode](editors/vscode/README.md);
+  [how it works](docs/internals/09-language-server.md)).
+- **Coming:** CLI parity ([notes/switch-over.md](notes/switch-over.md)).
 
 ## Try it
 

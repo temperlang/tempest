@@ -7,6 +7,7 @@ use temper_frontend::project::load_imports;
 use temper_frontend::settle::settle;
 use temper_frontend::sources::Sources;
 use temper_syntax::lex::SourceKind;
+use temper_syntax::tree::Span;
 
 const MAIN: FileId = FileId(0);
 
@@ -89,7 +90,8 @@ fn hover_on_members() {
     let h = a.hover(MAIN, at(STACK, "push(\"a\")", 0, 1)).unwrap();
     assert_eq!(h.name.as_deref(), Some("push"));
     assert_eq!(h.kind, Some(DeclKind::Method));
-    assert_eq!(h.ty.as_deref(), Some("push(item: T): Void"));
+    // On a `Stack<String>`, `T` is `String`.
+    assert_eq!(h.ty.as_deref(), Some("push(item: String): Void"));
     assert_eq!(h.doc.as_deref(), Some("Adds an item on top."));
     let h = a.hover(MAIN, at(STACK, "stack.size", 0, 7)).unwrap();
     assert_eq!(h.name.as_deref(), Some("size"));
@@ -97,10 +99,17 @@ fn hover_on_members() {
     let h = a.hover(MAIN, at(STACK, "items.add", 0, 1)).unwrap();
     assert_eq!(h.kind, Some(DeclKind::Field));
     assert_eq!(h.ty.as_deref(), Some("ListBuilder<T>"));
-    // A builtin type's member.
+    // A builtin type's member, as core declares it.
     let h = a.hover(MAIN, at(STACK, "toString", 0, 2)).unwrap();
     assert_eq!(h.name.as_deref(), Some("toString"));
-    assert_eq!(h.kind, Some(DeclKind::Builtin));
+    assert_eq!(h.kind, Some(DeclKind::Method));
+    assert!(
+        h.ty.as_deref().is_some_and(|t| t.starts_with("toString(")),
+        "{h:?}"
+    );
+    // In the class, `items` is still a `ListBuilder<T>`; its `add` takes a `T`.
+    let h = a.hover(MAIN, at(STACK, "items.add", 0, 7)).unwrap();
+    assert_eq!(h.ty.as_deref(), Some("add(newValue: T, at?: Int32): Void"));
 }
 
 #[test]
@@ -154,7 +163,10 @@ fn completions() {
     let members = a.completions(MAIN, source.len() as u32);
     let names: Vec<&str> = members.iter().map(|c| c.name.as_str()).collect();
     assert_eq!(names, ["push", "size"]);
-    assert_eq!(members[0].detail.as_deref(), Some("push(item: T): Void"));
+    assert_eq!(
+        members[0].detail.as_deref(),
+        Some("push(item: String): Void")
+    );
 }
 
 /// Diagnostics' spans as the text they cover.
@@ -225,4 +237,290 @@ fn getters_show_their_type() {
     let a = analyze(STACK);
     let h = a.hover(MAIN, at(STACK, "stack.size", 0, 7)).unwrap();
     assert_eq!(h.ty.as_deref(), Some("Int32"));
+}
+
+/// Completion's names at the end of `STACK` plus `tail`.
+fn completed(tail: &str) -> Vec<(String, Option<String>)> {
+    let source = format!("{STACK}{tail}");
+    let a = analyze(&source);
+    (a.completions(MAIN, source.len() as u32).into_iter())
+        .map(|c| (c.name, c.detail))
+        .collect()
+}
+
+fn names_of(found: &[(String, Option<String>)]) -> Vec<&str> {
+    found.iter().map(|(n, _)| n.as_str()).collect()
+}
+
+#[test]
+fn builtin_members_complete() {
+    // Builtin types' members, with their type arguments.
+    let found = completed("let b = new ListBuilder<String>();\nb.");
+    let add = found.iter().find(|(n, _)| n == "add").expect("add");
+    assert_eq!(
+        add.1.as_deref(),
+        Some("add(newValue: String, at?: Int32): Void")
+    );
+    assert!(names_of(&found).contains(&"length"), "{found:?}");
+    let found = completed("let m = new Map<String, Int>([]);\nm.");
+    assert!(names_of(&found).contains(&"get"), "{found:?}");
+    let found = completed("let t = \"abc\";\nt.");
+    assert!(names_of(&found).contains(&"split"), "{found:?}");
+    // A builtin type's statics after its name.
+    let found = completed("String.");
+    assert!(names_of(&found).contains(&"fromCodePoint"), "{found:?}");
+}
+
+#[test]
+fn completion_after_any_expression() {
+    // A call's result, a member's, `this`, and a prefix typed.
+    let found = completed("let make(): Stack<Int> { new Stack<Int>() }\nmake().");
+    assert_eq!(names_of(&found), ["push", "size"]);
+    assert_eq!(found[0].1.as_deref(), Some("push(item: Int32): Void"));
+    let found = completed("let label2 = label.toString().spl");
+    assert!(names_of(&found).contains(&"split"), "{found:?}");
+    let source = "class Box(public item: String) {\n  public get size(): Int { this.item.";
+    let a = analyze(source);
+    let names: Vec<String> = (a.completions(MAIN, source.len() as u32).into_iter())
+        .map(|c| c.name)
+        .collect();
+    assert!(names.iter().any(|n| n == "split"), "{names:?}");
+    let source = "class Box(public item: String) {\n  public get size(): Int { this.";
+    let a = analyze(source);
+    let names: Vec<String> = (a.completions(MAIN, source.len() as u32).into_iter())
+        .map(|c| c.name)
+        .collect();
+    assert!(names.iter().any(|n| n == "item"), "{names:?}");
+}
+
+#[test]
+fn no_member_spans_just_the_name() {
+    // Kotlin spans `s.lenght`; editors underline `lenght`.
+    let found = problems("let s = \"abc\";\nlet n = s.lenght;\n");
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0].2, "lenght");
+}
+
+const SHAPES: &str = r#"let { Regex } = import("std/regex");
+class Point(public x: Int, public y: Int) {}
+let origin: Point = { x: 0, y: 0 };
+let make(x: Int): Point { { x, y: 1 } }
+let far = new Point(10, origin.x);
+let pattern = new Regex("a");
+"#;
+
+#[test]
+fn definition_into_std() {
+    // std's declarations are in the library's files.
+    let a = analyze(SHAPES);
+    let d = a.definition(MAIN, at(SHAPES, "Regex(", 0, 1)).unwrap();
+    assert!(a.is_std(d.file), "{d:?}");
+    let path = &a.settled.library.files[d.file.0 as usize].path;
+    assert!(path.starts_with("-std-/regex/"), "{path}");
+}
+
+#[test]
+fn references_across_uses() {
+    let a = analyze(STACK);
+    let refs = a.references(MAIN, at(STACK, "stack.push", 0, 1), true);
+    let starts: Vec<u32> = refs.iter().map(|r| r.span.start).collect();
+    assert_eq!(
+        starts,
+        [
+            at(STACK, "stack =", 0, 0),
+            at(STACK, "stack.push", 0, 0),
+            at(STACK, "stack.size", 0, 0)
+        ]
+    );
+    // Without the declaration; and a method, by its uses after `.`.
+    assert_eq!(
+        a.references(MAIN, at(STACK, "stack.push", 0, 1), false)
+            .len(),
+        2
+    );
+    let refs = a.references(MAIN, at(STACK, "push(item", 0, 1), true);
+    let texts: Vec<&str> = (refs.iter())
+        .map(|r| &STACK[r.span.start as usize..r.span.end as usize])
+        .collect();
+    assert_eq!(texts, ["push", "push"]);
+    // A field, used bare in its class.
+    assert_eq!(a.references(MAIN, at(STACK, "items:", 0, 1), true).len(), 3);
+}
+
+#[test]
+fn references_across_files() {
+    let mut library = Library::new();
+    library.add_file(
+        "a.temper",
+        "export let shared = 1;\n",
+        SourceKind::Standalone,
+    );
+    library.add_file(
+        "b.temper",
+        "let b = shared + shared;\n",
+        SourceKind::Standalone,
+    );
+    load_imports(&Sources::memory(&[]), &mut library);
+    let a = Analysis::new(settle(library));
+    let refs = a.references(FileId(1), 9, true);
+    let files: Vec<u32> = refs.iter().map(|r| r.file.0).collect();
+    assert_eq!(files, [0, 1, 1]);
+    let edits = a.rename(FileId(1), 9, "common").unwrap();
+    assert_eq!(edits.len(), 3);
+    assert!(edits.iter().all(|e| e.text == "common"));
+}
+
+/// The source with the edits made.
+fn edited(source: &str, mut edits: Vec<temper_analysis::Edit>) -> String {
+    edits.sort_by_key(|e| std::cmp::Reverse(e.span.start));
+    let mut out = source.to_string();
+    for e in edits {
+        out.replace_range(e.span.start as usize..e.span.end as usize, &e.text);
+    }
+    out
+}
+
+#[test]
+fn rename() {
+    let a = analyze(STACK);
+    let (span, name) = a
+        .prepare_rename(MAIN, at(STACK, "items.add", 0, 1))
+        .unwrap();
+    assert_eq!((name.as_str(), span.end - span.start), ("items", 5));
+    let edits = a
+        .rename(MAIN, at(STACK, "items.add", 0, 1), "elements")
+        .unwrap();
+    let renamed = edited(STACK, edits);
+    assert!(
+        renamed.contains("private elements: ListBuilder<T>"),
+        "{renamed}"
+    );
+    assert!(renamed.contains("elements.add(item)") && renamed.contains("{ elements.length }"));
+    // Builtins, std, keywords, and what isn't a name are refused.
+    assert!(
+        a.prepare_rename(MAIN, at(STACK, "ListBuilder<T>()", 0, 1))
+            .is_err()
+    );
+    assert!(a.rename(MAIN, at(STACK, "count", 0, 0), "if").is_err());
+    assert!(a.rename(MAIN, at(STACK, "count", 0, 0), "a b").is_err());
+    let a = analyze(SHAPES);
+    let why = a
+        .prepare_rename(MAIN, at(SHAPES, "Regex(", 0, 1))
+        .unwrap_err();
+    assert!(why.contains("std"), "{why}");
+}
+
+#[test]
+fn rename_reaches_object_literals() {
+    let a = analyze(SHAPES);
+    let edits = a
+        .rename(MAIN, at(SHAPES, "origin.x", 0, 7), "left")
+        .unwrap();
+    let renamed = edited(SHAPES, edits);
+    assert!(renamed.contains("public left: Int"), "{renamed}");
+    assert!(renamed.contains("{ left: 0, y: 0 }"), "{renamed}");
+    // Shorthand keeps its value, the parameter `x`.
+    assert!(renamed.contains("{ left: x, y: 1 }"), "{renamed}");
+    assert!(renamed.contains("origin.left"), "{renamed}");
+    assert!(renamed.contains("make(x: Int)"), "{renamed}");
+}
+
+#[test]
+fn document_symbols() {
+    let a = analyze(STACK);
+    let symbols = a.document_symbols(MAIN);
+    let names: Vec<&str> = symbols.iter().map(|s| s.name.as_str()).collect();
+    assert_eq!(names, ["Stack", "twice", "count", "stack", "label"]);
+    let stack = &symbols[0];
+    assert_eq!(stack.kind, DeclKind::Class);
+    let members: Vec<(&str, DeclKind)> = (stack.children.iter())
+        .map(|s| (s.name.as_str(), s.kind))
+        .collect();
+    assert_eq!(
+        members,
+        [
+            ("items", DeclKind::Field),
+            ("push", DeclKind::Method),
+            ("size", DeclKind::Getter)
+        ]
+    );
+    let twice = &symbols[1];
+    assert_eq!(
+        twice.detail.as_deref(),
+        Some("twice(n: Int32, extra?: Int32): Int32")
+    );
+    let name = at(STACK, "twice(n", 0, 0);
+    assert_eq!(
+        twice.selection,
+        Span {
+            start: name,
+            end: name + 5
+        }
+    );
+    assert!(
+        twice.span.start < name && twice.span.end > name + 20,
+        "{twice:?}"
+    );
+}
+
+#[test]
+fn signature_help() {
+    let source = format!("{STACK}let z = twice(1, ");
+    let a = analyze(&source);
+    let help = a.signature_help(MAIN, source.len() as u32).unwrap();
+    assert_eq!(help.label, "twice(n: Int32, extra?: Int32): Int32");
+    assert_eq!(help.params, ["n: Int32", "extra?: Int32"]);
+    assert_eq!(help.active, 1);
+    assert_eq!(help.doc.as_deref(), Some("Doubles `n`."));
+    // A method on a generic receiver, inside nested brackets.
+    let source = format!("{STACK}stack.push([1, 2].length.toString(");
+    let a = analyze(&source);
+    let help = a.signature_help(
+        MAIN,
+        (source.len() - "[1, 2].length.toString(".len()) as u32,
+    );
+    assert_eq!(help.unwrap().label, "push(item: String): Void");
+    // A builtin's, and a constructor's.
+    let source = format!("{STACK}let b = new ListBuilder<Int>();\nb.add(1, ");
+    let a = analyze(&source);
+    let help = a.signature_help(MAIN, source.len() as u32).unwrap();
+    assert_eq!(help.params, ["newValue: Int32", "at?: Int32"]);
+    assert_eq!(help.active, 1);
+    let a = analyze(SHAPES);
+    let help = a
+        .signature_help(MAIN, at(SHAPES, "10, origin", 0, 4))
+        .unwrap();
+    assert_eq!(help.label, "Point(x: Int32, y: Int32)");
+    assert_eq!(help.active, 1);
+    // Not in a call, or in a string.
+    assert_eq!(a.signature_help(MAIN, at(SHAPES, "far", 0, 0)), None);
+    assert_eq!(a.signature_help(MAIN, at(SHAPES, "\"a\"", 0, 1)), None);
+}
+
+#[test]
+fn object_literal_keys_complete() {
+    let names = |source: &str| -> Vec<String> {
+        let a = analyze(source);
+        let offset = source.find('|').unwrap();
+        let source = source.replace('|', "");
+        let a2 = analyze(&source);
+        drop(a);
+        (a2.completions(MAIN, offset as u32).into_iter())
+            .map(|c| c.name)
+            .collect()
+    };
+    let class = "class Person(public name: String, public age: Int) {}\n";
+    assert_eq!(
+        names(&format!("{class}let p: Person = {{ na| }};\n")),
+        ["name", "age"]
+    );
+    assert_eq!(
+        names(&format!("{class}let p: Person = {{ name: \"a\", | }};\n")),
+        ["age"]
+    );
+    let call = format!("{class}let greet(p: Person): String {{ p.name }}\nlet s = greet({{ |");
+    assert_eq!(names(&call), ["name", "age"]);
+    // A value's place, not a key's: names in scope.
+    let value = names(&format!("{class}let p: Person = {{ name: | }};\n"));
+    assert!(value.contains(&"console".to_string()), "{value:?}");
 }

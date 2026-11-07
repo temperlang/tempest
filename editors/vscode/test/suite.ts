@@ -1,0 +1,122 @@
+// The extension's tests in a real VS Code, run by run.ts with
+// @vscode/test-electron: VS Code loads this module in its extension host
+// and calls `run`. The workspace is a library, with shapes.temper and
+// use.temper, and the extension is the platform package as built, so
+// these talk to its bundled tempest.
+
+import assert from "node:assert/strict";
+import * as vscode from "vscode";
+import type { Api } from "../src/extension";
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Waits up to 30 s for `f` to give something truthy. */
+async function until<T>(what: string, f: () => T | undefined | false): Promise<T> {
+  for (let waited = 0; waited < 30_000; waited += 50) {
+    const found = f();
+    if (found) return found;
+    await sleep(50);
+  }
+  throw new Error(`timed out waiting for ${what}`);
+}
+
+const text = (h: vscode.Hover): string =>
+  h.contents.map((c) => (typeof c === "string" ? c : "value" in c ? c.value : "")).join("\n");
+
+export async function run(): Promise<void> {
+  const extension = vscode.extensions.getExtension<Api>("temperlang.temper");
+  assert.ok(extension, "the Temper extension is installed");
+  const api = await extension.activate();
+  const server = api.server();
+  assert.equal(server?.from, "bundled", `uses the bundled tempest, not ${JSON.stringify(server)}`);
+  console.log(`tempest: ${server?.command}`);
+
+  const folder = vscode.workspace.workspaceFolders?.[0]?.uri;
+  assert.ok(folder, "a workspace folder");
+  const shapes = vscode.Uri.joinPath(folder, "shapes.temper");
+  const uses = vscode.Uri.joinPath(folder, "use.temper");
+  const document = await vscode.workspace.openTextDocument(uses);
+  await vscode.window.showTextDocument(document);
+  assert.equal(document.languageId, "temper");
+  const tests: [string, () => Promise<void>][] = [];
+  const test = (name: string, f: () => Promise<void>): void => void tests.push([name, f]);
+
+  test("diagnostics, for unsaved text too", async () => {
+    // use.temper starts with `let b: String = a;`, where `a` is an Int.
+    const [d] = await until("an error", () => {
+      const found = vscode.languages.getDiagnostics(uses);
+      return found.length === 1 && found;
+    });
+    assert.equal(d?.range.start.line, 1);
+    assert.equal(d?.severity, vscode.DiagnosticSeverity.Error);
+    assert.equal(d?.source, "tempest");
+    // Fixed as typed: an incremental change, `String` to `Int`.
+    const edit = new vscode.WorkspaceEdit();
+    edit.replace(uses, new vscode.Range(1, 7, 1, 13), "Int");
+    assert.ok(await vscode.workspace.applyEdit(edit));
+    assert.equal(document.getText(), "let a = area(3);\nlet b: Int = a;\n");
+    await until("no errors", () => vscode.languages.getDiagnostics(uses).length === 0);
+  });
+
+  test("hover", async () => {
+    const found = await vscode.commands.executeCommand<vscode.Hover[]>(
+      "vscode.executeHoverProvider",
+      uses,
+      new vscode.Position(0, 9),
+    );
+    const shown = found.map(text).join("\n");
+    assert.match(shown, /function area\(side: Int32\): Int32/);
+    assert.match(shown, /A square's area\./);
+  });
+
+  test("definition, in the other file", async () => {
+    const found = await vscode.commands.executeCommand<(vscode.Location | vscode.LocationLink)[]>(
+      "vscode.executeDefinitionProvider",
+      uses,
+      new vscode.Position(0, 9),
+    );
+    assert.equal(found.length, 1);
+    const [first] = found;
+    const [uri, range] = first && "uri" in first ? [first.uri, first.range] : [first?.targetUri, first?.targetSelectionRange ?? first?.targetRange];
+    assert.equal(uri?.toString(), shapes.toString());
+    assert.equal(range?.start.line, 1);
+    assert.equal(range?.start.character, 11);
+  });
+
+  test("completion", async () => {
+    const found = await vscode.commands.executeCommand<vscode.CompletionList>(
+      "vscode.executeCompletionItemProvider",
+      uses,
+      new vscode.Position(1, 0),
+    );
+    const labels = found.items.map((i) => (typeof i.label === "string" ? i.label : i.label.label));
+    assert.ok(labels.includes("area") && labels.includes("a"), labels.join(" "));
+  });
+
+  test("rename, across both files", async () => {
+    const found = await vscode.commands.executeCommand<vscode.WorkspaceEdit>(
+      "vscode.executeDocumentRenameProvider",
+      uses,
+      new vscode.Position(0, 9),
+      "squared",
+    );
+    const files = found.entries().map(([uri, edits]) => {
+      assert.ok(edits.every((e) => e.newText === "squared"));
+      return uri.toString();
+    });
+    assert.deepEqual(files.sort(), [shapes.toString(), uses.toString()].sort());
+  });
+
+  let failed = 0;
+  for (const [name, f] of tests) {
+    try {
+      await f();
+      console.log(`ok - ${name}`);
+    } catch (error) {
+      failed += 1;
+      console.log(`not ok - ${name}\n${String(error instanceof Error ? error.stack : error)}`);
+    }
+  }
+  console.log(`vscode tests: ${tests.length - failed} passed, ${failed} failed`);
+  if (failed) throw new Error(`${failed} of ${tests.length} VS Code tests failed`);
+}

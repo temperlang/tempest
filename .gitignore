@@ -8,3 +8,9 @@ __pycache__/
 # The playground's build output and npm packages
 /site/_out/
 /site/playground/node_modules
+
+# The VS Code extension's build output, npm packages, and the VS Code its
+# tests download
+/editors/vscode/out/
+/editors/vscode/node_modules
+/editors/vscode/.vscode-test/

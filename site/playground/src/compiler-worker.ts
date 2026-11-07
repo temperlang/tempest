@@ -27,6 +27,9 @@ interface Exports {
   hover(at: number): void;
   definition(at: number): void;
   completions(at: number): void;
+  references(at: number): void;
+  rename(at: number, ptr: number, len: number): void;
+  signature_help(at: number): void;
   backends(): void;
   std_library(backend: number): void;
   output_ptr(): number;
@@ -61,6 +64,9 @@ function instantiate(m: WebAssembly.Module): Exports {
     hover: fn("hover"),
     definition: fn("definition"),
     completions: fn("completions"),
+    references: fn("references"),
+    rename: fn("rename"),
+    signature_help: fn("signature_help"),
     backends: fn("backends"),
     std_library: fn("std_library"),
     output_ptr: fn("output_ptr"),
@@ -97,9 +103,17 @@ function compile(id: number, source: string): void {
 }
 
 /** An editor query over the last source analyzed. */
-function query(qid: number, what: Query, at: number): void {
+function query(qid: number, what: Query, at: number, name: string): void {
   const e = current();
-  e[what](at);
+  if (what === "rename") {
+    // The new name goes in the input buffer; empty only checks.
+    const bytes = new TextEncoder().encode(name);
+    const ptr = e.alloc(bytes.length);
+    new Uint8Array(e.memory.buffer, ptr, bytes.length).set(bytes);
+    e.rename(at, ptr, bytes.length);
+  } else {
+    e[what](at);
+  }
   post({ type: "answer", qid, value: output(e) });
 }
 
@@ -125,7 +139,7 @@ self.onmessage = (event: MessageEvent<ToCompiler>) => {
   }
   if (message.type === "query") {
     try {
-      query(message.qid, message.what, message.at);
+      query(message.qid, message.what, message.at, message.name ?? "");
     } catch {
       exports = null;
       post({ type: "answer", qid: message.qid, value: null });

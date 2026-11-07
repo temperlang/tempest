@@ -1,6 +1,8 @@
 # Builds `tempest` for Linux (x64, and Arm64 for 64-bit Raspberry Pi
-# OS), macOS (Apple silicon), and Windows, with Temper's std built in, and
-# `temper-wasm`, and uploads each as a workflow artifact. Pushing a tag
+# OS), macOS (Apple silicon and Intel), and Windows (x64 and Arm64), with
+# Temper's std built in, `temper-wasm`, and the VS Code extension's
+# packages (one per platform with its tempest, and a universal one
+# without), and uploads each as a workflow artifact. Pushing a tag
 # like `v0.1.0` also attaches them to a GitHub release for that tag. Every
 # night, if `main` has changed, and whenever it's run by hand from the
 # Actions tab, they replace those of the `nightly` prerelease, whose tag
@@ -51,8 +53,17 @@ jobs:
           - os: macos-latest
             target: aarch64-apple-darwin
             exe: tempest
+          # Intel Macs, cross-compiled on Apple silicon.
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            exe: tempest
           - os: windows-latest
             target: x86_64-pc-windows-msvc
+            exe: tempest.exe
+          # Windows on Arm, cross-compiled on x64; ring (std `net`'s TLS)
+          # needs clang for it, which the image has.
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
             exe: tempest.exe
     runs-on: ${{ matrix.os }}
     steps:
@@ -63,6 +74,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
+      - name: clang for ring on Windows Arm64
+        if: matrix.target == 'aarch64-pc-windows-msvc'
+        shell: bash
+        run: echo "C:\Program Files\LLVM\bin" >> "$GITHUB_PATH"
       - name: Build
         run: cargo build --profile small --target ${{ matrix.target }} -p tempest
       - name: Package
@@ -106,9 +121,39 @@ jobs:
           name: temper-wasm
           path: temper-wasm.tar.gz
 
+  # The VS Code extension: a package per platform, each with the tempest
+  # just built for it in bin/, and a universal one without (which finds
+  # tempest on PATH), all by `vsce package`; the Linux x64 package's tests
+  # run in a real VS Code, under xvfb.
+  vscode:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: tempest-*
+          path: dist
+          merge-multiple: true
+      - name: Unpack the binaries
+        run: |
+          mkdir bins
+          for f in dist/*.tar.gz; do tar xzf "$f" -C bins; done
+          for f in dist/*.zip; do unzip -q "$f" -d bins; done
+      - name: Package and test
+        run: uv run editors/vscode/build.py --binaries bins --test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: temper-vscode
+          path: editors/vscode/out/*.vsix
+
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [build, wasm]
+    needs: [build, wasm, vscode]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -121,10 +166,11 @@ jobs:
           files: |
             tempest-*
             temper-wasm.tar.gz
+            temper-*.vsix
 
   nightly:
     if: github.event_name != 'push' && github.ref == 'refs/heads/main'
-    needs: [build, wasm]
+    needs: [build, wasm, vscode]
     runs-on: ubuntu-latest
     permissions:
       contents: write

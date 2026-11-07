@@ -1,0 +1,76 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Temper Markdown",
+  "scopeName": "text.html.markdown.temper",
+  "comment": "Literate Temper (.temper.md): Markdown prose, with Temper in code blocks as the frontend's literate split reads them (crates/temper-syntax/src/literate.rs): fenced blocks untagged or tagged temper, but not inert, and indented blocks; not in block quotes. Indented blocks are approximated line by line. Prose uses VS Code's Markdown grammar where it's there.",
+  "patterns": [
+    {
+      "include": "#temper-fence"
+    },
+    {
+      "include": "#other-fence"
+    },
+    {
+      "include": "#indented-temper"
+    },
+    {
+      "include": "text.html.markdown"
+    }
+  ],
+  "repository": {
+    "temper-fence": {
+      "name": "markup.fenced_code.block.temper",
+      "begin": "^( {0,3})(`{3,}|~{3,})[ \\t]*(temper(?:[ \\t]+(?!inert\\b)[^\\s`]+)*)?[ \\t]*$",
+      "end": "^ {0,3}(\\2)[`~]*[ \\t]*$",
+      "beginCaptures": {
+        "2": {
+          "name": "punctuation.definition.markdown"
+        },
+        "3": {
+          "name": "fenced_code.block.language.markdown"
+        }
+      },
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.markdown"
+        }
+      },
+      "contentName": "meta.embedded.block.temper",
+      "patterns": [
+        {
+          "include": "source.temper"
+        }
+      ]
+    },
+    "other-fence": {
+      "name": "markup.fenced_code.block.markdown",
+      "begin": "^( {0,3})(`{3,}|~{3,})[ \\t]*(\\S.*)$",
+      "end": "^ {0,3}(\\2)[`~]*[ \\t]*$",
+      "beginCaptures": {
+        "2": {
+          "name": "punctuation.definition.markdown"
+        },
+        "3": {
+          "name": "fenced_code.block.language.markdown"
+        }
+      },
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.markdown"
+        }
+      },
+      "contentName": "markup.raw.block.markdown"
+    },
+    "indented-temper": {
+      "comment": "Lines indented 4 spaces or a tab, after a blank line in the source; TextMate can't see the line before, so a list item's indented paragraph also reads as code.",
+      "contentName": "meta.embedded.block.temper",
+      "begin": "^(?=(?: {4}|\\t)[ \\t]*\\S)",
+      "while": "^(?:(?: {4}|\\t)|[ \\t]*$)",
+      "patterns": [
+        {
+          "include": "source.temper"
+        }
+      ]
+    }
+  }
+}

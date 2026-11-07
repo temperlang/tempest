@@ -8,7 +8,9 @@
 # by g++ with every warning an error, and run, also under AddressSanitizer,
 # UndefinedBehaviorSanitizer, and ThreadSanitizer, and generated Lua run
 # by Lua 5.4.6, parsed by luac, and type checked by LuaLS),
-# the wasm build and the playground (type checked and bundled), Temper's functional tests (copied
+# the wasm build and the playground (type checked and bundled), the VS
+# Code extension (type checked, bundled, packaged, and tested in a real
+# VS Code against the release build), Temper's functional tests (copied
 # into vendor/temper/, which has its patches) on tempest's interpreter, and `tempest test` on Chromarite and Ordable,
 # on the interpreter and on Python, JS, Lua, Java, and C#.
 # The checks against Kotlin Temper's own lexer and parser need a Kotlin
@@ -166,6 +168,16 @@ jobs:
       # bundled by esbuild, on the wasm just built.
       - name: Playground
         run: uv run site/playground/build.py --skip-wasm
+      # The VS Code extension, type checked by its pinned tsc and bundled
+      # by esbuild, its search for tempest tested under Node, its TextMate
+      # grammars checked (check_grammar.py), and packaged by vsce, as a
+      # universal .vsix and a Linux x64 one with tempest's release build
+      # (the small profile, as released); that one's tests run in a real
+      # VS Code (@vscode/test-electron), under xvfb, against its tempest.
+      - name: Release build of tempest
+        run: cargo build --profile small -p tempest
+      - name: VS Code extension
+        run: uv run editors/vscode/build.py --tempest target/small/tempest --test
       - name: Functional tests
         run: uv run compat/check_functional.py
       - name: Size and speed charts are current

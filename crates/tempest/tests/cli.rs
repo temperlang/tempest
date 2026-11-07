@@ -30,6 +30,7 @@ fn usage() {
     assert_eq!(tempest(&["test", "a", "b"]).0, 2);
     assert_eq!(tempest(&["test", "--std"]).0, 2);
     assert_eq!(tempest(&["test", "--bench"]).0, 2);
+    assert_eq!(tempest(&["lsp", "--stdio-ish"]).0, 2);
     for backend in ["py", "rust", "js", "java", "csharp", "cpp", "lua"] {
         // A backend left out fails the same way whatever the arguments.
         let code = if built_in(backend) { 2 } else { 1 };
@@ -43,6 +44,7 @@ fn usage() {
             0,
             "usage: tempest build [-w DIR] [-b BACKEND]... [--no-connected] [--verbose] [--std DIR]\n       \
              tempest test [-b interp|BACKEND] [--verbose] [--std DIR] [DIR]\n       \
+             tempest lsp [--std DIR]\n       \
              tempest py [--out DIR] [--std DIR] FILE...\n       \
              tempest rust [--out DIR] [--std DIR] FILE...\n       \
              tempest js [--out DIR] [--std DIR] FILE...\n       \

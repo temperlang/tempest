@@ -96,6 +96,8 @@ pub(super) struct CoreMember {
     /// The operator it implements, if marked so, as `==` for
     /// `@operator("==")`.
     pub operator: Option<String>,
+    /// A method's parameters' names, `_` where not read.
+    pub param_names: Vec<String>,
 }
 
 /// A builtin type's declaration: how many type parameters it has, and its
@@ -171,6 +173,117 @@ fn read_class(name: &str) -> CoreClass {
         type_params: reader.type_params.len(),
         type_param_names: reader.type_params,
         members,
+    }
+}
+
+/// A builtin type's public member, as editors show it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BuiltinMember {
+    pub name: String,
+    pub is_static: bool,
+    /// Whether it's a method, rather than a field or getter.
+    pub is_method: bool,
+    /// A field's or getter's type, or a method's signature with its
+    /// parameters' names, as `add(value: String, at?: Int32): Void`.
+    pub detail: String,
+    /// A method's parameters, as `at?: Int32`; empty for others.
+    pub params: Vec<String>,
+    /// The builtin type that declares it, as `Listed` for a `List`'s
+    /// `isEmpty`.
+    pub declared_in: &'static str,
+}
+
+/// The public members of a builtin type, by its name in [`TYPES`], and
+/// then of the builtin types it extends with the same type arguments
+/// (`Listed` for `List`), each name once, with the type's own type
+/// parameters shown as `args`, as `String` for `T` in a `List<String>`
+/// (or by their own names where `args` has none). Empty for a type whose
+/// members typing doesn't read.
+pub fn builtin_members(type_name: &str, args: &[String]) -> Vec<BuiltinMember> {
+    let mut out: Vec<BuiltinMember> = Vec::new();
+    let mut name = Some(type_name);
+    while let Some(ty) = name {
+        let Some(&declared_in) = READ_TYPES.iter().find(|&&t| t == ty) else {
+            break;
+        };
+        let class = core_class(ty);
+        let shown_args: Vec<String> = (class.type_param_names.iter().enumerate())
+            .map(|(i, n)| args.get(i).cloned().unwrap_or_else(|| n.clone()))
+            .collect();
+        for m in &class.members {
+            if out.iter().any(|o| o.name == m.name) || m.operator.is_some() {
+                continue;
+            }
+            let (is_method, detail, shown_params) = match &m.kind {
+                CoreMemberKind::Value(t) => (false, show_core(t, &shown_args, &[]), Vec::new()),
+                CoreMemberKind::Method {
+                    type_params,
+                    params,
+                    ret,
+                    throws,
+                } => {
+                    let params: Vec<String> = (params.iter().enumerate())
+                        .map(|(i, (t, optional))| {
+                            let n = m.param_names.get(i).map_or("_", String::as_str);
+                            let q = if *optional { "?" } else { "" };
+                            format!("{n}{q}: {}", show_core(t, &shown_args, type_params))
+                        })
+                        .collect();
+                    let ret = show_core(ret, &shown_args, type_params);
+                    let ret = crate::types::show_result(ret, *throws);
+                    let own = match type_params.is_empty() {
+                        true => String::new(),
+                        false => format!("<{}>", type_params.join(", ")),
+                    };
+                    let detail = format!("{}{own}({}): {ret}", m.name, params.join(", "));
+                    (true, detail, params)
+                }
+            };
+            out.push(BuiltinMember {
+                name: m.name.clone(),
+                is_static: m.is_static,
+                is_method,
+                detail,
+                params: shown_params,
+                declared_in,
+            });
+        }
+        name = crate::types::builtin_supertype(ty);
+    }
+    out
+}
+
+/// A member's type as messages write it, with the type's parameters as
+/// `args` and a method's own by their names.
+fn show_core(t: &CoreType, args: &[String], own: &[String]) -> String {
+    match t {
+        CoreType::Unknown => "?".into(),
+        CoreType::Builtin(i) => match TYPES[*i as usize] {
+            "Int" => "Int32".into(),
+            name => name.into(),
+        },
+        CoreType::Param(i) => args.get(*i as usize).cloned().unwrap_or_else(|| "?".into()),
+        CoreType::Own(i) => own.get(*i as usize).cloned().unwrap_or_else(|| "?".into()),
+        CoreType::Applied(b, targs) => {
+            let targs: Vec<String> = targs.iter().map(|a| show_core(a, args, own)).collect();
+            let base = show_core(&CoreType::Builtin(*b), args, own);
+            format!("{base}<{}>", targs.join(", "))
+        }
+        CoreType::Nullable(inner) => match **inner {
+            CoreType::Fn(..) => format!("({})?", show_core(inner, args, own)),
+            _ => format!("{}?", show_core(inner, args, own)),
+        },
+        CoreType::Fn(params, ret) => {
+            let ret = show_core(ret, args, own);
+            match params.is_empty() {
+                true => format!("fn: {ret}"),
+                false => {
+                    let params: Vec<String> =
+                        params.iter().map(|p| show_core(p, args, own)).collect();
+                    format!("fn ({}): {ret}", params.join(", "))
+                }
+            }
+        }
     }
 }
 
@@ -304,6 +417,7 @@ impl<'a> Reader<'a> {
                     })
                     .collect();
                 let mut params = Vec::new();
+                let mut names = Vec::new();
                 let mut rest = parts;
                 while let [p, after @ ..] = rest {
                     match self.symbol(*p) {
@@ -312,6 +426,7 @@ impl<'a> Reader<'a> {
                         None => {
                             if tree.kind(*p) != NodeKind::Fun {
                                 params.push(self.param(*p));
+                                names.push(self.param_name(*p).unwrap_or("_").to_string());
                             }
                             rest = after;
                         }
@@ -326,8 +441,30 @@ impl<'a> Reader<'a> {
                     throws,
                 };
                 self.push(tree.children(node)[0], is_static, kind, out);
+                if let Some(m) = out.last_mut() {
+                    m.param_names = names;
+                }
             }
             _ => {}
+        }
+    }
+
+    /// A parameter's name, read as [`Reader::param`] reads its type.
+    fn param_name(&self, node: NodeId) -> Option<&'a str> {
+        let tree = self.ast.tree();
+        if let Some((Some("@"), [_, target])) = self.call_parts(node) {
+            return self.param_name(*target);
+        }
+        let parts = tree.children(node);
+        match tree.kind(node) {
+            NodeKind::Decl => self.text(*parts.first()?),
+            NodeKind::Block => match (parts.iter()).find(|&&p| tree.kind(p) == NodeKind::Decl) {
+                Some(&decl) => self.param_name(decl),
+                None => (parts.windows(2))
+                    .find(|pair| self.symbol(pair[0]) == Some("_complexArg_"))
+                    .and_then(|pair| self.text(pair[1])),
+            },
+            _ => None,
         }
     }
 
@@ -338,6 +475,7 @@ impl<'a> Reader<'a> {
                 is_static,
                 kind,
                 operator: None,
+                param_names: Vec::new(),
             });
         }
     }
@@ -452,6 +590,27 @@ mod tests {
         (core_class(ty).members.iter())
             .find(|m| m.name == name)
             .unwrap_or_else(|| panic!("{ty}.{name}"))
+    }
+
+    #[test]
+    fn lists_builtin_members_for_editors() {
+        let members = builtin_members("ListBuilder", &["String".into()]);
+        let add = members.iter().find(|m| m.name == "add").unwrap();
+        assert!(add.is_method);
+        assert_eq!(add.detail, "add(newValue: String, at?: Int32): Void");
+        // From Listed, which ListBuilder extends.
+        let length = members.iter().find(|m| m.name == "length").unwrap();
+        assert_eq!(length.detail, "Int32");
+        assert!(members.iter().any(|m| m.declared_in == "Listed"));
+        let strings = builtin_members("String", &[]);
+        let split = strings.iter().find(|m| m.name == "split").unwrap();
+        assert!(split.detail.starts_with("split("), "{}", split.detail);
+        assert!(
+            strings
+                .iter()
+                .any(|m| m.name == "fromCodePoint" && m.is_static)
+        );
+        assert!(builtin_members("Nope", &[]).is_empty());
     }
 
     #[test]

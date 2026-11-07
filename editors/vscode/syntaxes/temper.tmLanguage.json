@@ -1,0 +1,381 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Temper",
+  "scopeName": "source.temper",
+  "comment": "Temper's syntax, consistent with the playground's highlighting (site/playground/src/temper-language.ts) and editor analysis's keywords. Checked by editors/vscode/check_grammar.py.",
+  "patterns": [
+    {
+      "include": "#code"
+    }
+  ],
+  "repository": {
+    "code": {
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#multi-quoted"
+        },
+        {
+          "include": "#strings"
+        },
+        {
+          "include": "#numbers"
+        },
+        {
+          "include": "#decorators"
+        },
+        {
+          "include": "#declarations"
+        },
+        {
+          "include": "#keywords"
+        },
+        {
+          "include": "#types"
+        },
+        {
+          "include": "#calls"
+        },
+        {
+          "include": "#braces"
+        },
+        {
+          "include": "#operators"
+        },
+        {
+          "include": "#punctuation"
+        }
+      ]
+    },
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.block.documentation.temper",
+          "begin": "/\\*\\*(?!/)",
+          "end": "\\*/",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.temper"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.temper"
+            }
+          }
+        },
+        {
+          "name": "comment.block.temper",
+          "begin": "/\\*",
+          "end": "\\*/",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.temper"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.temper"
+            }
+          }
+        },
+        {
+          "name": "comment.line.double-slash.temper",
+          "match": "(//).*$",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.comment.temper"
+            }
+          }
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.temper",
+          "begin": "\"",
+          "end": "\"|$",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.begin.temper"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.temper"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#string-content"
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.single.temper",
+          "begin": "'",
+          "end": "'|$",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.begin.temper"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.temper"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#string-content"
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.other.backtick.temper",
+          "begin": "`",
+          "end": "`|$",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.begin.temper"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.temper"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#string-content"
+            }
+          ]
+        }
+      ]
+    },
+    "string-content": {
+      "patterns": [
+        {
+          "name": "constant.character.escape.temper",
+          "match": "\\\\(?:u\\{[0-9A-Fa-f]+\\}|u[0-9A-Fa-f]{4}|.)"
+        },
+        {
+          "include": "#interpolation"
+        }
+      ]
+    },
+    "interpolation": {
+      "name": "meta.embedded.line.temper",
+      "contentName": "source.temper",
+      "begin": "\\$\\{",
+      "end": "\\}",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.section.embedded.begin.temper"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.embedded.end.temper"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#code"
+        }
+      ]
+    },
+    "multi-quoted": {
+      "comment": "\"\"\" then lines with a margin: \" or ~ for content, : for code; it ends at the first line without one.",
+      "name": "string.quoted.triple.temper",
+      "begin": "\"\"\"",
+      "end": "^(?=\\s*[^\\s\\\"~:/])",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.begin.temper"
+        }
+      },
+      "patterns": [
+        {
+          "begin": "^\\s*([\\\"~])",
+          "end": "$",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.definition.string.margin.temper"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#string-content"
+            }
+          ]
+        },
+        {
+          "contentName": "source.temper",
+          "begin": "^\\s*(:)",
+          "end": "$",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.definition.string.margin.temper"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#code"
+            }
+          ]
+        },
+        {
+          "include": "#comments"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.hex.temper",
+          "match": "\\b0[xX][0-9A-Fa-f_]+\\b"
+        },
+        {
+          "name": "constant.numeric.decimal.temper",
+          "match": "\\b[0-9][0-9_]*(?:\\.[0-9][0-9_]*)?(?:[eE][+-]?[0-9]+)?\\b"
+        }
+      ]
+    },
+    "decorators": {
+      "name": "meta.decorator.temper",
+      "match": "(@)([A-Za-z_][A-Za-z0-9_]*)",
+      "captures": {
+        "1": {
+          "name": "punctuation.decorator.temper"
+        },
+        "2": {
+          "name": "entity.name.function.decorator.temper"
+        }
+      }
+    },
+    "declarations": {
+      "patterns": [
+        {
+          "match": "\\b(class|interface)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "storage.type.class.temper"
+            },
+            "2": {
+              "name": "entity.name.type.class.temper"
+            }
+          }
+        },
+        {
+          "match": "\\b(let|fn|get|set)\\s+([A-Za-z_][A-Za-z0-9_]*)(?=\\s*[<(])",
+          "captures": {
+            "1": {
+              "name": "storage.type.function.temper"
+            },
+            "2": {
+              "name": "entity.name.function.temper"
+            }
+          }
+        },
+        {
+          "match": "\\b(let|var|const)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "storage.type.temper"
+            },
+            "2": {
+              "name": "variable.other.declaration.temper"
+            }
+          }
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.temper",
+          "match": "\\b(?:assert|async|await|break|bubble|case|continue|do|else|for|if|orelse|panic|return|throws|when|while|yield)\\b(?![$])"
+        },
+        {
+          "name": "storage.type.temper",
+          "match": "\\b(?:class|const|fn|get|interface|let|set|var)\\b(?![$])"
+        },
+        {
+          "name": "storage.modifier.temper",
+          "match": "\\b(?:export|private|protected|public|sealed|static)\\b(?![$])"
+        },
+        {
+          "name": "keyword.other.temper",
+          "match": "\\b(?:as|extends|import|in|is|new|of|test)\\b(?![$])"
+        },
+        {
+          "name": "variable.language.temper",
+          "match": "\\b(?:super|this)\\b(?![$])"
+        },
+        {
+          "name": "constant.language.temper",
+          "match": "\\b(?:false|null|true|void)\\b(?![$])"
+        }
+      ]
+    },
+    "types": {
+      "name": "entity.name.type.temper",
+      "match": "\\b[A-Z][A-Za-z0-9_]*\\b"
+    },
+    "calls": {
+      "name": "entity.name.function.call.temper",
+      "match": "\\b[A-Za-z_][A-Za-z0-9_]*(?=\\s*[({])"
+    },
+    "braces": {
+      "begin": "\\{",
+      "end": "\\}",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.section.block.begin.temper"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.block.end.temper"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#code"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.arrow.temper",
+          "match": "=>"
+        },
+        {
+          "name": "keyword.operator.temper",
+          "match": "[=<>!+\\-*/%&|^~?:]+"
+        }
+      ]
+    },
+    "punctuation": {
+      "patterns": [
+        {
+          "name": "punctuation.separator.comma.temper",
+          "match": ","
+        },
+        {
+          "name": "punctuation.terminator.statement.temper",
+          "match": ";"
+        },
+        {
+          "name": "punctuation.accessor.temper",
+          "match": "\\.(?!\\.)"
+        }
+      ]
+    }
+  }
+}

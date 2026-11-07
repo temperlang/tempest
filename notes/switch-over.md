@@ -30,7 +30,7 @@ Estimates are in chunks, each about 1–1.5 hours; an active day fits
 | 5 | Web playground | 1–2 | done (2026-11-05): the wasm compiler in a worker, every backend's output, errors, and tests run on the interpreter and on the generated JavaScript, as you type; published to Pages ([site/playground](../site/playground/README.md)); one missing or extra bracket is one error at the gap, with the rest of the file still parsed and typed, not one error to the end of the file (2026-11-06) |
 | | **Preview** | **15–25** | |
 | 6 | CLI parity | 2–3 | started (2026-11-06): errors stay local, as in Kotlin: `tempest build` writes every backend's code past them and exits with 1, `tempest test` runs the tests on the interpreter and every backend, failing only those that reach an error, and a misspelled member, an undeclared type, or a value of the wrong type fails only where it runs ([kotlin-differences.md](kotlin-differences.md), "Keep on trucking") |
-| 7 | Language server | 3–5 | started (2026-11-06): the shared layer, the `temper-analysis` crate over the frontend only (diagnostics, hover with kinds, types, signatures, and doc comments, go to definition, and completion of names in scope and class members), answering from one settled library; in the playground through wasm exports, with diagnostics shown before the run and backends ([docs/internals/08-playground.md](../docs/internals/08-playground.md#editor-queries)); next, `tempest lsp` over stdio |
+| 7 | Language server | 3–5 | done for the preview (2026-11-07): the shared layer, the `temper-analysis` crate over the frontend only (diagnostics, hover with kinds, types, signatures, and doc comments, go to definition, and completion of names in scope and class members), answering from one settled library; in the playground through wasm exports, with diagnostics shown before the run and backends ([docs/internals/08-playground.md](../docs/internals/08-playground.md#editor-queries)) (2026-11-06); `tempest lsp` over stdio, on the library around each file with unsaved edits, and find references, rename across files, outlines, signature help, object literals' property names, generic receivers' type arguments, builtin types' members, completion after `.` on any expression, and definition into std, in the server and the playground; TextMate grammars and a VS Code extension, packaged as a `.vsix` ([docs/internals/09-language-server.md](../docs/internals/09-language-server.md)) (2026-11-07); the server on `serde_json` and `lsp-types` with incremental sync, the extension on `vscode-languageclient`, platform packages with tempest bundled, built by the Binaries workflow, and tests in a real VS Code (2026-11-07) |
 | 8 | Clarity refactors and architecture docs | 2–4 | started (2026-11-06): state machines dispatch by a tmpl `Switch` (Rust `match`, C++ and Java `switch`; `if` chains elsewhere, by profile), with literal branches folded and unreached or jump-only states dropped; simplifications before the docs (2026-11-06): stale module docs and design.md sections 5 and 9 refreshed, each backend described once (`temper_tmpl::Backend`, its crate's `BACKEND`) and listed once (the `tempest` crate, now a library too), and one compile path for `tempest build`, the one-backend commands, and the wasm; shared hoisting and function literals' lowering wait until after the preview; architecture docs (2026-11-06): [docs/internals/](../docs/internals/README.md), eight numbered pages from source to seven languages and the playground, with Mermaid diagrams, links to the code that CI checks (`compat/check_anchors.py`), and `triple.temper` as their running example, a playground example and a shared test program whose goldens are the pages' output; design.md's language decisions moved to [language.md](language.md); a docs audit (2026-11-07): DESIGN.md folded into the README, finished milestones and the tmpl state log moved to [history/](history/README.md), and the parser's Kotlin differences merged into [kotlin-differences.md](kotlin-differences.md#lexer-and-parser) |
 | 9 | One tier-2 backend | 2–3 | not started |
 
@@ -137,15 +137,18 @@ Risks to the date:
    interpreter and on the generated JavaScript, side by side, and
    diagnostics show in the editor. IDE features (2026-11-06): hover
    types, go to definition, and completion in the playground, over one
-   shared layer, the `temper-analysis` crate, that a language server
-   will reuse.
+   shared layer, the `temper-analysis` crate, that the language server
+   reuses; references, rename, and signature help too (2026-11-07).
 6. **CLI parity.** `init`, `build`, `test`, `watch`, `repl`, and doc
    generation, with Kotlin Temper's flags and output layout.
 7. **A language server** ([design.md](design.md), CLI/watch/LSP).
    Kotlin Temper's is flaky, slow, and uses a lot of memory. Tempest's
    should be fast, steady, and small: diagnostics as you type, hover
    types, go to definition, and completion, on the same incremental
-   core as `watch`.
+   core as `watch`. Status (2026-11-07): `tempest lsp` and the VS Code
+   extension ([docs/internals/09-language-server.md](../docs/internals/09-language-server.md));
+   it settles a library again on each pause in typing, which is fast
+   enough for the libraries we have, rather than incrementally.
 8. **Architecture docs** that a newcomer can take in quickly:
    - a few diagrams (source to tree, the settle loop, typing, tmpl,
      backends, and how `watch` and the LSP reuse it);

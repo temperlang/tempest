@@ -10,7 +10,9 @@
 // - Diagnostics come first, as soon as the source settles, before the
 //   run and the backends. The worker keeps the settled source for the
 //   editor's queries: hover, go to definition (F12, or Ctrl or Cmd and
-//   click), and completion, which wait for the current text to settle.
+//   click; into std, shown read-only on the right), completion, find
+//   references (Shift+F12), rename (F2), and signature help in a call's
+//   arguments, which wait for the current text to settle.
 
 import {
   type Completion,
@@ -31,15 +33,19 @@ import {
 } from "@codemirror/language";
 import { type Diagnostic as LintDiagnostic, lintGutter, setDiagnostics } from "@codemirror/lint";
 import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
-import { Compartment, EditorState, type Extension } from "@codemirror/state";
+import { Compartment, EditorState, type Extension, StateEffect, StateField } from "@codemirror/state";
 import {
+  Decoration,
+  type DecorationSet,
   EditorView,
+  type Tooltip,
   drawSelection,
   highlightActiveLine,
   highlightActiveLineGutter,
   hoverTooltip,
   keymap,
   lineNumbers,
+  showTooltip,
 } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import { cpp, csharp, java } from "@codemirror/legacy-modes/mode/clike";
@@ -64,7 +70,7 @@ import type {
   ToCompiler,
   ToJsRunner,
 } from "./api";
-import { toCompletions, toHover, toSpan } from "./api";
+import { toCompletions, toDefinition, toHover, toRename, toSignature, toSpans } from "./api";
 import { examples } from "./examples";
 import { decode, encode } from "./share";
 import { temper } from "./temper-language";
@@ -88,6 +94,8 @@ const BACKENDS: Record<string, { label: string; main: RegExp }> = {
   rust: { label: "Rust", main: /\/mod\.rs$/ },
 };
 const DEFAULT_TAB = "py";
+/** What `selected` is while a std file is shown, which isn't a tab. */
+const STD_VIEW = "std";
 
 const $ = <T extends HTMLElement>(selector: string): T => {
   const element = document.querySelector<T>(selector);
@@ -165,6 +173,43 @@ const looks = EditorView.theme({
   ".cm-hover-kind": { color: "var(--muted)" },
   ".cm-hover-doc": { marginTop: "4px", whiteSpace: "pre-wrap" },
   ".cm-tooltip-autocomplete ul li[aria-selected]": { backgroundColor: "var(--selection)", color: "var(--text)" },
+  ".cm-reference": { backgroundColor: "var(--match)", outline: "1px solid var(--accent)" },
+  ".cm-signature": { padding: "4px 8px", fontFamily: "var(--mono)", maxWidth: "40em", whiteSpace: "pre-wrap" },
+  ".cm-signature-active": { fontWeight: "bold", textDecoration: "underline" },
+  ".cm-signature-doc": { fontFamily: "var(--sans, inherit)", marginTop: "4px", color: "var(--muted)" },
+});
+
+// References, marked in the editor until the text changes or Escape.
+
+const setReferences = StateEffect.define<{ from: number; to: number }[]>();
+const referenceMark = Decoration.mark({ class: "cm-reference" });
+const references = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(marks, tr) {
+    for (const effect of tr.effects) {
+      if (effect.is(setReferences)) {
+        const ranges = effect.value
+          .filter((s) => s.to <= tr.state.doc.length && s.from < s.to)
+          .sort((a, b) => a.from - b.from)
+          .map((s) => referenceMark.range(s.from, s.to));
+        return Decoration.set(ranges);
+      }
+    }
+    return tr.docChanged ? Decoration.none : marks;
+  },
+  provide: (field) => EditorView.decorations.from(field),
+});
+
+// Signature help: a tooltip over a call's arguments while typing them.
+
+const setSignature = StateEffect.define<Tooltip | null>();
+const signature = StateField.define<Tooltip | null>({
+  create: () => null,
+  update(tooltip, tr) {
+    for (const effect of tr.effects) if (effect.is(setSignature)) return effect.value;
+    return tooltip;
+  },
+  provide: (field) => showTooltip.from(field),
 });
 
 // The editor.
@@ -186,7 +231,21 @@ const editor = new EditorView({
       closeBrackets(),
       autocompletion({ override: [complete] }),
       hoverTooltip(hover, { hoverTime: 300 }),
-      keymap.of([{ key: "F12", run: (view) => (void goToDefinition(view.state.selection.main.head), true) }]),
+      references,
+      signature,
+      keymap.of([
+        { key: "F12", run: (view) => (void goToDefinition(view.state.selection.main.head), true) },
+        { key: "Shift-F12", run: (view) => (void findReferences(view.state.selection.main.head), true) },
+        { key: "F2", run: (view) => (void renameAt(view.state.selection.main.head), true) },
+        {
+          key: "Escape",
+          run: (view) => {
+            const shown = view.state.field(references).size > 0 || view.state.field(signature) !== null;
+            if (shown) view.dispatch({ effects: [setReferences.of([]), setSignature.of(null)] });
+            return shown;
+          },
+        },
+      ]),
       EditorView.domEventHandlers({
         mousedown: (event, view) => {
           if (!(event.ctrlKey || event.metaKey) || event.button !== 0) return false;
@@ -212,6 +271,12 @@ const editor = new EditorView({
           compileSoon();
           shareSoon();
         }
+        // Signature help opens on `(` or `,`, and follows the cursor while open.
+        const typed = update.transactions.some((tr) => tr.isUserEvent("input.type"));
+        const inserted = typed ? update.state.sliceDoc(update.state.selection.main.head - 1, update.state.selection.main.head) : "";
+        if (inserted === "(" || inserted === "," || (update.startState.field(signature) && (update.docChanged || update.selectionSet))) {
+          signatureSoon();
+        }
       }),
     ],
   }),
@@ -236,6 +301,8 @@ const viewer = new EditorView({
       EditorState.readOnly.of(true),
       EditorView.editable.of(false),
       EditorView.contentAttributes.of({ "aria-label": "Generated code", tabindex: "0" }),
+      // Shows go to definition's target in a std file, unfocused.
+      drawSelection(),
       outputLanguage.of([]),
       syntaxHighlighting(highlight),
       highlightSelectionMatches(),
@@ -679,7 +746,8 @@ function sendNext(): void {
 function show(result: CompileResult, ms: number): void {
   latest = result;
   if (!waiting) document.body.classList.remove("pending");
-  if (!panes.code.hidden) showBackend();
+  // A std file shown stays until a tab is picked.
+  if (!panes.code.hidden && selected !== STD_VIEW) showBackend();
   showDiagnostics(result.diagnostics);
   showInterpreter(result.run);
   runJs(result.backends.js);
@@ -716,10 +784,10 @@ function onSettled(text: string): void {
   for (const resolve of settledWaiters.splice(0)) resolve();
 }
 
-async function ask(what: Query, at: number): Promise<unknown> {
+async function ask(what: Query, at: number, name?: string): Promise<unknown> {
   if (!worker || !(await settledNow()) || !worker) return null;
   const qid = nextQuery++;
-  const message: ToCompiler = { type: "query", qid, what, at };
+  const message: ToCompiler = { type: "query", qid, what, at, name };
   const answer = new Promise<unknown>((resolve) => queries.set(qid, resolve));
   worker.postMessage(message);
   return answer;
@@ -766,10 +834,101 @@ async function hover(_view: EditorView, at: number, side: -1 | 1) {
 }
 
 async function goToDefinition(at: number): Promise<void> {
-  const span = toSpan(await ask("definition", at));
-  if (!span || span.to > editor.state.doc.length) return;
-  editor.dispatch({ selection: { anchor: span.from, head: span.to }, scrollIntoView: true });
+  const target = toDefinition(await ask("definition", at));
+  if (!target) return;
+  if ("file" in target) {
+    showStd(target.file, target.text, target);
+    return;
+  }
+  if (target.to > editor.state.doc.length) return;
+  editor.dispatch({ selection: { anchor: target.from, head: target.to }, scrollIntoView: true });
   editor.focus();
+}
+
+/** Shows a std file read-only in the output viewer, at a declaration. */
+function showStd(file: string, text: string, span: { from: number; to: number }): void {
+  selected = STD_VIEW;
+  for (const tab of tabs.querySelectorAll<HTMLButtonElement>(".tab")) tab.setAttribute("aria-selected", "false");
+  panes.code.hidden = false;
+  panes.run.hidden = true;
+  panes.errors.hidden = true;
+  backendError.hidden = true;
+  const option = document.createElement("option");
+  option.textContent = `${file} (read-only)`;
+  filePicker.replaceChildren(option);
+  filePicker.disabled = true;
+  filePicker.hidden = false;
+  viewer.dispatch({
+    changes: { from: 0, to: viewer.state.doc.length, insert: text },
+    effects: outputLanguage.reconfigure(temper),
+  });
+  viewer.dispatch({
+    selection: { anchor: span.from, head: span.to },
+    effects: EditorView.scrollIntoView(span.from, { y: "center" }),
+  });
+}
+
+async function findReferences(at: number): Promise<void> {
+  const spans = toSpans(await ask("references", at));
+  editor.dispatch({ effects: setReferences.of(spans) });
+  status(spans.length === 1 ? "1 reference" : `${spans.length} references`, false);
+}
+
+async function renameAt(at: number): Promise<void> {
+  const check = toRename(await ask("rename", at, ""));
+  if (!check) return;
+  if ("error" in check) {
+    status(check.error, true);
+    return;
+  }
+  if (!("name" in check)) return;
+  const name = window.prompt(`Rename ${check.name} to`, check.name);
+  if (!name || name === check.name) return;
+  const answer = toRename(await ask("rename", at, name));
+  if (!answer) return;
+  if ("error" in answer) {
+    status(answer.error, true);
+    return;
+  }
+  if (!("edits" in answer)) return;
+  editor.dispatch({ changes: answer.edits.map((e) => ({ from: e.from, to: e.to, insert: e.text })), userEvent: "rename" });
+  status(`Renamed ${answer.edits.length} ${answer.edits.length === 1 ? "place" : "places"}`, false);
+}
+
+const signatureSoon = debounce(() => void updateSignature(), 50);
+
+async function updateSignature(): Promise<void> {
+  const at = editor.state.selection.main.head;
+  const help = toSignature(await ask("signature_help", at));
+  if (editor.state.selection.main.head !== at) return;
+  const tooltip: Tooltip | null = help && {
+    pos: at,
+    above: true,
+    create: () => {
+      const dom = document.createElement("div");
+      dom.className = "cm-signature";
+      const line = document.createElement("div");
+      const active = help.params[help.active];
+      const start = active === undefined ? -1 : help.label.indexOf(active, help.label.indexOf("("));
+      if (start >= 0 && active !== undefined) {
+        const bold = document.createElement("span");
+        bold.className = "cm-signature-active";
+        bold.textContent = active;
+        line.append(help.label.slice(0, start), bold, help.label.slice(start + active.length));
+      } else {
+        line.textContent = help.label;
+      }
+      dom.append(line);
+      if (help.doc) {
+        const doc = document.createElement("div");
+        doc.className = "cm-signature-doc";
+        doc.textContent = help.doc;
+        dom.append(doc);
+      }
+      return { dom };
+    },
+  };
+  editor.dispatch({ effects: setSignature.of(tooltip) });
 }
 
 const COMPLETION_TYPES: Record<string, string> = {

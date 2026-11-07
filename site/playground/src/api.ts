@@ -52,14 +52,17 @@ export interface CompileResult {
 }
 
 /** The editor's queries, by the wasm build's names for them. */
-export type Query = "hover" | "definition" | "completions";
+export type Query = "hover" | "definition" | "completions" | "references" | "rename" | "signature_help";
 
 /** The page to the compiler's worker. */
 export type ToCompiler =
   | { type: "init"; module: WebAssembly.Module }
   | { type: "compile"; id: number; source: string }
-  /** `at` counts UTF-16 code units in the last source compiled. */
-  | { type: "query"; qid: number; what: Query; at: number };
+  /**
+   * `at` counts UTF-16 code units in the last source compiled; `name` is
+   * rename's new name, or empty to check whether it can rename.
+   */
+  | { type: "query"; qid: number; what: Query; at: number; name?: string };
 
 /** The compiler's worker to the page. */
 export type FromCompiler =
@@ -194,6 +197,60 @@ export function toSpan(value: Json): Span | null {
   if (value === null) return null;
   if (!isRecord(value)) return fail("span");
   return { from: num(value.from, "from"), to: num(value.to, "to") };
+}
+
+/** Where go to definition leads: the source, or a file of std's. */
+export type DefinitionTarget = Span | (Span & { file: string; text: string });
+
+export function toDefinition(value: Json): DefinitionTarget | null {
+  const span = toSpan(value);
+  if (!span || !isRecord(value) || value.file === undefined) return span;
+  return { ...span, file: str(value.file, "file"), text: str(value.text, "text") };
+}
+
+export function toSpans(value: Json): Span[] {
+  if (value === null) return [];
+  return list(value, "spans", (s) => toSpan(s) ?? fail("span"));
+}
+
+/** A rename's edits, or why it can't, or (checking) what it renames. */
+export type RenameAnswer =
+  | { edits: (Span & { text: string })[] }
+  | { error: string }
+  | (Span & { name: string });
+
+export function toRename(value: Json): RenameAnswer | null {
+  if (value === null) return null;
+  if (!isRecord(value)) return fail("rename");
+  if (value.error !== undefined) return { error: str(value.error, "error") };
+  if (value.edits !== undefined) {
+    return {
+      edits: list(value.edits, "edits", (e) => {
+        if (!isRecord(e)) return fail("edit");
+        return { from: num(e.from, "from"), to: num(e.to, "to"), text: str(e.text, "text") };
+      }),
+    };
+  }
+  return { from: num(value.from, "from"), to: num(value.to, "to"), name: str(value.name, "name") };
+}
+
+/** A call's signature while typing its arguments. */
+export interface SignatureInfo {
+  label: string;
+  params: string[];
+  active: number;
+  doc: string | null;
+}
+
+export function toSignature(value: Json): SignatureInfo | null {
+  if (value === null) return null;
+  if (!isRecord(value)) return fail("signature");
+  return {
+    label: str(value.label, "label"),
+    params: toStrings(value.params),
+    active: num(value.active, "active"),
+    doc: strOrNull(value.doc, "doc"),
+  };
 }
 
 export function toCompletions(value: Json): CompletionItem[] {

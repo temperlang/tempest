@@ -51,10 +51,19 @@ minifies it with esbuild, and prints each file's size. CI runs it with
   `@codemirror/lint`, and listed in the Errors tab.
 - **Hover** over a name for its kind, type (a function's signature),
   and doc comment, or over other code for its type.
-- **Go to definition:** F12, or Ctrl or Cmd and click.
+- **Go to definition:** F12, or Ctrl or Cmd and click. A declaration
+  in std opens std's file, read-only, on the right; pick a tab to go
+  back.
 - **Completion:** names in scope as you type, or Ctrl-Space; after
-  `x.`, the members of `x`'s class.
+  `x.`, the members of whatever `x` is (builtin types' too, and a
+  generic class's with its type arguments); in an object literal, the
+  property names its class takes.
+- **References:** Shift+F12 marks every use of a name; Escape clears.
+- **Rename:** F2 asks for the new name and renames every use.
+- **Signature help:** typing `(` or `,` in a call shows its signature,
+  with the current argument in bold.
 
 The worker keeps the source it last settled, and the wasm's `hover`,
-`definition`, and `completions` answer from it, at UTF-16 offsets
+`definition`, `completions`, `references`, `rename`, and
+`signature_help` answer from it, at UTF-16 offsets
 ([docs/internals/08-playground.md](../../docs/internals/08-playground.md#editor-queries)).

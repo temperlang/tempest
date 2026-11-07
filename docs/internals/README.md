@@ -52,6 +52,7 @@ flowchart LR
   frontend --> lib["tempest (library)"]
   frontend --> analysis["temper-analysis"]
   analysis --> wasm
+  analysis --> lib
   be --> lib
   lib --> cli["tempest (command)"]
   lib --> wasm["temper-wasm (playground)"]
@@ -61,10 +62,10 @@ flowchart LR
 |---|---|
 | [`temper-syntax`](../../crates/temper-syntax/src/lib.rs) | Source to trees: literate files, lexing, parsing, the grammar step |
 | [`temper-frontend`](../../crates/temper-frontend/src/lib.rs) | Trees to a settled library: the settle loop, typing, the interpreter, and translation to tmpl |
-| [`temper-analysis`](../../crates/temper-analysis/src/lib.rs) | Editor queries over a settled library: diagnostics, hover, definition, and completion |
+| [`temper-analysis`](../../crates/temper-analysis/src/lib.rs) | Editor queries over a settled library: diagnostics, hover, definition, completion, references, rename, outlines, and signature help |
 | [`temper-tmpl`](../../crates/temper-tmpl/src/lib.rs) | tmpl itself, plus the lowerings and naming that every backend shares |
 | `temper-be-*` | One crate per language: tmpl in, source files out. Each depends only on `temper-tmpl` |
-| [`tempest`](../../crates/tempest/src/lib.rs) | The one list of backends and the one compile path, as a library; and the command, `build` and `test` |
+| [`tempest`](../../crates/tempest/src/lib.rs) | The one list of backends and the one compile path, as a library; and the command, `build`, `test`, and `lsp` |
 | [`temper-wasm`](../../crates/temper-wasm/src/lib.rs) | The compiler as wasm, for the playground |
 
 ## Reading order
@@ -82,6 +83,8 @@ flowchart LR
    tests with each language's own tools.
 8. [Wasm, the playground, watch, and a language server](08-playground.md):
    the same compiler in a browser, and in an editor.
+9. [The language server and editors](09-language-server.md): `tempest
+   lsp`, its queries, and the VS Code extension.
 
 ## The running example
 

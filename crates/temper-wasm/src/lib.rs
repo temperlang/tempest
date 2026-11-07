@@ -7,8 +7,9 @@
 //! results from the interpreter, and each backend's files. The
 //! playground calls it in two halves, `analyze` for the diagnostics
 //! first, then `finish` for the rest, and `analyze` keeps the settled
-//! source for the editor's queries, `hover`, `definition`, and
-//! `completions`, which [`temper_analysis`] answers; `backends`
+//! source for the editor's queries, `hover`, `definition`,
+//! `completions`, `references`, `rename`, and `signature_help`, which
+//! [`temper_analysis`] answers; `backends`
 //! lists the backends built in, and `std_library` gives std's own
 //! output from one, for running generated tests. The older calls each do
 //! one thing: `parse` returns the parse tree and the grammar step's tree
@@ -327,19 +328,116 @@ pub extern "C" fn hover(at: u32) {
 }
 
 /// Where the name at UTF-16 offset `at` of the kept source is declared,
-/// as `{"from": 4, "to": 9}` in the same source, or `null` if it's not
-/// declared there (a builtin, or std).
+/// as `{"from": 4, "to": 9}` in the same source, or in std, also with
+/// the file's path from std's root and its text, `{"file":
+/// "std/regex/regex.temper.md", "text": "…", "from": …, "to": …}`, or
+/// `null` for a builtin.
 #[unsafe(no_mangle)]
 pub extern "C" fn definition(at: u32) {
     query(|kept, out| {
         let offset = byte_offset(&kept.source, at as usize) as u32;
-        match kept.analysis.definition(FileId(0), offset) {
-            Some(d) if d.file == FileId(0) => {
+        let found = kept.analysis.definition(FileId(0), offset);
+        let library = &kept.analysis.settled.library;
+        match found.map(|d| (d, library.files.get(d.file.0 as usize))) {
+            Some((d, _)) if d.file == FileId(0) => {
                 let (from, to) = utf16_span(&kept.source, d.span);
                 let _ = write!(out, "{{\"from\":{from},\"to\":{to}}}");
             }
+            Some((d, Some(file))) if kept.analysis.is_std(d.file) => {
+                let text = file.parsed.source();
+                let (from, to) = utf16_span(text, d.span);
+                let path = file.path.replacen(temper_frontend::stdlib::DIR, "std", 1);
+                let _ = write!(
+                    out,
+                    "{{\"file\":{},\"text\":{},\"from\":{from},\"to\":{to}}}",
+                    json_string(&path),
+                    json_string(text)
+                );
+            }
             _ => out.push_str("null"),
         }
+    });
+}
+
+/// Each use of what the name at UTF-16 offset `at` names in the kept
+/// source, with its declaration, as `[{"from": 4, "to": 9}, …]`.
+#[unsafe(no_mangle)]
+pub extern "C" fn references(at: u32) {
+    query(|kept, out| {
+        let offset = byte_offset(&kept.source, at as usize) as u32;
+        let spans: Vec<String> = (kept.analysis.references(FileId(0), offset, true).iter())
+            .filter(|l| l.file == FileId(0))
+            .map(|l| {
+                let (from, to) = utf16_span(&kept.source, l.span);
+                format!("{{\"from\":{from},\"to\":{to}}}")
+            })
+            .collect();
+        let _ = write!(out, "[{}]", spans.join(","));
+    });
+}
+
+/// Renames what the name at UTF-16 offset `at` of the kept source names
+/// to the input buffer's text (from `alloc`): the edits, as `{"edits":
+/// [{"from": 4, "to": 9, "text": "y"}, …]}`, or `{"error": "why"}`. With
+/// an empty name, only checks: `{"from": 4, "to": 9, "name": "x"}`.
+#[unsafe(no_mangle)]
+pub extern "C" fn rename(at: u32, ptr: *const u8, len: usize) {
+    let new_name = INPUT.with_borrow(|input| match ptr == input.as_ptr() && len <= input.len() {
+        true => String::from_utf8_lossy(&input[..len]).into_owned(),
+        false => String::new(),
+    });
+    query(|kept, out| {
+        let offset = byte_offset(&kept.source, at as usize) as u32;
+        let analysis = &kept.analysis;
+        if new_name.is_empty() {
+            let _ = match analysis.prepare_rename(FileId(0), offset) {
+                Ok((span, name)) => {
+                    let (from, to) = utf16_span(&kept.source, span);
+                    let name = json_string(&name);
+                    write!(out, "{{\"from\":{from},\"to\":{to},\"name\":{name}}}")
+                }
+                Err(why) => write!(out, "{{\"error\":{}}}", json_string(&why)),
+            };
+            return;
+        }
+        let _ = match analysis.rename(FileId(0), offset, &new_name) {
+            // The playground has one file; anything else is std's, which
+            // renaming refuses.
+            Ok(edits) => {
+                let edits: Vec<String> = (edits.iter())
+                    .filter(|e| e.file == FileId(0))
+                    .map(|e| {
+                        let (from, to) = utf16_span(&kept.source, e.span);
+                        let text = json_string(&e.text);
+                        format!("{{\"from\":{from},\"to\":{to},\"text\":{text}}}")
+                    })
+                    .collect();
+                write!(out, "{{\"edits\":[{}]}}", edits.join(","))
+            }
+            Err(why) => write!(out, "{{\"error\":{}}}", json_string(&why)),
+        };
+    });
+}
+
+/// The signature of the call whose arguments UTF-16 offset `at` of the
+/// kept source is among, as `{"label": "f(a: Int32): Void", "params":
+/// ["a: Int32"], "active": 0, "doc": null}`, or `null`.
+#[unsafe(no_mangle)]
+pub extern "C" fn signature_help(at: u32) {
+    query(|kept, out| {
+        let offset = byte_offset(&kept.source, at as usize) as u32;
+        let Some(help) = kept.analysis.signature_help(FileId(0), offset) else {
+            return out.push_str("null");
+        };
+        let params: Vec<String> = help.params.iter().map(|p| json_string(p)).collect();
+        let _ = write!(
+            out,
+            "{{\"label\":{},\"params\":[{}],\"active\":{},\"doc\":{}}}",
+            json_string(&help.label),
+            params.join(","),
+            help.active,
+            help.doc.as_deref().map_or("null".into(), json_string)
+        );
     });
 }
 
@@ -804,6 +902,78 @@ mod tests {
         assert_eq!(
             answers[4],
             "[{\"name\":\"m\",\"kind\":\"method\",\"type\":\"m(): Int32\"}]"
+        );
+    }
+
+    /// References, rename, signature help, and a definition in std.
+    #[test]
+    fn answers_editing_queries() {
+        const SOURCE: &str = "let { Regex } = import(\"std/regex\");\n\
+                              let \u{e9}t\u{e9} = 1;\nlet b = \u{e9}t\u{e9} + \u{e9}t\u{e9};\n\
+                              let r: Regex? = null;\nlet f(a: Int, b: Int): Int { a }\nf(1, ";
+        let utf16 = |needle: &str| {
+            let byte = SOURCE.find(needle).unwrap();
+            Position::of(SOURCE, byte).utf16 as u32
+        };
+        let (ete, regex) = (utf16("\u{e9}t\u{e9} +"), utf16("Regex? "));
+        let end = SOURCE.encode_utf16().count() as u32;
+        let answers = std::thread::Builder::new()
+            .stack_size(64 << 20)
+            .spawn(move || {
+                let mut out = String::new();
+                analyze_into(SOURCE, SourceKind::Standalone, &mut out);
+                let mut answers = Vec::new();
+                references(ete);
+                answers.push(OUTPUT.with_borrow(|out| out.clone()));
+                let name = "x";
+                let ptr = alloc(name.len());
+                INPUT.with_borrow_mut(|input| input[..1].copy_from_slice(b"x"));
+                rename(ete, ptr, name.len());
+                answers.push(OUTPUT.with_borrow(|out| out.clone()));
+                rename(ete, std::ptr::null(), 0);
+                answers.push(OUTPUT.with_borrow(|out| out.clone()));
+                signature_help(end);
+                answers.push(OUTPUT.with_borrow(|out| out.clone()));
+                definition(regex + 1);
+                answers.push(OUTPUT.with_borrow(|out| out.clone()));
+                answers
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+        let decl = utf16("\u{e9}t\u{e9} =");
+        let second = utf16("\u{e9}t\u{e9};");
+        assert_eq!(
+            answers[0],
+            format!(
+                "[{{\"from\":{decl},\"to\":{}}},{{\"from\":{ete},\"to\":{}}},{{\"from\":{second},\"to\":{}}}]",
+                decl + 3,
+                ete + 3,
+                second + 3
+            )
+        );
+        assert!(answers[1].starts_with("{\"edits\":[{"), "{}", answers[1]);
+        assert_eq!(
+            answers[1].matches("\"text\":\"x\"").count(),
+            3,
+            "{}",
+            answers[1]
+        );
+        assert_eq!(
+            answers[2],
+            format!(
+                "{{\"from\":{ete},\"to\":{},\"name\":\"\u{e9}t\u{e9}\"}}",
+                ete + 3
+            )
+        );
+        assert_eq!(
+            answers[3],
+            "{\"label\":\"f(a: Int32, b: Int32): Int32\",\"params\":[\"a: Int32\",\"b: Int32\"],\"active\":1,\"doc\":null}"
+        );
+        assert!(
+            answers[4].starts_with("{\"file\":\"std/regex/regex.temper.md\",\"text\":"),
+            "{}",
+            &answers[4][..80]
         );
     }
 
