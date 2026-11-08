@@ -22,8 +22,8 @@ The [regular expressions tutorial](../guide/tutorial/07-regex.md) walks
 through the dialect and the data model. A named group is `(?name=…)`.
 
 > **Note:** Temper's first compiler also accepts `(?<name>…)`, as the
-> std's own docs write it; tempest says "lookaround and (?<name>...)
-> aren't supported; use (?name=pattern)"
+> std's own docs write it; tempest says `lookaround and (?<name>...)
+> aren't supported; use (?name=pattern)`
 > ([inconsistencies](../inconsistencies.md#i22-named-groups-in-regular-expressions)).
 
 | Member | What it does |

@@ -48,7 +48,7 @@ documentation site, [temperlang.dev](https://temperlang.dev/), and its
 sources in the [temperlang/temper](https://github.com/temperlang/temper)
 repository, including reference pages generated there from doc
 comments in the compiler's source. They're Markdown source here, edited
-by hand ([how, and the plan for rendering them](contributing/docs.md)).
+by hand ([how, and how the docs site is built](contributing/docs.md)).
 The [blog](https://temperlang.dev/blog/) stays in its own repository.
 
 Copyright The Temper Project Contributors. The documentation is

@@ -12,7 +12,8 @@ the right, updated as you type, with no server.
 `package-lock.json` pins (into `node_modules/`, or into `--deps DIR`,
 linked from there), type-checks the TypeScript with `tsc`, bundles and
 minifies it with esbuild, and prints each file's size. CI runs it with
-`--skip-wasm` after its wasm build; the Pages workflow publishes it.
+`--skip-wasm` after its wasm build; the Pages workflow publishes it,
+with the docs site around it ([site/docs](../docs/build.py)).
 
 ## How it fits together
 
@@ -43,7 +44,7 @@ minifies it with esbuild, and prints each file's size. CI runs it with
 - **Examples** are `examples/*.temper`, bundled as text; each starts
   with a `// Title` comment. `7-triple.temper` is the running example of
   [the architecture docs](../../docs/internals/README.md), which the footer's "How
-  it works" links to on GitHub.
+  it works" links to on the docs site, beside the playground.
 
 ## IDE features
 

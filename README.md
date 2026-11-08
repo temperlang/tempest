@@ -96,7 +96,8 @@ browser.
 
 ## Documentation
 
-Everything lives under [docs/](docs/README.md):
+Everything lives under [docs/](docs/README.md), and on the
+[docs site](https://temperlang.github.io/tempest/c9cb414b4800a065953f72df4ab69943/), beside the playground:
 
 - [Guide](docs/guide/README.md): why Temper, a quick tour, getting
   started, and a tutorial.

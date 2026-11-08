@@ -1,8 +1,7 @@
 # Writing these docs
 
-The docs are Markdown that reads well on GitHub, which is their first
-renderer. A site, like [temperlang.dev](https://temperlang.dev/), can
-be rendered from the same files later, without changing them.
+The docs are Markdown that reads well on GitHub, and the same files,
+unchanged, make the [docs site](https://temperlang.github.io/tempest/c9cb414b4800a065953f72df4ab69943/) (see [the site](#the-site)).
 
 ## Where things go
 
@@ -25,8 +24,8 @@ text. Language logos and their terms are in
 
 ## Conventions
 
-Plain GitHub Flavored Markdown, plus a few conventions that a later
-renderer can style:
+Plain GitHub Flavored Markdown, plus a few conventions that the site
+styles:
 
 - **Callouts** are GitHub alerts: `> [!NOTE]`, `> [!TIP]`,
   `> [!IMPORTANT]`, `> [!WARNING]`, and `> [!CAUTION]`. (mkdocs'
@@ -44,7 +43,7 @@ renderer can style:
   `Rule := Other "token" | …`. (These were railroad diagrams, drawn from
   the same text; a renderer could draw them again.)
 - **Diagrams** are [Mermaid](https://mermaid.js.org/) blocks, which
-  GitHub draws.
+  GitHub draws (the site shows their source, for now).
 - **Temper examples** are ```` ```temper ```` blocks, and each ends
   with a marker comment saying what it does, as below. Literate Temper
   files are ```` ```tempermd ````, interactive sessions ```` ```console ````,
@@ -128,9 +127,50 @@ Anchors changed too: the old pages linked generated anchors, such as
 `#type-Boolean`; these link GitHub's heading anchors, such as
 `#class-boolean`.
 
-## Rendering a site, later
+## The site
 
-The source stays Markdown either way. The options:
+The [docs site](https://temperlang.github.io/tempest/c9cb414b4800a065953f72df4ab69943/) is README.md as its home page and every page of
+docs/ at the same path, as `.html`, with the
+[playground](https://temperlang.github.io/tempest/c9cb414b4800a065953f72df4ab69943/playground/) beside them. Its address has an
+unguessable part, read from the playground link in the README, until
+we unprefix it; every page says `noindex` and `nofollow`, sends no
+referrer, and `robots.txt` turns crawlers away.
+
+[Kelpto](https://github.com/temperlang/kelpto), the lossless Markdown
+and HTML library written in Temper, renders it: tempest builds Kelpto
+for Python, and site/docs' [`build.py`](../../site/docs/build.py), with
+nothing but Python's standard library, parses each page as GitHub
+Flavored Markdown with raw HTML and renders it with Kelpto's
+`renderSafe`. Then it adds what Kelpto leaves to us: GitHub's heading
+anchors and alerts, Temper highlighting with the VS Code extension's
+grammar, a header and a sidebar from each folder's `README.md`, and
+links rewritten for the site (`.md` to `.html`, and `README.md` to
+`index.html`). Links to the repository's sources, outside docs/, can't
+work there, so they show as plain text, dotted, with the path in a
+tooltip; the build counts them, and publishes the license files, as
+`.txt`, so those links work. Mermaid diagrams show as their source,
+labeled, for now. What Kelpto's sanitizer drops (comments, `style`,
+and mkdocs' `markdown` attributes) is counted too. The build ends by
+checking that every link on the site leads to a page, a file, and a
+heading that exist, and fails if one doesn't; links into the
+playground are only listed when it isn't built.
+
+To preview it, with Kelpto checked out beside this repository
+(`../kelpto`, or `--kelpto DIR`) and tempest built:
+
+    uv run site/playground/build.py --out site/_out/site/playground   # optional
+    uv run site/docs/build.py
+    python3 -m http.server -d site/_out/site
+
+The pages take about ten seconds. CI
+([pages.yml](../../.github/workflows/pages.yml)) does the same on each
+push to `main` that changes the docs or the playground, with the Kelpto
+commit in site/docs' [`kelpto-ref`](../../site/docs/kelpto-ref); move
+that forward to pick up Kelpto's fixes.
+
+### Why Kelpto
+
+The options were:
 
 | | For | Against |
 |---|---|---|
@@ -138,16 +178,11 @@ The source stays Markdown either way. The options:
 | **A small custom renderer** (a Rust binary, `pulldown-cmark` or `comrak`) | Fast, one toolchain; could run examples and draw grammar while rendering | We'd write and keep navigation, search, and themes; a new dependency |
 | **Kelpto**, the lossless Markdown and HTML library written in Temper | Dogfooding: Temper's docs rendered by a Temper library, through tempest, in any of seven languages; GFM conformant, with HTML sanitizing and link checks; lossless edits could keep the docs tidy (rewrite links, number the inconsistencies) | Young; navigation, search, and highlighting are ours to add; its build depends on tempest building it |
 
-**Recommendation: Kelpto,** run as a small Temper program that tempest
-builds, starting with a static site: one page per file, a sidebar from
-each folder's `README.md`, GitHub alerts and `<details>` styled, Mermaid
-drawn in the browser, and Temper highlighted with the VS Code
-extension's grammar. It shows off exactly what Temper is for, and what
-it needs (navigation, highlighting) is useful to Kelpto's users too.
-Fall back to mkdocs only if the site must ship before Kelpto can do
-that. Either way, the renderer can run `check_doc_examples.py` first,
-and could someday show each example's translations, made by tempest at
-build time, in place of the old tabs.
+Kelpto shows off exactly what Temper is for, and what the site adds
+(heading anchors, alerts, highlighting) would help Kelpto's users too.
+Still to come: drawing Mermaid diagrams, search, running
+`check_doc_examples.py` first, and, someday, each example's
+translations, made by tempest at build time, in place of the old tabs.
 
 ## To do
 

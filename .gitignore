@@ -5,7 +5,7 @@ __pycache__/
 # A local decision-graph tool's database
 .deciduous/
 
-# The playground's build output and npm packages
+# The site's build output (docs, playground, and Kelpto's build) and npm packages
 /site/_out/
 /site/playground/node_modules
 

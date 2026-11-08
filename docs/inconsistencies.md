@@ -23,7 +23,7 @@ page doesn't repeat those.
 | [I8](#i8-numbered-names-in-output-samples) | home page | `x__4` in samples | Done here |
 | [I9](#i9-the-command-line) | guide, tools | `temper` commands tempest lacks | CLI parity, then one name |
 | [I10](#i10-examples-tempest-doesnt-run-as-marked) | builtins, types, std | 14 examples | Fix tempest, one by one |
-| [I11](#i11-playground-addresses) | README, terms | Three playgrounds | Pick one, and its terms |
+| [I11](#i11-playground-addresses) | terms, Kotlin README | Old playground addresses | Links done here; terms left |
 | [I12](#i12-the-functional-test-matrix) | `functional-test-matrix.md` | Failures tempest doesn't have | Regenerate, or retire |
 | [I13](#i13-lua-versions) | target languages | "Lua 5.1" | State what's tested |
 | [I14](#i14-python-named-arguments) | target languages | Named arguments | Done here |
@@ -58,14 +58,19 @@ page doesn't repeat those.
 
 ### I11: Playground addresses
 
-- **Docs:** the Kotlin README links `play.temperlang.dev`; the
-  [playground terms](legal/playground-terms.md) name
-  `playground.temper.systems`; tempest's playground is on GitHub Pages
-  ([playground](tools/playground.md)).
+- **Here:** every link to try Temper (the README, the guide, and
+  [tools](tools/playground.md)) goes to tempest's playground, published
+  on GitHub Pages with the docs site. `play.temperlang.dev` is left
+  only where it's history: the internals' comparison with Temper's
+  first playground.
+- **Left:** the [playground terms](legal/playground-terms.md) still
+  name `playground.temper.systems`, the old site's playground, and the
+  Kotlin README still links `play.temperlang.dev`.
 - **tempest:** a static page, compiling in the browser, with no server
   and no accounts; sharing puts the code in the URL.
-- **Suggested:** one address for the playground, and terms that fit
-  what it does (a static page may need few or none).
+- **Suggested:** terms that fit what it does (a static page may need few
+  or none), the Kotlin README's link updated, and one lasting address
+  once the site leaves its unguessable path.
 
 ## Languages and versions
 
@@ -266,7 +271,7 @@ remove its `known` comment and its row here.
 - **Docs:** std's regex docs write a capture as `/(?<name>...)/` and,
   a few lines later, `/(?name = ...)/`; the tutorial uses `(?name=…)`.
 - **Kotlin:** accepts both.
-- **tempest:** accepts only `(?name=…)`: "lookaround and (?<name>...)
-  aren't supported; use (?name=pattern)".
+- **tempest:** accepts only `(?name=…)`: `lookaround and (?<name>...)
+  aren't supported; use (?name=pattern)`.
 - **Suggested:** accept `(?<name>…)` in tempest too, since JavaScript,
   Java, C#, and Python 3.11's `re` (as `(?P<name>…)`) users expect it.

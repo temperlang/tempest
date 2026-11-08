@@ -1,6 +1,9 @@
-# Publishes the playground (site/playground) to GitHub Pages under an
-# unguessable path. The path comes from the playground link in
-# README.md, so the README stays the one place to change it.
+# Publishes the docs site (site/docs: README.md and docs/, rendered by
+# Kelpto) and the playground (site/playground) to GitHub Pages under an
+# unguessable path: the docs at <nonce>/, the playground at
+# <nonce>/playground/. The path comes from the playground link in
+# README.md, so the README stays the one place to change it. Kelpto's
+# commit is in site/docs/kelpto-ref.
 name: Pages
 
 on:
@@ -8,6 +11,9 @@ on:
     branches: [main]
     paths:
       - site/**
+      - docs/**
+      - editors/vscode/syntaxes/**
+      - editors/vscode/check_grammar.py
       - crates/**
       - vendor/temper/**
       - Cargo.lock
@@ -40,7 +46,15 @@ jobs:
         with:
           node-version: 24
       - uses: astral-sh/setup-uv@v6
-      - name: Build
+      - id: kelpto
+        run: echo "ref=$(tr -d '[:space:]' < site/docs/kelpto-ref)" >> "$GITHUB_OUTPUT"
+      # Public; built for Python by tempest below.
+      - uses: actions/checkout@v4
+        with:
+          repository: temperlang/kelpto
+          ref: ${{ steps.kelpto.outputs.ref }}
+          path: .kelpto
+      - name: Path
         run: |
           nonce=$(grep -oE 'github\.io/tempest/[0-9a-f]{32}/' README.md \
             | head -1 | grep -oE '[0-9a-f]{32}')
@@ -48,10 +62,21 @@ jobs:
             echo "No playground link with a 32-hex path in README.md" >&2
             exit 1
           fi
-          # The wasm, npm ci, tsc, and esbuild; the page itself carries
-          # noindex, nofollow, and no-referrer.
-          uv run site/playground/build.py --out "_site/$nonce/playground"
-          # Keep crawlers out.
+          echo "NONCE=$nonce" >> "$GITHUB_ENV"
+      # The wasm, npm ci, tsc, and esbuild; the page itself carries
+      # noindex, nofollow, and no-referrer.
+      - name: Playground
+        run: uv run site/playground/build.py --out "_site/$NONCE/playground"
+      # README.md and docs/, rendered by Kelpto, which tempest builds for
+      # Python; every page carries noindex, nofollow, and no-referrer. It
+      # ends by checking every link on the site, into the playground too,
+      # and fails if any is broken.
+      - name: Docs site
+        run: |
+          cargo build --release -p tempest
+          uv run site/docs/build.py --kelpto .kelpto --out "_site/$NONCE"
+      - name: Keep crawlers out
+        run: |
           printf 'User-agent: *\nDisallow: /\n' > _site/robots.txt
           touch _site/.nojekyll
       - uses: actions/configure-pages@v5
