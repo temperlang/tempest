@@ -12,7 +12,8 @@
 # Code extension (type checked, bundled, packaged, and tested in a real
 # VS Code against the release build), Temper's functional tests (copied
 # into vendor/temper/, which has its patches) on tempest's interpreter, the
-# docs' examples on the release build, and `tempest test` on Chromarite and Ordable,
+# docs' examples on the release build, the docs site (built, its Mermaid
+# diagrams drawn, and its links checked), and `tempest test` on Chromarite and Ordable,
 # on the interpreter and on Python, JS, Lua, Java, and C#.
 # The checks against Kotlin Temper's own lexer and parser need a Kotlin
 # Temper install, so they run locally, not here.
@@ -183,6 +184,27 @@ jobs:
       # marker says, or as its `<!-- known: In -->` comment says.
       - name: Docs' examples
         run: uv run compat/check_doc_examples.py --tempest target/small/tempest
+      # The docs site, as pages.yml builds it, Mermaid diagrams drawn, so
+      # a broken link or diagram fails here, not at deploy. Links into the
+      # playground are only listed.
+      - id: kelpto
+        run: echo "ref=$(tr -d '[:space:]' < site/docs/kelpto-ref)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: temperlang/kelpto
+          ref: ${{ steps.kelpto.outputs.ref }}
+          path: .kelpto
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ hashFiles('site/docs/mermaid/package-lock.json') }}
+      - name: Diagram renderer
+        working-directory: site/docs/mermaid
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npx --no-install playwright-core install --with-deps --only-shell chromium
+      - name: Docs site
+        run: uv run site/docs/build.py --kelpto .kelpto --tempest target/small/tempest --out "$RUNNER_TEMP/site"
       - name: Functional tests
         run: uv run compat/check_functional.py
       - name: Size and speed charts are current

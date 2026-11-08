@@ -4,6 +4,7 @@
 """Builds the docs site: README.md and docs/, rendered by Kelpto.
 
     uv run site/docs/build.py [--out DIR] [--kelpto DIR] [--tempest BIN]
+                              [--chromium PATH | --no-diagrams]
 
 Kelpto, the Markdown and HTML library written in Temper, renders every
 page, built for Python by tempest itself: this copies Kelpto's four
@@ -11,7 +12,7 @@ libraries (kelpto-core, kelpto-md, kelpto-html, and kelpto) from
 `--kelpto DIR` (default `../kelpto`, beside this repository; CI checks
 out the commit in `site/docs/kelpto-ref`) into `site/_out/kelpto/`,
 runs `tempest build -b py` there, and imports the result. Nothing else
-is needed but Python's standard library.
+in Python is needed but its standard library; diagrams need Node (below).
 
 Each page is parsed as GitHub Flavored Markdown, with raw HTML parsed as
 HTML, and rendered by Kelpto's `renderSafe`. Then this script adds what
@@ -21,6 +22,15 @@ editors/vscode/check_grammar.py's tokenizer), and links rewritten for
 the site: `.md` to `.html` (`README.md` to `index.html`), and the
 playground's absolute link to its relative path. Links to files outside
 docs/ (sources in the repository) become plain text, and are counted.
+
+Mermaid diagrams are drawn here, as inline SVG, light and dark, by
+site/docs/mermaid/render.mjs: mermaid in headless Chromium, through
+playwright-core, all in one browser run. It needs Node, the packages in
+site/docs/mermaid/package-lock.json (installed with `npm ci` when they
+change), and a Chromium: `--chromium PATH`, else `$TEMPEST_CHROMIUM`,
+else Playwright's own. Drawings are cached in `site/_out/mermaid/` by
+mermaid's version, render.mjs, the theme, and the source, so only new
+diagrams are drawn. `--no-diagrams` shows their source instead.
 
 Writes to `--out DIR` (default `site/_out/site/`): `index.html` from
 README.md, `docs/…` from docs/, `assets/site.css`, and the licenses as
@@ -32,6 +42,7 @@ leads to a page, file, and heading that exist, and exits with 1 if not.
 import argparse
 import hashlib
 import html
+import json
 import posixpath
 import re
 import shutil
@@ -46,6 +57,10 @@ ROOT = HERE.parents[1]
 DOCS = ROOT / "docs"
 OUT = ROOT / "site" / "_out" / "site"
 WORK = ROOT / "site" / "_out" / "kelpto"
+MERMAID = HERE / "mermaid"
+DRAWN = ROOT / "site" / "_out" / "mermaid"
+# How small a wide diagram may shrink to fit, before it scrolls sideways.
+DIAGRAM_MIN_SCALE = 0.6
 KELPTO_LIBS = ["kelpto-core", "kelpto-md", "kelpto-html", "kelpto"]
 # The playground's published address, from README.md, as pages.yml reads it.
 SITE_URL = re.compile(r"https://temperlang\.github\.io/tempest/[0-9a-f]{32}/")
@@ -131,6 +146,122 @@ class Kelpto:
         return safe.html, [f"{r.kind} {r.name}" for r in safe.removals]
 
 
+# Diagrams
+
+
+class Diagrams:
+    """Mermaid sources drawn as SVG, light and dark, by mermaid/render.mjs,
+    cached in DRAWN."""
+
+    THEMES = ["light", "dark"]
+
+    def __init__(self, chromium: str | None):
+        self.chromium = chromium
+        self.svgs: dict[str, dict[str, tuple[str, str]]] = {}  # source: theme: (id, svg)
+        self.drawn = 0
+        self.cached = 0
+        self.seconds = 0.0
+
+    def install(self) -> str:
+        """Installs the npm packages, if they changed; gives mermaid's version."""
+        if shutil.which("node") is None or shutil.which("npm") is None:
+            sys.exit("build.py: Mermaid diagrams need Node and npm; install them, or pass --no-diagrams")
+        lock = json.loads((MERMAID / "package-lock.json").read_text())["packages"]
+        installed = MERMAID / "node_modules" / ".package-lock.json"
+        want = {k: v.get("version") for k, v in lock.items() if k and not v.get("optional")}
+        have = json.loads(installed.read_text())["packages"] if installed.is_file() else {}
+        if any(have.get(k, {}).get("version") != v for k, v in want.items()):
+            print("build.py: npm ci in site/docs/mermaid", flush=True)
+            subprocess.run(
+                ["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"], cwd=MERMAID, check=True, stdout=subprocess.DEVNULL
+            )
+        return lock["node_modules/mermaid"]["version"]
+
+    def draw(self, sources: set[str]) -> None:
+        started = time.monotonic()
+        version = self.install()
+        script = (MERMAID / "render.mjs").read_bytes()
+        DRAWN.mkdir(parents=True, exist_ok=True)
+        jobs, keep = [], set()
+        for source in sorted(sources):
+            for theme in self.THEMES:
+                digest = hashlib.sha256(version.encode() + b"\0" + script + b"\0" + theme.encode() + b"\0" + source.encode())
+                ident = f"mermaid-{digest.hexdigest()[:16]}"
+                file = DRAWN / f"{ident}.svg"
+                keep.add(file.name)
+                self.svgs.setdefault(source, {})[theme] = (ident, str(file))
+                if not file.is_file():
+                    jobs.append({"id": ident, "theme": theme, "source": source, "out": str(file)})
+        self.cached = 2 * len(sources) - len(jobs)
+        self.drawn = len(jobs)
+        if jobs:
+            (DRAWN / "jobs.json").write_text(json.dumps(jobs))
+            command = ["node", str(MERMAID / "render.mjs"), str(DRAWN / "jobs.json")]
+            if self.chromium:
+                command += ["--chromium", self.chromium]
+            run = subprocess.run(command, capture_output=True, text=True)
+            if run.returncode == 3:
+                sys.exit(
+                    f"build.py: no Chromium to draw Mermaid diagrams with:\n{run.stderr}"
+                    "Pass --chromium PATH or set TEMPEST_CHROMIUM; or install Playwright's, with\n"
+                    "    (cd site/docs/mermaid && npx playwright-core install --only-shell chromium)\n"
+                    "or pass --no-diagrams to show their source instead."
+                )
+            if run.returncode != 0:
+                sys.exit(f"build.py: drawing Mermaid diagrams failed:\n{run.stdout}{run.stderr}")
+        for f in DRAWN.glob("*.svg"):
+            if f.name not in keep:
+                f.unlink()
+        for source, themes in self.svgs.items():
+            for theme, (ident, file) in themes.items():
+                themes[theme] = (ident, Path(file).read_text())
+        self.seconds = time.monotonic() - started
+
+    @staticmethod
+    def inline(svg: str, ident: str, new: str, label: str) -> str:
+        """An SVG ready to go in a page: its id `new`, its other ids under
+        it (mermaid leaves some bare, such as node names, and repeats them),
+        an image to assistive tech, labeled, and allowed to shrink only so
+        far before it scrolls."""
+        svg = svg.replace(ident, new)
+        # Mermaid's own bookkeeping, unused here: the edges' points as
+        # base64, and markers no edge points to (it adds a dozen to each).
+        svg = re.sub(r'\sdata-(?:points|id|et|edge|from|to|type)="[^"]*"', "", svg)
+        for marker in re.findall(r'<marker\b[^>]*\bid="([^"]+)"', svg):
+            if f"url(#{marker})" not in svg:
+                svg = re.sub(r'<marker\b[^>]*\bid="' + re.escape(marker) + r'".*?</marker>', "", svg, flags=re.S)
+        for bare in sorted(set(re.findall(r'\bid="([^"]+)"', svg)) - {new}):
+            if bare.startswith(new):
+                continue
+            refs = re.compile(r'(url\(#|href="#)' + re.escape(bare) + r'(?=[)"])')
+            if refs.search(svg):
+                svg = refs.sub(lambda m: m.group(1) + f"{new}-{bare}", svg)
+                svg = svg.replace(f'id="{bare}"', f'id="{new}-{bare}"')
+            else:
+                svg = re.sub(r'\sid="' + re.escape(bare) + '"', "", svg)
+        root = re.match(r"<svg\b[^>]*>", svg)
+        assert root, "not an SVG"
+        tag = re.sub(r'\s(role|aria-roledescription)="[^"]*"', "", root.group(0))
+        tag = tag[:-1] + f' role="img" aria-label="{html.escape(label)}">'
+        if m := re.search(r"max-width: ([\d.]+)px;", tag):
+            least = round(float(m.group(1)) * DIAGRAM_MIN_SCALE)
+            tag = tag.replace(m.group(0), m.group(0) + f" min-width: {least}px;")
+        return Diagrams.rounded(tag + svg[root.end() :])
+
+    GEOMETRY = re.compile(r'(\s(?:d|transform|viewBox|points|[xy][12]?|width|height|r[xy]?|c[xy])=")([^"]*)"')
+
+    @staticmethod
+    def rounded(svg: str) -> str:
+        """Coordinates to two decimals, a tenth of a pixel at most, for
+        half the size."""
+
+        def number(m: re.Match) -> str:
+            text = f"{float(m.group(0)):.2f}".rstrip("0").rstrip(".")
+            return "0" if text == "-0" else text
+
+        return Diagrams.GEOMETRY.sub(lambda m: m.group(1) + re.sub(r"-?\d+\.\d{3,}", number, m.group(2)) + '"', svg)
+
+
 # Highlighting
 
 
@@ -209,8 +340,9 @@ def slug(text: str) -> str:
 
 
 class Site:
-    def __init__(self, kelpto: Kelpto, highlighter: Highlighter, out: Path):
+    def __init__(self, kelpto: Kelpto, highlighter: Highlighter, out: Path, diagrams: Diagrams | None):
         self.kelpto = kelpto
+        self.diagrams = diagrams
         self.highlighter = highlighter
         self.out = out
         self.sources = ["README.md"] + sorted(p.relative_to(ROOT).as_posix() for p in DOCS.rglob("*.md"))
@@ -291,9 +423,31 @@ class Site:
 
     # Blocks
 
+    CODE_BLOCK = re.compile(r'<pre><code(?: class="language-([^"]+)")?>(.*?)</code></pre>', re.S)
+
     def code_blocks(self, body: str) -> str:
+        headings = [(h.end(), text_of(h.group(1))) for h in re.finditer(r"<h[1-6][^>]*>(.*?)</h[1-6]>", body, re.S)]
+        used: dict[str, int] = {}
+
+        def diagram(m: re.Match, code: str) -> str:
+            heading = next((t for end, t in reversed(headings) if end <= m.start()), "")
+            label = f"Diagram: {heading}" if heading else "Diagram"
+            arts = []
+            for theme, (ident, svg) in self.diagrams.svgs[html.unescape(code)].items():
+                n = used.get(ident, 0)
+                used[ident] = n + 1
+                svg = Diagrams.inline(svg, ident, ident if n == 0 else f"{ident}-{n}", label)
+                arts.append(f'<div class="diagram-art diagram-{theme}">{svg}</div>')
+            return (
+                f'<figure class="diagram">{"".join(arts)}'
+                '<details class="diagram-source"><summary>Diagram source</summary>'
+                f'<pre><code class="language-mermaid">{code}</code></pre></details></figure>'
+            )
+
         def block(m: re.Match) -> str:
             lang, code = m.group(1) or "", m.group(2)
+            if lang == "mermaid" and self.diagrams:
+                return diagram(m, code)
             if lang == "mermaid":
                 return (
                     '<figure class="diagram"><figcaption>Diagram, as Mermaid source</figcaption>'
@@ -303,7 +457,7 @@ class Site:
             cls = f' class="language-{lang}"' if lang else ""
             return f"<pre><code{cls}>{lit if lit is not None else code}</code></pre>"
 
-        return re.sub(r'<pre><code(?: class="language-([^"]+)")?>(.*?)</code></pre>', block, body, flags=re.S)
+        return self.CODE_BLOCK.sub(block, body)
 
     @staticmethod
     def alerts(body: str) -> str:
@@ -446,6 +600,12 @@ Rendered by <a href="https://github.com/temperlang/kelpto">Kelpto</a>, a Temper 
         for src in self.sources:
             body, removed = self.kelpto.render((ROOT / src).read_text())
             self.removed += [f"{src}: {r}" for r in removed]
+            bodies[src] = body
+        if self.diagrams:
+            self.diagrams.draw(
+                {html.unescape(m.group(2)) for b in bodies.values() for m in self.CODE_BLOCK.finditer(b) if m.group(1) == "mermaid"}
+            )
+        for src, body in bodies.items():
             page = out_path(src)
             body = self.code_blocks(body)
             body = self.alerts(body)
@@ -513,6 +673,8 @@ def main() -> int:
     parser.add_argument("--out", type=Path, default=OUT, help="the site's root (default site/_out/site)")
     parser.add_argument("--kelpto", type=Path, default=ROOT.parent / "kelpto", help="a Kelpto checkout")
     parser.add_argument("--tempest", type=Path, help="tempest (default target/release/tempest, else target/small/tempest)")
+    parser.add_argument("--chromium", help="Chromium to draw diagrams with (default $TEMPEST_CHROMIUM, else Playwright's)")
+    parser.add_argument("--no-diagrams", action="store_true", help="show Mermaid diagrams' source, not drawn")
     args = parser.parse_args()
     started = time.monotonic()
     tempest = args.tempest or next(
@@ -523,12 +685,17 @@ def main() -> int:
     sys.dont_write_bytecode = True
     py = build_kelpto(args.kelpto.resolve(), tempest)
     built = time.monotonic()
-    site = Site(Kelpto(py), Highlighter(), args.out.resolve())
+    diagrams = None if args.no_diagrams else Diagrams(args.chromium)
+    site = Site(Kelpto(py), Highlighter(), args.out.resolve(), diagrams)
     n = site.build()
     rendered = time.monotonic()
     problems, count, skipped = check(args.out.resolve())
     problems = site.stale + problems
     print(f"build.py: {n} pages in {args.out} (Kelpto {built - started:.1f} s, pages {rendered - built:.1f} s)")
+    if diagrams:
+        print(f"build.py: {len(diagrams.svgs)} Mermaid diagrams, light and dark: {diagrams.drawn} drawn, {diagrams.cached} cached ({diagrams.seconds:.1f} s)")
+    else:
+        print("build.py: Mermaid diagrams shown as source (--no-diagrams)")
     offsite = sum(site.offsite.values())
     if offsite:
         tops: dict[str, int] = {}

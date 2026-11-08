@@ -8,6 +8,7 @@ __pycache__/
 # The site's build output (docs, playground, and Kelpto's build) and npm packages
 /site/_out/
 /site/playground/node_modules
+/site/docs/mermaid/node_modules
 
 # The VS Code extension's build output, npm packages, and the VS Code its
 # tests download

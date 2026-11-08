@@ -32,6 +32,8 @@ concurrency:
 
 jobs:
   deploy:
+    # Only main deploys, even when run by hand from another branch.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -71,6 +73,18 @@ jobs:
       # Python; every page carries noindex, nofollow, and no-referrer. It
       # ends by checking every link on the site, into the playground too,
       # and fails if any is broken.
+      # Mermaid diagrams are drawn by mermaid in headless Chromium, which
+      # the pinned playwright-core installs: its own build, cached by the
+      # lockfile.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ hashFiles('site/docs/mermaid/package-lock.json') }}
+      - name: Diagram renderer
+        working-directory: site/docs/mermaid
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npx --no-install playwright-core install --with-deps --only-shell chromium
       - name: Docs site
         run: |
           cargo build --release -p tempest

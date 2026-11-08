@@ -43,7 +43,7 @@ styles:
   `Rule := Other "token" | …`. (These were railroad diagrams, drawn from
   the same text; a renderer could draw them again.)
 - **Diagrams** are [Mermaid](https://mermaid.js.org/) blocks, which
-  GitHub draws (the site shows their source, for now).
+  GitHub draws, and the site draws when it's built.
 - **Temper examples** are ```` ```temper ```` blocks, and each ends
   with a marker comment saying what it does, as below. Literate Temper
   files are ```` ```tempermd ````, interactive sessions ```` ```console ````,
@@ -148,25 +148,42 @@ links rewritten for the site (`.md` to `.html`, and `README.md` to
 `index.html`). Links to the repository's sources, outside docs/, can't
 work there, so they show as plain text, dotted, with the path in a
 tooltip; the build counts them, and publishes the license files, as
-`.txt`, so those links work. Mermaid diagrams show as their source,
-labeled, for now. What Kelpto's sanitizer drops (comments, `style`,
+`.txt`, so those links work. What Kelpto's sanitizer drops (comments, `style`,
 and mkdocs' `markdown` attributes) is counted too. The build ends by
 checking that every link on the site leads to a page, a file, and a
 heading that exist, and fails if one doesn't; links into the
 playground are only listed when it isn't built.
 
+Mermaid diagrams are drawn at build time, into inline SVG, so readers
+get them at once, with no script: each twice, in the site's light and
+dark colors, shown by `prefers-color-scheme`, with its source in a
+"Diagram source" box below. site/docs/mermaid's
+[`render.mjs`](../../site/docs/mermaid/render.mjs) runs mermaid in one
+headless Chromium page, through playwright-core, with every request
+blocked; both are pinned in its `package-lock.json`, and `build.py`
+runs `npm ci` there when they change. Drawings are cached in
+`site/_out/mermaid/`, so only new or changed diagrams are drawn. Wide
+diagrams shrink to fit only so far, then scroll sideways.
+
 To preview it, with Kelpto checked out beside this repository
 (`../kelpto`, or `--kelpto DIR`) and tempest built:
 
     uv run site/playground/build.py --out site/_out/site/playground   # optional
-    uv run site/docs/build.py
+    uv run site/docs/build.py [--chromium PATH | --no-diagrams]
     python3 -m http.server -d site/_out/site
 
-The pages take about ten seconds. CI
+Diagrams need Node and a Chromium: `--chromium PATH`, else
+`$TEMPEST_CHROMIUM`, else Playwright's own, which
+`npx playwright-core install --only-shell chromium` in site/docs/mermaid
+installs. Without one, the build stops and says so; `--no-diagrams`
+shows their source instead. The pages take about ten seconds, and
+drawing every diagram, uncached, about seven more. CI
 ([pages.yml](../../.github/workflows/pages.yml)) does the same on each
 push to `main` that changes the docs or the playground, with the Kelpto
 commit in site/docs' [`kelpto-ref`](../../site/docs/kelpto-ref); move
-that forward to pick up Kelpto's fixes.
+that forward to pick up Kelpto's fixes. CI
+([ci.yml](../../.github/workflows/ci.yml)) builds it too, diagrams and
+link check included, on every push and pull request.
 
 ### Why Kelpto
 
@@ -180,7 +197,7 @@ The options were:
 
 Kelpto shows off exactly what Temper is for, and what the site adds
 (heading anchors, alerts, highlighting) would help Kelpto's users too.
-Still to come: drawing Mermaid diagrams, search, running
+Still to come: search, running
 `check_doc_examples.py` first, and, someday, each example's
 translations, made by tempest at build time, in place of the old tabs.
 
