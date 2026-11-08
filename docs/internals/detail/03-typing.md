@@ -7,7 +7,7 @@ passes over the settled tree after it. This page is the long companion
 to [3. Typing](../03-typing.md): the decisions behind it, its main types
 and functions, the tests that pin it, and what's weak. The rules
 themselves are in [notes/typing.md](../../../notes/typing.md), and the
-language's own semantics on [temperlang.dev](https://temperlang.dev/).
+language's own semantics in the [language reference](../../language/README.md).
 
 ## Contents
 

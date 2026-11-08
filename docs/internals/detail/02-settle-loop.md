@@ -7,7 +7,7 @@ inferred ([typing](03-typing.md)). This page is the long companion to
 [2. The settle loop](../02-settle-loop.md): the decisions behind the
 loop, its main types and functions, the tests that pin it, and what's
 weak. It's about the compiler's architecture; for what Temper's macros
-and names mean, see [temperlang.dev](https://temperlang.dev/).
+and names mean, see the [language reference](../../language/README.md).
 
 ## Contents
 

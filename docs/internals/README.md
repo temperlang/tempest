@@ -11,7 +11,7 @@ and the same code builds to wasm for the browser.
 These pages walk through it one stage at a time. Each is short, follows
 one tiny program through its stage, and ends with links into the code.
 They cover the compiler's architecture, not the language: for Temper
-itself, see [temperlang.dev](https://temperlang.dev/).
+itself, see the [language reference](../language/README.md).
 
 ## The big picture
 
@@ -129,7 +129,9 @@ functions, the tests that pin it, and known weaknesses:
 The design notes explain the why: [notes/README.md](../../notes/README.md)
 for the goals, [notes/design.md](../../notes/design.md) for the whole
 design, [notes/typing.md](../../notes/typing.md) for typing, and
-[notes/tmpl/](../../notes/tmpl/README.md) for tmpl.
+[notes/tmpl/](../../notes/tmpl/README.md) for tmpl. The Kotlin
+compiler's own backend guide and output grammars are kept in
+[kotlin/](kotlin/README.md).
 
 Links to code go to a file and name the type or function to look for
 there. CI checks that each file still defines what its link names, and

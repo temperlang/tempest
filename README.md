@@ -1,128 +1,136 @@
-# Tempest
+<p align="center">
+  <img src="docs/images/temper-logo-text-auto.svg" alt="Temper" width="400">
+</p>
 
-A from-scratch implementation of [Temper](https://temperlang.dev/) in Rust
-(edition 2024): the same language, behavior, and generated APIs as Temper
-today, from a much smaller, simpler, and faster compiler. See
-[docs/internals/](docs/internals/README.md) for how it works, stage by stage,
-and [notes/](notes/README.md) for the design and the plan.
+<p align="center">
+  <strong>Write once. Compile to every language.</strong><br>
+  A programming language for problem solvers.
+</p>
 
-## Status
+<p align="center">
+  <a href="docs/README.md"><b>Docs</b></a> ·
+  <a href="docs/guide/tour.md">Quick tour</a> ·
+  <a href="docs/guide/getting-started.md">Tutorial</a> ·
+  <a href="docs/language/README.md">Reference</a> ·
+  <a href="https://temperlang.github.io/tempest/c9cb414b4800a065953f72df4ab69943/playground/"><b>Playground</b></a>
+</p>
 
-- **The whole pipeline works:** parsing, the settle loop (names, macros,
-  types), an interpreter, tmpl (the backend IR), and seven backends: C++,
-  C#, Java, JavaScript, Lua, Python, and Rust.
-- **Temper's functional tests:** all 72 run on the interpreter and pass
-  on every backend, matching Temper's expected output. (std's `net` needs
-  libcurl for C++ and LuaSocket for Lua; without them, its two tests fail
-  as Temper's do.)
-  Generated code passes each language's strict checkers (clippy, `tsc
-  --strict`, pyright and mypy, LuaLS, and compilers with warnings as
-  errors); C++ also runs under AddressSanitizer, UBSan, and TSan.
-- **Async and generators** on every backend, one turn at a time, with
-  each language's own `await` and loops working on generated promises and
-  generators.
-- **Real libraries:** Hrefine, Chromarite, Ordable, Kelpto, and
-  Wherewith pass all their tests on the interpreter and, built by
-  `tempest test -b`, in C++, C#, Java, JavaScript, Lua, Python, and
-  Rust, run by each language's own tools ([notes/switch-over.md](notes/switch-over.md)).
-- **How it works:** [docs/internals/](docs/internals/README.md) walks through each stage,
-  from source to seven languages, with diagrams and links into the code;
-  [notes/](notes/README.md) indexes the design notes behind it: the
-  settle loop, typing, tmpl, compile-time evaluation, language
-  decisions, API compatibility, testing, and code style.
-- **Editors:** `tempest lsp`, a language server (errors as you type,
-  hover, go to definition, completion, references, rename, outlines,
-  and signature help), and a VS Code extension with highlighting,
-  packaged per platform with tempest bundled
-  ([editors/vscode](editors/vscode/README.md);
-  [how it works](docs/internals/09-language-server.md)).
-- **Coming:** CLI parity ([notes/switch-over.md](notes/switch-over.md)).
+---
+
+**Temper** lets a developer or a small team solve a problem once, for
+every programming language community. It's a language designed for one
+purpose: to translate well to all the others. You write a library in
+Temper, and get idiomatic, semantically equivalent libraries in each
+language, with their tests.
+
+```temper
+export let half(x: Int): Int {
+  x / 2
+}
+```
+
+becomes, in Python,
+
+```py
+from temper_core import int_div as _int_div
+
+def half(x: int, /) -> int:
+    return _int_div(x, 2)
+```
+
+and likewise in each of these[\*](#not-endorsed-or-affiliated):
+
+<table>
+  <tr valign="bottom">
+    <td align="center"><a href="docs/backends/README.md#c-cpp"><img src="docs/images/lang-icons/cpp.png" alt="C++"><br>C++</a></td>
+    <td align="center"><a href="docs/backends/README.md#c-csharp"><img src="docs/images/lang-icons/csharp.png" alt="C#"><br>C#</a></td>
+    <td align="center"><a href="docs/backends/README.md#java-java"><img src="docs/images/lang-icons/java.png" alt="Java"><br>Java</a></td>
+    <td align="center"><a href="docs/backends/README.md#javascript-js"><img src="docs/images/lang-icons/js.png" alt="JavaScript"> <img src="docs/images/lang-icons/ts.png" alt="TypeScript"><br>JS / TS</a></td>
+  </tr>
+  <tr valign="bottom">
+    <td align="center"><a href="docs/backends/README.md#lua-lua"><img src="docs/images/lang-icons/lua.png" alt="Lua"><br>Lua</a></td>
+    <td align="center"><a href="docs/backends/README.md#python-py"><img src="docs/images/lang-icons/py.png" alt="Python"><br>Python</a></td>
+    <td align="center"><a href="docs/backends/README.md#rust-rust"><img src="docs/images/lang-icons/rust.png" alt="Rust"><br>Rust</a></td>
+    <td align="center">&hellip;<br>and more to come</td>
+  </tr>
+</table>
+
+## This repository
+
+This is **tempest**, Temper's compiler written from scratch in Rust
+(edition 2024): the same language, behavior, and generated APIs as
+Temper's first compiler, from a much smaller, simpler, and faster
+code base. It's one small binary, `tempest`, and it also runs in the
+browser.
+
+- **The whole pipeline works:** parsing, the settle loop (names,
+  macros, and types), an interpreter, tmpl (the backend IR), and seven
+  backends.
+- **Temper's functional tests** all pass on the interpreter and on
+  every backend, and the generated code passes each language's strict
+  checkers (clippy, `tsc --strict`, pyright and mypy, LuaLS, and
+  compilers with warnings as errors).
+- **Real libraries** (Hrefine, Chromarite, Ordable, Kelpto, and
+  Wherewith) pass all their tests in all seven languages.
+- **Editors:** a language server, `tempest lsp`, and a VS Code
+  extension ([editors/vscode](editors/vscode/README.md)).
+- **Coming:** the rest of the `temper` command line
+  ([docs/tools/cli.md](docs/tools/cli.md)).
 
 ## Try it
 
-- **Playground (online):**
-  <https://temperlang.github.io/tempest/c9cb414b4800a065953f72df4ab69943/playground/>,
-  the whole compiler in the browser, as wasm
-  ([site/playground](site/playground/README.md)).
+- **In your browser:** the
+  [playground](https://temperlang.github.io/tempest/c9cb414b4800a065953f72df4ab69943/playground/)
+  runs the whole compiler as wasm: type Temper and see every
+  language's output, errors, and test results as you type.
+- **From source,** with [Rust](https://rustup.rs/) 1.85 or later:
 
-    cargo run --release -p tempest -- test [-b interp|BACKEND] [DIR]
-    cargo run --release -p tempest -- build [-w DIR] [-b BACKEND]...
-    cargo run --release -p tempest -- py|rust|js|java|csharp|cpp|lua [--out DIR] FILE...
+      cargo build --release -p tempest
+      target/release/tempest test DIR        # run a library's tests
+      target/release/tempest build -w DIR    # write temper.out/LANGUAGE/…
 
-- `test` finds the libraries under DIR (each directory with a
-  `config.temper.md`) and runs their tests, as `temper test` does: on
-  the interpreter, or with `-b BACKEND`, built into `temper.out` and run
-  by the language's own tools (`temper_core.testing` for Python, Mocha,
-  LuaUnit, JUnit through `javac`, `dotnet test`, `cargo test`, or
-  CMake and the test program for C++).
-- `build` writes `temper.out/BACKEND/LIBRARY/…`, laid out as Temper's.
-- A backend's name translates files and prints, or writes, the result.
-  It's an internal development command, not part of Temper's CLI, and
-  will go once tests use `build` instead.
+  A library is a directory with a `config.temper.md`; the
+  [getting started guide](docs/guide/getting-started.md) makes one.
+  Temper's standard library is built in, so the binary needs nothing
+  beside it.
 
-Temper's std library is built in, so the binary needs nothing beside it.
-Each backend is a cargo feature, all on by default.
+## Documentation
 
-## Principles
+Everything lives under [docs/](docs/README.md):
 
-- Match Temper's behavior, error messages, and generated public APIs, not
-  its implementation; check against Temper itself (`compat/`).
-- Keep it simple: one tree, a settle loop instead of stages, and errors as
-  values that still reach code generation.
-- No explicit lifetimes where avoidable: ids into arenas, borrows on the
-  stack, copies when cheap ([notes/code-style.md](notes/code-style.md)).
-- Few dependencies, each widely used and quick to compile.
-- Readable generated code: no numbered names except on real conflicts,
-  and source maps for every backend.
+- [Guide](docs/guide/README.md): why Temper, a quick tour, getting
+  started, and a tutorial.
+- [Language reference](docs/language/README.md): types, builtins,
+  syntax, and modules.
+- [Standard library](docs/std/README.md): JSON, regular expressions,
+  dates, testing, and networking.
+- [Backends](docs/backends/README.md): what each target language gets.
+- [Tools](docs/tools/README.md): the command line, editors, and the
+  playground.
+- [Contributing](docs/contributing/README.md), and
+  [how tempest works](docs/internals/README.md), stage by stage.
+- [Release notes](docs/release-notes/README.md).
 
-## Layout
+## Community
 
-| Crate | What it does |
-|---|---|
-| `temper-syntax` | Source to trees: literate files, lexing, parsing, the grammar step |
-| `temper-frontend` | Libraries to settled trees: the settle loop, typing, the interpreter, and tmpl translation |
-| `temper-analysis` | Editor queries over a settled library: diagnostics, hover, definition, and completion; depends on the frontend only |
-| `temper-tmpl` | tmpl, the backend IR ([notes/tmpl/](notes/tmpl/README.md)), with shared lowerings such as coroutines |
-| `temper-be-*` | One crate per backend, tmpl in and source out, and how its language runs tests, each depending only on `temper-tmpl` |
-| `temper-be-testkit` | What the backends' tests share: programs, goldens, and tool discovery |
-| `temper-funtests` | Temper's functional tests, from `vendor/temper/` |
-| `temper-driver` | The registry of backends, the one compile path, `build`, and running tests with each backend's tools |
-| `temper-lsp` | The language server, `tempest lsp` |
-| `tempest` | The command-line tool: argument parsing and output |
-| `temper-wasm` | The compiler for the browser, the base of the playground |
+- **Discord:** [the Temper Language Discord](https://discord.gg/TY3Be6fzwu)
+- **Stack Overflow:** the [`temper`](https://stackoverflow.com/questions/tagged/temper) tag
+- **Issues:** [report bugs or request features](https://github.com/temperlang/temper/issues)
 
-Also: `docs/` (how it works, stage by stage), `compat/` (scripts
-comparing with Temper, fuzzing, and timing),
-`vendor/temper/` (Temper's runtimes, std, and functional tests, synced
-with patches in `vendor/temper-patches/`), and `notes/`.
+## License
 
-## Testing
+[COPYRIGHT](COPYRIGHT) has the details: code is dual licensed as
+[Apache 2.0](LICENSE-APACHE) or [MIT](LICENSE-MIT), and documentation
+as [CC BY-SA 4.0](LICENSE-CC-BY-SA-4.0). Third-party materials are
+listed in [NOTICE](NOTICE).
 
-    cargo test
+### Not endorsed or affiliated
 
-runs every crate's tests, needing no Temper checkout. Backends' tests
-compare goldens of generated code (`UPDATE_SNAPSHOTS=1` accepts changes)
-and run the generated code with each language's own tools, skipping with
-a message when a tool is missing; [notes/test-speed.md](notes/test-speed.md)
-has the details.
-
-Comparing with Temper, using the copy in `vendor/temper/` (or `--temper
-DIR` for a checkout):
-
-    uv run compat/check_functional.py   # the functional tests, in-process
-    uv run compat/count_tmpl.py         # which tests translate, and why not
-    uv run compat/sync_temper.py        # refresh vendor/temper/ (--check in CI)
-
-and `compat/check_*.py`, `fuzz_*.py`, and `bench_*.py` for each stage.
-Scripts run with [uv](https://docs.astral.sh/uv/), for Python 3.11+.
-
-CI runs formatting, clippy, a check of the docs' and notes' links,
-every crate's tests with each language's toolchain (`tempest test -b` on small
-fixture libraries for every backend among them), the wasm build, and
-the functional tests, all on Rust 1.85.0, the workspace's
-`rust-version`. A nightly job tests C++ on
-more compilers and under sanitizers, and runs real libraries' tests on
-every backend, from a list (`.github/nightly-libraries.json`;
-[notes/test-speed.md](notes/test-speed.md), "Real libraries, nightly").
+We use other programming language projects' logos and names with
+permission, but don't imply any official relationship with, or
+endorsement by, those projects' contributors or sponsors. (We refer to
+them because we love them, as we love all programming languages, their
+contributors, and their communities.) Where each logo comes from, and
+its terms, is in [docs/images/lang-icons](docs/images/lang-icons/README.md).
 
 Written with Claude Code and Opus 5.5.

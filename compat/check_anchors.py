@@ -16,6 +16,8 @@
   `mod name`, and so on. A label that is the file's own name, as
   `main.rs` or `strings` for `strings.rs`, passes too.
 - Links never carry line numbers (`#L10`).
+- Reference definitions, `[name]: target`, and HTML `<a href>` and
+  `<img src>` are links too.
 
 Exits with 1 if anything is wrong. PATH, files or folders, defaults to
 the README, docs/, notes/, and the playground's README.
@@ -28,7 +30,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT = ["README.md", "docs", "notes", "site/playground/README.md"]
-LINK = re.compile(r"\]\(([^)\s]+)\)")
+LINK = re.compile(r"\]\(([^)\s]+)\)|^ {0,3}\[[^\]^][^\]]*\]:\s*(\S+)|<(?:a|img)\b[^>]*?\b(?:href|src)=\"([^\"]+)\"", re.M)
 CODE_LINK = re.compile(r"\[`([^`]+)`\]\(([^)\s]+)\)")
 DEFINERS = r"fn|struct|enum|const|type|trait|static|mod|macro_rules!|function|class|interface"
 
@@ -71,7 +73,8 @@ def check(page: Path) -> list[str]:
     problems = []
     where = page.relative_to(ROOT) if page.is_relative_to(ROOT) else page
     prose = re.sub(r"```.*?```", "", page.read_text(), flags=re.S)
-    for target in LINK.findall(prose):
+    for groups in LINK.findall(prose):
+        target = next(g for g in groups if g)
         if re.match(r"[a-z]+:", target):
             continue
         path, _, anchor = target.partition("#")

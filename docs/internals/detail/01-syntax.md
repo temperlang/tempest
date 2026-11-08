@@ -6,7 +6,7 @@ no dependencies, and it knows nothing of what `let` or `if` mean. This
 page is the long companion to [1. Syntax](../01-syntax.md): the decisions
 behind each step, the main types and functions, the tests that pin them,
 and what's weak. For Temper's syntax itself, see
-[temperlang.dev](https://temperlang.dev/).
+the [syntax reference](../../language/syntax.md).
 
 ## Contents
 

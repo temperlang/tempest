@@ -7,6 +7,22 @@ vendor/temper/ holds a copy of Kotlin Temper's functional tests, std, and core,
 also The Temper Project's, under the same licenses (see
 vendor/temper/SOURCE.md for the commit it came from).
 
+Documentation. Much of docs/ (the guide, the language reference, the
+target language notes, the release notes, docs/internals/kotlin/, and
+docs/contributing/signing-commits.md) is adapted from the Temper
+Language Documentation: the temperlang.dev site's sources and generated
+pages, release notes, and READMEs in the temperlang/temper repository
+(commit 30b05fe6f7faaf0d80e4d1df573edf065554e205, 2026-11-06),
+Copyright The Temper Project Contributors, licensed under CC BY-SA 4.0
+(LICENSE-CC-BY-SA-4.0). Changes: converted from mkdocs to GitHub
+Markdown, reorganized, edited, and annotated where Temper's compilers
+disagree; docs/README.md says where each part came from. The adapted
+documentation stays under CC BY-SA 4.0.
+
+Language logos. docs/images/lang-icons/ holds other projects' logos,
+used under their projects' terms, as docs/images/lang-icons/README.md
+records.
+
 Unicode data. crates/temper-syntax/src/nfkc_tables.rs is derived from the
 Unicode Character Database (version 15.0.0, as Java 21 provides it), and
 crates/temper-syntax/src/id_parts.rs from its identifier properties, by

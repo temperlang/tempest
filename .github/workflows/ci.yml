@@ -11,7 +11,8 @@
 # the wasm build and the playground (type checked and bundled), the VS
 # Code extension (type checked, bundled, packaged, and tested in a real
 # VS Code against the release build), Temper's functional tests (copied
-# into vendor/temper/, which has its patches) on tempest's interpreter, and `tempest test` on Chromarite and Ordable,
+# into vendor/temper/, which has its patches) on tempest's interpreter, the
+# docs' examples on the release build, and `tempest test` on Chromarite and Ordable,
 # on the interpreter and on Python, JS, Lua, Java, and C#.
 # The checks against Kotlin Temper's own lexer and parser need a Kotlin
 # Temper install, so they run locally, not here.
@@ -178,6 +179,10 @@ jobs:
         run: cargo build --profile small -p tempest
       - name: VS Code extension
         run: uv run editors/vscode/build.py --tempest target/small/tempest --test
+      # Each marked ```temper block in docs/ runs on the release build as its
+      # marker says, or as its `<!-- known: In -->` comment says.
+      - name: Docs' examples
+        run: uv run compat/check_doc_examples.py --tempest target/small/tempest
       - name: Functional tests
         run: uv run compat/check_functional.py
       - name: Size and speed charts are current

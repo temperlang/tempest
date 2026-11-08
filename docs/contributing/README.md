@@ -1,0 +1,139 @@
+# Contributing
+
+Thank you for your interest in Temper! Not all contributions are code:
+documentation, examples, visualizations, ideas, and bug reports all
+help.
+
+Please follow the [Contributor Covenant code of conduct][CoC] in every
+interaction with other contributors and community members; the
+[Discord][discord] has notes on following up on conduct problems.
+
+## What's here
+
+This repository is tempest, Temper's compiler in Rust. Start with:
+
+- [How tempest works](../internals/README.md): each stage, with
+  diagrams and links into the code.
+- [Design notes](../../notes/README.md): the plan, the decisions behind
+  it, and [where tempest differs from Temper's first
+  compiler](../../notes/kotlin-differences.md).
+- [Writing these docs](docs.md): their conventions, how their examples
+  are checked, and the plan for rendering them.
+
+### Principles
+
+- Match Temper's behavior, error messages, and generated public APIs,
+  not its implementation; check against Temper itself (`compat/`).
+- Keep it simple: one tree, a settle loop instead of stages, and errors
+  as values that still reach code generation.
+- No explicit lifetimes where avoidable: ids into arenas, borrows on
+  the stack, copies when cheap ([code style](../../notes/code-style.md)).
+- Few dependencies, each widely used and quick to compile.
+- Readable generated code: no numbered names except on real conflicts,
+  and source maps for every backend.
+
+### Layout
+
+| Crate | What it does |
+|---|---|
+| `temper-syntax` | Source to trees: literate files, lexing, parsing, the grammar step |
+| `temper-frontend` | Libraries to settled trees: the settle loop, typing, the interpreter, and tmpl translation |
+| `temper-analysis` | Editor queries over a settled library: diagnostics, hover, definition, and completion; depends on the frontend only |
+| `temper-tmpl` | tmpl, the backend IR ([notes/tmpl/](../../notes/tmpl/README.md)), with shared lowerings such as coroutines |
+| `temper-be-*` | One crate per backend, tmpl in and source out, and how its language runs tests, each depending only on `temper-tmpl` |
+| `temper-be-testkit` | What the backends' tests share: programs, goldens, and tool discovery |
+| `temper-funtests` | Temper's functional tests, from `vendor/temper/` |
+| `temper-driver` | The registry of backends, the one compile path, `build`, and running tests with each backend's tools |
+| `temper-lsp` | The language server, `tempest lsp` |
+| `tempest` | The command-line tool: argument parsing and output |
+| `temper-wasm` | The compiler for the browser, the base of the playground |
+
+Also: `docs/` (these docs), `compat/` (scripts comparing with Temper's
+first compiler, fuzzing, timing, and checking the docs), `vendor/temper/`
+(Temper's runtimes, std, and functional tests, synced with patches in
+`vendor/temper-patches/`), `editors/` (the VS Code extension), `site/`
+(the playground), and `notes/`.
+
+## Building
+
+You need [Rust](https://rustup.rs/) 1.85.0 or later (the workspace's
+`rust-version`, which CI uses) and, for the scripts,
+[uv](https://docs.astral.sh/uv/), which runs them on Python 3.11 or
+later.
+
+    cargo build --release -p tempest
+
+Each backend is a cargo feature, all on by default. While tempest
+grows toward Temper's command line, each backend's name is also a
+development command that translates files and prints, or writes, the
+result:
+
+    cargo run --release -p tempest -- py|rust|js|java|csharp|cpp|lua [--out DIR] FILE...
+
+## Testing
+
+    cargo test
+
+runs every crate's tests, needing no other checkout. Backends' tests
+compare goldens of generated code (`UPDATE_SNAPSHOTS=1` accepts
+changes) and run the generated code with each language's own tools,
+skipping with a message when a tool is missing;
+[test speed](../../notes/test-speed.md) has the details. To run those
+too, install the languages' tools: a C++ compiler and CMake, the .NET 6
+SDK or later, a JDK 17 or later with Maven, Node.js with npm, Lua 5.4
+or LuaJIT with LuaRocks, Python 3.11 or later, and Rust.
+
+Comparing with Temper's first compiler, using the copy in
+`vendor/temper/` (or `--temper DIR` for a checkout):
+
+    uv run compat/check_functional.py   # the functional tests, in-process
+    uv run compat/count_tmpl.py         # which tests translate, and why not
+    uv run compat/sync_temper.py        # refresh vendor/temper/ (--check in CI)
+
+and `compat/check_*.py`, `fuzz_*.py`, and `bench_*.py` for each stage.
+For the docs:
+
+    uv run compat/check_anchors.py        # every link leads somewhere
+    uv run compat/check_doc_examples.py   # examples run as marked
+
+CI runs formatting, clippy, the link check, every crate's tests with
+each language's toolchain (`tempest test -b` on small fixture libraries
+for every backend among them), the wasm build, and the functional
+tests, all on Rust 1.85.0. A nightly job tests C++ on more compilers
+and under sanitizers, and runs real libraries' tests on every backend,
+from a list (`.github/nightly-libraries.json`;
+[test speed](../../notes/test-speed.md), "Real libraries, nightly").
+
+## Sending changes
+
+Changes come in as GitHub pull requests. A commit to `main` needs two
+things:
+
+- **Signed commits** ([commit signing][signing]), which let us produce
+  builds with supply chain security metadata, as
+  [some large organizations require](https://engineering.homeoffice.gov.uk/standards/signing-code-commits/).
+  [Signing commits](signing-commits.md) walks through setting it up.
+- **Sign-off** ([`git commit -s`][signoff]), which records who
+  authored and authorized each change, so that contributions under
+  [GitHub's inbound=outbound][inbound] terms are clear.
+
+A change users would notice gets a note in
+[the release notes](../release-notes/README.md#writing-a-release-note).
+Docs changes keep the links working (`compat/check_anchors.py`).
+
+## Questions?
+
+- [Discord][discord]: chat with the community.
+
+  > **Note:** Temper's pages link three different Discord invites;
+  > this is the one temperlang.dev uses
+  > ([inconsistencies](../inconsistencies.md#i2-discord-invites)).
+
+- [Issues](https://github.com/temperlang/temper/issues): report bugs or
+  request features.
+
+[CoC]: https://www.contributor-covenant.org/version/3/0/code_of_conduct/
+[discord]: https://discord.gg/TY3Be6fzwu
+[signing]: https://docs.github.com/en/authentication/managing-commit-signature-verification/about-commit-signature-verification
+[signoff]: https://git-scm.com/docs/git-commit#Documentation/git-commit.txt--s
+[inbound]: https://docs.github.com/en/site-policy/github-terms/github-terms-of-service#6-contributions-under-repository-license

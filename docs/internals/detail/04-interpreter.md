@@ -13,7 +13,7 @@ It sits beside `to_tmpl`, not after it: both read the settled tree and
 typing's facts. [The overview page](../04-interpreter.md) follows
 `triple.temper` through it; this page covers the decisions behind it,
 its main types, its tests, and its weak spots. For what the language
-means, see [temperlang.dev](https://temperlang.dev/).
+means, see the [language reference](../../language/README.md).
 
 ## Contents
 
