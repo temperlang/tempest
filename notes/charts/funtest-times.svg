@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 296" width="720" height="296" role="img" aria-labelledby="t d">
 <title id="t">Functional tests by backend (s)</title>
-<desc id="d">C++: 266 s at first, 108 s latest (92f1d04); C#: 63.1 s at first, 39.5 s latest (92f1d04); Java: 31.5 s at first, 34.3 s latest (92f1d04); JavaScript: 22.1 s at first, 26.8 s latest (92f1d04); Lua: 11.5 s at first, 18.9 s latest (92f1d04); Python: 432 s at first, 54.9 s latest (92f1d04); Rust: 16.5 s at first, 35.5 s latest (92f1d04).</desc>
+<desc id="d">C++: 266 s at first, 58 s latest (f104ea0); C#: 63.1 s at first, 43.1 s latest (f104ea0); Java: 31.5 s at first, 28.3 s latest (f104ea0); JavaScript: 22.1 s at first, 64.6 s latest (f104ea0); Lua: 11.5 s at first, 14.6 s latest (f104ea0); Python: 432 s at first, 22.2 s latest (f104ea0); Rust: 16.5 s at first, 14.8 s latest (f104ea0).</desc>
 <style>
   svg { --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --grid: #e4e3df;
         --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
@@ -29,245 +29,261 @@
 <line x1="56" x2="530" y1="72.0" y2="72.0" stroke="var(--grid)" stroke-width="1"/>
 <text x="48" y="76.0" text-anchor="end">800</text>
 <text x="56.0" y="276" text-anchor="middle">11-05</text>
-<text x="346.5" y="276" text-anchor="middle">11-06</text>
-<polygon points="56.0,205.2 71.3,218.4 86.6,226.7 101.9,228.9 117.2,234.5 132.5,234.5 147.7,234.5 163.0,219.6 193.6,224.7 208.9,224.7 224.2,224.7 239.5,218.5 254.8,215.5 270.1,215.5 285.4,215.5 300.6,215.5 315.9,213.3 331.2,207.4 346.5,203.7 361.8,207.5 377.1,207.5 392.4,207.7 407.7,213.2 423.0,207.4 438.3,208.3 453.5,212.7 468.8,213.8 484.1,212.7 499.4,216.1 514.7,219.3 530.0,223.7 530.0,238.8 514.7,235.6 499.4,231.2 484.1,223.7 468.8,222.6 453.5,214.9 438.3,218.2 423.0,219.0 407.7,224.8 392.4,230.5 377.1,230.7 361.8,230.7 346.5,230.5 331.2,226.8 315.9,220.9 300.6,218.7 285.4,218.7 270.1,221.7 254.8,226.4 239.5,231.1 224.2,226.7 208.9,226.7 193.6,226.7 163.0,233.9 147.7,237.3 132.5,237.3 117.2,237.3 101.9,235.9 86.6,237.3 71.3,232.2 56.0,232.0" fill="var(--s1)" opacity="0.15"/>
-<path d="M56.0,218.6 L71.3,225.3 L86.6,232.0 L101.9,232.4 L117.2,235.9 L132.5,235.9 L147.7,235.9 L163.0,226.7 L193.6,225.7 L208.9,225.7 L224.2,225.7 L239.5,224.8 L254.8,220.9 L270.1,218.6 L285.4,217.1 L300.6,217.1 L315.9,217.1 L331.2,217.1 L346.5,217.1 L361.8,219.1 L377.1,219.1 L392.4,219.1 L407.7,219.0 L423.0,213.2 L438.3,213.2 L453.5,213.8 L468.8,218.2 L484.1,218.2 L499.4,223.7 L514.7,227.5 L530.0,231.2" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linejoin="round"/>
+<text x="328.9" y="276" text-anchor="middle">11-06</text>
+<text x="515.6" y="276" text-anchor="middle">11-07</text>
+<text x="530.0" y="276" text-anchor="middle">11-08</text>
+<polygon points="56.0,205.2 70.4,218.4 84.7,226.7 99.1,228.9 113.5,234.5 127.8,234.5 142.2,234.5 156.5,219.6 185.3,224.7 199.6,224.7 214.0,224.7 228.4,218.5 242.7,215.5 257.1,215.5 271.5,215.5 285.8,215.5 300.2,213.3 314.5,207.4 328.9,203.7 343.3,207.5 357.6,207.5 372.0,207.7 386.4,213.2 400.7,207.4 415.1,208.3 429.5,212.7 443.8,213.8 458.2,212.7 472.5,216.1 486.9,220.3 501.3,223.7 515.6,229.9 530.0,225.8 530.0,236.7 515.6,241.3 501.3,238.8 486.9,231.2 472.5,231.2 458.2,223.7 443.8,222.6 429.5,214.9 415.1,218.2 400.7,219.0 386.4,224.8 372.0,230.5 357.6,230.7 343.3,230.7 328.9,230.5 314.5,226.8 300.2,220.9 285.8,218.7 271.5,218.7 257.1,221.7 242.7,226.4 228.4,231.1 214.0,226.7 199.6,226.7 185.3,226.7 156.5,233.9 142.2,237.3 127.8,237.3 113.5,237.3 99.1,235.9 84.7,237.3 70.4,232.2 56.0,232.0" fill="var(--s1)" opacity="0.15"/>
+<path d="M56.0,218.6 L70.4,225.3 L84.7,232.0 L99.1,232.4 L113.5,235.9 L127.8,235.9 L142.2,235.9 L156.5,226.7 L185.3,225.7 L199.6,225.7 L214.0,225.7 L228.4,224.8 L242.7,220.9 L257.1,218.6 L271.5,217.1 L285.8,217.1 L300.2,217.1 L314.5,217.1 L328.9,217.1 L343.3,219.1 L357.6,219.1 L372.0,219.1 L386.4,219.0 L400.7,213.2 L415.1,213.2 L429.5,213.8 L443.8,218.2 L458.2,218.2 L472.5,223.7 L486.9,225.8 L501.3,231.2 L515.6,235.6 L530.0,231.2" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linejoin="round"/>
 <circle cx="56.0" cy="194.9" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 7649668 with changes (2026-11-05): 266 s</title></circle>
-<circle cx="71.3" cy="218.6" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, d13d4d7 with changes (2026-11-05): 163 s</title></circle>
-<circle cx="86.6" cy="232.0" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 77ff5b5 with changes (2026-11-05): 104 s</title></circle>
-<circle cx="101.9" cy="232.4" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, ca9bcbf with changes (2026-11-05): 103 s</title></circle>
-<circle cx="117.2" cy="237.3" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 47bb65c with changes (2026-11-05): 81.1 s</title></circle>
-<circle cx="132.5" cy="235.9" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 5ee1eff with changes (2026-11-05): 87.3 s</title></circle>
-<circle cx="147.7" cy="235.9" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 5ee1eff with changes (2026-11-05): 87.3 s</title></circle>
-<circle cx="163.0" cy="219.6" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 69c7642 with changes (2026-11-05): 158 s</title></circle>
-<circle cx="193.6" cy="226.7" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, fa729b8 with changes (2026-11-05): 127 s</title></circle>
-<circle cx="208.9" cy="224.8" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, fea0fa1 with changes (2026-11-05): 136 s</title></circle>
-<circle cx="224.2" cy="225.7" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 5910a01 with changes (2026-11-05): 132 s</title></circle>
-<circle cx="239.5" cy="231.1" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 5910a01 with changes (2026-11-05): 108 s</title></circle>
-<circle cx="254.8" cy="214.8" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 9daba5c with changes (2026-11-05): 179 s</title></circle>
-<circle cx="270.1" cy="215.5" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 9daba5c with changes (2026-11-05): 176 s</title></circle>
-<circle cx="285.4" cy="220.9" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 9daba5c with changes (2026-11-05): 152 s</title></circle>
-<circle cx="300.6" cy="218.6" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, a348abb with changes (2026-11-05): 163 s</title></circle>
-<circle cx="315.9" cy="217.1" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 9076ee7 with changes (2026-11-05): 169 s</title></circle>
-<circle cx="331.2" cy="207.4" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 9076ee7 with changes (2026-11-05): 211 s</title></circle>
-<circle cx="346.5" cy="197.1" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 3d91b41 with changes (2026-11-06): 256 s</title></circle>
-<circle cx="361.8" cy="230.5" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 7fc2086 with changes (2026-11-06): 111 s</title></circle>
-<circle cx="377.1" cy="230.7" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 7fc2086 with changes (2026-11-06): 110 s</title></circle>
-<circle cx="392.4" cy="219.1" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 68151d3 with changes (2026-11-06): 160 s</title></circle>
-<circle cx="407.7" cy="206.7" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 12ecca9 with changes (2026-11-06): 214 s</title></circle>
-<circle cx="423.0" cy="213.2" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 12ecca9 with changes (2026-11-06): 186 s</title></circle>
-<circle cx="438.3" cy="219.0" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 12ecca9 with changes (2026-11-06): 161 s</title></circle>
-<circle cx="453.5" cy="212.7" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 481be5a with changes (2026-11-06): 188 s</title></circle>
-<circle cx="468.8" cy="218.2" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 75e0d51 with changes (2026-11-06): 164 s</title></circle>
-<circle cx="484.1" cy="213.8" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 0e2638d with changes (2026-11-06): 183 s</title></circle>
-<circle cx="499.4" cy="223.7" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 8ab9d9c with changes (2026-11-06): 140 s</title></circle>
-<circle cx="514.7" cy="239.9" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, a8bd9f5 with changes (2026-11-06): 69.8 s</title></circle>
-<circle cx="530.0" cy="231.2" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 92f1d04 with changes (2026-11-06): 108 s</title></circle>
-<polygon points="56.0,250.2 71.3,248.0 86.6,249.4 101.9,249.7 117.2,249.8 132.5,249.5 147.7,249.5 163.0,248.5 178.3,247.6 193.6,247.7 208.9,248.0 224.2,248.0 239.5,247.7 254.8,248.1 270.1,247.7 285.4,246.7 300.6,246.4 315.9,246.3 331.2,246.3 346.5,246.4 361.8,247.7 377.1,247.7 392.4,247.7 407.7,247.7 423.0,245.4 438.3,245.4 453.5,245.4 468.8,246.2 484.1,246.2 499.4,246.4 514.7,246.6 530.0,246.9 530.0,247.6 514.7,247.5 499.4,248.1 484.1,248.3 468.8,248.3 453.5,247.4 438.3,247.6 423.0,247.6 407.7,249.8 392.4,249.8 377.1,249.8 361.8,249.8 346.5,249.2 331.2,248.2 315.9,248.2 300.6,249.2 285.4,248.8 270.1,249.2 254.8,248.8 239.5,249.2 224.2,248.9 208.9,248.9 193.6,249.2 178.3,250.2 163.0,249.8 147.7,250.2 132.5,250.2 117.2,250.2 101.9,250.4 86.6,250.7 71.3,250.6 56.0,250.7" fill="var(--s2)" opacity="0.15"/>
-<path d="M56.0,250.4 L71.3,249.3 L86.6,250.0 L101.9,250.0 L117.2,250.0 L132.5,249.8 L147.7,249.8 L163.0,249.2 L178.3,248.9 L193.6,248.4 L208.9,248.5 L224.2,248.4 L239.5,248.4 L254.8,248.5 L270.1,248.5 L285.4,247.8 L300.6,247.8 L315.9,247.2 L331.2,247.2 L346.5,247.8 L361.8,248.7 L377.1,248.7 L392.4,248.7 L407.7,248.7 L423.0,246.5 L438.3,246.5 L453.5,246.4 L468.8,247.2 L484.1,247.2 L499.4,247.2 L514.7,247.1 L530.0,247.2" fill="none" stroke="var(--s2)" stroke-width="2" stroke-linejoin="round"/>
+<circle cx="70.4" cy="218.6" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, d13d4d7 with changes (2026-11-05): 163 s</title></circle>
+<circle cx="84.7" cy="232.0" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 77ff5b5 with changes (2026-11-05): 104 s</title></circle>
+<circle cx="99.1" cy="232.4" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, ca9bcbf with changes (2026-11-05): 103 s</title></circle>
+<circle cx="113.5" cy="237.3" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 47bb65c with changes (2026-11-05): 81.1 s</title></circle>
+<circle cx="127.8" cy="235.9" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 5ee1eff with changes (2026-11-05): 87.3 s</title></circle>
+<circle cx="142.2" cy="235.9" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 5ee1eff with changes (2026-11-05): 87.3 s</title></circle>
+<circle cx="156.5" cy="219.6" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 69c7642 with changes (2026-11-05): 158 s</title></circle>
+<circle cx="185.3" cy="226.7" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, fa729b8 with changes (2026-11-05): 127 s</title></circle>
+<circle cx="199.6" cy="224.8" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, fea0fa1 with changes (2026-11-05): 136 s</title></circle>
+<circle cx="214.0" cy="225.7" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 5910a01 with changes (2026-11-05): 132 s</title></circle>
+<circle cx="228.4" cy="231.1" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 5910a01 with changes (2026-11-05): 108 s</title></circle>
+<circle cx="242.7" cy="214.8" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 9daba5c with changes (2026-11-05): 179 s</title></circle>
+<circle cx="257.1" cy="215.5" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 9daba5c with changes (2026-11-05): 176 s</title></circle>
+<circle cx="271.5" cy="220.9" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 9daba5c with changes (2026-11-05): 152 s</title></circle>
+<circle cx="285.8" cy="218.6" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, a348abb with changes (2026-11-05): 163 s</title></circle>
+<circle cx="300.2" cy="217.1" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 9076ee7 with changes (2026-11-05): 169 s</title></circle>
+<circle cx="314.5" cy="207.4" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 9076ee7 with changes (2026-11-05): 211 s</title></circle>
+<circle cx="328.9" cy="197.1" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 3d91b41 with changes (2026-11-06): 256 s</title></circle>
+<circle cx="343.3" cy="230.5" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 7fc2086 with changes (2026-11-06): 111 s</title></circle>
+<circle cx="357.6" cy="230.7" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 7fc2086 with changes (2026-11-06): 110 s</title></circle>
+<circle cx="372.0" cy="219.1" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 68151d3 with changes (2026-11-06): 160 s</title></circle>
+<circle cx="386.4" cy="206.7" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 12ecca9 with changes (2026-11-06): 214 s</title></circle>
+<circle cx="400.7" cy="213.2" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 12ecca9 with changes (2026-11-06): 186 s</title></circle>
+<circle cx="415.1" cy="219.0" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 12ecca9 with changes (2026-11-06): 161 s</title></circle>
+<circle cx="429.5" cy="212.7" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 481be5a with changes (2026-11-06): 188 s</title></circle>
+<circle cx="443.8" cy="218.2" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 75e0d51 with changes (2026-11-06): 164 s</title></circle>
+<circle cx="458.2" cy="213.8" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 0e2638d with changes (2026-11-06): 183 s</title></circle>
+<circle cx="472.5" cy="223.7" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 8ab9d9c with changes (2026-11-06): 140 s</title></circle>
+<circle cx="486.9" cy="239.9" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, a8bd9f5 with changes (2026-11-06): 69.8 s</title></circle>
+<circle cx="501.3" cy="231.2" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 92f1d04 with changes (2026-11-06): 108 s</title></circle>
+<circle cx="515.6" cy="225.8" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, 849ccbd (2026-11-07): 132 s</title></circle>
+<circle cx="530.0" cy="242.7" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>C++, f104ea0 (2026-11-08): 58 s</title></circle>
+<polygon points="56.0,250.2 70.4,248.0 84.7,249.4 99.1,249.7 113.5,249.8 127.8,249.5 142.2,249.5 156.5,248.5 170.9,247.6 185.3,247.7 199.6,248.0 214.0,248.0 228.4,247.7 242.7,248.1 257.1,247.7 271.5,246.7 285.8,246.4 300.2,246.3 314.5,246.3 328.9,246.4 343.3,247.7 357.6,247.7 372.0,247.7 386.4,247.7 400.7,245.4 415.1,245.4 429.5,245.4 443.8,246.2 458.2,246.2 472.5,246.4 486.9,246.4 501.3,246.1 515.6,246.8 530.0,246.1 530.0,247.7 515.6,249.0 501.3,248.4 486.9,248.1 472.5,248.1 458.2,248.3 443.8,248.3 429.5,247.4 415.1,247.6 400.7,247.6 386.4,249.8 372.0,249.8 357.6,249.8 343.3,249.8 328.9,249.2 314.5,248.2 300.2,248.2 285.8,249.2 271.5,248.8 257.1,249.2 242.7,248.8 228.4,249.2 214.0,248.9 199.6,248.9 185.3,249.2 170.9,250.2 156.5,249.8 142.2,250.2 127.8,250.2 113.5,250.2 99.1,250.4 84.7,250.7 70.4,250.6 56.0,250.7" fill="var(--s2)" opacity="0.15"/>
+<path d="M56.0,250.4 L70.4,249.3 L84.7,250.0 L99.1,250.0 L113.5,250.0 L127.8,249.8 L142.2,249.8 L156.5,249.2 L170.9,248.9 L185.3,248.4 L199.6,248.5 L214.0,248.4 L228.4,248.4 L242.7,248.5 L257.1,248.5 L271.5,247.8 L285.8,247.8 L300.2,247.2 L314.5,247.2 L328.9,247.8 L343.3,248.7 L357.6,248.7 L372.0,248.7 L386.4,248.7 L400.7,246.5 L415.1,246.5 L429.5,246.4 L443.8,247.2 L458.2,247.2 L472.5,247.2 L486.9,247.2 L501.3,247.2 L515.6,247.9 L530.0,246.9" fill="none" stroke="var(--s2)" stroke-width="2" stroke-linejoin="round"/>
 <circle cx="56.0" cy="241.5" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 7649668 with changes (2026-11-05): 63.1 s</title></circle>
-<circle cx="71.3" cy="250.7" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, d13d4d7 with changes (2026-11-05): 23 s</title></circle>
-<circle cx="86.6" cy="250.4" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 77ff5b5 with changes (2026-11-05): 24.2 s</title></circle>
-<circle cx="101.9" cy="248.2" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, ca9bcbf with changes (2026-11-05): 34.1 s</title></circle>
-<circle cx="117.2" cy="250.0" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 47bb65c with changes (2026-11-05): 25.9 s</title></circle>
-<circle cx="132.5" cy="249.8" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 5ee1eff with changes (2026-11-05): 26.8 s</title></circle>
-<circle cx="147.7" cy="250.2" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 5ee1eff with changes (2026-11-05): 25.4 s</title></circle>
-<circle cx="163.0" cy="244.9" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 69c7642 with changes (2026-11-05): 48.1 s</title></circle>
-<circle cx="178.3" cy="249.2" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, fa729b8 with changes (2026-11-05): 29.6 s</title></circle>
-<circle cx="193.6" cy="248.9" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, fa729b8 with changes (2026-11-05): 30.9 s</title></circle>
-<circle cx="208.9" cy="246.6" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, fea0fa1 with changes (2026-11-05): 40.7 s</title></circle>
-<circle cx="224.2" cy="248.4" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 5910a01 with changes (2026-11-05): 32.9 s</title></circle>
-<circle cx="239.5" cy="248.5" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 5910a01 with changes (2026-11-05): 32.8 s</title></circle>
-<circle cx="254.8" cy="247.4" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 9daba5c with changes (2026-11-05): 37.2 s</title></circle>
-<circle cx="270.1" cy="249.2" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 9daba5c with changes (2026-11-05): 29.5 s</title></circle>
-<circle cx="285.4" cy="248.8" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 9daba5c with changes (2026-11-05): 31.1 s</title></circle>
-<circle cx="300.6" cy="246.1" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, a348abb with changes (2026-11-05): 43 s</title></circle>
-<circle cx="315.9" cy="247.8" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 9076ee7 with changes (2026-11-05): 35.7 s</title></circle>
-<circle cx="331.2" cy="246.3" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 9076ee7 with changes (2026-11-05): 42.1 s</title></circle>
-<circle cx="346.5" cy="247.2" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 3d91b41 with changes (2026-11-06): 38.1 s</title></circle>
-<circle cx="361.8" cy="249.2" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 7fc2086 with changes (2026-11-06): 29.5 s</title></circle>
-<circle cx="377.1" cy="249.8" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 7fc2086 with changes (2026-11-06): 27.1 s</title></circle>
-<circle cx="392.4" cy="248.7" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 68151d3 with changes (2026-11-06): 31.6 s</title></circle>
-<circle cx="407.7" cy="246.5" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 12ecca9 with changes (2026-11-06): 41.3 s</title></circle>
-<circle cx="423.0" cy="245.4" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 12ecca9 with changes (2026-11-06): 46.2 s</title></circle>
-<circle cx="438.3" cy="249.5" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 12ecca9 with changes (2026-11-06): 28.1 s</title></circle>
-<circle cx="453.5" cy="246.2" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 481be5a with changes (2026-11-06): 42.6 s</title></circle>
-<circle cx="468.8" cy="248.9" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 75e0d51 with changes (2026-11-06): 30.8 s</title></circle>
-<circle cx="484.1" cy="246.4" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 0e2638d with changes (2026-11-06): 41.9 s</title></circle>
-<circle cx="499.4" cy="247.2" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 8ab9d9c with changes (2026-11-06): 38.1 s</title></circle>
-<circle cx="514.7" cy="248.9" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, a8bd9f5 with changes (2026-11-06): 30.8 s</title></circle>
-<circle cx="530.0" cy="246.9" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 92f1d04 with changes (2026-11-06): 39.5 s</title></circle>
-<polygon points="56.0,252.0 71.3,248.7 86.6,251.5 101.9,251.6 117.2,251.7 132.5,251.2 147.7,251.2 163.0,248.6 178.3,248.7 193.6,248.3 208.9,248.3 224.2,247.3 239.5,247.5 254.8,247.2 270.1,246.5 285.4,248.4 300.6,248.9 315.9,248.3 331.2,247.8 346.5,246.5 361.8,250.4 377.1,250.4 392.4,250.4 407.7,249.5 423.0,248.2 438.3,248.7 453.5,248.8 468.8,249.4 484.1,249.4 499.4,248.8 514.7,248.5 530.0,248.7 530.0,251.0 514.7,250.2 499.4,250.4 484.1,249.9 468.8,249.9 453.5,250.0 438.3,250.1 423.0,250.6 407.7,251.8 392.4,251.8 377.1,251.8 361.8,251.8 346.5,251.4 331.2,250.1 315.9,249.6 300.6,249.1 285.4,249.6 270.1,249.1 254.8,249.4 239.5,249.2 224.2,249.4 208.9,250.0 193.6,250.0 178.3,250.1 163.0,251.6 147.7,252.0 132.5,252.0 117.2,252.2 101.9,252.3 86.6,252.3 71.3,252.3 56.0,252.3" fill="var(--s3)" opacity="0.15"/>
-<path d="M56.0,252.2 L71.3,250.5 L86.6,251.9 L101.9,251.9 L117.2,251.9 L132.5,251.6 L147.7,251.6 L163.0,250.1 L178.3,249.4 L193.6,249.2 L208.9,249.2 L224.2,248.3 L239.5,248.3 L254.8,248.3 L270.1,247.8 L285.4,249.0 L300.6,249.0 L315.9,249.0 L331.2,249.0 L346.5,249.0 L361.8,251.1 L377.1,251.1 L392.4,251.1 L407.7,250.6 L423.0,249.4 L438.3,249.4 L453.5,249.4 L468.8,249.6 L484.1,249.6 L499.4,249.6 L514.7,249.3 L530.0,249.9" fill="none" stroke="var(--s3)" stroke-width="2" stroke-linejoin="round"/>
+<circle cx="70.4" cy="250.7" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, d13d4d7 with changes (2026-11-05): 23 s</title></circle>
+<circle cx="84.7" cy="250.4" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 77ff5b5 with changes (2026-11-05): 24.2 s</title></circle>
+<circle cx="99.1" cy="248.2" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, ca9bcbf with changes (2026-11-05): 34.1 s</title></circle>
+<circle cx="113.5" cy="250.0" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 47bb65c with changes (2026-11-05): 25.9 s</title></circle>
+<circle cx="127.8" cy="249.8" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 5ee1eff with changes (2026-11-05): 26.8 s</title></circle>
+<circle cx="142.2" cy="250.2" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 5ee1eff with changes (2026-11-05): 25.4 s</title></circle>
+<circle cx="156.5" cy="244.9" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 69c7642 with changes (2026-11-05): 48.1 s</title></circle>
+<circle cx="170.9" cy="249.2" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, fa729b8 with changes (2026-11-05): 29.6 s</title></circle>
+<circle cx="185.3" cy="248.9" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, fa729b8 with changes (2026-11-05): 30.9 s</title></circle>
+<circle cx="199.6" cy="246.6" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, fea0fa1 with changes (2026-11-05): 40.7 s</title></circle>
+<circle cx="214.0" cy="248.4" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 5910a01 with changes (2026-11-05): 32.9 s</title></circle>
+<circle cx="228.4" cy="248.5" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 5910a01 with changes (2026-11-05): 32.8 s</title></circle>
+<circle cx="242.7" cy="247.4" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 9daba5c with changes (2026-11-05): 37.2 s</title></circle>
+<circle cx="257.1" cy="249.2" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 9daba5c with changes (2026-11-05): 29.5 s</title></circle>
+<circle cx="271.5" cy="248.8" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 9daba5c with changes (2026-11-05): 31.1 s</title></circle>
+<circle cx="285.8" cy="246.1" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, a348abb with changes (2026-11-05): 43 s</title></circle>
+<circle cx="300.2" cy="247.8" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 9076ee7 with changes (2026-11-05): 35.7 s</title></circle>
+<circle cx="314.5" cy="246.3" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 9076ee7 with changes (2026-11-05): 42.1 s</title></circle>
+<circle cx="328.9" cy="247.2" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 3d91b41 with changes (2026-11-06): 38.1 s</title></circle>
+<circle cx="343.3" cy="249.2" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 7fc2086 with changes (2026-11-06): 29.5 s</title></circle>
+<circle cx="357.6" cy="249.8" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 7fc2086 with changes (2026-11-06): 27.1 s</title></circle>
+<circle cx="372.0" cy="248.7" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 68151d3 with changes (2026-11-06): 31.6 s</title></circle>
+<circle cx="386.4" cy="246.5" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 12ecca9 with changes (2026-11-06): 41.3 s</title></circle>
+<circle cx="400.7" cy="245.4" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 12ecca9 with changes (2026-11-06): 46.2 s</title></circle>
+<circle cx="415.1" cy="249.5" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 12ecca9 with changes (2026-11-06): 28.1 s</title></circle>
+<circle cx="429.5" cy="246.2" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 481be5a with changes (2026-11-06): 42.6 s</title></circle>
+<circle cx="443.8" cy="248.9" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 75e0d51 with changes (2026-11-06): 30.8 s</title></circle>
+<circle cx="458.2" cy="246.4" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 0e2638d with changes (2026-11-06): 41.9 s</title></circle>
+<circle cx="472.5" cy="247.2" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 8ab9d9c with changes (2026-11-06): 38.1 s</title></circle>
+<circle cx="486.9" cy="248.9" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, a8bd9f5 with changes (2026-11-06): 30.8 s</title></circle>
+<circle cx="501.3" cy="246.9" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 92f1d04 with changes (2026-11-06): 39.5 s</title></circle>
+<circle cx="515.6" cy="249.1" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, 849ccbd (2026-11-07): 29.9 s</title></circle>
+<circle cx="530.0" cy="246.1" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>C#, f104ea0 (2026-11-08): 43.1 s</title></circle>
+<polygon points="56.0,252.0 70.4,248.7 84.7,251.5 99.1,251.6 113.5,251.7 127.8,251.2 142.2,251.2 156.5,248.6 170.9,248.7 185.3,248.3 199.6,248.3 214.0,247.3 228.4,247.5 242.7,247.2 257.1,246.5 271.5,248.4 285.8,248.9 300.2,248.3 314.5,247.8 328.9,246.5 343.3,250.4 357.6,250.4 372.0,250.4 386.4,249.5 400.7,248.2 415.1,248.7 429.5,248.8 443.8,249.4 458.2,249.4 472.5,248.8 486.9,248.8 501.3,249.0 515.6,249.3 530.0,248.3 530.0,250.7 515.6,250.9 501.3,250.7 486.9,250.9 472.5,250.4 458.2,249.9 443.8,249.9 429.5,250.0 415.1,250.1 400.7,250.6 386.4,251.8 372.0,251.8 357.6,251.8 343.3,251.8 328.9,251.4 314.5,250.1 300.2,249.6 285.8,249.1 271.5,249.6 257.1,249.1 242.7,249.4 228.4,249.2 214.0,249.4 199.6,250.0 185.3,250.0 170.9,250.1 156.5,251.6 142.2,252.0 127.8,252.0 113.5,252.2 99.1,252.3 84.7,252.3 70.4,252.3 56.0,252.3" fill="var(--s3)" opacity="0.15"/>
+<path d="M56.0,252.2 L70.4,250.5 L84.7,251.9 L99.1,251.9 L113.5,251.9 L127.8,251.6 L142.2,251.6 L156.5,250.1 L170.9,249.4 L185.3,249.2 L199.6,249.2 L214.0,248.3 L228.4,248.3 L242.7,248.3 L257.1,247.8 L271.5,249.0 L285.8,249.0 L300.2,249.0 L314.5,249.0 L328.9,249.0 L343.3,251.1 L357.6,251.1 L372.0,251.1 L386.4,250.6 L400.7,249.4 L415.1,249.4 L429.5,249.4 L443.8,249.6 L458.2,249.6 L472.5,249.6 L486.9,249.9 L501.3,249.9 L515.6,250.1 L530.0,249.5" fill="none" stroke="var(--s3)" stroke-width="2" stroke-linejoin="round"/>
 <circle cx="56.0" cy="248.8" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 7649668 with changes (2026-11-05): 31.5 s</title></circle>
-<circle cx="71.3" cy="252.3" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, d13d4d7 with changes (2026-11-05): 15.9 s</title></circle>
-<circle cx="86.6" cy="252.2" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 77ff5b5 with changes (2026-11-05): 16.6 s</title></circle>
-<circle cx="101.9" cy="248.5" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, ca9bcbf with changes (2026-11-05): 32.6 s</title></circle>
-<circle cx="117.2" cy="251.9" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 47bb65c with changes (2026-11-05): 17.7 s</title></circle>
-<circle cx="132.5" cy="251.6" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 5ee1eff with changes (2026-11-05): 19.2 s</title></circle>
-<circle cx="147.7" cy="252.0" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 5ee1eff with changes (2026-11-05): 17.5 s</title></circle>
-<circle cx="163.0" cy="247.0" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 69c7642 with changes (2026-11-05): 39.1 s</title></circle>
-<circle cx="178.3" cy="250.1" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, fa729b8 with changes (2026-11-05): 25.6 s</title></circle>
-<circle cx="193.6" cy="249.4" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, fa729b8 with changes (2026-11-05): 28.7 s</title></circle>
-<circle cx="208.9" cy="249.2" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, fea0fa1 with changes (2026-11-05): 29.6 s</title></circle>
-<circle cx="224.2" cy="248.3" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 5910a01 with changes (2026-11-05): 33.3 s</title></circle>
-<circle cx="239.5" cy="247.2" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 5910a01 with changes (2026-11-05): 38.1 s</title></circle>
-<circle cx="254.8" cy="245.6" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 9daba5c with changes (2026-11-05): 45.3 s</title></circle>
-<circle cx="270.1" cy="249.1" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 9daba5c with changes (2026-11-05): 30 s</title></circle>
-<circle cx="285.4" cy="249.6" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 9daba5c with changes (2026-11-05): 27.8 s</title></circle>
-<circle cx="300.6" cy="247.8" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, a348abb with changes (2026-11-05): 35.7 s</title></circle>
-<circle cx="315.9" cy="249.0" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 9076ee7 with changes (2026-11-05): 30.5 s</title></circle>
-<circle cx="331.2" cy="249.0" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 9076ee7 with changes (2026-11-05): 30.6 s</title></circle>
-<circle cx="346.5" cy="246.1" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 3d91b41 with changes (2026-11-06): 43 s</title></circle>
-<circle cx="361.8" cy="251.4" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 7fc2086 with changes (2026-11-06): 19.9 s</title></circle>
-<circle cx="377.1" cy="251.8" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 7fc2086 with changes (2026-11-06): 18.4 s</title></circle>
-<circle cx="392.4" cy="251.1" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 68151d3 with changes (2026-11-06): 21.3 s</title></circle>
-<circle cx="407.7" cy="248.7" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 12ecca9 with changes (2026-11-06): 31.9 s</title></circle>
-<circle cx="423.0" cy="246.8" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 12ecca9 with changes (2026-11-06): 39.8 s</title></circle>
-<circle cx="438.3" cy="250.6" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 12ecca9 with changes (2026-11-06): 23.4 s</title></circle>
-<circle cx="453.5" cy="249.4" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 481be5a with changes (2026-11-06): 28.7 s</title></circle>
-<circle cx="468.8" cy="249.6" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 75e0d51 with changes (2026-11-06): 27.8 s</title></circle>
-<circle cx="484.1" cy="248.8" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 0e2638d with changes (2026-11-06): 31.3 s</title></circle>
-<circle cx="499.4" cy="249.9" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 8ab9d9c with changes (2026-11-06): 26.7 s</title></circle>
-<circle cx="514.7" cy="251.0" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, a8bd9f5 with changes (2026-11-06): 21.6 s</title></circle>
-<circle cx="530.0" cy="248.1" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 92f1d04 with changes (2026-11-06): 34.3 s</title></circle>
-<polygon points="56.0,252.7 71.3,251.7 86.6,252.3 101.9,252.9 132.5,252.6 147.7,251.1 163.0,251.1 178.3,251.2 193.6,251.5 208.9,251.5 239.5,250.8 254.8,251.3 270.1,250.5 285.4,250.5 300.6,250.6 315.9,250.2 331.2,250.2 346.5,251.6 377.1,249.7 392.4,249.7 407.7,251.0 423.0,250.8 438.3,250.1 453.5,250.2 468.8,250.2 484.1,250.2 499.4,249.8 514.7,250.0 530.0,251.8 530.0,252.6 514.7,252.4 499.4,250.7 484.1,252.5 468.8,252.5 453.5,251.4 438.3,251.5 423.0,252.0 407.7,252.9 392.4,252.0 377.1,251.7 346.5,252.9 331.2,251.2 315.9,251.2 300.6,252.0 285.4,252.0 270.1,252.0 254.8,252.7 239.5,252.3 208.9,252.5 193.6,252.5 178.3,252.8 163.0,252.9 147.7,252.9 132.5,253.3 101.9,253.4 86.6,253.6 71.3,253.4 56.0,253.6" fill="var(--s4)" opacity="0.15"/>
-<path d="M56.0,253.2 L71.3,252.5 L86.6,252.9 L101.9,253.2 L132.5,252.9 L147.7,252.0 L163.0,252.0 L178.3,252.0 L193.6,252.0 L208.9,252.0 L239.5,251.5 L254.8,252.0 L270.1,251.3 L285.4,251.3 L300.6,251.3 L315.9,250.7 L331.2,250.7 L346.5,252.3 L377.1,250.7 L392.4,250.8 L407.7,252.0 L423.0,251.4 L438.3,250.8 L453.5,250.8 L468.8,251.4 L484.1,251.4 L499.4,250.2 L514.7,251.2 L530.0,252.2" fill="none" stroke="var(--s4)" stroke-width="2" stroke-linejoin="round"/>
+<circle cx="70.4" cy="252.3" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, d13d4d7 with changes (2026-11-05): 15.9 s</title></circle>
+<circle cx="84.7" cy="252.2" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 77ff5b5 with changes (2026-11-05): 16.6 s</title></circle>
+<circle cx="99.1" cy="248.5" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, ca9bcbf with changes (2026-11-05): 32.6 s</title></circle>
+<circle cx="113.5" cy="251.9" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 47bb65c with changes (2026-11-05): 17.7 s</title></circle>
+<circle cx="127.8" cy="251.6" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 5ee1eff with changes (2026-11-05): 19.2 s</title></circle>
+<circle cx="142.2" cy="252.0" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 5ee1eff with changes (2026-11-05): 17.5 s</title></circle>
+<circle cx="156.5" cy="247.0" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 69c7642 with changes (2026-11-05): 39.1 s</title></circle>
+<circle cx="170.9" cy="250.1" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, fa729b8 with changes (2026-11-05): 25.6 s</title></circle>
+<circle cx="185.3" cy="249.4" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, fa729b8 with changes (2026-11-05): 28.7 s</title></circle>
+<circle cx="199.6" cy="249.2" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, fea0fa1 with changes (2026-11-05): 29.6 s</title></circle>
+<circle cx="214.0" cy="248.3" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 5910a01 with changes (2026-11-05): 33.3 s</title></circle>
+<circle cx="228.4" cy="247.2" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 5910a01 with changes (2026-11-05): 38.1 s</title></circle>
+<circle cx="242.7" cy="245.6" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 9daba5c with changes (2026-11-05): 45.3 s</title></circle>
+<circle cx="257.1" cy="249.1" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 9daba5c with changes (2026-11-05): 30 s</title></circle>
+<circle cx="271.5" cy="249.6" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 9daba5c with changes (2026-11-05): 27.8 s</title></circle>
+<circle cx="285.8" cy="247.8" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, a348abb with changes (2026-11-05): 35.7 s</title></circle>
+<circle cx="300.2" cy="249.0" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 9076ee7 with changes (2026-11-05): 30.5 s</title></circle>
+<circle cx="314.5" cy="249.0" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 9076ee7 with changes (2026-11-05): 30.6 s</title></circle>
+<circle cx="328.9" cy="246.1" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 3d91b41 with changes (2026-11-06): 43 s</title></circle>
+<circle cx="343.3" cy="251.4" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 7fc2086 with changes (2026-11-06): 19.9 s</title></circle>
+<circle cx="357.6" cy="251.8" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 7fc2086 with changes (2026-11-06): 18.4 s</title></circle>
+<circle cx="372.0" cy="251.1" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 68151d3 with changes (2026-11-06): 21.3 s</title></circle>
+<circle cx="386.4" cy="248.7" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 12ecca9 with changes (2026-11-06): 31.9 s</title></circle>
+<circle cx="400.7" cy="246.8" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 12ecca9 with changes (2026-11-06): 39.8 s</title></circle>
+<circle cx="415.1" cy="250.6" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 12ecca9 with changes (2026-11-06): 23.4 s</title></circle>
+<circle cx="429.5" cy="249.4" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 481be5a with changes (2026-11-06): 28.7 s</title></circle>
+<circle cx="443.8" cy="249.6" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 75e0d51 with changes (2026-11-06): 27.8 s</title></circle>
+<circle cx="458.2" cy="248.8" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 0e2638d with changes (2026-11-06): 31.3 s</title></circle>
+<circle cx="472.5" cy="249.9" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 8ab9d9c with changes (2026-11-06): 26.7 s</title></circle>
+<circle cx="486.9" cy="251.0" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, a8bd9f5 with changes (2026-11-06): 21.6 s</title></circle>
+<circle cx="501.3" cy="248.1" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 92f1d04 with changes (2026-11-06): 34.3 s</title></circle>
+<circle cx="515.6" cy="250.7" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, 849ccbd (2026-11-07): 23 s</title></circle>
+<circle cx="530.0" cy="249.5" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>Java, f104ea0 (2026-11-08): 28.3 s</title></circle>
+<polygon points="56.0,252.7 70.4,251.7 84.7,252.3 99.1,252.9 127.8,252.6 142.2,251.1 156.5,251.1 170.9,251.2 185.3,251.5 199.6,251.5 228.4,250.8 242.7,251.3 257.1,250.5 271.5,250.5 285.8,250.6 300.2,250.2 314.5,250.2 328.9,251.6 357.6,249.7 372.0,249.7 386.4,251.0 400.7,250.8 415.1,250.1 429.5,250.2 443.8,250.2 458.2,250.2 472.5,249.8 486.9,251.1 501.3,251.1 515.6,249.7 530.0,247.8 530.0,251.9 515.6,252.0 501.3,252.6 486.9,252.6 472.5,250.7 458.2,252.5 443.8,252.5 429.5,251.4 415.1,251.5 400.7,252.0 386.4,252.9 372.0,252.0 357.6,251.7 328.9,252.9 314.5,251.2 300.2,251.2 285.8,252.0 271.5,252.0 257.1,252.0 242.7,252.7 228.4,252.3 199.6,252.5 185.3,252.5 170.9,252.8 156.5,252.9 142.2,252.9 127.8,253.3 99.1,253.4 84.7,253.6 70.4,253.4 56.0,253.6" fill="var(--s4)" opacity="0.15"/>
+<path d="M56.0,253.2 L70.4,252.5 L84.7,252.9 L99.1,253.2 L127.8,252.9 L142.2,252.0 L156.5,252.0 L170.9,252.0 L185.3,252.0 L199.6,252.0 L228.4,251.5 L242.7,252.0 L257.1,251.3 L271.5,251.3 L285.8,251.3 L300.2,250.7 L314.5,250.7 L328.9,252.3 L357.6,250.7 L372.0,250.8 L386.4,252.0 L400.7,251.4 L415.1,250.8 L429.5,250.8 L443.8,251.4 L458.2,251.4 L472.5,250.2 L486.9,251.9 L501.3,251.9 L515.6,250.8 L530.0,249.8" fill="none" stroke="var(--s4)" stroke-width="2" stroke-linejoin="round"/>
 <circle cx="56.0" cy="250.9" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 7649668 with changes (2026-11-05): 22.1 s</title></circle>
-<circle cx="71.3" cy="253.6" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, d13d4d7 with changes (2026-11-05): 10.4 s</title></circle>
-<circle cx="86.6" cy="253.2" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 77ff5b5 with changes (2026-11-05): 12.3 s</title></circle>
-<circle cx="101.9" cy="251.9" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, ca9bcbf with changes (2026-11-05): 17.9 s</title></circle>
-<circle cx="132.5" cy="252.9" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 5ee1eff with changes (2026-11-05): 13.3 s</title></circle>
-<circle cx="147.7" cy="253.3" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 5ee1eff with changes (2026-11-05): 11.9 s</title></circle>
-<circle cx="163.0" cy="249.4" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 69c7642 with changes (2026-11-05): 28.6 s</title></circle>
-<circle cx="178.3" cy="252.0" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, fa729b8 with changes (2026-11-05): 17.4 s</title></circle>
-<circle cx="193.6" cy="251.5" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, fa729b8 with changes (2026-11-05): 19.5 s</title></circle>
-<circle cx="208.9" cy="252.8" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, fea0fa1 with changes (2026-11-05): 14 s</title></circle>
-<circle cx="239.5" cy="252.3" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 5910a01 with changes (2026-11-05): 16.3 s</title></circle>
-<circle cx="254.8" cy="249.9" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 9daba5c with changes (2026-11-05): 26.5 s</title></circle>
-<circle cx="270.1" cy="251.3" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 9daba5c with changes (2026-11-05): 20.5 s</title></circle>
-<circle cx="285.4" cy="252.0" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 9daba5c with changes (2026-11-05): 17.5 s</title></circle>
-<circle cx="300.6" cy="250.5" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, a348abb with changes (2026-11-05): 23.8 s</title></circle>
-<circle cx="315.9" cy="252.4" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 9076ee7 with changes (2026-11-05): 15.7 s</title></circle>
-<circle cx="331.2" cy="250.7" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 9076ee7 with changes (2026-11-05): 23.1 s</title></circle>
-<circle cx="346.5" cy="250.2" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 3d91b41 with changes (2026-11-06): 25.2 s</title></circle>
-<circle cx="377.1" cy="252.9" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 7fc2086 with changes (2026-11-06): 13.4 s</title></circle>
-<circle cx="392.4" cy="252.3" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 68151d3 with changes (2026-11-06): 16.2 s</title></circle>
-<circle cx="407.7" cy="249.7" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 12ecca9 with changes (2026-11-06): 27.6 s</title></circle>
-<circle cx="423.0" cy="250.8" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 12ecca9 with changes (2026-11-06): 22.6 s</title></circle>
-<circle cx="438.3" cy="252.0" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 12ecca9 with changes (2026-11-06): 17.6 s</title></circle>
-<circle cx="453.5" cy="251.4" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 481be5a with changes (2026-11-06): 20.1 s</title></circle>
-<circle cx="468.8" cy="250.1" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 75e0d51 with changes (2026-11-06): 25.5 s</title></circle>
-<circle cx="484.1" cy="250.2" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 0e2638d with changes (2026-11-06): 25 s</title></circle>
-<circle cx="499.4" cy="252.6" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 8ab9d9c with changes (2026-11-06): 14.8 s</title></circle>
-<circle cx="514.7" cy="252.2" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, a8bd9f5 with changes (2026-11-06): 16.6 s</title></circle>
-<circle cx="530.0" cy="249.8" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 92f1d04 with changes (2026-11-06): 26.8 s</title></circle>
-<polygon points="56.0,254.0 71.3,253.6 86.6,254.0 101.9,254.1 117.2,254.1 132.5,253.8 147.7,253.7 163.0,253.6 178.3,253.6 193.6,253.7 208.9,253.8 224.2,253.8 239.5,253.7 254.8,253.2 270.1,252.8 285.4,252.8 300.6,253.2 315.9,252.7 331.2,252.7 346.5,253.3 361.8,253.3 377.1,252.8 392.4,253.2 407.7,253.0 423.0,253.1 438.3,252.7 453.5,252.7 468.8,252.7 484.1,252.8 499.4,251.7 514.7,251.6 530.0,253.1 530.0,253.8 514.7,253.5 499.4,253.7 484.1,253.8 468.8,253.9 453.5,253.8 438.3,253.8 423.0,253.5 407.7,254.0 392.4,253.7 377.1,254.2 361.8,253.7 346.5,254.1 331.2,253.9 315.9,253.9 300.6,253.6 285.4,253.9 270.1,253.9 254.8,253.9 239.5,254.1 224.2,254.0 208.9,254.0 193.6,254.1 178.3,254.5 163.0,254.5 147.7,254.5 132.5,254.4 117.2,254.5 101.9,254.5 86.6,254.6 71.3,254.4 56.0,254.6" fill="var(--s5)" opacity="0.15"/>
-<path d="M56.0,254.3 L71.3,254.0 L86.6,254.3 L101.9,254.3 L117.2,254.3 L132.5,254.1 L147.7,254.1 L163.0,254.0 L178.3,254.0 L193.6,253.9 L208.9,253.9 L224.2,253.9 L239.5,253.9 L254.8,253.6 L270.1,253.4 L285.4,253.4 L300.6,253.4 L315.9,253.3 L331.2,253.3 L346.5,253.7 L361.8,253.5 L377.1,253.5 L392.4,253.5 L407.7,253.5 L423.0,253.3 L438.3,253.2 L453.5,253.2 L468.8,253.3 L484.1,253.3 L499.4,252.7 L514.7,252.6 L530.0,253.5" fill="none" stroke="var(--s5)" stroke-width="2" stroke-linejoin="round"/>
+<circle cx="70.4" cy="253.6" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, d13d4d7 with changes (2026-11-05): 10.4 s</title></circle>
+<circle cx="84.7" cy="253.2" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 77ff5b5 with changes (2026-11-05): 12.3 s</title></circle>
+<circle cx="99.1" cy="251.9" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, ca9bcbf with changes (2026-11-05): 17.9 s</title></circle>
+<circle cx="127.8" cy="252.9" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 5ee1eff with changes (2026-11-05): 13.3 s</title></circle>
+<circle cx="142.2" cy="253.3" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 5ee1eff with changes (2026-11-05): 11.9 s</title></circle>
+<circle cx="156.5" cy="249.4" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 69c7642 with changes (2026-11-05): 28.6 s</title></circle>
+<circle cx="170.9" cy="252.0" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, fa729b8 with changes (2026-11-05): 17.4 s</title></circle>
+<circle cx="185.3" cy="251.5" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, fa729b8 with changes (2026-11-05): 19.5 s</title></circle>
+<circle cx="199.6" cy="252.8" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, fea0fa1 with changes (2026-11-05): 14 s</title></circle>
+<circle cx="228.4" cy="252.3" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 5910a01 with changes (2026-11-05): 16.3 s</title></circle>
+<circle cx="242.7" cy="249.9" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 9daba5c with changes (2026-11-05): 26.5 s</title></circle>
+<circle cx="257.1" cy="251.3" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 9daba5c with changes (2026-11-05): 20.5 s</title></circle>
+<circle cx="271.5" cy="252.0" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 9daba5c with changes (2026-11-05): 17.5 s</title></circle>
+<circle cx="285.8" cy="250.5" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, a348abb with changes (2026-11-05): 23.8 s</title></circle>
+<circle cx="300.2" cy="252.4" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 9076ee7 with changes (2026-11-05): 15.7 s</title></circle>
+<circle cx="314.5" cy="250.7" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 9076ee7 with changes (2026-11-05): 23.1 s</title></circle>
+<circle cx="328.9" cy="250.2" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 3d91b41 with changes (2026-11-06): 25.2 s</title></circle>
+<circle cx="357.6" cy="252.9" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 7fc2086 with changes (2026-11-06): 13.4 s</title></circle>
+<circle cx="372.0" cy="252.3" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 68151d3 with changes (2026-11-06): 16.2 s</title></circle>
+<circle cx="386.4" cy="249.7" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 12ecca9 with changes (2026-11-06): 27.6 s</title></circle>
+<circle cx="400.7" cy="250.8" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 12ecca9 with changes (2026-11-06): 22.6 s</title></circle>
+<circle cx="415.1" cy="252.0" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 12ecca9 with changes (2026-11-06): 17.6 s</title></circle>
+<circle cx="429.5" cy="251.4" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 481be5a with changes (2026-11-06): 20.1 s</title></circle>
+<circle cx="443.8" cy="250.1" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 75e0d51 with changes (2026-11-06): 25.5 s</title></circle>
+<circle cx="458.2" cy="250.2" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 0e2638d with changes (2026-11-06): 25 s</title></circle>
+<circle cx="472.5" cy="252.6" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 8ab9d9c with changes (2026-11-06): 14.8 s</title></circle>
+<circle cx="486.9" cy="252.2" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, a8bd9f5 with changes (2026-11-06): 16.6 s</title></circle>
+<circle cx="501.3" cy="249.8" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 92f1d04 with changes (2026-11-06): 26.8 s</title></circle>
+<circle cx="515.6" cy="251.9" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, 849ccbd (2026-11-07): 18 s</title></circle>
+<circle cx="530.0" cy="241.1" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>JavaScript, f104ea0 (2026-11-08): 64.6 s</title></circle>
+<polygon points="56.0,254.0 70.4,253.6 84.7,254.0 99.1,254.1 113.5,254.1 127.8,253.8 142.2,253.7 156.5,253.6 170.9,253.6 185.3,253.7 199.6,253.8 214.0,253.8 228.4,253.7 242.7,253.2 257.1,252.8 271.5,252.8 285.8,253.2 300.2,252.7 314.5,252.7 328.9,253.3 343.3,253.3 357.6,252.8 372.0,253.2 386.4,253.0 400.7,253.1 415.1,252.7 429.5,252.7 443.8,252.7 458.2,252.8 472.5,251.7 486.9,252.5 501.3,252.6 515.6,252.5 530.0,252.2 530.0,253.1 515.6,253.3 501.3,253.6 486.9,253.8 472.5,253.7 458.2,253.8 443.8,253.9 429.5,253.8 415.1,253.8 400.7,253.5 386.4,254.0 372.0,253.7 357.6,254.2 343.3,253.7 328.9,254.1 314.5,253.9 300.2,253.9 285.8,253.6 271.5,253.9 257.1,253.9 242.7,253.9 228.4,254.1 214.0,254.0 199.6,254.0 185.3,254.1 170.9,254.5 156.5,254.5 142.2,254.5 127.8,254.4 113.5,254.5 99.1,254.5 84.7,254.6 70.4,254.4 56.0,254.6" fill="var(--s5)" opacity="0.15"/>
+<path d="M56.0,254.3 L70.4,254.0 L84.7,254.3 L99.1,254.3 L113.5,254.3 L127.8,254.1 L142.2,254.1 L156.5,254.0 L170.9,254.0 L185.3,253.9 L199.6,253.9 L214.0,253.9 L228.4,253.9 L242.7,253.6 L257.1,253.4 L271.5,253.4 L285.8,253.4 L300.2,253.3 L314.5,253.3 L328.9,253.7 L343.3,253.5 L357.6,253.5 L372.0,253.5 L386.4,253.5 L400.7,253.3 L415.1,253.2 L429.5,253.2 L443.8,253.3 L458.2,253.3 L472.5,252.7 L486.9,253.1 L501.3,253.1 L515.6,252.9 L530.0,252.6" fill="none" stroke="var(--s5)" stroke-width="2" stroke-linejoin="round"/>
 <circle cx="56.0" cy="253.4" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 7649668 with changes (2026-11-05): 11.5 s</title></circle>
-<circle cx="71.3" cy="254.6" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, d13d4d7 with changes (2026-11-05): 6.1 s</title></circle>
-<circle cx="86.6" cy="254.3" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 77ff5b5 with changes (2026-11-05): 7.5 s</title></circle>
-<circle cx="101.9" cy="253.8" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, ca9bcbf with changes (2026-11-05): 9.7 s</title></circle>
-<circle cx="117.2" cy="254.3" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 47bb65c with changes (2026-11-05): 7.5 s</title></circle>
-<circle cx="132.5" cy="254.1" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 5ee1eff with changes (2026-11-05): 8.4 s</title></circle>
-<circle cx="147.7" cy="254.5" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 5ee1eff with changes (2026-11-05): 6.6 s</title></circle>
-<circle cx="163.0" cy="252.2" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 69c7642 with changes (2026-11-05): 16.4 s</title></circle>
-<circle cx="178.3" cy="253.4" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, fa729b8 with changes (2026-11-05): 11.3 s</title></circle>
-<circle cx="193.6" cy="254.0" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, fa729b8 with changes (2026-11-05): 8.5 s</title></circle>
-<circle cx="208.9" cy="254.1" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, fea0fa1 with changes (2026-11-05): 8.2 s</title></circle>
-<circle cx="224.2" cy="253.9" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 5910a01 with changes (2026-11-05): 9.2 s</title></circle>
-<circle cx="239.5" cy="253.9" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 5910a01 with changes (2026-11-05): 9 s</title></circle>
-<circle cx="254.8" cy="252.3" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 9daba5c with changes (2026-11-05): 16.3 s</title></circle>
-<circle cx="270.1" cy="253.6" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 9daba5c with changes (2026-11-05): 10.6 s</title></circle>
-<circle cx="285.4" cy="253.4" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 9daba5c with changes (2026-11-05): 11.4 s</title></circle>
-<circle cx="300.6" cy="252.5" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, a348abb with changes (2026-11-05): 15 s</title></circle>
-<circle cx="315.9" cy="253.9" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 9076ee7 with changes (2026-11-05): 9.1 s</title></circle>
-<circle cx="331.2" cy="253.3" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 9076ee7 with changes (2026-11-05): 11.8 s</title></circle>
-<circle cx="346.5" cy="252.0" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 3d91b41 with changes (2026-11-06): 17.3 s</title></circle>
-<circle cx="361.8" cy="253.7" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 7fc2086 with changes (2026-11-06): 10.1 s</title></circle>
-<circle cx="377.1" cy="254.2" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 7fc2086 with changes (2026-11-06): 8 s</title></circle>
-<circle cx="392.4" cy="253.5" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 68151d3 with changes (2026-11-06): 10.9 s</title></circle>
-<circle cx="407.7" cy="252.3" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 12ecca9 with changes (2026-11-06): 15.9 s</title></circle>
-<circle cx="423.0" cy="253.2" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 12ecca9 with changes (2026-11-06): 12 s</title></circle>
-<circle cx="438.3" cy="254.0" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 12ecca9 with changes (2026-11-06): 8.9 s</title></circle>
-<circle cx="453.5" cy="253.3" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 481be5a with changes (2026-11-06): 11.7 s</title></circle>
-<circle cx="468.8" cy="252.7" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 75e0d51 with changes (2026-11-06): 14.4 s</title></circle>
-<circle cx="484.1" cy="251.6" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 0e2638d with changes (2026-11-06): 19.2 s</title></circle>
-<circle cx="499.4" cy="253.8" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 8ab9d9c with changes (2026-11-06): 9.6 s</title></circle>
-<circle cx="514.7" cy="253.5" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, a8bd9f5 with changes (2026-11-06): 11 s</title></circle>
-<circle cx="530.0" cy="251.7" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 92f1d04 with changes (2026-11-06): 18.9 s</title></circle>
-<polygon points="56.0,254.0 71.3,252.1 86.6,254.0 101.9,254.0 117.2,253.8 132.5,252.3 147.7,252.4 163.0,251.6 178.3,251.5 193.6,251.2 208.9,251.3 224.2,249.9 239.5,249.9 254.8,249.9 270.1,250.8 285.4,250.9 300.6,251.2 315.9,250.9 331.2,251.3 346.5,251.5 377.1,250.4 392.4,250.2 407.7,250.0 423.0,249.2 438.3,249.7 453.5,247.5 468.8,247.3 484.1,249.8 499.4,249.8 514.7,245.3 530.0,251.4 530.0,252.5 514.7,252.2 499.4,252.5 484.1,252.5 468.8,251.1 453.5,250.9 438.3,251.1 423.0,251.6 407.7,251.7 392.4,251.5 377.1,252.5 346.5,251.8 331.2,251.7 315.9,251.7 300.6,251.5 285.4,251.7 270.1,251.7 254.8,251.8 239.5,252.8 224.2,253.0 208.9,252.4 193.6,252.4 178.3,253.2 163.0,253.2 147.7,254.0 132.5,254.0 117.2,254.0 101.9,254.1 86.6,254.1 71.3,254.1 56.0,254.1" fill="var(--s6)" opacity="0.15"/>
-<path d="M56.0,254.0 L71.3,253.1 L86.6,254.0 L101.9,254.0 L117.2,253.9 L132.5,253.2 L147.7,253.2 L163.0,252.4 L178.3,252.4 L193.6,251.8 L208.9,251.8 L224.2,251.4 L239.5,251.3 L254.8,250.8 L270.1,251.3 L285.4,251.3 L300.6,251.3 L315.9,251.3 L331.2,251.5 L346.5,251.7 L377.1,251.5 L392.4,250.9 L407.7,250.9 L423.0,250.4 L438.3,250.4 L453.5,249.2 L468.8,249.2 L484.1,251.1 L499.4,251.1 L514.7,248.7 L530.0,251.9" fill="none" stroke="var(--s6)" stroke-width="2" stroke-linejoin="round"/>
+<circle cx="70.4" cy="254.6" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, d13d4d7 with changes (2026-11-05): 6.1 s</title></circle>
+<circle cx="84.7" cy="254.3" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 77ff5b5 with changes (2026-11-05): 7.5 s</title></circle>
+<circle cx="99.1" cy="253.8" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, ca9bcbf with changes (2026-11-05): 9.7 s</title></circle>
+<circle cx="113.5" cy="254.3" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 47bb65c with changes (2026-11-05): 7.5 s</title></circle>
+<circle cx="127.8" cy="254.1" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 5ee1eff with changes (2026-11-05): 8.4 s</title></circle>
+<circle cx="142.2" cy="254.5" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 5ee1eff with changes (2026-11-05): 6.6 s</title></circle>
+<circle cx="156.5" cy="252.2" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 69c7642 with changes (2026-11-05): 16.4 s</title></circle>
+<circle cx="170.9" cy="253.4" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, fa729b8 with changes (2026-11-05): 11.3 s</title></circle>
+<circle cx="185.3" cy="254.0" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, fa729b8 with changes (2026-11-05): 8.5 s</title></circle>
+<circle cx="199.6" cy="254.1" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, fea0fa1 with changes (2026-11-05): 8.2 s</title></circle>
+<circle cx="214.0" cy="253.9" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 5910a01 with changes (2026-11-05): 9.2 s</title></circle>
+<circle cx="228.4" cy="253.9" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 5910a01 with changes (2026-11-05): 9 s</title></circle>
+<circle cx="242.7" cy="252.3" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 9daba5c with changes (2026-11-05): 16.3 s</title></circle>
+<circle cx="257.1" cy="253.6" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 9daba5c with changes (2026-11-05): 10.6 s</title></circle>
+<circle cx="271.5" cy="253.4" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 9daba5c with changes (2026-11-05): 11.4 s</title></circle>
+<circle cx="285.8" cy="252.5" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, a348abb with changes (2026-11-05): 15 s</title></circle>
+<circle cx="300.2" cy="253.9" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 9076ee7 with changes (2026-11-05): 9.1 s</title></circle>
+<circle cx="314.5" cy="253.3" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 9076ee7 with changes (2026-11-05): 11.8 s</title></circle>
+<circle cx="328.9" cy="252.0" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 3d91b41 with changes (2026-11-06): 17.3 s</title></circle>
+<circle cx="343.3" cy="253.7" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 7fc2086 with changes (2026-11-06): 10.1 s</title></circle>
+<circle cx="357.6" cy="254.2" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 7fc2086 with changes (2026-11-06): 8 s</title></circle>
+<circle cx="372.0" cy="253.5" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 68151d3 with changes (2026-11-06): 10.9 s</title></circle>
+<circle cx="386.4" cy="252.3" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 12ecca9 with changes (2026-11-06): 15.9 s</title></circle>
+<circle cx="400.7" cy="253.2" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 12ecca9 with changes (2026-11-06): 12 s</title></circle>
+<circle cx="415.1" cy="254.0" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 12ecca9 with changes (2026-11-06): 8.9 s</title></circle>
+<circle cx="429.5" cy="253.3" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 481be5a with changes (2026-11-06): 11.7 s</title></circle>
+<circle cx="443.8" cy="252.7" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 75e0d51 with changes (2026-11-06): 14.4 s</title></circle>
+<circle cx="458.2" cy="251.6" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 0e2638d with changes (2026-11-06): 19.2 s</title></circle>
+<circle cx="472.5" cy="253.8" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 8ab9d9c with changes (2026-11-06): 9.6 s</title></circle>
+<circle cx="486.9" cy="253.5" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, a8bd9f5 with changes (2026-11-06): 11 s</title></circle>
+<circle cx="501.3" cy="251.7" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 92f1d04 with changes (2026-11-06): 18.9 s</title></circle>
+<circle cx="515.6" cy="253.1" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, 849ccbd (2026-11-07): 12.5 s</title></circle>
+<circle cx="530.0" cy="252.6" r="4" fill="var(--s5)" stroke="var(--surface)" stroke-width="2"><title>Lua, f104ea0 (2026-11-08): 14.6 s</title></circle>
+<polygon points="56.0,254.0 70.4,252.1 84.7,254.0 99.1,254.0 113.5,253.8 127.8,252.3 142.2,252.4 156.5,251.6 170.9,251.5 185.3,251.2 199.6,251.3 214.0,249.9 228.4,249.9 242.7,249.9 257.1,250.8 271.5,250.9 285.8,251.2 300.2,250.9 314.5,251.3 328.9,251.5 357.6,250.4 372.0,250.2 386.4,250.0 400.7,249.2 415.1,249.7 429.5,247.5 443.8,247.3 458.2,249.8 472.5,249.8 486.9,249.2 501.3,249.9 515.6,250.3 530.0,250.8 530.0,250.9 515.6,251.4 501.3,251.9 486.9,252.5 472.5,252.5 458.2,252.5 443.8,251.1 429.5,250.9 415.1,251.1 400.7,251.6 386.4,251.7 372.0,251.5 357.6,252.5 328.9,251.8 314.5,251.7 300.2,251.7 285.8,251.5 271.5,251.7 257.1,251.7 242.7,251.8 228.4,252.8 214.0,253.0 199.6,252.4 185.3,252.4 170.9,253.2 156.5,253.2 142.2,254.0 127.8,254.0 113.5,254.0 99.1,254.1 84.7,254.1 70.4,254.1 56.0,254.1" fill="var(--s6)" opacity="0.15"/>
+<path d="M56.0,254.0 L70.4,253.1 L84.7,254.0 L99.1,254.0 L113.5,253.9 L127.8,253.2 L142.2,253.2 L156.5,252.4 L170.9,252.4 L185.3,251.8 L199.6,251.8 L214.0,251.4 L228.4,251.3 L242.7,250.8 L257.1,251.3 L271.5,251.3 L285.8,251.3 L300.2,251.3 L314.5,251.5 L328.9,251.7 L357.6,251.5 L372.0,250.9 L386.4,250.9 L400.7,250.4 L415.1,250.4 L429.5,249.2 L443.8,249.2 L458.2,251.1 L472.5,251.1 L486.9,250.8 L501.3,250.9 L515.6,250.9 L530.0,250.8" fill="none" stroke="var(--s6)" stroke-width="2" stroke-linejoin="round"/>
 <circle cx="56.0" cy="156.7" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 7649668 with changes (2026-11-05): 432 s</title></circle>
-<circle cx="71.3" cy="254.1" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, d13d4d7 with changes (2026-11-05): 8.3 s</title></circle>
-<circle cx="86.6" cy="254.0" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 77ff5b5 with changes (2026-11-05): 8.6 s</title></circle>
-<circle cx="101.9" cy="252.2" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, ca9bcbf with changes (2026-11-05): 16.7 s</title></circle>
-<circle cx="117.2" cy="254.0" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 47bb65c with changes (2026-11-05): 8.5 s</title></circle>
-<circle cx="132.5" cy="253.2" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 5ee1eff with changes (2026-11-05): 12.3 s</title></circle>
-<circle cx="147.7" cy="253.9" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 5ee1eff with changes (2026-11-05): 9.1 s</title></circle>
-<circle cx="163.0" cy="251.8" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 69c7642 with changes (2026-11-05): 18.3 s</title></circle>
-<circle cx="178.3" cy="252.4" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, fa729b8 with changes (2026-11-05): 15.8 s</title></circle>
-<circle cx="193.6" cy="251.4" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, fa729b8 with changes (2026-11-05): 19.8 s</title></circle>
-<circle cx="208.9" cy="253.2" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, fea0fa1 with changes (2026-11-05): 12.1 s</title></circle>
-<circle cx="224.2" cy="249.6" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 5910a01 with changes (2026-11-05): 28 s</title></circle>
-<circle cx="239.5" cy="251.8" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 5910a01 with changes (2026-11-05): 18.2 s</title></circle>
-<circle cx="254.8" cy="249.9" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 9daba5c with changes (2026-11-05): 26.6 s</title></circle>
-<circle cx="270.1" cy="251.3" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 9daba5c with changes (2026-11-05): 20.3 s</title></circle>
-<circle cx="285.4" cy="250.8" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 9daba5c with changes (2026-11-05): 22.5 s</title></circle>
-<circle cx="300.6" cy="251.3" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, a348abb with changes (2026-11-05): 20.5 s</title></circle>
-<circle cx="315.9" cy="251.7" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 9076ee7 with changes (2026-11-05): 18.9 s</title></circle>
-<circle cx="331.2" cy="251.5" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 9076ee7 with changes (2026-11-05): 19.7 s</title></circle>
-<circle cx="346.5" cy="250.2" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 3d91b41 with changes (2026-11-06): 25.2 s</title></circle>
-<circle cx="377.1" cy="253.0" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 7fc2086 with changes (2026-11-06): 12.9 s</title></circle>
-<circle cx="392.4" cy="251.7" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 68151d3 with changes (2026-11-06): 18.6 s</title></circle>
-<circle cx="407.7" cy="250.4" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 12ecca9 with changes (2026-11-06): 24.3 s</title></circle>
-<circle cx="423.0" cy="250.9" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 12ecca9 with changes (2026-11-06): 22.3 s</title></circle>
-<circle cx="438.3" cy="249.2" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 12ecca9 with changes (2026-11-06): 29.6 s</title></circle>
-<circle cx="453.5" cy="247.7" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 481be5a with changes (2026-11-06): 35.9 s</title></circle>
-<circle cx="468.8" cy="251.1" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 75e0d51 with changes (2026-11-06): 21.2 s</title></circle>
-<circle cx="484.1" cy="245.6" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 0e2638d with changes (2026-11-06): 45.3 s</title></circle>
-<circle cx="499.4" cy="252.5" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 8ab9d9c with changes (2026-11-06): 15.4 s</title></circle>
-<circle cx="514.7" cy="251.9" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, a8bd9f5 with changes (2026-11-06): 17.8 s</title></circle>
-<circle cx="530.0" cy="243.4" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 92f1d04 with changes (2026-11-06): 54.9 s</title></circle>
-<polygon points="56.0,253.9 71.3,252.3 86.6,253.8 101.9,253.8 117.2,253.8 132.5,253.0 147.7,253.0 163.0,252.8 178.3,252.8 193.6,251.2 208.9,253.0 224.2,251.1 239.5,250.8 254.8,251.1 270.1,249.2 285.4,249.8 300.6,250.5 315.9,250.6 331.2,250.6 346.5,251.1 361.8,252.3 377.1,252.3 392.4,252.3 407.7,250.8 423.0,248.8 438.3,248.9 453.5,249.7 468.8,249.7 484.1,250.4 499.4,250.4 514.7,249.8 530.0,250.7 530.0,253.2 514.7,252.6 499.4,251.9 484.1,251.9 468.8,251.1 453.5,251.1 438.3,251.2 423.0,251.3 407.7,253.7 392.4,253.7 377.1,253.7 361.8,253.7 346.5,252.4 331.2,251.8 315.9,251.8 300.6,251.8 285.4,251.8 270.1,252.4 254.8,253.5 239.5,253.7 224.2,253.5 208.9,253.8 193.6,253.4 178.3,253.9 163.0,253.9 147.7,253.9 132.5,254.0 117.2,254.0 101.9,254.1 86.6,254.1 71.3,254.0 56.0,254.1" fill="var(--s7)" opacity="0.15"/>
-<path d="M56.0,254.0 L71.3,253.2 L86.6,254.0 L101.9,254.0 L117.2,253.9 L132.5,253.5 L147.7,253.5 L163.0,253.4 L178.3,253.4 L193.6,252.3 L208.9,253.4 L224.2,252.3 L239.5,252.3 L254.8,252.3 L270.1,250.8 L285.4,250.8 L300.6,251.1 L315.9,251.2 L331.2,251.2 L346.5,251.8 L361.8,253.0 L377.1,253.0 L392.4,253.0 L407.7,252.3 L423.0,250.1 L438.3,250.1 L453.5,250.4 L468.8,250.4 L484.1,251.1 L499.4,251.1 L514.7,251.2 L530.0,251.9" fill="none" stroke="var(--s7)" stroke-width="2" stroke-linejoin="round"/>
+<circle cx="70.4" cy="254.1" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, d13d4d7 with changes (2026-11-05): 8.3 s</title></circle>
+<circle cx="84.7" cy="254.0" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 77ff5b5 with changes (2026-11-05): 8.6 s</title></circle>
+<circle cx="99.1" cy="252.2" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, ca9bcbf with changes (2026-11-05): 16.7 s</title></circle>
+<circle cx="113.5" cy="254.0" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 47bb65c with changes (2026-11-05): 8.5 s</title></circle>
+<circle cx="127.8" cy="253.2" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 5ee1eff with changes (2026-11-05): 12.3 s</title></circle>
+<circle cx="142.2" cy="253.9" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 5ee1eff with changes (2026-11-05): 9.1 s</title></circle>
+<circle cx="156.5" cy="251.8" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 69c7642 with changes (2026-11-05): 18.3 s</title></circle>
+<circle cx="170.9" cy="252.4" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, fa729b8 with changes (2026-11-05): 15.8 s</title></circle>
+<circle cx="185.3" cy="251.4" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, fa729b8 with changes (2026-11-05): 19.8 s</title></circle>
+<circle cx="199.6" cy="253.2" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, fea0fa1 with changes (2026-11-05): 12.1 s</title></circle>
+<circle cx="214.0" cy="249.6" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 5910a01 with changes (2026-11-05): 28 s</title></circle>
+<circle cx="228.4" cy="251.8" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 5910a01 with changes (2026-11-05): 18.2 s</title></circle>
+<circle cx="242.7" cy="249.9" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 9daba5c with changes (2026-11-05): 26.6 s</title></circle>
+<circle cx="257.1" cy="251.3" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 9daba5c with changes (2026-11-05): 20.3 s</title></circle>
+<circle cx="271.5" cy="250.8" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 9daba5c with changes (2026-11-05): 22.5 s</title></circle>
+<circle cx="285.8" cy="251.3" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, a348abb with changes (2026-11-05): 20.5 s</title></circle>
+<circle cx="300.2" cy="251.7" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 9076ee7 with changes (2026-11-05): 18.9 s</title></circle>
+<circle cx="314.5" cy="251.5" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 9076ee7 with changes (2026-11-05): 19.7 s</title></circle>
+<circle cx="328.9" cy="250.2" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 3d91b41 with changes (2026-11-06): 25.2 s</title></circle>
+<circle cx="357.6" cy="253.0" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 7fc2086 with changes (2026-11-06): 12.9 s</title></circle>
+<circle cx="372.0" cy="251.7" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 68151d3 with changes (2026-11-06): 18.6 s</title></circle>
+<circle cx="386.4" cy="250.4" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 12ecca9 with changes (2026-11-06): 24.3 s</title></circle>
+<circle cx="400.7" cy="250.9" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 12ecca9 with changes (2026-11-06): 22.3 s</title></circle>
+<circle cx="415.1" cy="249.2" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 12ecca9 with changes (2026-11-06): 29.6 s</title></circle>
+<circle cx="429.5" cy="247.7" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 481be5a with changes (2026-11-06): 35.9 s</title></circle>
+<circle cx="443.8" cy="251.1" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 75e0d51 with changes (2026-11-06): 21.2 s</title></circle>
+<circle cx="458.2" cy="245.6" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 0e2638d with changes (2026-11-06): 45.3 s</title></circle>
+<circle cx="472.5" cy="252.5" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 8ab9d9c with changes (2026-11-06): 15.4 s</title></circle>
+<circle cx="486.9" cy="251.9" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, a8bd9f5 with changes (2026-11-06): 17.8 s</title></circle>
+<circle cx="501.3" cy="243.4" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 92f1d04 with changes (2026-11-06): 54.9 s</title></circle>
+<circle cx="515.6" cy="250.8" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, 849ccbd (2026-11-07): 22.5 s</title></circle>
+<circle cx="530.0" cy="250.9" r="4" fill="var(--s6)" stroke="var(--surface)" stroke-width="2"><title>Python, f104ea0 (2026-11-08): 22.2 s</title></circle>
+<polygon points="56.0,253.9 70.4,252.3 84.7,253.8 99.1,253.8 113.5,253.8 127.8,253.0 142.2,253.0 156.5,252.8 170.9,252.8 185.3,251.2 199.6,253.0 214.0,251.1 228.4,250.8 242.7,251.1 257.1,249.2 271.5,249.8 285.8,250.5 300.2,250.6 314.5,250.6 328.9,251.1 343.3,252.3 357.6,252.3 372.0,252.3 386.4,250.8 400.7,248.8 415.1,248.9 429.5,249.7 443.8,249.7 458.2,250.4 472.5,250.4 486.9,247.8 501.3,250.7 515.6,247.5 530.0,244.1 530.0,251.6 515.6,252.3 501.3,253.2 486.9,253.0 472.5,251.9 458.2,251.9 443.8,251.1 429.5,251.1 415.1,251.2 400.7,251.3 386.4,253.7 372.0,253.7 357.6,253.7 343.3,253.7 328.9,252.4 314.5,251.8 300.2,251.8 285.8,251.8 271.5,251.8 257.1,252.4 242.7,253.5 228.4,253.7 214.0,253.5 199.6,253.8 185.3,253.4 170.9,253.9 156.5,253.9 142.2,253.9 127.8,254.0 113.5,254.0 99.1,254.1 84.7,254.1 70.4,254.0 56.0,254.1" fill="var(--s7)" opacity="0.15"/>
+<path d="M56.0,254.0 L70.4,253.2 L84.7,254.0 L99.1,254.0 L113.5,253.9 L127.8,253.5 L142.2,253.5 L156.5,253.4 L170.9,253.4 L185.3,252.3 L199.6,253.4 L214.0,252.3 L228.4,252.3 L242.7,252.3 L257.1,250.8 L271.5,250.8 L285.8,251.1 L300.2,251.2 L314.5,251.2 L328.9,251.8 L343.3,253.0 L357.6,253.0 L372.0,253.0 L386.4,252.3 L400.7,250.1 L415.1,250.1 L429.5,250.4 L443.8,250.4 L458.2,251.1 L472.5,251.1 L486.9,250.4 L501.3,251.9 L515.6,249.9 L530.0,247.8" fill="none" stroke="var(--s7)" stroke-width="2" stroke-linejoin="round"/>
 <circle cx="56.0" cy="252.2" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 7649668 with changes (2026-11-05): 16.5 s</title></circle>
-<circle cx="71.3" cy="254.1" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, d13d4d7 with changes (2026-11-05): 8.3 s</title></circle>
-<circle cx="86.6" cy="254.0" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 77ff5b5 with changes (2026-11-05): 8.7 s</title></circle>
-<circle cx="101.9" cy="252.3" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, ca9bcbf with changes (2026-11-05): 16 s</title></circle>
-<circle cx="117.2" cy="254.0" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 47bb65c with changes (2026-11-05): 8.9 s</title></circle>
-<circle cx="132.5" cy="253.5" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 5ee1eff with changes (2026-11-05): 11 s</title></circle>
-<circle cx="147.7" cy="253.9" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 5ee1eff with changes (2026-11-05): 9.1 s</title></circle>
-<circle cx="163.0" cy="249.6" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 69c7642 with changes (2026-11-05): 27.9 s</title></circle>
-<circle cx="178.3" cy="253.4" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, fa729b8 with changes (2026-11-05): 11.4 s</title></circle>
-<circle cx="193.6" cy="252.0" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, fa729b8 with changes (2026-11-05): 17.6 s</title></circle>
-<circle cx="208.9" cy="253.8" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, fea0fa1 with changes (2026-11-05): 9.6 s</title></circle>
-<circle cx="224.2" cy="252.3" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 5910a01 with changes (2026-11-05): 16.2 s</title></circle>
-<circle cx="239.5" cy="253.5" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 5910a01 with changes (2026-11-05): 11 s</title></circle>
-<circle cx="254.8" cy="250.2" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 9daba5c with changes (2026-11-05): 25.4 s</title></circle>
-<circle cx="270.1" cy="250.8" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 9daba5c with changes (2026-11-05): 22.6 s</title></circle>
-<circle cx="285.4" cy="252.5" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 9daba5c with changes (2026-11-05): 15.4 s</title></circle>
-<circle cx="300.6" cy="249.2" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, a348abb with changes (2026-11-05): 29.4 s</title></circle>
-<circle cx="315.9" cy="251.8" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 9076ee7 with changes (2026-11-05): 18.4 s</title></circle>
-<circle cx="331.2" cy="251.1" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 9076ee7 with changes (2026-11-05): 21.2 s</title></circle>
-<circle cx="346.5" cy="251.2" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 3d91b41 with changes (2026-11-06): 20.9 s</title></circle>
-<circle cx="361.8" cy="253.2" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 7fc2086 with changes (2026-11-06): 12.3 s</title></circle>
-<circle cx="377.1" cy="253.7" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 7fc2086 with changes (2026-11-06): 9.9 s</title></circle>
-<circle cx="392.4" cy="253.0" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 68151d3 with changes (2026-11-06): 13.1 s</title></circle>
-<circle cx="407.7" cy="248.8" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 12ecca9 with changes (2026-11-06): 31.2 s</title></circle>
-<circle cx="423.0" cy="252.3" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 12ecca9 with changes (2026-11-06): 16.2 s</title></circle>
-<circle cx="438.3" cy="250.1" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 12ecca9 with changes (2026-11-06): 25.8 s</title></circle>
-<circle cx="453.5" cy="248.9" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 481be5a with changes (2026-11-06): 30.8 s</title></circle>
-<circle cx="468.8" cy="251.1" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 75e0d51 with changes (2026-11-06): 21.1 s</title></circle>
-<circle cx="484.1" cy="250.4" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 0e2638d with changes (2026-11-06): 24.3 s</title></circle>
-<circle cx="499.4" cy="253.2" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 8ab9d9c with changes (2026-11-06): 12.2 s</title></circle>
-<circle cx="514.7" cy="251.9" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, a8bd9f5 with changes (2026-11-06): 17.7 s</title></circle>
-<circle cx="530.0" cy="247.8" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 92f1d04 with changes (2026-11-06): 35.5 s</title></circle>
-<text class="label" x="542" y="192.0">C++: 108</text>
-<text class="label" x="542" y="208.0">Python: 54.9</text>
-<text class="label" x="542" y="224.0">C#: 39.5</text>
-<text class="label" x="542" y="240.0">Rust: 35.5</text>
-<text class="label" x="542" y="256.0">Java: 34.3</text>
-<text class="label" x="542" y="272.0">JavaScript: 26.8</text>
-<text class="label" x="542" y="288.0">Lua: 18.9</text>
+<circle cx="70.4" cy="254.1" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, d13d4d7 with changes (2026-11-05): 8.3 s</title></circle>
+<circle cx="84.7" cy="254.0" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 77ff5b5 with changes (2026-11-05): 8.7 s</title></circle>
+<circle cx="99.1" cy="252.3" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, ca9bcbf with changes (2026-11-05): 16 s</title></circle>
+<circle cx="113.5" cy="254.0" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 47bb65c with changes (2026-11-05): 8.9 s</title></circle>
+<circle cx="127.8" cy="253.5" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 5ee1eff with changes (2026-11-05): 11 s</title></circle>
+<circle cx="142.2" cy="253.9" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 5ee1eff with changes (2026-11-05): 9.1 s</title></circle>
+<circle cx="156.5" cy="249.6" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 69c7642 with changes (2026-11-05): 27.9 s</title></circle>
+<circle cx="170.9" cy="253.4" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, fa729b8 with changes (2026-11-05): 11.4 s</title></circle>
+<circle cx="185.3" cy="252.0" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, fa729b8 with changes (2026-11-05): 17.6 s</title></circle>
+<circle cx="199.6" cy="253.8" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, fea0fa1 with changes (2026-11-05): 9.6 s</title></circle>
+<circle cx="214.0" cy="252.3" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 5910a01 with changes (2026-11-05): 16.2 s</title></circle>
+<circle cx="228.4" cy="253.5" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 5910a01 with changes (2026-11-05): 11 s</title></circle>
+<circle cx="242.7" cy="250.2" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 9daba5c with changes (2026-11-05): 25.4 s</title></circle>
+<circle cx="257.1" cy="250.8" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 9daba5c with changes (2026-11-05): 22.6 s</title></circle>
+<circle cx="271.5" cy="252.5" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 9daba5c with changes (2026-11-05): 15.4 s</title></circle>
+<circle cx="285.8" cy="249.2" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, a348abb with changes (2026-11-05): 29.4 s</title></circle>
+<circle cx="300.2" cy="251.8" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 9076ee7 with changes (2026-11-05): 18.4 s</title></circle>
+<circle cx="314.5" cy="251.1" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 9076ee7 with changes (2026-11-05): 21.2 s</title></circle>
+<circle cx="328.9" cy="251.2" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 3d91b41 with changes (2026-11-06): 20.9 s</title></circle>
+<circle cx="343.3" cy="253.2" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 7fc2086 with changes (2026-11-06): 12.3 s</title></circle>
+<circle cx="357.6" cy="253.7" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 7fc2086 with changes (2026-11-06): 9.9 s</title></circle>
+<circle cx="372.0" cy="253.0" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 68151d3 with changes (2026-11-06): 13.1 s</title></circle>
+<circle cx="386.4" cy="248.8" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 12ecca9 with changes (2026-11-06): 31.2 s</title></circle>
+<circle cx="400.7" cy="252.3" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 12ecca9 with changes (2026-11-06): 16.2 s</title></circle>
+<circle cx="415.1" cy="250.1" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 12ecca9 with changes (2026-11-06): 25.8 s</title></circle>
+<circle cx="429.5" cy="248.9" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 481be5a with changes (2026-11-06): 30.8 s</title></circle>
+<circle cx="443.8" cy="251.1" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 75e0d51 with changes (2026-11-06): 21.1 s</title></circle>
+<circle cx="458.2" cy="250.4" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 0e2638d with changes (2026-11-06): 24.3 s</title></circle>
+<circle cx="472.5" cy="253.2" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 8ab9d9c with changes (2026-11-06): 12.2 s</title></circle>
+<circle cx="486.9" cy="251.9" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, a8bd9f5 with changes (2026-11-06): 17.7 s</title></circle>
+<circle cx="501.3" cy="247.8" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 92f1d04 with changes (2026-11-06): 35.5 s</title></circle>
+<circle cx="515.6" cy="244.1" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, 849ccbd (2026-11-07): 51.8 s</title></circle>
+<circle cx="530.0" cy="252.6" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"><title>Rust, f104ea0 (2026-11-08): 14.8 s</title></circle>
+<text class="label" x="542" y="192.0">JavaScript: 64.6</text>
+<text class="label" x="542" y="208.0">C++: 58</text>
+<text class="label" x="542" y="224.0">C#: 43.1</text>
+<text class="label" x="542" y="240.0">Java: 28.3</text>
+<text class="label" x="542" y="256.0">Python: 22.2</text>
+<text class="label" x="542" y="272.0">Rust: 14.8</text>
+<text class="label" x="542" y="288.0">Lua: 14.6</text>
 </svg>
