@@ -26,15 +26,15 @@ static core::GlobalSlot<std::shared_ptr<core::Console::Type>> console;
 }  // namespace temper_globals
 
 static void yay() {
-  core::Console::log(temper_globals::console.value, "yay");
+  core::Console::log(temper_globals::console.value, TEMPER_STR("yay"));
 }
 
 static void meh() {
-  core::Console::log(temper_globals::console.value, "meh");
+  core::Console::log(temper_globals::console.value, TEMPER_STR("meh"));
 }
 
 static void boo() {
-  core::Console::log(temper_globals::console.value, "boo");
+  core::Console::log(temper_globals::console.value, TEMPER_STR("boo"));
 }
 
 static int32_t f(int32_t x) {
@@ -53,7 +53,7 @@ void global_init_init() {
   core::init_once([] {
     temper_globals::console.construct();
     temper_globals::console.value = core::Console::get_console();
-    core::Console::log(temper_globals::console.value, "Checkpoint 0");
+    core::Console::log(temper_globals::console.value, TEMPER_STR("Checkpoint 0"));
     try {
       int32_t a;
       static_cast<void>(a);
@@ -61,11 +61,11 @@ void global_init_init() {
     } catch (core::TemperBubble const &) {
       yay();
     }
-    core::Console::log(temper_globals::console.value, "Checkpoint 1");
+    core::Console::log(temper_globals::console.value, TEMPER_STR("Checkpoint 1"));
     int32_t a2 = 1;
     static_cast<void>(a2);
     yay();
-    core::Console::log(temper_globals::console.value, "Checkpoint 2");
+    core::Console::log(temper_globals::console.value, TEMPER_STR("Checkpoint 2"));
     {
       int32_t a3 = 1;
       try {
@@ -79,12 +79,12 @@ void global_init_init() {
         meh();
       }
     }
-    core::Console::log(temper_globals::console.value, "Checkpoint 3");
+    core::Console::log(temper_globals::console.value, TEMPER_STR("Checkpoint 3"));
     int32_t a4 = 1;
     static_cast<void>(a4);
     a4 = 2;
     yay();
-    core::Console::log(temper_globals::console.value, "Checkpoint 4");
+    core::Console::log(temper_globals::console.value, TEMPER_STR("Checkpoint 4"));
     try {
       f(0);
       yay();
@@ -96,7 +96,7 @@ void global_init_init() {
     } catch (core::TemperBubble const &) {
       meh();
     }
-    core::Console::log(temper_globals::console.value, "Checkpoint 5");
+    core::Console::log(temper_globals::console.value, TEMPER_STR("Checkpoint 5"));
     try {
       g(0);
       yay();
@@ -108,7 +108,7 @@ void global_init_init() {
     } catch (core::TemperBubble const &) {
       meh();
     }
-    core::Console::log(temper_globals::console.value, "Checkpoint 6");
+    core::Console::log(temper_globals::console.value, TEMPER_STR("Checkpoint 6"));
     try {
       i(0);
       yay();

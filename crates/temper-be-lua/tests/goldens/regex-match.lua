@@ -120,6 +120,9 @@ end) then
   t = "-"
 end
 print(t)
+local notLow = oneOrMore(CodeSet({ CodeRange(0, 47) }, true)):compiled()
+print("not low: " .. notLow:find("-/a🌍-").full.value)
+print("not space or >: " .. Repeat(CodeSet({ CodePoints("\t"), CodePoints("\n"), CodePoints(" "), CodePoints(">") }, true), 1, temper.null, false):compiled():find("ab>c").full.value)
 local idStart = CodeSet({ CodeRange(97, 122), CodeRange(65, 90), CodePoints("_") }, false):compiled().data
 local idContinue = Or({ idStart, CodeSet({ CodeRange(48, 57) }, false):compiled().data })
 local word = Sequence({ WordBoundary, idStart, Repeat(idContinue, 0, temper.null), WordBoundary }):compiled()

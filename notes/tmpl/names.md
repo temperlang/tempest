@@ -292,7 +292,7 @@ Proposed:
   unlisted ones, and the interpreter, use the body. With no list, every
   backend needs host code, as today (Decided 2026-10-29, [question
   41](open-questions.md)). In user code, top-level functions and, since
-  Kotlin's `connected-type-fallback` branch, classes with a complete
+  Kotlin's #642 (connected fallback types), classes with a complete
   Temper implementation, which a backend that takes host code makes a
   name for the host's class. As built (2026-11-02): the build gives the
   program its host files and `--no-connected` (`Program.host`), and

@@ -45,22 +45,22 @@ static double add(double a, double b) {
   return a + b;
 }
 
-static void checkParse(std::string string) {
-  std::string converted;
+static void checkParse(core::Str const & string) {
+  core::Str converted;
   try {
     converted = core::Float64::toString(core::String::toFloat64(string));
   } catch (core::TemperBubble const &) {
-    converted = "failed";
+    converted = TEMPER_STR("failed");
   }
   core::Console::log(temper_globals::console.value, "Parse " + string + " -> " + converted);
 }
 
-static void checkTiny(std::string string) {
-  std::string positive;
+static void checkTiny(core::Str const & string) {
+  core::Str positive;
   try {
     positive = core::Boolean::toString(core::Float64::gt(core::String::toFloat64(string), 0.0));
   } catch (core::TemperBubble const &) {
-    positive = "failed";
+    positive = TEMPER_STR("failed");
   }
   core::Console::log(temper_globals::console.value, "Parse " + string + " > 0 -> " + positive);
 }
@@ -75,63 +75,63 @@ void global_init_init() {
     double two = 2.0;
     double three = 3.0;
     if (gt(one, zero)) {
-      core::Console::log(temper_globals::console.value, "greater than");
+      core::Console::log(temper_globals::console.value, TEMPER_STR("greater than"));
     }
     if (lt(zero, one)) {
-      core::Console::log(temper_globals::console.value, "less than");
+      core::Console::log(temper_globals::console.value, TEMPER_STR("less than"));
     }
     if (eq(zero, one)) {
-      core::Console::log(temper_globals::console.value, "equality is wrong");
+      core::Console::log(temper_globals::console.value, TEMPER_STR("equality is wrong"));
     }
     if (neq(zero, one)) {
-      core::Console::log(temper_globals::console.value, "inequality");
+      core::Console::log(temper_globals::console.value, TEMPER_STR("inequality"));
     }
     core::Console::log(temper_globals::console.value, core::Float64::toString(zero));
     if (neq(negativeZero, zero)) {
-      core::Console::log(temper_globals::console.value, "zeroes not equal");
+      core::Console::log(temper_globals::console.value, TEMPER_STR("zeroes not equal"));
     }
     if (lt(negativeZero, zero)) {
-      core::Console::log(temper_globals::console.value, "negZero < zero");
+      core::Console::log(temper_globals::console.value, TEMPER_STR("negZero < zero"));
     }
     if (core::Float64::eq(zero - zero, zero)) {
-      core::Console::log(temper_globals::console.value, "zero subtraction");
+      core::Console::log(temper_globals::console.value, TEMPER_STR("zero subtraction"));
     }
     if (core::Float64::eq(zero + zero, zero)) {
-      core::Console::log(temper_globals::console.value, "zero addition");
+      core::Console::log(temper_globals::console.value, TEMPER_STR("zero addition"));
     }
     if (core::Float64::eq(negativeZero - zero, negativeZero)) {
-      core::Console::log(temper_globals::console.value, "negative zero minus zero is negative");
+      core::Console::log(temper_globals::console.value, TEMPER_STR("negative zero minus zero is negative"));
     }
     if (core::Float64::eq(negativeZero + zero, zero)) {
-      core::Console::log(temper_globals::console.value, "negative zero plus zero is positive");
+      core::Console::log(temper_globals::console.value, TEMPER_STR("negative zero plus zero is positive"));
     }
     if (core::Float64::eq(zero - negativeZero, zero)) {
-      core::Console::log(temper_globals::console.value, "zero minus negative zero is zero");
+      core::Console::log(temper_globals::console.value, TEMPER_STR("zero minus negative zero is zero"));
     }
     if (core::Float64::eq(zero + negativeZero, zero)) {
-      core::Console::log(temper_globals::console.value, "zero plus negative zero is zero");
+      core::Console::log(temper_globals::console.value, TEMPER_STR("zero plus negative zero is zero"));
     }
     if (core::Float64::eq(negativeZero - negativeZero, zero)) {
-      core::Console::log(temper_globals::console.value, "negative zero minus negative zero is zero");
+      core::Console::log(temper_globals::console.value, TEMPER_STR("negative zero minus negative zero is zero"));
     }
     if (core::Float64::eq(negativeZero + negativeZero, negativeZero)) {
-      core::Console::log(temper_globals::console.value, "negative zero plus negative zero is negative zero");
+      core::Console::log(temper_globals::console.value, TEMPER_STR("negative zero plus negative zero is negative zero"));
     }
     core::Console::log(temper_globals::console.value, core::Float64::toString(negativeZero));
     double third = one / three;
     double half = one / two;
     double twoThirds = two / three;
     if (gt(third, half)) {
-      core::Console::log(temper_globals::console.value, "oops third > half");
+      core::Console::log(temper_globals::console.value, TEMPER_STR("oops third > half"));
     }
     if (gt(half, twoThirds)) {
-      core::Console::log(temper_globals::console.value, "oops half > twoThirds");
+      core::Console::log(temper_globals::console.value, TEMPER_STR("oops half > twoThirds"));
     }
     if (neq(third * two, twoThirds)) {
-      core::Console::log(temper_globals::console.value, "misaligned multiplication");
+      core::Console::log(temper_globals::console.value, TEMPER_STR("misaligned multiplication"));
     }
     if (neq(add(third, twoThirds), one)) {
-      core::Console::log(temper_globals::console.value, "doesn't add back up");
+      core::Console::log(temper_globals::console.value, TEMPER_STR("doesn't add back up"));
     }
     core::Console::log(temper_globals::console.value, core::Float64::toString(half));
     core::Console::log(temper_globals::console.value, core::Float64::toString(core::Float64::pow(4.0, -half)));
@@ -152,30 +152,30 @@ void global_init_init() {
     core::Console::log(temper_globals::console.value, "negative infinity " + core::Float64::toString(negativeInfinity));
     double infinity = std::numeric_limits<double>::infinity();
     core::Console::log(temper_globals::console.value, core::Float64::toString(infinity));
-    core::Console::log(temper_globals::console.value, "processed an infinity");
+    core::Console::log(temper_globals::console.value, TEMPER_STR("processed an infinity"));
     double nan = std::numeric_limits<double>::quiet_NaN();
     core::Console::log(temper_globals::console.value, core::Float64::toString(nan));
     if (core::Float64::gt(nan, infinity)) {
-      core::Console::log(temper_globals::console.value, "NaN is biggest");
+      core::Console::log(temper_globals::console.value, TEMPER_STR("NaN is biggest"));
     } else {
-      core::Console::log(temper_globals::console.value, "Infinity is biggest");
+      core::Console::log(temper_globals::console.value, TEMPER_STR("Infinity is biggest"));
     }
     core::Console::log(temper_globals::console.value, "NaN == NaN? " + core::Boolean::toString(core::Float64::eq(nan, std::numeric_limits<double>::quiet_NaN())));
     core::Console::log(temper_globals::console.value, "Int to float: " + core::Float64::toString(core::Int::toFloat64(core::Float64::toInt32Unsafe(two))));
     core::Console::log(temper_globals::console.value, "Positive to int: " + std::to_string(core::Float64::toInt32Unsafe(4.9 * one)));
     core::Console::log(temper_globals::console.value, "Negative to int: " + std::to_string(core::Float64::toInt32Unsafe(-4.9 * one)));
-    std::string value;
+    core::Str value;
     try {
       value = std::to_string(core::Float64::toInt32(infinity));
     } catch (core::TemperBubble const &) {
-      value = "no";
+      value = TEMPER_STR("no");
     }
     core::Console::log(temper_globals::console.value, "Infinity to int: " + value);
-    std::string value2;
+    core::Str value2;
     try {
       value2 = std::to_string(core::Float64::toInt32(std::numeric_limits<double>::quiet_NaN()));
     } catch (core::TemperBubble const &) {
-      value2 = "no";
+      value2 = TEMPER_STR("no");
     }
     core::Console::log(temper_globals::console.value, "NaN to int: " + value2);
     int64_t oneInt64 = core::Float64::toInt64Unsafe(one);
@@ -189,51 +189,51 @@ void global_init_init() {
     core::Console::log(temper_globals::console.value, "Bigger to Int64: " + std::to_string(slightlyBigger));
     core::Console::log(temper_globals::console.value, "Smaller to Int64: " + std::to_string(slightlySmaller));
     core::Console::log(temper_globals::console.value, "Barely ok to Int64: " + std::to_string(core::Float64::toInt64Unsafe(okToConvert64)));
-    std::string value3;
+    core::Str value3;
     try {
       value3 = std::to_string(core::Float64::toInt64(sneakyBig));
     } catch (core::TemperBubble const &) {
-      value3 = "no";
+      value3 = TEMPER_STR("no");
     }
     core::Console::log(temper_globals::console.value, "Sneaky big to Int64: " + value3);
-    std::string value4;
+    core::Str value4;
     try {
       value4 = core::Float64::toString(core::Int64::toFloat64(tooBigForFloat64));
     } catch (core::TemperBubble const &) {
-      value4 = "no";
+      value4 = TEMPER_STR("no");
     }
     core::Console::log(temper_globals::console.value, "Too big Int64 to Float64: " + value4);
-    std::string value5;
+    core::Str value5;
     try {
       value5 = std::to_string(core::Float64::toInt64(infinity));
     } catch (core::TemperBubble const &) {
-      value5 = "no";
+      value5 = TEMPER_STR("no");
     }
     core::Console::log(temper_globals::console.value, "Infinity to Int64: " + value5);
-    std::string value6;
+    core::Str value6;
     try {
       value6 = std::to_string(core::Float64::toInt64(std::numeric_limits<double>::quiet_NaN()));
     } catch (core::TemperBubble const &) {
-      value6 = "no";
+      value6 = TEMPER_STR("no");
     }
     core::Console::log(temper_globals::console.value, "NaN to Int64: " + value6);
-    types_float_basics::checkParse("-1.5");
-    types_float_basics::checkParse("-0");
-    types_float_basics::checkParse("2.0");
-    types_float_basics::checkParse("2");
-    types_float_basics::checkParse(" 2 ");
-    types_float_basics::checkParse("5e-1");
-    types_float_basics::checkParse("NaN");
-    types_float_basics::checkParse("-Infinity");
-    types_float_basics::checkTiny("2.225e-308");
-    types_float_basics::checkTiny("5e-324");
-    types_float_basics::checkParse("1e-400");
-    types_float_basics::checkParse("-1e-400");
-    types_float_basics::checkParse("2.");
-    types_float_basics::checkParse(".2");
-    types_float_basics::checkParse("2.0.0");
-    types_float_basics::checkParse("-inf");
-    types_float_basics::checkParse("totally");
+    types_float_basics::checkParse(TEMPER_STR("-1.5"));
+    types_float_basics::checkParse(TEMPER_STR("-0"));
+    types_float_basics::checkParse(TEMPER_STR("2.0"));
+    types_float_basics::checkParse(TEMPER_STR("2"));
+    types_float_basics::checkParse(TEMPER_STR(" 2 "));
+    types_float_basics::checkParse(TEMPER_STR("5e-1"));
+    types_float_basics::checkParse(TEMPER_STR("NaN"));
+    types_float_basics::checkParse(TEMPER_STR("-Infinity"));
+    types_float_basics::checkTiny(TEMPER_STR("2.225e-308"));
+    types_float_basics::checkTiny(TEMPER_STR("5e-324"));
+    types_float_basics::checkParse(TEMPER_STR("1e-400"));
+    types_float_basics::checkParse(TEMPER_STR("-1e-400"));
+    types_float_basics::checkParse(TEMPER_STR("2."));
+    types_float_basics::checkParse(TEMPER_STR(".2"));
+    types_float_basics::checkParse(TEMPER_STR("2.0.0"));
+    types_float_basics::checkParse(TEMPER_STR("-inf"));
+    types_float_basics::checkParse(TEMPER_STR("totally"));
   });
 }
 

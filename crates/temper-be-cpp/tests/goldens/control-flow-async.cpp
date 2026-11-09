@@ -31,26 +31,26 @@ void global_init_init() {
     temper_globals::console.value = core::Console::get_console();
     auto fn = []() -> std::shared_ptr<core::SafeGenerator<std::shared_ptr<core::Empty>>> {
       std::shared_ptr<int32_t> caseIndex2 = std::make_shared<int32_t>(0);
-      std::shared_ptr<std::shared_ptr<core::PromiseBuilder<std::string>>> b = std::make_shared<std::shared_ptr<core::PromiseBuilder<std::string>>>(nullptr);
-      std::shared_ptr<std::shared_ptr<core::PromiseBuilder<std::string>>> b2 = std::make_shared<std::shared_ptr<core::PromiseBuilder<std::string>>>(nullptr);
-      std::shared_ptr<std::shared_ptr<core::PromiseBuilder<std::string>>> b3 = std::make_shared<std::shared_ptr<core::PromiseBuilder<std::string>>>(nullptr);
-      std::shared_ptr<std::shared_ptr<core::PromiseBuilder<std::string>>> b4 = std::make_shared<std::shared_ptr<core::PromiseBuilder<std::string>>>(nullptr);
+      std::shared_ptr<std::shared_ptr<core::PromiseBuilder<core::Str>>> b = std::make_shared<std::shared_ptr<core::PromiseBuilder<core::Str>>>(nullptr);
+      std::shared_ptr<std::shared_ptr<core::PromiseBuilder<core::Str>>> b2 = std::make_shared<std::shared_ptr<core::PromiseBuilder<core::Str>>>(nullptr);
+      std::shared_ptr<std::shared_ptr<core::PromiseBuilder<core::Str>>> b3 = std::make_shared<std::shared_ptr<core::PromiseBuilder<core::Str>>>(nullptr);
+      std::shared_ptr<std::shared_ptr<core::PromiseBuilder<core::Str>>> b4 = std::make_shared<std::shared_ptr<core::PromiseBuilder<core::Str>>>(nullptr);
       std::shared_ptr<std::shared_ptr<core::PromiseBuilder<std::shared_ptr<core::Empty>>>> a = std::make_shared<std::shared_ptr<core::PromiseBuilder<std::shared_ptr<core::Empty>>>>(nullptr);
       std::shared_ptr<std::shared_ptr<core::PromiseBuilder<std::shared_ptr<core::Empty>>>> b5 = std::make_shared<std::shared_ptr<core::PromiseBuilder<std::shared_ptr<core::Empty>>>>(nullptr);
-      std::shared_ptr<std::shared_ptr<core::PromiseBuilder<std::string>>> b6 = std::make_shared<std::shared_ptr<core::PromiseBuilder<std::string>>>(nullptr);
-      std::shared_ptr<std::string> t = std::make_shared<std::string>("");
-      std::shared_ptr<std::shared_ptr<core::Promise<std::string>>> awaited2 = std::make_shared<std::shared_ptr<core::Promise<std::string>>>(nullptr);
-      std::shared_ptr<std::string> t2 = std::make_shared<std::string>("");
-      std::shared_ptr<std::shared_ptr<core::Promise<std::string>>> awaited3 = std::make_shared<std::shared_ptr<core::Promise<std::string>>>(nullptr);
-      std::shared_ptr<std::string> t3 = std::make_shared<std::string>("");
-      std::shared_ptr<std::shared_ptr<core::Promise<std::string>>> awaited4 = std::make_shared<std::shared_ptr<core::Promise<std::string>>>(nullptr);
-      std::shared_ptr<std::string> t4 = std::make_shared<std::string>("");
-      std::shared_ptr<std::shared_ptr<core::Promise<std::string>>> awaited5 = std::make_shared<std::shared_ptr<core::Promise<std::string>>>(nullptr);
-      std::shared_ptr<std::string> t5 = std::make_shared<std::string>("");
-      std::shared_ptr<std::shared_ptr<core::Promise<std::string>>> awaited6 = std::make_shared<std::shared_ptr<core::Promise<std::string>>>(nullptr);
+      std::shared_ptr<std::shared_ptr<core::PromiseBuilder<core::Str>>> b6 = std::make_shared<std::shared_ptr<core::PromiseBuilder<core::Str>>>(nullptr);
+      std::shared_ptr<core::Str> t = std::make_shared<core::Str>(core::Str());
+      std::shared_ptr<std::shared_ptr<core::Promise<core::Str>>> awaited2 = std::make_shared<std::shared_ptr<core::Promise<core::Str>>>(nullptr);
+      std::shared_ptr<core::Str> t2 = std::make_shared<core::Str>(core::Str());
+      std::shared_ptr<std::shared_ptr<core::Promise<core::Str>>> awaited3 = std::make_shared<std::shared_ptr<core::Promise<core::Str>>>(nullptr);
+      std::shared_ptr<core::Str> t3 = std::make_shared<core::Str>(core::Str());
+      std::shared_ptr<std::shared_ptr<core::Promise<core::Str>>> awaited4 = std::make_shared<std::shared_ptr<core::Promise<core::Str>>>(nullptr);
+      std::shared_ptr<core::Str> t4 = std::make_shared<core::Str>(core::Str());
+      std::shared_ptr<std::shared_ptr<core::Promise<core::Str>>> awaited5 = std::make_shared<std::shared_ptr<core::Promise<core::Str>>>(nullptr);
+      std::shared_ptr<core::Str> t5 = std::make_shared<core::Str>(core::Str());
+      std::shared_ptr<std::shared_ptr<core::Promise<core::Str>>> awaited6 = std::make_shared<std::shared_ptr<core::Promise<core::Str>>>(nullptr);
       std::shared_ptr<std::shared_ptr<core::Promise<std::shared_ptr<core::Empty>>>> awaited7 = std::make_shared<std::shared_ptr<core::Promise<std::shared_ptr<core::Empty>>>>(nullptr);
-      std::shared_ptr<std::string> t6 = std::make_shared<std::string>("");
-      std::shared_ptr<std::shared_ptr<core::Promise<std::string>>> awaited8 = std::make_shared<std::shared_ptr<core::Promise<std::string>>>(nullptr);
+      std::shared_ptr<core::Str> t6 = std::make_shared<core::Str>(core::Str());
+      std::shared_ptr<std::shared_ptr<core::Promise<core::Str>>> awaited8 = std::make_shared<std::shared_ptr<core::Promise<core::Str>>>(nullptr);
       auto convertedCoroutine2 = [=](std::shared_ptr<core::SafeGenerator<std::shared_ptr<core::Empty>>> generator2) -> std::shared_ptr<core::GeneratorResult<std::shared_ptr<core::Empty>>> {
         while (true) {
           int32_t caseIndexLocal2 = (*caseIndex2);
@@ -58,8 +58,8 @@ void global_init_init() {
           switch (caseIndexLocal2) {
             case 0:
               try {
-                *b = core::PromiseBuilderNs::make<std::string>();
-                core::complete((*b), std::string("Completed synchronously"));
+                *b = core::PromiseBuilderNs::make<core::Str>();
+                core::complete((*b), TEMPER_STR("Completed synchronously"));
                 *awaited2 = core::getpromise((*b));
                 *caseIndex2 = 3;
                 core::awake_upon((*awaited2), generator2);
@@ -71,7 +71,7 @@ void global_init_init() {
             case 1:
               core::panic();
             case 2:
-              *b2 = core::PromiseBuilderNs::make<std::string>();
+              *b2 = core::PromiseBuilderNs::make<core::Str>();
               core::breakpromise((*b2));
               *caseIndex2 = 6;
               break;
@@ -85,7 +85,7 @@ void global_init_init() {
               }
               break;
             case 4:
-              *t2 = "Broken synchronously";
+              *t2 = TEMPER_STR("Broken synchronously");
               *caseIndex2 = 5;
               break;
             case 5:
@@ -114,8 +114,8 @@ void global_init_init() {
               core::panic();
             case 9:
               try {
-                *b4 = core::PromiseBuilderNs::make<std::string>();
-                core::complete((*b4), std::string("Worth doing twice"));
+                *b4 = core::PromiseBuilderNs::make<core::Str>();
+                core::complete((*b4), TEMPER_STR("Worth doing twice"));
                 *awaited5 = core::getpromise((*b4));
                 *caseIndex2 = 14;
                 core::awake_upon((*awaited5), generator2);
@@ -126,7 +126,7 @@ void global_init_init() {
               break;
             case 10:
               try {
-                *b3 = core::PromiseBuilderNs::make<std::string>();
+                *b3 = core::PromiseBuilderNs::make<core::Str>();
                 auto fn2 = [=]() -> std::shared_ptr<core::SafeGenerator<std::shared_ptr<core::Empty>>> {
                   std::shared_ptr<int32_t> caseIndex = std::make_shared<int32_t>(0);
                   auto convertedCoroutine = [=](std::shared_ptr<core::SafeGenerator<std::shared_ptr<core::Empty>>>) -> std::shared_ptr<core::GeneratorResult<std::shared_ptr<core::Empty>>> {
@@ -134,7 +134,7 @@ void global_init_init() {
                     *caseIndex = -1;
                     switch (caseIndexLocal) {
                       case 0:
-                        core::complete((*b3), std::string("Completed asynchronously"));
+                        core::complete((*b3), TEMPER_STR("Completed asynchronously"));
                         return core::doneResult();
                       default:
                         return core::doneResult();
@@ -187,7 +187,7 @@ void global_init_init() {
                         case 1:
                           core::panic();
                         case 2:
-                          core::Console::log(temper_globals::console.value, "After");
+                          core::Console::log(temper_globals::console.value, TEMPER_STR("After"));
                           core::complete((*a), core::empty());
                           return core::doneResult();
                         case 3:
@@ -213,7 +213,7 @@ void global_init_init() {
                     *caseIndex = -1;
                     switch (caseIndexLocal) {
                       case 0:
-                        core::Console::log(temper_globals::console.value, "Before");
+                        core::Console::log(temper_globals::console.value, TEMPER_STR("Before"));
                         core::complete((*b5), core::empty());
                         return core::doneResult();
                       default:
@@ -256,10 +256,10 @@ void global_init_init() {
               core::panic();
             case 17:
               try {
-                core::Console::log(temper_globals::console.value, "What is your favourite colour?");
-                *b6 = core::PromiseBuilderNs::make<std::string>();
-                core::complete((*b6), std::string("Blue"));
-                core::complete((*b6), std::string("No, yell..."));
+                core::Console::log(temper_globals::console.value, TEMPER_STR("What is your favourite colour?"));
+                *b6 = core::PromiseBuilderNs::make<core::Str>();
+                core::complete((*b6), TEMPER_STR("Blue"));
+                core::complete((*b6), TEMPER_STR("No, yell..."));
                 *awaited8 = core::getpromise((*b6));
                 *caseIndex2 = 19;
                 core::awake_upon((*awaited8), generator2);

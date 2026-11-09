@@ -20,7 +20,7 @@ struct Tick : public virtual temper::core::AnyValueBase {
 struct Counter : public std::enable_shared_from_this<Counter> {
   int32_t n;
   static std::shared_ptr<Counter> make();
-  void bump(std::string tag, int32_t times);
+  void bump(temper::core::Str const & tag, int32_t times);
   int32_t get_n();
 };
 
@@ -208,8 +208,8 @@ static std::shared_ptr<std::vector<int32_t>> take(std::shared_ptr<core::SafeGene
   return core::List::toList<int32_t>(taken);
 }
 
-static std::string shown(std::shared_ptr<std::vector<int32_t>> const & ints) {
-  return core::List::join(ints, " ", [](int32_t i) -> std::string { return std::to_string(i); });
+static core::Str shown(std::shared_ptr<std::vector<int32_t>> const & ints) {
+  return core::List::join(ints, TEMPER_STR(" "), [](int32_t i) -> core::Str { return std::to_string(i); });
 }
 
 std::shared_ptr<Counter> Counter::make() {
@@ -218,7 +218,7 @@ std::shared_ptr<Counter> Counter::make() {
   return self;
 }
 
-void Counter::bump(std::string tag, int32_t times) {
+void Counter::bump(core::Str const & tag, int32_t times) {
   core::Console::log(temper_globals::console.value, tag + " start");
   {
     int32_t i = 0;
@@ -264,7 +264,7 @@ void global_init_init() {
           *caseIndex = -1;
           switch (caseIndexLocal) {
             case 0:
-              temper_globals::c.value->bump("A", 10000);
+              temper_globals::c.value->bump(TEMPER_STR("A"), 10000);
               *caseIndex = 3;
               break;
             case 1:
@@ -310,7 +310,7 @@ void global_init_init() {
           *caseIndex = -1;
           switch (caseIndexLocal) {
             case 0:
-              temper_globals::c.value->bump("B", 10000);
+              temper_globals::c.value->bump(TEMPER_STR("B"), 10000);
               *caseIndex = 3;
               break;
             case 1:
@@ -353,10 +353,10 @@ void global_init_init() {
         *caseIndex = -1;
         switch (caseIndexLocal) {
           case 0:
-            core::Console::log(temper_globals::console.value, "opener: calling complete");
+            core::Console::log(temper_globals::console.value, TEMPER_STR("opener: calling complete"));
             core::complete(temper_globals::gateA.value, 1);
             core::complete(temper_globals::gateB.value, 2);
-            core::Console::log(temper_globals::console.value, "opener: complete returned");
+            core::Console::log(temper_globals::console.value, TEMPER_STR("opener: complete returned"));
             return core::doneResult();
           default:
             return core::doneResult();

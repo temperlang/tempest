@@ -14,6 +14,7 @@
 #include <utility>
 #include "nullable_param.hpp"
 #include "promise.hpp"
+#include "str.hpp"
 #ifdef TEMPER_NET_CURL
 #ifndef CURL_DISABLE_TYPECHECK
 #define CURL_DISABLE_TYPECHECK
@@ -28,6 +29,8 @@ namespace temper {
     namespace core {
         namespace net {
 
+            // A client's requests and responses hold std::strings, not
+            // Temper's shared Str, as host code and other threads use them.
             struct Request {
                 std::string url;
                 std::string method;
@@ -213,6 +216,14 @@ namespace temper {
 #endif
             }
 
+            // A Temper String? as the host's std::string, or back.
+            inline NullableParam<std::string> text_of(NullableParam<Str> const& text) {
+                return text.has_value ? NullableParam<std::string>(text.value.str()) : NullableParam<std::string>();
+            }
+            inline NullableParam<Str> text_of(NullableParam<std::string> const& text) {
+                return text.has_value ? NullableParam<Str>(Str(text.value)) : NullableParam<Str>();
+            }
+
             // std/net's NetResponse (R) over a response.
             template<class R>
             struct ResponseOf final : public R {
@@ -224,13 +235,13 @@ namespace temper {
                     return response->status;
                 }
 
-                NullableParam<std::string> get_contentType() const override {
-                    return response->contentType;
+                NullableParam<Str> get_contentType() const override {
+                    return text_of(response->contentType);
                 }
 
-                std::shared_ptr<Promise<NullableParam<std::string>>> get_bodyContent() override {
-                    auto builder = PromiseBuilderNs::make<NullableParam<std::string>>();
-                    complete(builder, response->bodyContent);
+                std::shared_ptr<Promise<NullableParam<Str>>> get_bodyContent() override {
+                    auto builder = PromiseBuilderNs::make<NullableParam<Str>>();
+                    complete(builder, text_of(response->bodyContent));
                     return getpromise(builder);
                 }
             };
@@ -240,10 +251,10 @@ namespace temper {
             // waits for it when nothing else is ready (async_hold).
             template<class R>
             std::shared_ptr<Promise<std::shared_ptr<R>>> sendRequest(
-                std::string url,
-                std::string method,
-                NullableParam<std::string> bodyContent,
-                NullableParam<std::string> bodyMimeType
+                Str const& url,
+                Str const& method,
+                NullableParam<Str> const& bodyContent,
+                NullableParam<Str> const& bodyMimeType
             ) {
                 auto builder = PromiseBuilderNs::make<std::shared_ptr<R>>();
                 std::shared_ptr<Client> client = current_client();
@@ -261,7 +272,7 @@ namespace temper {
                 }
                 async_hold();
                 auto once = std::make_shared<std::atomic<bool>>(false);
-                Request request{std::move(url), std::move(method), std::move(bodyContent), std::move(bodyMimeType)};
+                Request request{url.str(), method.str(), text_of(bodyContent), text_of(bodyMimeType)};
                 client->send(std::move(request), [builder, once](std::shared_ptr<Response const> response) {
                     if (once->exchange(true)) {
                         return;

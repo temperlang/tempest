@@ -163,6 +163,17 @@ const STD_MEMBERS: [&str; 5] = [
     "types/json-syntax-tree",
 ];
 
+/// The functional tests new in the 2026-11-09 sync with Kotlin's `main`
+/// (from its #644, #645, and #651), which translate; the backends don't
+/// list them yet (each logs what Kotlin expects on C++, checked by hand).
+const SYNCED: [&str; 5] = [
+    "casts/generic-is",
+    "classes/getter-constness",
+    "interfaces/generic-default",
+    "regex/code-sets",
+    "types/list/long-literal",
+];
+
 /// A functional test, settled as `check_functional.py` builds it: its
 /// directory's own files, the main one first, and std's that it imports.
 fn settled(test: &str) -> Settled {
@@ -223,6 +234,7 @@ fn subset_a_goldens() {
             .chain(&NET)
             .chain(&ASYNC)
             .chain(&STD_MEMBERS)
+            .chain(&SYNCED)
         {
             let program = translate(test).unwrap_or_else(|e| panic!("{test}: {e}"));
             let problems = validate(&program, &Profile::full());
@@ -311,7 +323,8 @@ fn every_functional_test_translates_or_says_why() {
             .chain(&TYPE_VALUES)
             .chain(&NET)
             .chain(&ASYNC)
-            .chain(&STD_MEMBERS))
+            .chain(&STD_MEMBERS)
+            .chain(&SYNCED))
         .copied()
         .collect();
         covered.sort();

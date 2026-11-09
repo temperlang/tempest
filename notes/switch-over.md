@@ -108,7 +108,10 @@ Risks to the date:
      backend (C#'s `Core` beside a module `core`, Rust's printer no
      longer exponential in call depth, C++'s private templates in the
      header), plus three runtime fixes from Kotlin branches as vendor
-     patches 0021 to 0023. Real libraries run nightly
+     patches 0021 to 0023, which Kotlin's `main` has since taken
+     (dropped in the 2026-11-09 sync, which also brought C++'s shared
+     `Str` strings, #654; all five libraries pass on C++ after it,
+     Wherewith's 76 once a discarded `String?` call was a statement). Real libraries run nightly
      on GitHub, from a list ([test-speed.md](test-speed.md), "Real
      libraries, nightly").
    - Kotlin Temper bugs these libraries hit are fixed in tempest's

@@ -9,5 +9,40 @@
 8:16 -> ../pure-virtual.temper.md:9:5   extends type(Greeter) { <- class HiGreeter extends Gree
 9:3 -> ../pure-virtual.temper.md:10:14 (greet)  greet() { <- greet(): Void {
 10:5 -> ../pure-virtual.temper.md:11:9  console.log("Hi, virtually!" <- console.log("Hi, virtually!"
-14:1 -> ../pure-virtual.temper.md:15:5  const greeter = new HiGreete <- let greeter: Greeter = new H
-15:1 -> ../pure-virtual.temper.md:16:5  greeter.greet(); <- greeter.greet();
+14:1 -> ../pure-virtual.temper.md:28:5  /** @template T */ <- interface Wrapper<T> {
+15:7 -> ../pure-virtual.temper.md:28:15 (Wrapper)  Wrapper extends type() { <- Wrapper<T> {
+15:14 -> ../pure-virtual.temper.md:28:5   extends type() { <- interface Wrapper<T> {
+16:3 -> ../pure-virtual.temper.md:29:14  /** @type {(item: T) => T} * <- wrap(item: T): T;
+17:3 -> ../pure-virtual.temper.md:29:14  wrap = /** @type {any} */ (u <- wrap(item: T): T;
+20:1 -> ../pure-virtual.temper.md:32:5  class Box extends type() { <- class Box(public label: Stri
+20:7 -> ../pure-virtual.temper.md:32:11 (Box)  Box extends type() { <- Box(public label: String) {}
+20:10 -> ../pure-virtual.temper.md:32:5   extends type() { <- class Box(public label: Stri
+21:3 -> ../pure-virtual.temper.md:32:22  /** @type {string} */ <- label: String) {}
+22:3 -> ../pure-virtual.temper.md:32:22  #label; <- label: String) {}
+24:3 -> ../pure-virtual.temper.md:32:5  /** @param {string} label */ <- class Box(public label: Stri
+25:3 -> ../pure-virtual.temper.md:32:5  constructor(label) { <- class Box(public label: Stri
+27:5 -> ../pure-virtual.temper.md:32:22  this.#label = label; <- label: String) {}
+30:3 -> ../pure-virtual.temper.md:32:22  /** @returns {string} */ <- label: String) {}
+31:3 -> ../pure-virtual.temper.md:32:22  get label() { <- label: String) {}
+31:7 -> ../pure-virtual.temper.md:32:22 (label)  label() { <- label: String) {}
+36:1 -> ../pure-virtual.temper.md:34:5  class BoxWrapper extends typ <- class BoxWrapper extends Wra
+36:7 -> ../pure-virtual.temper.md:34:11 (BoxWrapper)  BoxWrapper extends type(Wrap <- BoxWrapper extends Wrapper<B
+36:17 -> ../pure-virtual.temper.md:34:5   extends type(Wrapper) { <- class BoxWrapper extends Wra
+37:3 -> ../pure-virtual.temper.md:35:14  /** <- wrap(var item: Box): Box {
+41:3 -> ../pure-virtual.temper.md:35:14 (wrap)  wrap(item) { <- wrap(var item: Box): Box {
+42:5 -> ../pure-virtual.temper.md:36:9  item = new Box(`[${item.labe <- item = new Box("[${item.labe
+43:5 -> ../pure-virtual.temper.md:37:9  return item; <- item
+47:1 -> ../pure-virtual.temper.md:41:5  class IntWrapper extends typ <- class IntWrapper extends Wra
+47:7 -> ../pure-virtual.temper.md:41:11 (IntWrapper)  IntWrapper extends type(Wrap <- IntWrapper extends Wrapper<I
+47:17 -> ../pure-virtual.temper.md:41:5   extends type(Wrapper) { <- class IntWrapper extends Wra
+48:3 -> ../pure-virtual.temper.md:42:14  /** <- wrap(item: Int): Int { item
+52:3 -> ../pure-virtual.temper.md:42:14 (wrap)  wrap(item) { <- wrap(item: Int): Int { item
+53:5 -> ../pure-virtual.temper.md:42:37  return (item + 1) | 0; <- item + 1 }
+57:1 -> ../pure-virtual.temper.md:15:5  const greeter = new HiGreete <- let greeter: Greeter = new H
+58:1 -> ../pure-virtual.temper.md:16:5  greeter.greet(); <- greeter.greet();
+59:1 -> ../pure-virtual.temper.md:45:5  /** @type {Wrapper<Box>} */ <- let boxWrapper: Wrapper<Box>
+60:1 -> ../pure-virtual.temper.md:45:5  const boxWrapper = new BoxWr <- let boxWrapper: Wrapper<Box>
+61:1 -> ../pure-virtual.temper.md:46:5  /** @type {Wrapper<number>} <- let intWrapper: Wrapper<Int>
+62:1 -> ../pure-virtual.temper.md:46:5  const intWrapper = new IntWr <- let intWrapper: Wrapper<Int>
+63:1 -> ../pure-virtual.temper.md:47:5  console.log(boxWrapper.wrap( <- console.log(boxWrapper.wrap(
+64:1 -> ../pure-virtual.temper.md:48:5  console.log(intWrapper.wrap( <- console.log(intWrapper.wrap(

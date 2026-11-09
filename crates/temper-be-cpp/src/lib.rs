@@ -45,10 +45,21 @@
 //! `panic()` (`try`/`catch` of the runtime's `TemperBubble`); and
 //! generics, as templates, defined in the header where others may
 //! instantiate them, called with their type arguments, which C++ can't
-//! always deduce (`first<std::string>(…, "z")`), and core's lists, maps,
+//! always deduce (`first<core::Str>(…, TEMPER_STR("z"))`), and core's lists, maps,
 //! and pairs as the runtime's (`std::shared_ptr<std::vector<T>>`,
 //! `Mapped::Ordered`, `Pair`), its function templates also given their
 //! type arguments; anything else is [`NotYet`]. No source maps yet.
+//!
+//! Strings are the runtime's `temper::core::Str` (`str.hpp`, Temper
+//! #654): immutable UTF-8 text behind a `std::shared_ptr<std::string
+//! const>`, so a copy bumps a count, passed by `const &` where never
+//! assigned, as a `shared_ptr` is. A literal is `TEMPER_STR("…")`, made
+//! once, on first use, and the empty string `core::Str()`, as Kotlin's.
+//! Where Kotlin's concatenates through the runtime's `cat`, tempest's
+//! writes `+` with bare literals, which makes a `std::string` that
+//! converts to the `Str` it's kept as, and is wrapped as `core::Str(…)`
+//! where C++ would otherwise deduce `std::string` or find a choice of the
+//! two ambiguous ([`tree::Expr::str_value`]).
 
 pub mod connected;
 pub mod effects;
@@ -409,7 +420,7 @@ pub fn test_main(p: &Program, namespace: &str, names: &HashMap<DeclId, String>) 
         auto messages = test->messagesCombined();
         return temper::core::TestOutcome{{
             test->get_passing(),
-            temper::core::is_null(messages) ? std::string() : static_cast<std::string>(messages)}};
+            temper::core::is_null(messages) ? std::string() : temper::core::Str(messages).str()}};
       }}}},
 ",
                 tree::string_literal(p.strings.get(name))

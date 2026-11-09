@@ -45,6 +45,26 @@ console.log(builder[0]);
 builder[0] = "";
 builder[0] += "Back to square zero.";
 console.log(builder[0]);
+builder[0] = "";
+builder[0] += "a??=b??/c??>d???e";
+const marks = builder[0];
+console.log(marks);
+console.log(`Same: ${marks === "a??=b??/c??>d???e"}`);
+builder[0] = "";
+builder[0] += "??";
+try {
+  stringBuilderAppendCodePoint(builder, 1);
+} catch {
+  console.log("No U+1.");
+}
+builder[0] += "0";
+try {
+  stringBuilderAppendCodePoint(builder, 8364);
+} catch {
+  console.log("No euro.");
+}
+builder[0] += "1";
+console.log(`Digits after escapes: ${builder[0] === "??\x010€1"}`);
 const owner = new StringBuilderOwner([""]);
 owner.builder[0] += "Hi from inside.";
 console.log(owner.builder[0]);

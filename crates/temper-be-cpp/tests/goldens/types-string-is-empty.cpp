@@ -22,10 +22,10 @@ namespace core = temper::core;
 void global_init_init() {
   core::init_once([] {
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
-    std::string emptyString = "";
-    std::string foo = "foo";
-    core::Console::log(console, emptyString.empty() ? "emptyString is empty" : "emptyString is not empty");
-    core::Console::log(console, foo.empty() ? "foo is empty" : "foo is not empty");
+    core::Str emptyString = core::Str();
+    core::Str foo = TEMPER_STR("foo");
+    core::Console::log(console, emptyString.empty() ? TEMPER_STR("emptyString is empty") : TEMPER_STR("emptyString is not empty"));
+    core::Console::log(console, foo.empty() ? TEMPER_STR("foo is empty") : TEMPER_STR("foo is not empty"));
   });
 }
 

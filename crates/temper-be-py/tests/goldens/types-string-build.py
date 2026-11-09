@@ -1,5 +1,6 @@
 from temper_core import (
     LoggingConsole as _LoggingConsole,
+    boolean_to_string as _boolean_to_string,
     string_from_code_point as _string_from_code_point,
     string_step as _string_step,
 )
@@ -43,6 +44,24 @@ _console.log(''.join(_builder))
 _builder.clear()
 _builder.append('Back to square zero.')
 _console.log(''.join(_builder))
+_builder.clear()
+_builder.append('a??=b??/c??>d???e')
+_marks: str = ''.join(_builder)
+_console.log(_marks)
+_console.log(f"Same: {_boolean_to_string(_marks == 'a??=b??/c??>d???e')}")
+_builder.clear()
+_builder.append('??')
+try:
+    _builder.append(_string_from_code_point(1))
+except Exception:
+    _console.log('No U+1.')
+_builder.append('0')
+try:
+    _builder.append(_string_from_code_point(8364))
+except Exception:
+    _console.log('No euro.')
+_builder.append('1')
+_console.log('Digits after escapes: ' + _boolean_to_string(''.join(_builder) == '??\x010€1'))
 _owner: _StringBuilderOwner = _StringBuilderOwner([''])
 _owner.builder.append('Hi from inside.')
 _console.log(''.join(_owner.builder))

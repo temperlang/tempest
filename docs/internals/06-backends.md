@@ -84,9 +84,12 @@ The same two lines of Temper, in each language:
 Temper's `Int` is a 32-bit integer that wraps on overflow, so each
 language gets what gives that: Java's and C#'s `*` already do, Rust
 asks for `wrapping_mul`, JavaScript uses `Math.imul`, and C++, Lua, and
-Python call the runtime. Names follow each language's rules: `triple`
-is `_triple` in Python, where it's private to the module, and `Triple`
-in C#.
+Python call the runtime. Strings follow the runtime too: in C++ a
+`String` is `temper::core::Str`, shared, immutable text whose copies
+bump a count, with each literal made once (`TEMPER_STR("…")`), while
+`+` above makes a `std::string` that converts to it. Names follow each
+language's rules: `triple` is `_triple` in Python, where it's private
+to the module, and `Triple` in C#.
 
 ## Statements inside expressions
 

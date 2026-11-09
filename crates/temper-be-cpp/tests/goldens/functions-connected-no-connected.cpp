@@ -30,7 +30,7 @@ struct Hider : public std::enable_shared_from_this<Hider> {
 int32_t sumOf3(int32_t a, int32_t b, int32_t c);
 int32_t sum(int32_t i, int32_t j, temper::core::NullableParam<int32_t> bonus);
 int32_t sum(int32_t i, int32_t j);
-int32_t length(temper::core::NullableParam<std::string> string);
+int32_t length(temper::core::NullableParam<temper::core::Str> string);
 int32_t length();
 int32_t twice(int32_t i);
 
@@ -59,7 +59,7 @@ int32_t sum(int32_t i, int32_t j) {
   return sum(i, j, nullptr);
 }
 
-int32_t length(core::NullableParam<std::string> string) {
+int32_t length(core::NullableParam<core::Str> string) {
   global_init_init();
   if (string == nullptr) {
     return 999;
@@ -113,7 +113,7 @@ void global_init_init() {
   core::init_once([] {
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
     core::Console::log(console, "sum(1, 2): " + std::to_string(work::sum(1, 2)));
-    core::Console::log(console, "length \"\" vs null vs (): " + std::to_string(work::length("")) + " vs " + std::to_string(work::length(nullptr)) + " vs " + std::to_string(work::length()));
+    core::Console::log(console, "length \"\" vs null vs (): " + std::to_string(work::length(core::Str())) + " vs " + std::to_string(work::length(nullptr)) + " vs " + std::to_string(work::length()));
     core::Console::log(console, "twice(5): " + std::to_string(twice(5)));
     bool isConnected = work::sum(1, 2) == 3;
     if (isConnected) {

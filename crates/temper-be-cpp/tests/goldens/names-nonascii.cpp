@@ -25,7 +25,7 @@ static core::GlobalSlot<std::shared_ptr<core::Console::Type>> console;
 
 }  // namespace temper_globals
 
-static void sayHello(std::string όνομα) {
+static void sayHello(core::Str const & όνομα) {
   core::Console::log(temper_globals::console.value, "Hello, " + όνομα + "!");
 }
 
@@ -33,7 +33,7 @@ void global_init_init() {
   core::init_once([] {
     temper_globals::console.construct();
     temper_globals::console.value = core::Console::get_console();
-    nonascii::sayHello("World");
+    nonascii::sayHello(TEMPER_STR("World"));
   });
 }
 

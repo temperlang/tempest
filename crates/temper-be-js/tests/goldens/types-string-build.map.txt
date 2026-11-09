@@ -1,15 +1,15 @@
 # generated line:column -> source:line:column, and the text at each
-7:1 -> ../build.temper.md:74:5  class StringBuilderOwner ext <- class StringBuilderOwner(
-7:7 -> ../build.temper.md:74:11 (StringBuilderOwner)  StringBuilderOwner extends t <- StringBuilderOwner(
-7:25 -> ../build.temper.md:74:5   extends type() { <- class StringBuilderOwner(
-8:3 -> ../build.temper.md:75:14  /** @type {string[]} */ <- builder: StringBuilder,
-9:3 -> ../build.temper.md:75:14  #builder; <- builder: StringBuilder,
-11:3 -> ../build.temper.md:74:5  /** @param {string[]} builde <- class StringBuilderOwner(
-12:3 -> ../build.temper.md:74:5  constructor(builder) { <- class StringBuilderOwner(
-14:5 -> ../build.temper.md:75:14  this.#builder = builder; <- builder: StringBuilder,
-17:3 -> ../build.temper.md:75:14  /** @returns {string[]} */ <- builder: StringBuilder,
-18:3 -> ../build.temper.md:75:14  get builder() { <- builder: StringBuilder,
-18:7 -> ../build.temper.md:75:14 (builder)  builder() { <- builder: StringBuilder,
+7:1 -> ../build.temper.md:106:5  class StringBuilderOwner ext <- class StringBuilderOwner(
+7:7 -> ../build.temper.md:106:11 (StringBuilderOwner)  StringBuilderOwner extends t <- StringBuilderOwner(
+7:25 -> ../build.temper.md:106:5   extends type() { <- class StringBuilderOwner(
+8:3 -> ../build.temper.md:107:14  /** @type {string[]} */ <- builder: StringBuilder,
+9:3 -> ../build.temper.md:107:14  #builder; <- builder: StringBuilder,
+11:3 -> ../build.temper.md:106:5  /** @param {string[]} builde <- class StringBuilderOwner(
+12:3 -> ../build.temper.md:106:5  constructor(builder) { <- class StringBuilderOwner(
+14:5 -> ../build.temper.md:107:14  this.#builder = builder; <- builder: StringBuilder,
+17:3 -> ../build.temper.md:107:14  /** @returns {string[]} */ <- builder: StringBuilder,
+18:3 -> ../build.temper.md:107:14  get builder() { <- builder: StringBuilder,
+18:7 -> ../build.temper.md:107:14 (builder)  builder() { <- builder: StringBuilder,
 23:1 -> ../build.temper.md:7:5  const builder = [""]; <- let builder = new StringBuil
 24:1 -> ../build.temper.md:8:5  builder[0] += "Hi "; <- builder.append("Hi ");
 25:1 -> ../build.temper.md:9:5  stringBuilderAppendCodePoint <- builder.appendCodePoint(char
@@ -27,6 +27,18 @@
 45:1 -> ../build.temper.md:59:5  builder[0] = ""; <- builder.clear();  // Now it'
 46:1 -> ../build.temper.md:60:5  builder[0] += "Back to squar <- builder.append("Back to squa
 47:1 -> ../build.temper.md:62:5  console.log(builder[0]); <- console.log(builder.toString
-48:1 -> ../build.temper.md:81:5  const owner = new StringBuil <- let owner = new StringBuilde
-49:1 -> ../build.temper.md:82:5  owner.builder[0] += "Hi from <- owner.builder.append("Hi fro
-50:1 -> ../build.temper.md:83:5  console.log(owner.builder[0] <- console.log(owner.builder.to
+48:1 -> ../build.temper.md:73:5  builder[0] = ""; <- builder.clear();
+49:1 -> ../build.temper.md:74:5  builder[0] += "a??=b??/c??>d <- builder.append("a??=b??/c??>
+50:1 -> ../build.temper.md:75:5  const marks = builder[0]; <- let marks = builder.toString
+51:1 -> ../build.temper.md:76:5  console.log(marks); <- console.log(marks);
+52:1 -> ../build.temper.md:77:5  console.log(`Same: ${marks = <- console.log("Same: ${marks =
+53:1 -> ../build.temper.md:88:5  builder[0] = ""; <- builder.clear();
+54:1 -> ../build.temper.md:89:5  builder[0] += "??"; <- builder.append("??");
+55:1 -> ../build.temper.md:90:5  try { <- builder.appendCodePoint(1) o
+60:1 -> ../build.temper.md:91:5  builder[0] += "0"; <- builder.append("0");
+61:1 -> ../build.temper.md:92:5  try { <- builder.appendCodePoint(0x20
+66:1 -> ../build.temper.md:93:5  builder[0] += "1"; <- builder.append("1");
+67:1 -> ../build.temper.md:94:5  console.log(`Digits after es <- console.log("Digits after es
+68:1 -> ../build.temper.md:113:5  const owner = new StringBuil <- let owner = new StringBuilde
+69:1 -> ../build.temper.md:114:5  owner.builder[0] += "Hi from <- owner.builder.append("Hi fro
+70:1 -> ../build.temper.md:115:5  console.log(owner.builder[0] <- console.log(owner.builder.to

@@ -23,18 +23,18 @@ namespace core = temper::core;
 namespace temper_globals {
 
 static core::GlobalSlot<std::shared_ptr<core::Console::Type>> console;
-static core::GlobalSlot<std::string> text;
-static core::GlobalSlot<std::string> moreText;
+static core::GlobalSlot<core::Str> text;
+static core::GlobalSlot<core::Str> moreText;
 
 }  // namespace temper_globals
 
 static void checkGroup(std::shared_ptr<temper_std::Group> const & group) {
-  std::string name = group->name;
-  std::string value = group->value;
+  core::Str name = group->name;
+  core::Str value = group->value;
   int32_t begin = group->begin;
   int32_t end = group->end;
-  std::string size = std::to_string(core::String::countBetween(temper_globals::text.value, begin, end));
-  std::string begin2 = std::to_string(core::String::countBetween(temper_globals::text.value, core::String::begin(), begin));
+  core::Str size = std::to_string(core::String::countBetween(temper_globals::text.value, begin, end));
+  core::Str begin2 = std::to_string(core::String::countBetween(temper_globals::text.value, core::String::begin(), begin));
   core::Console::log(temper_globals::console.value, "match group '" + name + "': '" + value + "' at " + begin2 + " size " + size);
 }
 
@@ -45,117 +45,123 @@ void global_init_init() {
     temper_globals::moreText.construct();
     temper_std::global_init_regex();
     temper_globals::console.value = core::Console::get_console();
-    std::shared_ptr<temper_std::RegexNode> regexNode = temper_std::oneOrMore(temper_std::CodeSet::make(core::List::make<std::shared_ptr<temper_std::CodePart>>(temper_std::CodePoints::make("ab"))));
-    std::shared_ptr<temper_std::Regex> regex = temper_std::Sequence::make(core::List::make<std::shared_ptr<temper_std::RegexNode>>(regexNode, temper_std::CodePoints::make("c")))->compiled();
+    std::shared_ptr<temper_std::RegexNode> regexNode = temper_std::oneOrMore(temper_std::CodeSet::make(core::List::make<std::shared_ptr<temper_std::CodePart>>(temper_std::CodePoints::make(TEMPER_STR("ab")))));
+    std::shared_ptr<temper_std::Regex> regex = temper_std::Sequence::make(core::List::make<std::shared_ptr<temper_std::RegexNode>>(regexNode, temper_std::CodePoints::make(TEMPER_STR("c"))))->compiled();
     std::shared_ptr<temper_std::Regex> full = temper_std::entire(regex->data)->compiled();
-    std::shared_ptr<std::vector<std::string>> strings = core::List::make<std::string>("abc", "ac", "bbabac", "ab", "dc", "acc", "cbc");
+    std::shared_ptr<std::vector<core::Str>> strings = core::List::make<core::Str>(TEMPER_STR("abc"), TEMPER_STR("ac"), TEMPER_STR("bbabac"), TEMPER_STR("ab"), TEMPER_STR("dc"), TEMPER_STR("acc"), TEMPER_STR("cbc"));
     {
-      int32_t length = core::List::length<std::string>(strings);
+      int32_t length = core::List::length<core::Str>(strings);
       int32_t i = 0;
       while (i < length) {
-        std::string string = core::List::get<std::string>(strings, i);
+        core::Str string = core::List::get<core::Str>(strings, i);
         i = core::Int::add(i, 1);
         core::Console::log(temper_globals::console.value, "found " + string + ": " + core::Boolean::toString(regex->found(string)));
         core::Console::log(temper_globals::console.value, "matches " + string + ": " + core::Boolean::toString(full->found(string)));
       }
     }
-    std::shared_ptr<temper_std::RegexNode> value2 = temper_std::Repeat::make(temper_std::CodePoints::make("a"), 1, nullptr, false);
-    std::shared_ptr<temper_std::RegexNode> value3 = temper_std::Capture::make("intro", temper_std::Repeat::make(temper_std::CodePoints::make("b"), 1, nullptr, false));
-    std::shared_ptr<temper_std::RegexNode> value4 = temper_std::CodePoints::make("c");
-    std::shared_ptr<temper_std::RegexNode> value5 = temper_std::Capture::make("option1", temper_std::CodePoints::make("d"));
-    std::shared_ptr<temper_std::Regex> catcher = temper_std::Sequence::make(core::List::make<std::shared_ptr<temper_std::RegexNode>>(value2, value3, value4, temper_std::Repeat::make(temper_std::Or::make(core::List::make<std::shared_ptr<temper_std::RegexNode>>(value5, temper_std::Capture::make("alphaOption2", temper_std::CodePoints::make("e")))), 1, nullptr, false)))->compiled();
-    temper_globals::text.value = "🌍aaabbceef";
+    std::shared_ptr<temper_std::RegexNode> value2 = temper_std::Repeat::make(temper_std::CodePoints::make(TEMPER_STR("a")), 1, nullptr, false);
+    std::shared_ptr<temper_std::RegexNode> value3 = temper_std::Capture::make(TEMPER_STR("intro"), temper_std::Repeat::make(temper_std::CodePoints::make(TEMPER_STR("b")), 1, nullptr, false));
+    std::shared_ptr<temper_std::RegexNode> value4 = temper_std::CodePoints::make(TEMPER_STR("c"));
+    std::shared_ptr<temper_std::RegexNode> value5 = temper_std::Capture::make(TEMPER_STR("option1"), temper_std::CodePoints::make(TEMPER_STR("d")));
+    std::shared_ptr<temper_std::Regex> catcher = temper_std::Sequence::make(core::List::make<std::shared_ptr<temper_std::RegexNode>>(value2, value3, value4, temper_std::Repeat::make(temper_std::Or::make(core::List::make<std::shared_ptr<temper_std::RegexNode>>(value5, temper_std::Capture::make(TEMPER_STR("alphaOption2"), temper_std::CodePoints::make(TEMPER_STR("e"))))), 1, nullptr, false)))->compiled();
+    temper_globals::text.value = TEMPER_STR("🌍aaabbceef");
     std::shared_ptr<temper_std::Match> match = catcher->find(temper_globals::text.value);
     match::checkGroup(match->full);
-    match::checkGroup(core::Mapped::get<std::string, std::shared_ptr<temper_std::Group>>(match->groups, "intro"));
-    match::checkGroup(core::Mapped::get<std::string, std::shared_ptr<temper_std::Group>>(match->groups, "alphaOption2"));
+    match::checkGroup(core::Mapped::get<core::Str, std::shared_ptr<temper_std::Group>>(match->groups, TEMPER_STR("intro")));
+    match::checkGroup(core::Mapped::get<core::Str, std::shared_ptr<temper_std::Group>>(match->groups, TEMPER_STR("alphaOption2")));
     std::shared_ptr<temper_std::Regex> thing = temper_std::Repeat::make(temper_std::CodeSet::make(core::List::make<std::shared_ptr<temper_std::CodePart>>(temper_std::CodeRange::make(97, 122)), false), 1, nullptr, false)->compiled();
-    std::string multiText = "---abc---xyz---";
+    core::Str multiText = TEMPER_STR("---abc---xyz---");
     std::shared_ptr<temper_std::Match> first = thing->find(multiText);
     std::shared_ptr<temper_std::Match> second = thing->find(multiText, first->full->end);
     core::Console::log(temper_globals::console.value, "Found both " + first->full->value + " and " + second->full->value + ".");
-    temper_globals::moreText.value = "🌍aaabbcee🌎abcd🌏";
-    auto fn = [](std::shared_ptr<temper_std::Match> match2) -> std::string {
-      std::shared_ptr<core::Mapped::Ordered<std::string, std::shared_ptr<temper_std::Group>>> groups = match2->groups;
-      std::string option1_2;
+    temper_globals::moreText.value = TEMPER_STR("🌍aaabbcee🌎abcd🌏");
+    auto fn = [](std::shared_ptr<temper_std::Match> match2) -> core::Str {
+      std::shared_ptr<core::Mapped::Ordered<core::Str, std::shared_ptr<temper_std::Group>>> groups = match2->groups;
+      core::Str option1_2;
       try {
-        option1_2 = core::Mapped::get<std::string, std::shared_ptr<temper_std::Group>>(groups, "option1")->value;
+        option1_2 = core::Mapped::get<core::Str, std::shared_ptr<temper_std::Group>>(groups, TEMPER_STR("option1"))->value;
       } catch (core::TemperBubble const &) {
-        option1_2 = "";
+        option1_2 = core::Str();
       }
-      std::string alphaOption2;
+      core::Str alphaOption2;
       try {
-        alphaOption2 = core::Mapped::get<std::string, std::shared_ptr<temper_std::Group>>(groups, "alphaOption2")->value;
+        alphaOption2 = core::Mapped::get<core::Str, std::shared_ptr<temper_std::Group>>(groups, TEMPER_STR("alphaOption2"))->value;
       } catch (core::TemperBubble const &) {
-        alphaOption2 = "";
+        alphaOption2 = core::Str();
       }
       int32_t begin2 = core::String::countBetween(temper_globals::moreText.value, core::String::begin(), match2->full->begin);
       return "-" + option1_2 + alphaOption2 + std::to_string(begin2) + "-";
     };
-    std::string replaced = catcher->replace(temper_globals::moreText.value, fn);
+    core::Str replaced = catcher->replace(temper_globals::moreText.value, fn);
     core::Console::log(temper_globals::console.value, "replaced: " + replaced);
-    std::string notReplaced = catcher->replace("nope", [](std::shared_ptr<temper_std::Match>) -> std::string { return "hi"; });
+    core::Str notReplaced = catcher->replace(TEMPER_STR("nope"), [](std::shared_ptr<temper_std::Match>) -> core::Str { return TEMPER_STR("hi"); });
     core::Console::log(temper_globals::console.value, "not replaced: " + notReplaced);
-    std::string noMatch;
+    core::Str noMatch;
     try {
-      noMatch = catcher->find("not here")->full->value;
+      noMatch = catcher->find(TEMPER_STR("not here"))->full->value;
     } catch (core::TemperBubble const &) {
-      noMatch = "sorry";
+      noMatch = TEMPER_STR("sorry");
     }
     core::Console::log(temper_globals::console.value, "No match says " + noMatch);
-    std::shared_ptr<temper_std::RegexNode> value6 = temper_std::CodePoints::make("ab");
-    std::shared_ptr<temper_std::RegexNode> or_ = temper_std::Or::make(core::List::make<std::shared_ptr<temper_std::RegexNode>>(value6, temper_std::CodePoints::make("bc")))->compiled()->data;
-    std::string option1 = "ab";
-    std::string option2 = "bc";
-    std::string optionNone = "cb";
+    std::shared_ptr<temper_std::RegexNode> value6 = temper_std::CodePoints::make(TEMPER_STR("ab"));
+    std::shared_ptr<temper_std::RegexNode> or_ = temper_std::Or::make(core::List::make<std::shared_ptr<temper_std::RegexNode>>(value6, temper_std::CodePoints::make(TEMPER_STR("bc"))))->compiled()->data;
+    core::Str option1 = TEMPER_STR("ab");
+    core::Str option2 = TEMPER_STR("bc");
+    core::Str optionNone = TEMPER_STR("cb");
     core::Console::log(temper_globals::console.value, "or option 1: " + core::Boolean::toString(or_->found(option1)));
     core::Console::log(temper_globals::console.value, "or option 2: " + core::Boolean::toString(or_->found(option2)));
     core::Console::log(temper_globals::console.value, "or option none: " + core::Boolean::toString(or_->found(optionNone)));
-    std::shared_ptr<temper_std::Regex> begin = temper_std::Sequence::make(core::List::make<std::shared_ptr<temper_std::RegexNode>>(temper_std::temper_globals::Begin.value, temper_std::CodePoints::make("a")))->compiled();
-    std::string beginsWithATrue = "ab";
-    std::string beginsWithAFalse = "bab";
+    std::shared_ptr<temper_std::Regex> begin = temper_std::Sequence::make(core::List::make<std::shared_ptr<temper_std::RegexNode>>(temper_std::temper_globals::Begin.value, temper_std::CodePoints::make(TEMPER_STR("a"))))->compiled();
+    core::Str beginsWithATrue = TEMPER_STR("ab");
+    core::Str beginsWithAFalse = TEMPER_STR("bab");
     core::Console::log(temper_globals::console.value, "begin true: " + core::Boolean::toString(begin->found(beginsWithATrue)));
     core::Console::log(temper_globals::console.value, "begin false: " + core::Boolean::toString(begin->found(beginsWithAFalse)));
-    std::shared_ptr<temper_std::RegexNode> value7 = temper_std::CodePoints::make("a");
+    std::shared_ptr<temper_std::RegexNode> value7 = temper_std::CodePoints::make(TEMPER_STR("a"));
     std::shared_ptr<temper_std::Regex> negatedBasic = temper_std::entire(temper_std::Sequence::make(core::List::make<std::shared_ptr<temper_std::RegexNode>>(value7, temper_std::CodeSet::make(core::List::make<std::shared_ptr<temper_std::CodePart>>(temper_std::CodeRange::make(97, 99)), true)))->compiled()->data)->compiled();
-    std::string nbTrue = "a🌍";
-    std::string nbFalse = "ac";
+    core::Str nbTrue = TEMPER_STR("a🌍");
+    core::Str nbFalse = TEMPER_STR("ac");
     core::Console::log(temper_globals::console.value, "negated basic true: " + core::Boolean::toString(negatedBasic->found(nbTrue)));
     core::Console::log(temper_globals::console.value, "negated basic false: " + core::Boolean::toString(negatedBasic->found(nbFalse)));
-    std::string simplerLines = "It was the best of times.\nIt was the worst of times.";
+    core::Str simplerLines = TEMPER_STR("It was the best of times.\nIt was the worst of times.");
     core::Console::log(temper_globals::console.value, temper_std::Repeat::make(temper_std::CodeSet::make(core::List::make<std::shared_ptr<temper_std::CodePart>>(), true), 1, nullptr, false)->compiled()->find(simplerLines)->full->value);
-    std::string value8;
+    core::Str value8;
     try {
       value8 = temper_std::Repeat::make(temper_std::CodeSet::make(core::List::make<std::shared_ptr<temper_std::CodePart>>(), false), 1, nullptr, false)->compiled()->find(simplerLines)->full->value;
     } catch (core::TemperBubble const &) {
-      value8 = "-";
+      value8 = TEMPER_STR("-");
     }
     core::Console::log(temper_globals::console.value, value8);
-    std::shared_ptr<temper_std::CodePart> codePart = temper_std::CodeRange::make(97, 122);
-    std::shared_ptr<temper_std::CodePart> value9 = temper_std::CodeRange::make(65, 90);
-    std::shared_ptr<temper_std::RegexNode> idStart = temper_std::CodeSet::make(core::List::make<std::shared_ptr<temper_std::CodePart>>(codePart, value9, temper_std::CodePoints::make("_")), false)->compiled()->data;
+    std::shared_ptr<temper_std::Regex> notLow = temper_std::oneOrMore(temper_std::CodeSet::make(core::List::make<std::shared_ptr<temper_std::CodePart>>(temper_std::CodeRange::make(0, 47)), true))->compiled();
+    core::Console::log(temper_globals::console.value, "not low: " + notLow->find(TEMPER_STR("-/a🌍-"))->full->value);
+    std::shared_ptr<temper_std::CodePart> codePart = temper_std::CodePoints::make(TEMPER_STR("\t"));
+    std::shared_ptr<temper_std::CodePart> value9 = temper_std::CodePoints::make(TEMPER_STR("\n"));
+    std::shared_ptr<temper_std::CodePart> value10 = temper_std::CodePoints::make(TEMPER_STR(" "));
+    core::Console::log(temper_globals::console.value, "not space or >: " + temper_std::Repeat::make(temper_std::CodeSet::make(core::List::make<std::shared_ptr<temper_std::CodePart>>(codePart, value9, value10, temper_std::CodePoints::make(TEMPER_STR(">"))), true), 1, nullptr, false)->compiled()->find(TEMPER_STR("ab>c"))->full->value);
+    std::shared_ptr<temper_std::CodePart> value11 = temper_std::CodeRange::make(97, 122);
+    std::shared_ptr<temper_std::CodePart> value12 = temper_std::CodeRange::make(65, 90);
+    std::shared_ptr<temper_std::RegexNode> idStart = temper_std::CodeSet::make(core::List::make<std::shared_ptr<temper_std::CodePart>>(value11, value12, temper_std::CodePoints::make(TEMPER_STR("_"))), false)->compiled()->data;
     std::shared_ptr<temper_std::Or> idContinue = temper_std::Or::make(core::List::make<std::shared_ptr<temper_std::RegexNode>>(idStart, temper_std::CodeSet::make(core::List::make<std::shared_ptr<temper_std::CodePart>>(temper_std::CodeRange::make(48, 57)), false)->compiled()->data));
     std::shared_ptr<temper_std::Regex> word = temper_std::Sequence::make(core::List::make<std::shared_ptr<temper_std::RegexNode>>(temper_std::temper_globals::WordBoundary.value, idStart, temper_std::Repeat::make(idContinue, 0, nullptr), temper_std::temper_globals::WordBoundary.value))->compiled();
-    std::string expected = "def_456";
-    std::string found = word->find("123_abc " + expected + " ghi_789")->full->value;
+    core::Str expected = TEMPER_STR("def_456");
+    core::Str found = word->find("123_abc " + expected + " ghi_789")->full->value;
     core::Console::log(temper_globals::console.value, "Found id: " + found);
-    std::string stringToEscape = "$(*^";
+    core::Str stringToEscape = TEMPER_STR("$(*^");
     std::shared_ptr<temper_std::Regex> regexWithInterpolatedString = temper_std::Sequence::make(core::List::make<std::shared_ptr<temper_std::RegexNode>>(temper_std::temper_globals::Dot.value, temper_std::Repeat::make(temper_std::CodePoints::make(stringToEscape), 1, nullptr, false), temper_std::temper_globals::Dot.value))->compiled();
-    std::string stringToEscapeAndMore = "a" + stringToEscape + stringToEscape + "b";
+    core::Str stringToEscapeAndMore = "a" + stringToEscape + stringToEscape + "b";
     std::shared_ptr<temper_std::Match> escapedMatch = regexWithInterpolatedString->find(stringToEscapeAndMore);
     core::Console::log(temper_globals::console.value, escapedMatch->full->value);
-    std::shared_ptr<temper_std::Match> ownFullMatch = temper_std::Sequence::make(core::List::make<std::shared_ptr<temper_std::RegexNode>>(temper_std::temper_globals::Dot.value, temper_std::Capture::make("full", temper_std::temper_globals::Dot.value)))->compiled()->find("ab");
-    std::string ownFull = core::Mapped::get<std::string, std::shared_ptr<temper_std::Group>>(ownFullMatch->groups, "full")->value;
+    std::shared_ptr<temper_std::Match> ownFullMatch = temper_std::Sequence::make(core::List::make<std::shared_ptr<temper_std::RegexNode>>(temper_std::temper_globals::Dot.value, temper_std::Capture::make(TEMPER_STR("full"), temper_std::temper_globals::Dot.value)))->compiled()->find(TEMPER_STR("ab"));
+    core::Str ownFull = core::Mapped::get<core::Str, std::shared_ptr<temper_std::Group>>(ownFullMatch->groups, TEMPER_STR("full"))->value;
     core::Console::log(temper_globals::console.value, "Own full: " + ownFull + " vs " + ownFullMatch->full->value);
-    std::string comboLines = "It was the best\nof times.\r\n\rIt was the worst of times.";
+    core::Str comboLines = TEMPER_STR("It was the best\nof times.\r\n\rIt was the worst of times.");
     {
-      std::shared_ptr<temper_std::RegexNode> value10 = temper_std::CodePoints::make("\n");
-      std::shared_ptr<temper_std::RegexNode> value11 = temper_std::CodePoints::make("\r");
-      std::shared_ptr<std::vector<std::string>> list = temper_std::Or::make(core::List::make<std::shared_ptr<temper_std::RegexNode>>(value10, temper_std::Sequence::make(core::List::make<std::shared_ptr<temper_std::RegexNode>>(value11, temper_std::Repeat::make(temper_std::CodePoints::make("\n"), 0, 1, false)))))->compiled()->split(comboLines);
-      int32_t length2 = core::List::length<std::string>(list);
+      std::shared_ptr<temper_std::RegexNode> value13 = temper_std::CodePoints::make(TEMPER_STR("\n"));
+      std::shared_ptr<temper_std::RegexNode> value14 = temper_std::CodePoints::make(TEMPER_STR("\r"));
+      std::shared_ptr<std::vector<core::Str>> list = temper_std::Or::make(core::List::make<std::shared_ptr<temper_std::RegexNode>>(value13, temper_std::Sequence::make(core::List::make<std::shared_ptr<temper_std::RegexNode>>(value14, temper_std::Repeat::make(temper_std::CodePoints::make(TEMPER_STR("\n")), 0, 1, false)))))->compiled()->split(comboLines);
+      int32_t length2 = core::List::length<core::Str>(list);
       int32_t i2 = 0;
       while (i2 < length2) {
-        std::string line = core::List::get<std::string>(list, i2);
+        core::Str line = core::List::get<core::Str>(list, i2);
         i2 = core::Int::add(i2, 1);
         core::Console::log(temper_globals::console.value, line + ";");
       }

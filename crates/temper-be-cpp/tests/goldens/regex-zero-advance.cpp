@@ -11,7 +11,7 @@ namespace zero_advance {
 // optional.
 void global_init_init();
 
-std::string bulletizeList(std::string text);
+temper::core::Str bulletizeList(temper::core::Str const & text);
 
 }  // namespace zero_advance
 
@@ -28,9 +28,9 @@ static core::GlobalSlot<std::shared_ptr<temper_std::Regex>> commaItemStartRegex;
 
 }  // namespace temper_globals
 
-std::string bulletizeList(std::string text) {
+core::Str bulletizeList(core::Str const & text) {
   global_init_init();
-  std::string replaced = temper_globals::commaItemStartRegex.value->replace(text, [](std::shared_ptr<temper_std::Match>) -> std::string { return "\n- "; });
+  core::Str replaced = temper_globals::commaItemStartRegex.value->replace(text, [](std::shared_ptr<temper_std::Match>) -> core::Str { return TEMPER_STR("\n- "); });
   return core::String::slice(replaced, core::String::next(replaced, core::String::begin()), core::String::end(replaced));
 }
 
@@ -39,9 +39,9 @@ void global_init_init() {
     temper_globals::commaItemStartRegex.construct();
     temper_std::global_init_regex();
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
-    std::shared_ptr<temper_std::RegexNode> regexNode = temper_std::Or::make(core::List::make<std::shared_ptr<temper_std::RegexNode>>(temper_std::temper_globals::Begin.value, temper_std::CodePoints::make(",")));
+    std::shared_ptr<temper_std::RegexNode> regexNode = temper_std::Or::make(core::List::make<std::shared_ptr<temper_std::RegexNode>>(temper_std::temper_globals::Begin.value, temper_std::CodePoints::make(TEMPER_STR(","))));
     temper_globals::commaItemStartRegex.value = temper_std::Sequence::make(core::List::make<std::shared_ptr<temper_std::RegexNode>>(regexNode, temper_std::Repeat::make(temper_std::temper_globals::Space.value, 0, nullptr, false)))->compiled();
-    core::Console::log(console, zero_advance::bulletizeList("apples, bananas, cherries"));
+    core::Console::log(console, zero_advance::bulletizeList(TEMPER_STR("apples, bananas, cherries")));
   });
 }
 

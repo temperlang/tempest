@@ -14,7 +14,7 @@ struct I;
 struct C;
 
 struct I : public virtual temper::core::AnyValueBase {
-  virtual std::string get_place() const;
+  virtual temper::core::Str get_place() const;
 };
 
 struct C : public virtual I {
@@ -30,8 +30,8 @@ namespace inherited_getter {
 
 namespace core = temper::core;
 
-std::string I::get_place() const {
-  return "Byron Bay";
+core::Str I::get_place() const {
+  return TEMPER_STR("Byron Bay");
 }
 
 std::shared_ptr<C> C::make() {

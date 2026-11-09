@@ -23,7 +23,7 @@ namespace core = temper::core;
 namespace temper_globals {
 
 static core::GlobalSlot<std::shared_ptr<core::Console::Type>> console;
-static core::GlobalSlot<std::string> url;
+static core::GlobalSlot<core::Str> url;
 
 }  // namespace temper_globals
 
@@ -37,10 +37,10 @@ void global_init_init() {
     auto fn = []() -> std::shared_ptr<core::SafeGenerator<std::shared_ptr<core::Empty>>> {
       std::shared_ptr<int32_t> caseIndex = std::make_shared<int32_t>(0);
       std::shared_ptr<std::shared_ptr<temper_std::NetResponse>> resp = std::make_shared<std::shared_ptr<temper_std::NetResponse>>(nullptr);
-      std::shared_ptr<std::string> body = std::make_shared<std::string>("");
-      std::shared_ptr<core::NullableParam<std::string>> subject = std::make_shared<core::NullableParam<std::string>>(nullptr);
+      std::shared_ptr<core::Str> body = std::make_shared<core::Str>(core::Str());
+      std::shared_ptr<core::NullableParam<core::Str>> subject = std::make_shared<core::NullableParam<core::Str>>(nullptr);
       std::shared_ptr<std::shared_ptr<core::Promise<std::shared_ptr<temper_std::NetResponse>>>> awaited = std::make_shared<std::shared_ptr<core::Promise<std::shared_ptr<temper_std::NetResponse>>>>(nullptr);
-      std::shared_ptr<std::shared_ptr<core::Promise<core::NullableParam<std::string>>>> awaited2 = std::make_shared<std::shared_ptr<core::Promise<core::NullableParam<std::string>>>>(nullptr);
+      std::shared_ptr<std::shared_ptr<core::Promise<core::NullableParam<core::Str>>>> awaited2 = std::make_shared<std::shared_ptr<core::Promise<core::NullableParam<core::Str>>>>(nullptr);
       std::shared_ptr<std::shared_ptr<core::Promise<std::shared_ptr<temper_std::NetResponse>>>> awaited3 = std::make_shared<std::shared_ptr<core::Promise<std::shared_ptr<temper_std::NetResponse>>>>(nullptr);
       auto convertedCoroutine = [=](std::shared_ptr<core::SafeGenerator<std::shared_ptr<core::Empty>>> generator) -> std::shared_ptr<core::GeneratorResult<std::shared_ptr<core::Empty>>> {
         while (true) {
@@ -58,12 +58,12 @@ void global_init_init() {
               }
               break;
             case 1:
-              core::Console::log(temper_globals::console.value, "broken promise");
+              core::Console::log(temper_globals::console.value, TEMPER_STR("broken promise"));
               *caseIndex = 2;
               break;
             case 2:
               try {
-                *awaited3 = temper_std::NetRequest::make("http://127.0.0.1:1/")->send();
+                *awaited3 = temper_std::NetRequest::make(TEMPER_STR("http://127.0.0.1:1/"))->send();
                 *caseIndex = 6;
                 core::awake_upon((*awaited3), generator);
                 return core::ValueResult<std::shared_ptr<core::Empty>>::make(core::empty());
@@ -86,7 +86,7 @@ void global_init_init() {
             case 4:
               try {
                 *subject = core::get_promise_result_sync((*awaited2));
-                *body = (*subject) == nullptr ? "missing" : (*subject).value;
+                *body = (*subject) == nullptr ? TEMPER_STR("missing") : (*subject).value;
                 core::Console::log(temper_globals::console.value, "body " + (*body));
                 *caseIndex = 2;
               } catch (core::TemperBubble const &) {
@@ -94,13 +94,13 @@ void global_init_init() {
               }
               break;
             case 5:
-              core::Console::log(temper_globals::console.value, "no response from port 1");
+              core::Console::log(temper_globals::console.value, TEMPER_STR("no response from port 1"));
               *caseIndex = -1;
               break;
             case 6:
               try {
                 core::get_promise_result_sync((*awaited3));
-                core::Console::log(temper_globals::console.value, "port 1 answered");
+                core::Console::log(temper_globals::console.value, TEMPER_STR("port 1 answered"));
                 *caseIndex = -1;
               } catch (core::TemperBubble const &) {
                 *caseIndex = 5;

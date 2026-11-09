@@ -10,7 +10,7 @@ namespace modules {
 // optional.
 void global_init_deep();
 
-std::string greet(std::string who);
+temper::core::Str greet(temper::core::Str const & who);
 
 }  // namespace modules
 
@@ -21,7 +21,7 @@ namespace modules {
 
 namespace core = temper::core;
 
-std::string greet(std::string who) {
+core::Str greet(core::Str const & who) {
   return "hello, " + who + " from deep";
 }
 
@@ -114,7 +114,7 @@ void global_init_helpers() {
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
     temper_globals::base.value = 10;
     temper_globals::calls.value = 0;
-    core::Console::log(console, modules::greet("helpers"));
+    core::Console::log(console, modules::greet(TEMPER_STR("helpers")));
   });
 }
 
@@ -201,7 +201,7 @@ void global_init_init() {
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
     int32_t calls2 = temper_globals::calls.value;
     temper_globals::base2.value = 1;
-    core::Console::log(console, modules::greet("modules"));
+    core::Console::log(console, modules::greet(TEMPER_STR("modules")));
     core::Console::log(console, "sum " + std::to_string(sum(3)));
     core::Console::log(console, "share " + std::to_string(share(7, 2)));
     bump();

@@ -13,7 +13,7 @@
 //! `Float64::lt` and the like, which order NaN and signed zeros as Temper
 //! does; three-way comparisons through `Compare::cmp` and
 //! `Float64::cmp`, which give -1, 0, or 1. Strings compare with C++'s own
-//! operators, which compare `std::string`'s bytes as `unsigned char`, so
+//! operators, which compare `core::Str`'s bytes as `unsigned char`, so
 //! UTF-8 orders by code point, as Temper does.
 //!
 //! Differences from Kotlin's: shifts go through the runtime's `Int::shl`

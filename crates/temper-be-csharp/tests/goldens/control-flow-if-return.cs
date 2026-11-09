@@ -34,6 +34,23 @@ public static class IfReturnGlobal
         }
     }
 
+    internal static string Nested(bool a, bool b)
+    {
+        string result = "neither";
+        if (a)
+        {
+            if (b)
+            {
+                result = "both";
+            }
+        }
+        else
+        {
+            result = "not a";
+        }
+        return result;
+    }
+
     static IfReturnGlobal()
     {
         ILoggingConsole console = Support.Logging.LoggingConsoleFactory.CreateConsole("IfReturn");
@@ -45,5 +62,7 @@ public static class IfReturnGlobal
         console.Log("halfAndHalf false -> " + HalfAndHalf(f));
         console.Log("implicit    true  -> " + Implicit(t));
         console.Log("implicit    false -> " + Implicit(f));
+        console.Log("nested      true  false -> " + Nested(t, f));
+        console.Log("nested      false true  -> " + Nested(f, t));
     }
 }

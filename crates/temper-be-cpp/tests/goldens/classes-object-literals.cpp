@@ -15,13 +15,13 @@ struct Circle;
 struct Rectangle;
 
 struct Stringable : public virtual temper::core::AnyValueBase {
-  virtual std::string toString() const = 0;
+  virtual temper::core::Str toString() const = 0;
 };
 
 struct Circle : public virtual Stringable {
   int32_t radius;
   static std::shared_ptr<Circle> make(int32_t radius);
-  std::string toString() const override;
+  temper::core::Str toString() const override;
   int32_t get_radius() const;
 };
 
@@ -48,7 +48,7 @@ std::shared_ptr<Circle> Circle::make(int32_t radius) {
   return self;
 }
 
-std::string Circle::toString() const {
+core::Str Circle::toString() const {
   return "Circle of radius " + std::to_string(this->radius);
 }
 
@@ -94,27 +94,27 @@ struct Whatever;
 struct Moreover;
 
 struct Person : public virtual Stringable {
-  std::string name;
+  temper::core::Str name;
   int32_t age;
-  static std::shared_ptr<Person> make(std::string name, temper::core::NullableParam<int32_t> age);
-  static std::shared_ptr<Person> make(std::string name);
-  std::string toString() const override;
+  static std::shared_ptr<Person> make(temper::core::Str const & name, temper::core::NullableParam<int32_t> age);
+  static std::shared_ptr<Person> make(temper::core::Str const & name);
+  temper::core::Str toString() const override;
   bool eq(std::shared_ptr<Person> const & other) const;
-  std::string get_name() const;
+  temper::core::Str get_name() const;
   int32_t get_age() const;
 };
 
 struct Named : public virtual Stringable {
-  std::string name;
-  static std::shared_ptr<Named> make(std::string name);
-  std::string toString() const override;
-  std::string get_name() const;
+  temper::core::Str name;
+  static std::shared_ptr<Named> make(temper::core::Str const & name);
+  temper::core::Str toString() const override;
+  temper::core::Str get_name() const;
 };
 
 struct Whatever : public std::enable_shared_from_this<Whatever> {
-  std::string blah;
+  temper::core::Str blah;
   static std::shared_ptr<Whatever> make(int32_t blech);
-  std::string get_blah() const;
+  temper::core::Str get_blah() const;
 };
 
 struct Moreover : public std::enable_shared_from_this<Moreover> {
@@ -123,7 +123,7 @@ struct Moreover : public std::enable_shared_from_this<Moreover> {
   static std::shared_ptr<Moreover> make(temper::core::NullableParam<int32_t> blech, temper::core::NullableParam<int32_t> bling);
   static std::shared_ptr<Moreover> make(temper::core::NullableParam<int32_t> blech);
   static std::shared_ptr<Moreover> make();
-  std::string toString() const;
+  temper::core::Str toString() const;
   int32_t get_blech() const;
   int32_t get_bling() const;
 };
@@ -143,7 +143,7 @@ static core::GlobalSlot<std::shared_ptr<core::Console::Type>> console;
 
 }  // namespace temper_globals
 
-std::shared_ptr<Person> Person::make(std::string name, core::NullableParam<int32_t> age) {
+std::shared_ptr<Person> Person::make(core::Str const & name, core::NullableParam<int32_t> age) {
   global_init_init();
   std::shared_ptr<Person> self = std::make_shared<Person>();
   int32_t age2 = age == nullptr ? -100 : age.value;
@@ -152,13 +152,13 @@ std::shared_ptr<Person> Person::make(std::string name, core::NullableParam<int32
   return self;
 }
 
-std::shared_ptr<Person> Person::make(std::string name) {
+std::shared_ptr<Person> Person::make(core::Str const & name) {
   return make(name, nullptr);
 }
 
-std::string Person::toString() const {
+core::Str Person::toString() const {
   std::shared_ptr<Person const> self = std::shared_ptr<Person const>(shared_from_this(), this);
-  std::string ageText = core::List::join(core::List::make<int32_t>(0), "", [=](int32_t) -> std::string { return std::to_string(self->age); });
+  core::Str ageText = core::List::join(core::List::make<int32_t>(0), core::Str(), [=](int32_t) -> core::Str { return std::to_string(self->age); });
   return "Person " + self->name + " of age " + ageText;
 }
 
@@ -170,7 +170,7 @@ bool Person::eq(std::shared_ptr<Person> const & other) const {
   }
 }
 
-std::string Person::get_name() const {
+core::Str Person::get_name() const {
   return this->name;
 }
 
@@ -178,17 +178,17 @@ int32_t Person::get_age() const {
   return this->age;
 }
 
-std::shared_ptr<Named> Named::make(std::string name) {
+std::shared_ptr<Named> Named::make(core::Str const & name) {
   std::shared_ptr<Named> self = std::make_shared<Named>();
   self->name = name;
   return self;
 }
 
-std::string Named::toString() const {
+core::Str Named::toString() const {
   return "Named " + this->name;
 }
 
-std::string Named::get_name() const {
+core::Str Named::get_name() const {
   return this->name;
 }
 
@@ -198,7 +198,7 @@ std::shared_ptr<Whatever> Whatever::make(int32_t blech) {
   return self;
 }
 
-std::string Whatever::get_blah() const {
+core::Str Whatever::get_blah() const {
   return this->blah;
 }
 
@@ -219,7 +219,7 @@ std::shared_ptr<Moreover> Moreover::make() {
   return make(nullptr, nullptr);
 }
 
-std::string Moreover::toString() const {
+core::Str Moreover::toString() const {
   return std::to_string(this->blech) + " " + std::to_string(this->bling);
 }
 
@@ -248,8 +248,8 @@ void global_init_init() {
     temper_globals::console.construct();
     global_init_extra_class();
     temper_globals::console.value = core::Console::get_console();
-    std::shared_ptr<Person> person1 = Person::make("Alice", 50);
-    std::shared_ptr<Person> person2 = Person::make("Bob", 45);
+    std::shared_ptr<Person> person1 = Person::make(TEMPER_STR("Alice"), 50);
+    std::shared_ptr<Person> person2 = Person::make(TEMPER_STR("Bob"), 45);
     std::shared_ptr<Circle> circle1 = Circle::make(2);
     std::shared_ptr<Circle> circle2 = Circle::make(1);
     std::shared_ptr<std::vector<std::shared_ptr<Stringable>>> things = core::List::make<std::shared_ptr<Stringable>>(person1, person2, circle1, circle2);
@@ -264,8 +264,8 @@ void global_init_init() {
     bother();
     std::shared_ptr<Whatever> whatever = Whatever::make(6);
     core::Console::log(temper_globals::console.value, "Whatever again: " + whatever->blah);
-    std::shared_ptr<Person> personAgain = Person::make("Carrie", 40);
-    std::string name = personAgain->name;
+    std::shared_ptr<Person> personAgain = Person::make(TEMPER_STR("Carrie"), 40);
+    core::Str name = personAgain->name;
     int32_t someAge = personAgain->age;
     core::Console::log(temper_globals::console.value, "name is " + name + " and age is " + std::to_string(someAge));
     std::shared_ptr<Person> personMore = Person::make(name, 35);

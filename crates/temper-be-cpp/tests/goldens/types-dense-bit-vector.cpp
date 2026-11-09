@@ -25,11 +25,11 @@ void global_init_init() {
     std::shared_ptr<std::vector<bool>> v = core::DenseBitVector::make(16);
     core::Console::log(console, "v[2]=" + core::Boolean::toString(core::DenseBitVector::get(v, 2)));
     core::Console::log(console, "v[3]=" + core::Boolean::toString(core::DenseBitVector::get(v, 3)));
-    core::Console::log(console, "v[3] <- true");
+    core::Console::log(console, TEMPER_STR("v[3] <- true"));
     core::DenseBitVector::set(v, 3, true);
     core::Console::log(console, "v[2]=" + core::Boolean::toString(core::DenseBitVector::get(v, 2)));
     core::Console::log(console, "v[3]=" + core::Boolean::toString(core::DenseBitVector::get(v, 3)));
-    core::Console::log(console, "v[3] <- false");
+    core::Console::log(console, TEMPER_STR("v[3] <- false"));
     core::DenseBitVector::set(v, 3, false);
     core::Console::log(console, "v[2]=" + core::Boolean::toString(core::DenseBitVector::get(v, 2)));
     core::Console::log(console, "v[3]=" + core::Boolean::toString(core::DenseBitVector::get(v, 3)));

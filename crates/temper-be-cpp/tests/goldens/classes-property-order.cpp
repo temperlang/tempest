@@ -39,7 +39,7 @@ std::shared_ptr<C> C::make(core::NullableParam<int32_t> backed) {
   std::shared_ptr<C> self = std::make_shared<C>();
   int32_t backed2;
   if (backed == nullptr) {
-    core::Console::log(temper_globals::console.value, "initializing backed");
+    core::Console::log(temper_globals::console.value, TEMPER_STR("initializing backed"));
     backed2 = 1;
   } else {
     backed2 = backed.value;
@@ -53,7 +53,7 @@ std::shared_ptr<C> C::make() {
 }
 
 int32_t C::get_computed() const {
-  core::Console::log(temper_globals::console.value, "computing computed");
+  core::Console::log(temper_globals::console.value, TEMPER_STR("computing computed"));
   return 1;
 }
 
@@ -65,13 +65,13 @@ void global_init_init() {
   core::init_once([] {
     temper_globals::console.construct();
     temper_globals::console.value = core::Console::get_console();
-    core::Console::log(temper_globals::console.value, "about to create instance");
+    core::Console::log(temper_globals::console.value, TEMPER_STR("about to create instance"));
     std::shared_ptr<C> c = C::make();
-    core::Console::log(temper_globals::console.value, "about to get backed");
+    core::Console::log(temper_globals::console.value, TEMPER_STR("about to get backed"));
     core::Console::log(temper_globals::console.value, "c.backed=" + std::to_string(c->backed));
-    core::Console::log(temper_globals::console.value, "about to get computed");
+    core::Console::log(temper_globals::console.value, TEMPER_STR("about to get computed"));
     core::Console::log(temper_globals::console.value, "c.computed=" + std::to_string(c->get_computed()));
-    core::Console::log(temper_globals::console.value, "done");
+    core::Console::log(temper_globals::console.value, TEMPER_STR("done"));
   });
 }
 

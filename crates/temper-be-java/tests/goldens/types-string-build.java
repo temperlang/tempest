@@ -34,6 +34,26 @@ public final class BuildGlobal {
         builder.setLength(0);
         builder.append("Back to square zero.");
         console.log(builder.toString());
+        builder.setLength(0);
+        builder.append("a??=b??/c??>d???e");
+        String marks = builder.toString();
+        console.log(marks);
+        console.log("Same: " + marks.equals("a??=b??/c??>d???e"));
+        builder.setLength(0);
+        builder.append("??");
+        try {
+            Core.stringBuilderAppendCodePoint(builder, 1);
+        } catch (RuntimeException ignored3) {
+            console.log("No U+1.");
+        }
+        builder.append("0");
+        try {
+            Core.stringBuilderAppendCodePoint(builder, 8364);
+        } catch (RuntimeException ignored4) {
+            console.log("No euro.");
+        }
+        builder.append("1");
+        console.log("Digits after escapes: " + builder.toString().equals("??\u00010€1"));
         StringBuilderOwner owner = new StringBuilderOwner(new StringBuilder());
         owner.builder.append("Hi from inside.");
         console.log(owner.builder.toString());

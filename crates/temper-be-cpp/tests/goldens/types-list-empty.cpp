@@ -27,9 +27,9 @@ static core::GlobalSlot<std::shared_ptr<core::Console::Type>> console;
 
 static void f(std::shared_ptr<std::vector<int32_t>> const & b) {
   if (core::List::isEmpty<int32_t>(b)) {
-    core::Console::log(temper_globals::console.value, "empty");
+    core::Console::log(temper_globals::console.value, TEMPER_STR("empty"));
   } else {
-    core::Console::log(temper_globals::console.value, "not empty");
+    core::Console::log(temper_globals::console.value, TEMPER_STR("not empty"));
   }
 }
 

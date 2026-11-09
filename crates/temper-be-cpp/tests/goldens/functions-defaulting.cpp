@@ -15,17 +15,17 @@ struct StringHolder;
 
 struct Thing : public std::enable_shared_from_this<Thing> {
   static std::shared_ptr<Thing> make();
-  void say(temper::core::NullableParam<std::string> a, temper::core::NullableParam<std::string> b) const;
-  void say(temper::core::NullableParam<std::string> a) const;
+  void say(temper::core::NullableParam<temper::core::Str> a, temper::core::NullableParam<temper::core::Str> b) const;
+  void say(temper::core::NullableParam<temper::core::Str> a) const;
   void say() const;
-  static void sayStatic(std::string a, temper::core::NullableParam<std::string> b);
-  static void sayStatic(std::string a);
+  static void sayStatic(temper::core::Str const & a, temper::core::NullableParam<temper::core::Str> b);
+  static void sayStatic(temper::core::Str const & a);
 };
 
 struct StringHolder : public std::enable_shared_from_this<StringHolder> {
-  std::string string;
-  static std::shared_ptr<StringHolder> make(std::string string);
-  std::string get_string() const;
+  temper::core::Str string;
+  static std::shared_ptr<StringHolder> make(temper::core::Str const & string);
+  temper::core::Str get_string() const;
 };
 
 }  // namespace defaulting
@@ -72,7 +72,7 @@ static int32_t g() {
 }
 
 static core::NullableParam<int32_t> noInline() {
-  core::Console::log(temper_globals::console.value, "noInline");
+  core::Console::log(temper_globals::console.value, TEMPER_STR("noInline"));
   return nullptr;
 }
 
@@ -81,13 +81,13 @@ std::shared_ptr<Thing> Thing::make() {
   return self;
 }
 
-void Thing::say(core::NullableParam<std::string> a, core::NullableParam<std::string> b) const {
-  std::string a2 = a == nullptr ? "" : a.value;
-  std::string b2 = b == nullptr ? "" : b.value;
+void Thing::say(core::NullableParam<core::Str> a, core::NullableParam<core::Str> b) const {
+  core::Str a2 = a == nullptr ? core::Str() : a.value;
+  core::Str b2 = b == nullptr ? core::Str() : b.value;
   core::Console::log(temper_globals::console.value, "saying " + a2 + b2);
 }
 
-void Thing::say(core::NullableParam<std::string> a) const {
+void Thing::say(core::NullableParam<core::Str> a) const {
   return say(a, nullptr);
 }
 
@@ -95,43 +95,43 @@ void Thing::say() const {
   return say(nullptr, nullptr);
 }
 
-void Thing::sayStatic(std::string a, core::NullableParam<std::string> b) {
-  std::string b2 = b == nullptr ? "" : b.value;
+void Thing::sayStatic(core::Str const & a, core::NullableParam<core::Str> b) {
+  core::Str b2 = b == nullptr ? core::Str() : b.value;
   core::Console::log(temper_globals::console.value, "static " + a + b2);
 }
 
-void Thing::sayStatic(std::string a) {
+void Thing::sayStatic(core::Str const & a) {
   return sayStatic(a, nullptr);
 }
 
-std::shared_ptr<StringHolder> StringHolder::make(std::string string) {
+std::shared_ptr<StringHolder> StringHolder::make(core::Str const & string) {
   std::shared_ptr<StringHolder> self = std::make_shared<StringHolder>();
   self->string = string;
   return self;
 }
 
-std::string StringHolder::get_string() const {
+core::Str StringHolder::get_string() const {
   return this->string;
 }
 
-static std::string maybeEmpty(std::shared_ptr<StringHolder> const & a) {
+static core::Str maybeEmpty(std::shared_ptr<StringHolder> const & a) {
   {
     std::lock_guard<std::mutex> lock(moduleMutex);
     temper_globals::inked.value = core::Int::add(temper_globals::inked.value, 1);
   }
   {
-    core::NullableParam<std::string> subject3 = a == nullptr ? nullptr : core::NullableParam<std::string>(a->string);
+    core::NullableParam<core::Str> subject3 = a == nullptr ? nullptr : core::NullableParam<core::Str>(a->string);
     core::NullableParam<bool> subject2 = subject3 == nullptr ? nullptr : core::NullableParam<bool>(subject3.value.empty());
-    core::NullableParam<std::string> subject = subject2 == nullptr ? nullptr : core::NullableParam<std::string>(core::Boolean::toString(subject2.value));
+    core::NullableParam<core::Str> subject = subject2 == nullptr ? nullptr : core::NullableParam<core::Str>(core::Boolean::toString(subject2.value));
     if (subject == nullptr) {
-      return "null";
+      return TEMPER_STR("null");
     } else {
       return subject.value;
     }
   }
 }
 
-static core::NullableParam<int32_t> maybeLength(core::NullableParam<std::string> a) {
+static core::NullableParam<int32_t> maybeLength(core::NullableParam<core::Str> a) {
   {
     std::lock_guard<std::mutex> lock(moduleMutex);
     temper_globals::inked.value = core::Int::add(temper_globals::inked.value, 1);
@@ -157,7 +157,7 @@ static core::NullableParam<int32_t> maybeInc() {
   }
 }
 
-static std::string chainMore(core::NullableParam<std::string> a) {
+static core::Str chainMore(core::NullableParam<core::Str> a) {
   core::NullableParam<int32_t> subject2 = defaulting::maybeLength(a);
   core::NullableParam<int32_t> subject = subject2 == nullptr ? nullptr : core::NullableParam<int32_t>(std::max(subject2.value, 0));
   return std::to_string(subject == nullptr ? -1 : subject.value);
@@ -177,18 +177,18 @@ void global_init_init() {
     core::Console::log(temper_globals::console.value, "fCalls=" + std::to_string(temper_globals::fCalls.value));
     core::Console::log(temper_globals::console.value, "g(null)=" + std::to_string(defaulting::g(noInline())));
     core::Console::log(temper_globals::console.value, "fCalls=" + std::to_string(temper_globals::fCalls.value));
-    Thing::make()->say("hi");
-    Thing::make()->say(nullptr, "there");
-    Thing::make()->say("by", "e");
-    Thing::sayStatic("yall");
+    Thing::make()->say(TEMPER_STR("hi"));
+    Thing::make()->say(nullptr, TEMPER_STR("there"));
+    Thing::make()->say(TEMPER_STR("by"), TEMPER_STR("e"));
+    Thing::sayStatic(TEMPER_STR("yall"));
     temper_globals::inked.value = 0;
     core::NullableParam<int32_t> subject = maybeInc();
     core::Console::log(temper_globals::console.value, "maybeInc() -> " + std::to_string(subject == nullptr ? -1 : subject.value));
     core::Console::log(temper_globals::console.value, "inked: " + std::to_string(temper_globals::inked.value));
-    core::Console::log(temper_globals::console.value, "lengthish \"ab\": " + defaulting::chainMore("ab"));
+    core::Console::log(temper_globals::console.value, "lengthish \"ab\": " + defaulting::chainMore(TEMPER_STR("ab")));
     core::Console::log(temper_globals::console.value, "lengthish null: " + defaulting::chainMore(nullptr));
     core::Console::log(temper_globals::console.value, "inked: " + std::to_string(temper_globals::inked.value));
-    core::Console::log(temper_globals::console.value, "maybeEmpty \"\": " + defaulting::maybeEmpty(StringHolder::make("")));
+    core::Console::log(temper_globals::console.value, "maybeEmpty \"\": " + defaulting::maybeEmpty(StringHolder::make(core::Str())));
     core::Console::log(temper_globals::console.value, "maybeEmpty null: " + defaulting::maybeEmpty(nullptr));
     core::Console::log(temper_globals::console.value, "inked: " + std::to_string(temper_globals::inked.value));
   });

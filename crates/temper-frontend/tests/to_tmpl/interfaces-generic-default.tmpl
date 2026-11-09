@@ -1,0 +1,67 @@
+tmpl 1 model 1 library `generic-default` 0.0.0
+
+uses `temper-core`#26 0.1.0 {
+  interface Console#27 {
+    connected method log#28(message: String): Void;
+  }
+  class Boolean#32 {
+    connected method toString#33(): String;
+  }
+  connected fn getConsole#34(name?: String): Console#27;
+}
+
+module `generic-default`#0 {
+  let ~console#29: Console#27;
+
+  interface Box#1<T#4> {
+    abstract get item#6(): T#4;
+    method describe#7(prefix#20: String): String {
+      return %String.cat(%String.cat(prefix#20, ": "), this.show#9(this.item#6()));
+    }
+    get label#8(): String {
+      return this.describe#7("box");
+    }
+    abstract method show#9(x#21: T#4): String;
+  }
+
+  class TextBox#2 extends Box#1<String> {
+    constructor constructor#12(): TextBox#2 {}
+    get item#10(): String {
+      return "text";
+    }
+    method show#11(x#22: String): String {
+      return %String.cat(%String.cat("'", x#22), "'");
+    }
+  }
+
+  class NamedBox#3<T#5> extends Box#1<T#5> {
+    private let value#13: T#5;
+    private let render#14: fn (T#5): String;
+    constructor constructor#17(value#24: T#5, render#25: fn (T#5): String): NamedBox#3<T#5> {
+      this.value#13 = value#24;
+      this.render#14 = render#25;
+    }
+    get item#15(): T#5 {
+      return this.value#13;
+    }
+    method show#16(x#23: T#5): String {
+      return %String.cat("named ", this.render#14(x#23));
+    }
+  }
+
+  let named#18: NamedBox#3<Boolean>;
+
+  let box#19: Box#1<Boolean>;
+
+  init {
+    init ~console#29 = getConsole#34(omitted);
+    ~console#29.log#28(new constructor#12().describe#7("string"));
+    ~console#29.log#28(new constructor#12().label#8());
+    init named#18 = new constructor#17<Boolean>(true, (fn ~fn#30(b#31: Boolean): String {
+      return b#31.toString#33();
+    }): fn (Boolean): String);
+    ~console#29.log#28(named#18.describe#7("bool"));
+    init box#19 = (upcast(named#18)): Box#1<Boolean>;
+    ~console#29.log#28(box#19.label#8());
+  }
+}

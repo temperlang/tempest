@@ -47,7 +47,7 @@ void global_init_init() {
     core::Console::log(console, "First years between: " + std::to_string(firstYears));
     int32_t secondYears = core::Date::yearsBetween(start, core::Date::makeDate<temper_std::Date>(2012, 3, 21));
     core::Console::log(console, "Second years between: " + std::to_string(secondYears));
-    std::shared_ptr<temper_std::Date> rdc = core::Date::fromIso<temper_std::Date>("1596-03-31");
+    std::shared_ptr<temper_std::Date> rdc = core::Date::fromIso<temper_std::Date>(TEMPER_STR("1596-03-31"));
     core::Console::log(console, "Happy birthday, René: day=" + std::to_string(rdc->day) + ", month=" + std::to_string(rdc->month) + ", year=" + std::to_string(rdc->year));
   });
 }

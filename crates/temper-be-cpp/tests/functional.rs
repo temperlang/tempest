@@ -13,7 +13,8 @@
 //! shared programs (`crates/temper-be-testkit/programs/`), which cover
 //! operators, jumps, module state, string order, nullables, and classes beyond
 //! those tests, and on programs of C++'s own: names C++ takes
-//! ([`HIDING`]), and objects a call frees while it runs ([`LIFETIMES`]).
+//! ([`HIDING`]), a nullable result discarded ([`DISCARDED`]), and objects
+//! a call frees while it runs ([`LIFETIMES`]).
 //!
 //! - `goldens`: each program's generated library, laid out as Kotlin's,
 //!   with its `init.cpp` matching the golden in `tests/goldens/`, named
@@ -104,6 +105,35 @@ const HIDING: &str = "# Hiding
     let xs = [\"x\"];
     let ys = [\"y\"];
     console.log(\"${quoted(std)} ${swap(xs, ys)} ${move(xs)}\");
+";
+
+/// A nullable result discarded where tmpl knows it isn't null (Wherewith's
+/// `if (lexer.inLineComment) { lexer.scan("\n"); }`), which is the call
+/// alone, not its `NullableParam`'s `.value`, which C++ can't take as a
+/// statement.
+const DISCARDED: &str = "# Discarded
+
+    class Lexer {
+      public var seen: Int = 0;
+      public get inComment(): Boolean { seen > 0 }
+      public scan(text: String): String? {
+        seen += 1;
+        if (seen > 100) { \"too long\" } else { null }
+      }
+    }
+
+    let finish(texts: List<String>): String {
+      let lexer = new Lexer();
+      var problem: String? = null;
+      for (let text of texts) {
+        var found: String? = null;
+        found = lexer.scan(text);
+        if (problem == null) { problem = found; }
+      }
+      if (lexer.inComment) { lexer.scan(\"\\n\"); }
+      if (problem == null) { \"ok ${lexer.seen.toString()}\" } else { \"problem\" }
+    }
+    console.log(finish([\"a\", \"b\"]));
 ";
 
 /// Objects that a call frees while it runs, which C++ must keep alive:
@@ -210,7 +240,12 @@ const TESTS: Mode = Mode {
 /// (`-isystem`), so only generated code answers to the four that the
 /// runtime breaks ([`RUNTIME_WARNINGS`] has the rest). Not on: `-Weffc++`,
 /// whose rules (members initialized in constructors' lists, and the like)
-/// are older advice than C++11's, and which the runtime breaks too.
+/// are older advice than C++11's, and which the runtime breaks too; and
+/// `-Wnull-dereference`, whose path analysis, since strings became the
+/// runtime's `Str` (Temper #654), reports a call on an interface's
+/// `shared_ptr` with a literal argument, `labeled->label(TEMPER_STR("a"))`:
+/// the upcast to a virtual base checks for null, and the literal's
+/// function-local `static` keeps that null path alive (g++ 12 to 14).
 const STRICT: &[&str] = &[
     "-std=c++14",
     "-Wall",
@@ -233,7 +268,6 @@ const STRICT: &[&str] = &[
     "-Wlogical-op",
     "-Wmissing-declarations",
     "-Wnon-virtual-dtor",
-    "-Wnull-dereference",
     "-Wold-style-cast",
     "-Woverloaded-virtual",
     "-Wpessimizing-move",
@@ -291,7 +325,7 @@ fn cases() -> Vec<Case> {
     }
     // `regex/match` passes, `/a[^a-c]/` finding the one code point after
     // `a` in "a🌍", with the runtime's code sets rewritten into UTF-8
-    // byte sequences (vendor patch 0023; Kotlin's issue 198).
+    // byte sequences (Kotlin's issue 198, fixed in its #645).
     cases.push(Case::inline(
         "hiding",
         "hiding.temper.md",
@@ -303,6 +337,12 @@ fn cases() -> Vec<Case> {
             "true false".into(),
             "[s] yx x".into(),
         ],
+    ));
+    cases.push(Case::inline(
+        "discarded",
+        "discarded.temper.md",
+        DISCARDED,
+        vec!["ok 3".into()],
     ));
     cases.push(Case::inline(
         "lifetimes",

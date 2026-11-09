@@ -595,7 +595,7 @@ impl Translator<'_> {
                     for &param in p.nodes.list(params) {
                         if let Node::Param { decl: pd } = p.nodes.get(param) {
                             let mut ty = self.ty(p.decls.get(pd).ty)?;
-                            if ty.starts_with("std::shared_ptr<") {
+                            if super::indirect(&ty) {
                                 ty.push_str(" const &");
                             }
                             ps.push((ty, self.name(pd)));
@@ -671,7 +671,7 @@ impl Translator<'_> {
                     param.push('_');
                 }
                 let mut param_ty = ty.clone();
-                if param_ty.starts_with("std::shared_ptr<") {
+                if super::indirect(&param_ty) {
                     param_ty.push_str(" const &");
                 }
                 let f = tree::Function {
@@ -748,7 +748,7 @@ impl Translator<'_> {
             for &param in p.nodes.list(params) {
                 if let Node::Param { decl: pd } = p.nodes.get(param) {
                     let mut ty = self.ty(p.decls.get(pd).ty)?;
-                    if ty.starts_with("std::shared_ptr<") {
+                    if super::indirect(&ty) {
                         ty.push_str(" const &");
                     }
                     let mut name = self.name(pd);

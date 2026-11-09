@@ -22,6 +22,16 @@ def _implicit(b: bool, /) -> str:
         return 'false'
 
 
+def _nested(a: bool, b: bool, /) -> str:
+    result = 'neither'
+    if a:
+        if b:
+            result = 'both'
+    else:
+        result = 'not a'
+    return result
+
+
 _console: _LoggingConsole = _LoggingConsole(__name__)
 _t: bool = True
 _t = _t
@@ -32,3 +42,5 @@ _console.log(f'halfAndHalf true  -> {_half_and_half(_t)}')
 _console.log(f'halfAndHalf false -> {_half_and_half(_f)}')
 _console.log(f'implicit    true  -> {_implicit(_t)}')
 _console.log(f'implicit    false -> {_implicit(_f)}')
+_console.log(f'nested      true  false -> {_nested(_t, _f)}')
+_console.log(f'nested      false true  -> {_nested(_f, _t)}')

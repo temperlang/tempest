@@ -33,16 +33,16 @@ struct Box : public virtual Holder<T> {
 };
 
 struct Named : public std::enable_shared_from_this<Named> {
-  std::string name;
-  static std::shared_ptr<Named> make(std::string name);
-  std::string get_name() const;
+  temper::core::Str name;
+  static std::shared_ptr<Named> make(temper::core::Str const & name);
+  temper::core::Str get_name() const;
 };
 
 template <class T>
 struct Shelf : public std::enable_shared_from_this<Shelf<T>> {
   std::shared_ptr<std::vector<T>> items;
   static std::shared_ptr<Shelf<T>> make(std::shared_ptr<std::vector<T>> const & items);
-  temper::core::NullableParam<std::string> firstName() const;
+  temper::core::NullableParam<temper::core::Str> firstName() const;
   std::shared_ptr<std::vector<T>> get_items() const;
 };
 
@@ -78,7 +78,7 @@ std::shared_ptr<Shelf<T>> Shelf<T>::make(std::shared_ptr<std::vector<T>> const &
 }
 
 template <class T>
-temper::core::NullableParam<std::string> Shelf<T>::firstName() const {
+temper::core::NullableParam<temper::core::Str> Shelf<T>::firstName() const {
   if (temper::core::List::isEmpty<T>(this->items)) {
     return nullptr;
   } else {
@@ -110,14 +110,14 @@ namespace generics {
 
 namespace core = temper::core;
 
-std::shared_ptr<Named> Named::make(std::string name) {
+std::shared_ptr<Named> Named::make(core::Str const & name) {
   global_init_init();
   std::shared_ptr<Named> self = std::make_shared<Named>();
   self->name = name;
   return self;
 }
 
-std::string Named::get_name() const {
+core::Str Named::get_name() const {
   return this->name;
 }
 
@@ -148,59 +148,59 @@ void global_init_init() {
     std::shared_ptr<std::vector<int32_t>> ns = core::List::make<int32_t>(1, 2, 3);
     std::shared_ptr<std::vector<int32_t>> none = core::List::make<int32_t>();
     core::Console::log(console, std::to_string(generics::total(ns)) + " " + std::to_string(generics::first<int32_t>(ns, 0)) + " " + std::to_string(generics::first<int32_t>(none, -1)));
-    core::Console::log(console, generics::first<std::string>(core::List::make<std::string>("a", "b"), "z"));
-    std::shared_ptr<Box<std::string>> box = Box<std::string>::make("boxed");
-    core::Console::log(console, generics::held<std::string>(box));
-    std::shared_ptr<core::Pair<std::string, int32_t>> pair = box->pairWith(7);
+    core::Console::log(console, generics::first<core::Str>(core::List::make<core::Str>(TEMPER_STR("a"), TEMPER_STR("b")), TEMPER_STR("z")));
+    std::shared_ptr<Box<core::Str>> box = Box<core::Str>::make(TEMPER_STR("boxed"));
+    core::Console::log(console, generics::held<core::Str>(box));
+    std::shared_ptr<core::Pair<core::Str, int32_t>> pair = box->pairWith(7);
     core::Console::log(console, pair->key + " " + std::to_string(pair->value));
-    std::shared_ptr<Shelf<std::shared_ptr<Named>>> shelf = Shelf<std::shared_ptr<Named>>::make(core::List::make<std::shared_ptr<Named>>(Named::make("ann"), Named::make("bo")));
-    core::NullableParam<std::string> subject = shelf->firstName();
-    core::Console::log(console, subject == nullptr ? "none" : subject.value);
+    std::shared_ptr<Shelf<std::shared_ptr<Named>>> shelf = Shelf<std::shared_ptr<Named>>::make(core::List::make<std::shared_ptr<Named>>(Named::make(TEMPER_STR("ann")), Named::make(TEMPER_STR("bo"))));
+    core::NullableParam<core::Str> subject = shelf->firstName();
+    core::Console::log(console, subject == nullptr ? TEMPER_STR("none") : subject.value);
     std::shared_ptr<std::vector<std::shared_ptr<Named>>> noNames = core::List::make<std::shared_ptr<Named>>();
     std::shared_ptr<Shelf<std::shared_ptr<Named>>> empty = Shelf<std::shared_ptr<Named>>::make(noNames);
-    core::NullableParam<std::string> subject2 = empty->firstName();
-    core::Console::log(console, subject2 == nullptr ? "none" : subject2.value);
-    std::shared_ptr<std::vector<std::string>> builder = core::ListBuilder::make<std::string>();
-    core::ListBuilder::add<std::string>(builder, "x");
-    core::ListBuilder::add<std::string>(builder, "y");
-    core::ListBuilder::add<std::string>(builder, "w", 0);
-    int32_t length = core::List::length<std::string>(builder);
-    std::string get = core::List::get<std::string>(builder, 0);
-    core::Console::log(console, std::to_string(length) + " " + get + " " + core::ListBuilder::removeLast<std::string>(builder));
-    std::shared_ptr<std::vector<std::string>> built = core::List::toList<std::string>(builder);
-    int32_t int32 = core::List::length<std::string>(built);
-    std::string string = core::List::getOr<std::string>(built, 5, "?");
-    core::Console::log(console, std::to_string(int32) + " " + string + " " + core::List::get<std::string>(core::List::slice<std::string>(built, 1, 2), 0));
-    std::shared_ptr<core::Pair<std::string, int32_t>> value2 = core::PairFactory::make<std::string, int32_t>("a", 1);
-    std::shared_ptr<core::Mapped::Ordered<std::string, int32_t>> m = core::Map::make<std::string, int32_t>(core::List::make<std::shared_ptr<core::Pair<std::string, int32_t>>>(value2, core::PairFactory::make<std::string, int32_t>("b", 2)));
+    core::NullableParam<core::Str> subject2 = empty->firstName();
+    core::Console::log(console, subject2 == nullptr ? TEMPER_STR("none") : subject2.value);
+    std::shared_ptr<std::vector<core::Str>> builder = core::ListBuilder::make<core::Str>();
+    core::ListBuilder::add<core::Str>(builder, TEMPER_STR("x"));
+    core::ListBuilder::add<core::Str>(builder, TEMPER_STR("y"));
+    core::ListBuilder::add<core::Str>(builder, TEMPER_STR("w"), 0);
+    int32_t length = core::List::length<core::Str>(builder);
+    core::Str get = core::List::get<core::Str>(builder, 0);
+    core::Console::log(console, std::to_string(length) + " " + get + " " + core::ListBuilder::removeLast<core::Str>(builder));
+    std::shared_ptr<std::vector<core::Str>> built = core::List::toList<core::Str>(builder);
+    int32_t int32 = core::List::length<core::Str>(built);
+    core::Str string = core::List::getOr<core::Str>(built, 5, TEMPER_STR("?"));
+    core::Console::log(console, std::to_string(int32) + " " + string + " " + core::List::get<core::Str>(core::List::slice<core::Str>(built, 1, 2), 0));
+    std::shared_ptr<core::Pair<core::Str, int32_t>> value2 = core::PairFactory::make<core::Str, int32_t>(TEMPER_STR("a"), 1);
+    std::shared_ptr<core::Mapped::Ordered<core::Str, int32_t>> m = core::Map::make<core::Str, int32_t>(core::List::make<std::shared_ptr<core::Pair<core::Str, int32_t>>>(value2, core::PairFactory::make<core::Str, int32_t>(TEMPER_STR("b"), 2)));
     int32_t value3;
     try {
-      value3 = core::Mapped::get<std::string, int32_t>(m, "b");
+      value3 = core::Mapped::get<core::Str, int32_t>(m, TEMPER_STR("b"));
     } catch (core::TemperBubble const &) {
       value3 = -1;
     }
     int32_t value4;
     try {
-      value4 = core::Mapped::get<std::string, int32_t>(m, "c");
+      value4 = core::Mapped::get<core::Str, int32_t>(m, TEMPER_STR("c"));
     } catch (core::TemperBubble const &) {
       value4 = -1;
     }
-    core::Console::log(console, std::to_string(value3) + " " + std::to_string(value4) + " " + core::Boolean::toString(core::Mapped::has<std::string, int32_t>(m, "a")) + " " + std::to_string(core::Mapped::length<std::string, int32_t>(m)));
-    std::shared_ptr<core::Mapped::Ordered<std::string, core::NullableParam<int32_t>>> mb = core::Map::make<std::string, core::NullableParam<int32_t>>();
-    core::MapBuilder::set<std::string, core::NullableParam<int32_t>>(mb, "q", 5);
-    core::MapBuilder::set<std::string, core::NullableParam<int32_t>>(mb, "n", nullptr);
-    core::NullableParam<int32_t> subject3 = core::Mapped::getOr<std::string, core::NullableParam<int32_t>>(mb, "q", 0);
-    core::NullableParam<int32_t> subject4 = core::Mapped::getOr<std::string, core::NullableParam<int32_t>>(mb, "n", 0);
-    core::Console::log(console, std::to_string(subject3 == nullptr ? -2 : subject3.value) + " " + std::to_string(subject4 == nullptr ? -2 : subject4.value) + " " + core::Boolean::toString(core::Mapped::has<std::string, core::NullableParam<int32_t>>(mb, "n")));
+    core::Console::log(console, std::to_string(value3) + " " + std::to_string(value4) + " " + core::Boolean::toString(core::Mapped::has<core::Str, int32_t>(m, TEMPER_STR("a"))) + " " + std::to_string(core::Mapped::length<core::Str, int32_t>(m)));
+    std::shared_ptr<core::Mapped::Ordered<core::Str, core::NullableParam<int32_t>>> mb = core::Map::make<core::Str, core::NullableParam<int32_t>>();
+    core::MapBuilder::set<core::Str, core::NullableParam<int32_t>>(mb, TEMPER_STR("q"), 5);
+    core::MapBuilder::set<core::Str, core::NullableParam<int32_t>>(mb, TEMPER_STR("n"), nullptr);
+    core::NullableParam<int32_t> subject3 = core::Mapped::getOr<core::Str, core::NullableParam<int32_t>>(mb, TEMPER_STR("q"), 0);
+    core::NullableParam<int32_t> subject4 = core::Mapped::getOr<core::Str, core::NullableParam<int32_t>>(mb, TEMPER_STR("n"), 0);
+    core::Console::log(console, std::to_string(subject3 == nullptr ? -2 : subject3.value) + " " + std::to_string(subject4 == nullptr ? -2 : subject4.value) + " " + core::Boolean::toString(core::Mapped::has<core::Str, core::NullableParam<int32_t>>(mb, TEMPER_STR("n"))));
     core::NullableParam<int32_t> subject6;
     try {
-      subject6 = core::MapBuilder::remove<std::string, core::NullableParam<int32_t>>(mb, "q");
+      subject6 = core::MapBuilder::remove<core::Str, core::NullableParam<int32_t>>(mb, TEMPER_STR("q"));
     } catch (core::TemperBubble const &) {
       subject6 = 0;
     }
-    core::NullableParam<std::string> subject5 = subject6 == nullptr ? nullptr : core::NullableParam<std::string>(std::to_string(subject6.value));
-    core::Console::log(console, subject5 == nullptr ? "null" : subject5.value);
-    core::Console::log(console, std::to_string(core::List::length<std::string>(core::Mapped::keys<std::string, core::NullableParam<int32_t>>(mb))));
+    core::NullableParam<core::Str> subject5 = subject6 == nullptr ? nullptr : core::NullableParam<core::Str>(std::to_string(subject6.value));
+    core::Console::log(console, subject5 == nullptr ? TEMPER_STR("null") : subject5.value);
+    core::Console::log(console, std::to_string(core::List::length<core::Str>(core::Mapped::keys<core::Str, core::NullableParam<int32_t>>(mb))));
     core::Console::log(console, core::Boolean::toString(generics::firstSame(core::List::make<int32_t>(1000), core::List::make<int32_t>(1000))) + " " + core::Boolean::toString(generics::firstSame(core::List::make<int32_t>(1000), core::List::make<int32_t>(7))));
   });
 }

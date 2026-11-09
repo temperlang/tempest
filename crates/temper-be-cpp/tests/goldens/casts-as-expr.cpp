@@ -15,17 +15,17 @@ struct Fuji;
 struct Gala;
 
 struct Apple : public virtual temper::core::AnyValueBase {
-  virtual std::string get_name() const = 0;
+  virtual temper::core::Str get_name() const = 0;
 };
 
 struct Fuji : public virtual Apple {
   static std::shared_ptr<Fuji> make();
-  std::string get_name() const override;
+  temper::core::Str get_name() const override;
 };
 
 struct Gala : public virtual Apple {
   static std::shared_ptr<Gala> make();
-  std::string get_name() const override;
+  temper::core::Str get_name() const override;
 };
 
 // Storage, which the library reads and its init sets; read values
@@ -85,8 +85,8 @@ std::shared_ptr<Fuji> Fuji::make() {
   return self;
 }
 
-std::string Fuji::get_name() const {
-  return "Fuji";
+core::Str Fuji::get_name() const {
+  return TEMPER_STR("Fuji");
 }
 
 std::shared_ptr<Gala> Gala::make() {
@@ -94,8 +94,8 @@ std::shared_ptr<Gala> Gala::make() {
   return self;
 }
 
-std::string Gala::get_name() const {
-  return "Gala";
+core::Str Gala::get_name() const {
+  return TEMPER_STR("Gala");
 }
 
 void global_init_init() {
@@ -111,48 +111,48 @@ void global_init_init() {
       core::Console::log(console, core::checked_cast<Apple>(x)->get_name());
       core::Console::log(console, core::checked_cast<Fuji>(x)->get_name());
       x = Gala::make();
-      std::string value;
+      core::Str value;
       try {
         value = core::checked_cast<Fuji>(x)->get_name();
       } catch (core::TemperBubble const &) {
-        value = "Cast failed!";
+        value = TEMPER_STR("Cast failed!");
       }
       core::Console::log(console, value);
       std::shared_ptr<core::AnyValueBase> y = x;
-      std::string value2;
+      core::Str value2;
       try {
         value2 = core::checked_cast<Apple>(y)->get_name();
       } catch (core::TemperBubble const &) {
-        value2 = "Cast from AnyValue failed!";
+        value2 = TEMPER_STR("Cast from AnyValue failed!");
       }
       core::Console::log(console, value2);
-      std::string value3;
+      core::Str value3;
       try {
         value3 = core::checked_cast<Gala>(y)->get_name();
       } catch (core::TemperBubble const &) {
-        value3 = "Cast from AnyValue failed!";
+        value3 = TEMPER_STR("Cast from AnyValue failed!");
       }
       core::Console::log(console, value3);
-      std::string value4;
+      core::Str value4;
       try {
         value4 = core::checked_cast<Fuji>(y)->get_name();
       } catch (core::TemperBubble const &) {
-        value4 = "Cast from AnyValue failed!";
+        value4 = TEMPER_STR("Cast from AnyValue failed!");
       }
       core::Console::log(console, value4);
       x = nullptr;
-      std::string value5;
+      core::Str value5;
       try {
         core::checked_cast<Apple>(x);
-        value5 = "Tasty nothing.";
+        value5 = TEMPER_STR("Tasty nothing.");
       } catch (core::TemperBubble const &) {
-        value5 = "Was null!";
+        value5 = TEMPER_STR("Was null!");
       }
       core::Console::log(console, value5);
     }
     temper_globals::thing0.value = core::any_box(false);
     temper_globals::thing1.value = core::any_box(1);
-    temper_globals::thing2.value = core::any_box(std::string("two"));
+    temper_globals::thing2.value = core::any_box(TEMPER_STR("two"));
     temper_globals::thing3.value = core::any_box(3.14);
   });
 }

@@ -69,21 +69,21 @@ static core::GlobalSlot<std::shared_ptr<core::Console::Type>> console;
 
 }  // namespace temper_globals
 
-static std::string show(std::shared_ptr<std::vector<int32_t>> const & x) {
-  std::shared_ptr<std::vector<std::string>> s = core::ListBuilder::make<std::string>();
-  core::ListBuilder::add<std::string>(s, "[");
-  std::string c = "";
+static core::Str show(std::shared_ptr<std::vector<int32_t>> const & x) {
+  std::shared_ptr<std::vector<core::Str>> s = core::ListBuilder::make<core::Str>();
+  core::ListBuilder::add<core::Str>(s, TEMPER_STR("["));
+  core::Str c = core::Str();
   {
     int32_t i = 0;
     while (i < core::List::length<int32_t>(x)) {
-      core::ListBuilder::add<std::string>(s, c);
-      core::ListBuilder::add<std::string>(s, std::to_string(core::List::get<int32_t>(x, i)));
-      c = ", ";
+      core::ListBuilder::add<core::Str>(s, c);
+      core::ListBuilder::add<core::Str>(s, std::to_string(core::List::get<int32_t>(x, i)));
+      c = TEMPER_STR(", ");
       i = core::Int::add(i, 1);
     }
   }
-  core::ListBuilder::add<std::string>(s, "]");
-  return core::List::join(s, "", [](std::string v) -> std::string { return v; });
+  core::ListBuilder::add<core::Str>(s, TEMPER_STR("]"));
+  return core::List::join(s, core::Str(), [](core::Str v) -> core::Str { return v; });
 }
 
 template <class T>
@@ -114,7 +114,7 @@ static void mutableCapture(std::shared_ptr<std::vector<int32_t>> const & x) {
     return (*sum);
   };
   std::shared_ptr<std::vector<int32_t>> out = core::List::map(x, fn);
-  std::string string = locals::show(out);
+  core::Str string = locals::show(out);
   core::Console::log(temper_globals::console.value, "mutableCapture = " + string + "; sum=" + std::to_string((*sum)));
 }
 
@@ -128,7 +128,7 @@ static void mutableCaptureNested(std::shared_ptr<std::vector<int32_t>> const & x
     return core::List::map(x, fn2);
   };
   std::shared_ptr<std::vector<int32_t>> out = locals::nestBlock<std::shared_ptr<std::vector<int32_t>>>(fn);
-  std::string string = locals::show(out);
+  core::Str string = locals::show(out);
   core::Console::log(temper_globals::console.value, "mutableCaptureNested = " + string + "; sum=" + std::to_string((*sum)));
 }
 

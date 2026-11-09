@@ -89,6 +89,38 @@ function SSub.constructor(this, thing)
   this.thing = thing
 end
 
+---@class property-members.Holder
+
+---@class property-members.Holder.type: temper.Type
+local Holder = temper.type("property-members.Holder")
+
+---@class property-members.Labeled: property-members.Holder
+---@field label fun(self: property-members.Labeled, l: any): string
+
+---@class property-members.Labeled.type: temper.Type
+local Labeled = temper.type("property-members.Labeled", Holder)
+
+---@class property-members.LabeledSub: property-members.Labeled
+---@field thing property-members.C
+---@field label fun(self: property-members.LabeledSub, l: string): string
+
+---@class property-members.LabeledSub.type: temper.Type
+---@operator call: property-members.LabeledSub
+local LabeledSub = temper.type("property-members.LabeledSub", Labeled)
+
+---@param this property-members.LabeledSub
+---@param thing property-members.C
+function LabeledSub.constructor(this, thing)
+  this.thing = thing
+end
+
+---@param this property-members.LabeledSub
+---@param l string
+---@return string
+function LabeledSub.methods.label(this, l)
+  return l .. ": " .. this.thing.x
+end
+
 ---@class property-members.AllAlone: property-members.I
 
 ---@class property-members.AllAlone.type: temper.Type
@@ -212,6 +244,8 @@ print("Generically, x is " .. di.thing.x .. ".")
 print("Genericallier, x is still " .. dj.thing.x .. ".")
 local si = SSub(a)
 print("Sealed thing is " .. si.thing.x .. ".")
+local labeled = LabeledSub(a)
+print("Labeled thing is " .. labeled:label("first") .. ".")
 local high1 = Low1(11)
 local high1b = Low1(12)
 local high1c = Low1(12)

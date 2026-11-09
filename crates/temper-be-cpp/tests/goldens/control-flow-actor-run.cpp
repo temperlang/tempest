@@ -27,13 +27,13 @@ static core::GlobalSlot<std::shared_ptr<core::Console::Type>> console;
 
 static void f(std::function<std::shared_ptr<core::SafeGenerator<std::shared_ptr<core::Empty>>>()> const & body) {
   std::shared_ptr<core::SafeGenerator<std::shared_ptr<core::Empty>>> generator = body();
-  core::Console::log(temper_globals::console.value, "f0");
+  core::Console::log(temper_globals::console.value, TEMPER_STR("f0"));
   core::next(generator);
-  core::Console::log(temper_globals::console.value, "f1");
+  core::Console::log(temper_globals::console.value, TEMPER_STR("f1"));
   core::next(generator);
-  core::Console::log(temper_globals::console.value, "f2");
+  core::Console::log(temper_globals::console.value, TEMPER_STR("f2"));
   core::next(generator);
-  core::Console::log(temper_globals::console.value, "f3");
+  core::Console::log(temper_globals::console.value, TEMPER_STR("f3"));
 }
 
 void global_init_init() {

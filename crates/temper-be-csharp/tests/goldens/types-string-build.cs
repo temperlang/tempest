@@ -39,6 +39,32 @@ public static class BuildGlobal
         builder.Clear();
         builder.Append("Back to square zero.");
         console.Log(builder.ToString());
+        builder.Clear();
+        builder.Append("a??=b??/c??>d???e");
+        string marks = builder.ToString();
+        console.Log(marks);
+        console.Log("Same: " + (marks == "a??=b??/c??>d???e" ? "true" : "false"));
+        builder.Clear();
+        builder.Append("??");
+        try
+        {
+            StringUtil.AppendCodePoint(builder, 1);
+        }
+        catch
+        {
+            console.Log("No U+1.");
+        }
+        builder.Append('0');
+        try
+        {
+            StringUtil.AppendCodePoint(builder, 8364);
+        }
+        catch
+        {
+            console.Log("No euro.");
+        }
+        builder.Append('1');
+        console.Log("Digits after escapes: " + (builder.ToString() == "??\u00010€1" ? "true" : "false"));
         StringBuilderOwner owner = new StringBuilderOwner(new StringBuilder());
         owner.Builder.Append("Hi from inside.");
         console.Log(owner.Builder.ToString());

@@ -73,7 +73,10 @@ Each idea has a status: **done** in tempest, **planned**, or an **idea**.
    callee can't write the field; then maybe a shared `Str` (one block
    holding a refcount and the chars, converting implicitly to and from
    `std::string` and `std::string_view`), if the team accepts the
-   break.
+   break. **Done** (2026-11-09): Temper #654 made `String` a shared
+   `temper::core::Str` (a `shared_ptr` to a `const std::string`, which
+   tied the one-block layout on Kelpto), passed by `const &` where
+   never assigned, and tempest's C++ follows it.
 8. **Rust: fewer lock round trips.** Kotlin's Rust takes a lock and
    clones `Arc` fields on every field access. Beyond item 1, one guard
    per run of accesses, and atomics for scalar `var`s, would help.

@@ -85,6 +85,39 @@ class SSub extends type(SI) {
   }
 }
 
+/** @template T */
+class Holder extends type() {}
+
+/** @template L */
+class Labeled extends type(Holder) {
+  /** @type {(l: L) => string} */
+  label = /** @type {any} */ (undefined);
+}
+
+class LabeledSub extends type(Labeled) {
+  /** @type {C} */
+  #thing;
+
+  /** @param {C} thing */
+  constructor(thing) {
+    super();
+    this.#thing = thing;
+  }
+
+  /** @returns {C} */
+  get thing() {
+    return this.#thing;
+  }
+
+  /**
+   * @param {string} l
+   * @returns {string}
+   */
+  label(l) {
+    return `${l}: ${this.#thing.x}`;
+  }
+}
+
 class AllAlone extends type(I) {
   /** @type {string} */
   x = /** @type {any} */ (undefined);
@@ -199,6 +232,9 @@ console.log(`Genericallier, x is still ${dj.thing.x}.`);
 /** @type {SI<C>} */
 const si = new SSub(a);
 console.log(`Sealed thing is ${si.thing.x}.`);
+/** @type {Labeled<string>} */
+const labeled = new LabeledSub(a);
+console.log(`Labeled thing is ${labeled.label("first")}.`);
 const high1 = new Low1(11);
 const high1b = new Low1(12);
 const high1c = new Low1(12);

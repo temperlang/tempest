@@ -21,6 +21,11 @@ pub(crate) fn init() -> temper_core::Result<()> {
             println!("Genericallier, x is still {}.", dj.0.thing.x());
             let si: SI<C> = SI::new(SSub::new(a.clone()));
             println!("Sealed thing is {}.", si.thing().x());
+            let labeled: Labeled<Arc<String>> = Labeled::new(LabeledSub::new(a.clone()));
+            println!(
+                "Labeled thing is {}.",
+                labeled.label(Arc::new("first".to_string()))
+            );
             let high1 = High::new(Low1::new(11));
             let high1_b = High::new(Low1::new(12));
             let high1_c = High::new(Low1::new(12));
@@ -257,6 +262,118 @@ impl<T: ITrait + Clone + Send + Sync + 'static> SITrait<T> for SSub<T> {
 }
 
 temper_core::impl_any_value_trait!(SSub<T>, [SI<T>] where T: ITrait);
+
+pub(crate) trait HolderTrait<T: Clone + Send + Sync + 'static>:
+    temper_core::AsAnyValue + temper_core::AnyValueTrait + Send + Sync
+{
+    #[allow(dead_code)]
+    fn clone_boxed(&self) -> Holder<T>;
+}
+
+#[derive(Clone)]
+pub(crate) struct Holder<T: Clone + Send + Sync + 'static>(Arc<dyn HolderTrait<T>>);
+
+impl<T: Clone + Send + Sync + 'static> Holder<T> {
+    pub fn new(selfish: impl HolderTrait<T> + 'static) -> Holder<T> {
+        Holder(Arc::new(selfish))
+    }
+}
+
+impl<T: Clone + Send + Sync + 'static> HolderTrait<T> for Holder<T> {
+    fn clone_boxed(&self) -> Holder<T> {
+        HolderTrait::clone_boxed(&*self.0)
+    }
+}
+
+temper_core::impl_any_value_trait_for_interface!(Holder<T>);
+
+impl<T: Clone + Send + Sync + 'static> std::ops::Deref for Holder<T> {
+    type Target = dyn HolderTrait<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &*self.0
+    }
+}
+
+pub(crate) trait LabeledTrait<L: Clone + Send + Sync + 'static>:
+    temper_core::AsAnyValue + temper_core::AnyValueTrait + Send + Sync + HolderTrait<C>
+{
+    #[allow(dead_code)]
+    fn clone_boxed(&self) -> Labeled<L>;
+
+    fn label(&self, l: L) -> Arc<String>;
+}
+
+#[derive(Clone)]
+pub(crate) struct Labeled<L: Clone + Send + Sync + 'static>(Arc<dyn LabeledTrait<L>>);
+
+impl<L: Clone + Send + Sync + 'static> Labeled<L> {
+    pub fn new(selfish: impl LabeledTrait<L> + 'static) -> Labeled<L> {
+        Labeled(Arc::new(selfish))
+    }
+}
+
+impl<L: Clone + Send + Sync + 'static> LabeledTrait<L> for Labeled<L> {
+    fn clone_boxed(&self) -> Labeled<L> {
+        LabeledTrait::clone_boxed(&*self.0)
+    }
+
+    fn label(&self, l: L) -> Arc<String> {
+        LabeledTrait::label(&*self.0, l)
+    }
+}
+
+impl<L: Clone + Send + Sync + 'static> HolderTrait<C> for Labeled<L> {
+    fn clone_boxed(&self) -> Holder<C> {
+        HolderTrait::clone_boxed(&*self.0)
+    }
+}
+
+temper_core::impl_any_value_trait_for_interface!(Labeled<L>);
+
+impl<L: Clone + Send + Sync + 'static> std::ops::Deref for Labeled<L> {
+    type Target = dyn LabeledTrait<L>;
+
+    fn deref(&self) -> &Self::Target {
+        &*self.0
+    }
+}
+
+struct LabeledSubStruct {
+    thing: C,
+}
+
+#[derive(Clone)]
+pub(crate) struct LabeledSub(Arc<LabeledSubStruct>);
+
+impl LabeledSub {
+    pub fn new(thing: C) -> LabeledSub {
+        LabeledSub(Arc::new(LabeledSubStruct { thing }))
+    }
+
+    pub fn label(&self, l: impl ToArcString) -> Arc<String> {
+        let l = l.to_arc_string();
+        Arc::new(format!("{l}: {}", self.0.thing.x()))
+    }
+}
+
+impl LabeledTrait<Arc<String>> for LabeledSub {
+    fn clone_boxed(&self) -> Labeled<Arc<String>> {
+        Labeled::new(self.clone())
+    }
+
+    fn label(&self, l: Arc<String>) -> Arc<String> {
+        self.label(l)
+    }
+}
+
+impl HolderTrait<C> for LabeledSub {
+    fn clone_boxed(&self) -> Holder<C> {
+        Holder::new(self.clone())
+    }
+}
+
+temper_core::impl_any_value_trait!(LabeledSub, [Labeled<Arc<String>>, Holder<C>]);
 
 pub(crate) trait AllAloneTrait:
     temper_core::AsAnyValue + temper_core::AnyValueTrait + Send + Sync + ITrait

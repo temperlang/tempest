@@ -25,39 +25,39 @@ struct Box : public std::enable_shared_from_this<Box> {
 struct Holder : public std::enable_shared_from_this<Holder> {
   std::shared_ptr<Box> box;
   static std::shared_ptr<Holder> make(std::shared_ptr<Box> const & box);
-  std::string replace(std::shared_ptr<Box> const & old);
-  std::string replaceItem(std::shared_ptr<Item> const & old);
-  std::string run();
-  std::string runItem();
-  std::string drop();
+  temper::core::Str replace(std::shared_ptr<Box> const & old);
+  temper::core::Str replaceItem(std::shared_ptr<Item> const & old);
+  temper::core::Str run();
+  temper::core::Str runItem();
+  temper::core::Str drop();
   std::shared_ptr<Box> get_box();
 };
 
 struct Item : public std::enable_shared_from_this<Item> {
-  std::string name;
-  static std::shared_ptr<Item> make(std::string name);
-  std::string leave(std::shared_ptr<Holder> const & h) const;
-  std::string get_name() const;
+  temper::core::Str name;
+  static std::shared_ptr<Item> make(temper::core::Str const & name);
+  temper::core::Str leave(std::shared_ptr<Holder> const & h) const;
+  temper::core::Str get_name() const;
 };
 
 struct Slot : public std::enable_shared_from_this<Slot> {
   std::shared_ptr<Item> item;
-  temper::core::NullableParam<std::string> tag;
-  static std::shared_ptr<Slot> make(std::shared_ptr<Item> const & item, temper::core::NullableParam<std::string> tag);
-  std::string swap(std::shared_ptr<Item> const & old);
-  std::string run();
-  std::string relabel();
+  temper::core::NullableParam<temper::core::Str> tag;
+  static std::shared_ptr<Slot> make(std::shared_ptr<Item> const & item, temper::core::NullableParam<temper::core::Str> tag);
+  temper::core::Str swap(std::shared_ptr<Item> const & old);
+  temper::core::Str run();
+  temper::core::Str relabel();
   std::shared_ptr<Item> get_item();
-  temper::core::NullableParam<std::string> get_tag();
+  temper::core::NullableParam<temper::core::Str> get_tag();
 };
 
 struct Names : public std::enable_shared_from_this<Names> {
-  std::shared_ptr<std::vector<std::string>> list;
-  static std::shared_ptr<Names> make(std::shared_ptr<std::vector<std::string>> const & list);
-  std::string swap(std::shared_ptr<std::vector<std::string>> const & old);
-  std::string run();
-  std::string firstThen();
-  std::shared_ptr<std::vector<std::string>> get_list();
+  std::shared_ptr<std::vector<temper::core::Str>> list;
+  static std::shared_ptr<Names> make(std::shared_ptr<std::vector<temper::core::Str>> const & list);
+  temper::core::Str swap(std::shared_ptr<std::vector<temper::core::Str>> const & old);
+  temper::core::Str run();
+  temper::core::Str firstThen();
+  std::shared_ptr<std::vector<temper::core::Str>> get_list();
 };
 
 }  // namespace lifetimes
@@ -85,31 +85,31 @@ std::shared_ptr<Holder> Holder::make(std::shared_ptr<Box> const & box) {
   return self;
 }
 
-std::string Holder::replace(std::shared_ptr<Box> const & old) {
+core::Str Holder::replace(std::shared_ptr<Box> const & old) {
   std::shared_ptr<Holder> self = shared_from_this();
-  self->box = Box::make(Item::make("new"));
+  self->box = Box::make(Item::make(TEMPER_STR("new")));
   return old->item->name;
 }
 
-std::string Holder::replaceItem(std::shared_ptr<Item> const & old) {
+core::Str Holder::replaceItem(std::shared_ptr<Item> const & old) {
   std::shared_ptr<Holder> self = shared_from_this();
-  self->box = Box::make(Item::make("newer"));
+  self->box = Box::make(Item::make(TEMPER_STR("newer")));
   return old->name;
 }
 
-std::string Holder::run() {
+core::Str Holder::run() {
   std::shared_ptr<Holder> self = shared_from_this();
   std::shared_ptr<Box> value = self->box;
   return self->replace(value);
 }
 
-std::string Holder::runItem() {
+core::Str Holder::runItem() {
   std::shared_ptr<Holder> self = shared_from_this();
   std::shared_ptr<Item> value = self->box->item;
   return self->replaceItem(value);
 }
 
-std::string Holder::drop() {
+core::Str Holder::drop() {
   std::shared_ptr<Holder> self = shared_from_this();
   return self->box->item->leave(self);
 }
@@ -118,51 +118,51 @@ std::shared_ptr<Box> Holder::get_box() {
   return this->box;
 }
 
-std::shared_ptr<Item> Item::make(std::string name) {
+std::shared_ptr<Item> Item::make(core::Str const & name) {
   std::shared_ptr<Item> self = std::make_shared<Item>();
   self->name = name;
   return self;
 }
 
-std::string Item::leave(std::shared_ptr<Holder> const & h) const {
+core::Str Item::leave(std::shared_ptr<Holder> const & h) const {
   std::shared_ptr<Item const> self = shared_from_this();
-  h->box = Box::make(Item::make("other"));
+  h->box = Box::make(Item::make(TEMPER_STR("other")));
   return self->name;
 }
 
-std::string Item::get_name() const {
+core::Str Item::get_name() const {
   return this->name;
 }
 
-std::shared_ptr<Slot> Slot::make(std::shared_ptr<Item> const & item, core::NullableParam<std::string> tag) {
+std::shared_ptr<Slot> Slot::make(std::shared_ptr<Item> const & item, core::NullableParam<core::Str> tag) {
   std::shared_ptr<Slot> self = std::make_shared<Slot>();
   self->item = item;
   self->tag = tag;
   return self;
 }
 
-std::string Slot::swap(std::shared_ptr<Item> const & old) {
+core::Str Slot::swap(std::shared_ptr<Item> const & old) {
   this->item = nullptr;
   this->tag = nullptr;
   if (old == nullptr) {
-    return "none";
+    return TEMPER_STR("none");
   } else {
     return old->name;
   }
 }
 
-std::string Slot::run() {
+core::Str Slot::run() {
   std::shared_ptr<Slot> self = shared_from_this();
   std::shared_ptr<Item> value = self->item;
   return self->swap(value);
 }
 
-std::string Slot::relabel() {
-  core::NullableParam<std::string> was = this->tag;
-  this->tag = "after";
+core::Str Slot::relabel() {
+  core::NullableParam<core::Str> was = this->tag;
+  this->tag = TEMPER_STR("after");
   {
     if (was == nullptr) {
-      return "unlabeled";
+      return TEMPER_STR("unlabeled");
     } else {
       return was.value;
     }
@@ -173,82 +173,82 @@ std::shared_ptr<Item> Slot::get_item() {
   return this->item;
 }
 
-core::NullableParam<std::string> Slot::get_tag() {
+core::NullableParam<core::Str> Slot::get_tag() {
   return this->tag;
 }
 
 static std::shared_ptr<Item> maybeItem(bool make_) {
   if (make_) {
-    return Item::make("temp");
+    return Item::make(TEMPER_STR("temp"));
   } else {
     return nullptr;
   }
 }
 
-std::shared_ptr<Names> Names::make(std::shared_ptr<std::vector<std::string>> const & list) {
+std::shared_ptr<Names> Names::make(std::shared_ptr<std::vector<core::Str>> const & list) {
   std::shared_ptr<Names> self = std::make_shared<Names>();
   self->list = list;
   return self;
 }
 
-std::string Names::swap(std::shared_ptr<std::vector<std::string>> const & old) {
+core::Str Names::swap(std::shared_ptr<std::vector<core::Str>> const & old) {
   std::shared_ptr<Names> self = shared_from_this();
-  self->list = core::List::make<std::string>("fresh");
-  return core::List::get<std::string>(old, 0);
+  self->list = core::List::make<core::Str>(TEMPER_STR("fresh"));
+  return core::List::get<core::Str>(old, 0);
 }
 
-std::string Names::run() {
+core::Str Names::run() {
   std::shared_ptr<Names> self = shared_from_this();
-  std::shared_ptr<std::vector<std::string>> value = self->list;
+  std::shared_ptr<std::vector<core::Str>> value = self->list;
   return self->swap(value);
 }
 
-std::string Names::firstThen() {
+core::Str Names::firstThen() {
   std::shared_ptr<Names> self = shared_from_this();
-  std::string first = core::List::get<std::string>(self->list, 0);
-  self->list = core::List::make<std::string>("replaced");
+  core::Str first = core::List::get<core::Str>(self->list, 0);
+  self->list = core::List::make<core::Str>(TEMPER_STR("replaced"));
   return first;
 }
 
-std::shared_ptr<std::vector<std::string>> Names::get_list() {
+std::shared_ptr<std::vector<core::Str>> Names::get_list() {
   return this->list;
 }
 
-static std::shared_ptr<std::vector<std::string>> made() {
-  return core::List::make<std::string>("made", "list");
+static std::shared_ptr<std::vector<core::Str>> made() {
+  return core::List::make<core::Str>(TEMPER_STR("made"), TEMPER_STR("list"));
 }
 
 void global_init_init() {
   core::init_once([] {
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
-    std::shared_ptr<Holder> h = Holder::make(Box::make(Item::make("old")));
+    std::shared_ptr<Holder> h = Holder::make(Box::make(Item::make(TEMPER_STR("old"))));
     core::Console::log(console, h->run());
     core::Console::log(console, h->runItem());
     core::Console::log(console, h->box->item->name);
     core::Console::log(console, h->drop());
     core::Console::log(console, h->box->item->name);
-    core::Console::log(console, Holder::make(Box::make(Item::make("chained")))->box->item->name);
-    std::shared_ptr<Slot> slot = Slot::make(Item::make("slotted"), "before");
+    core::Console::log(console, Holder::make(Box::make(Item::make(TEMPER_STR("chained"))))->box->item->name);
+    std::shared_ptr<Slot> slot = Slot::make(Item::make(TEMPER_STR("slotted")), TEMPER_STR("before"));
     core::Console::log(console, slot->run());
     core::Console::log(console, slot->run());
-    slot->tag = "first";
+    slot->tag = TEMPER_STR("first");
     core::Console::log(console, slot->relabel());
     core::Console::log(console, slot->relabel());
     std::shared_ptr<Item> subject = maybeItem(true);
-    core::Console::log(console, (subject == nullptr ? Item::make("fallback") : subject)->name);
+    core::Console::log(console, (subject == nullptr ? Item::make(TEMPER_STR("fallback")) : subject)->name);
     std::shared_ptr<Item> subject2 = maybeItem(false);
-    core::Console::log(console, (subject2 == nullptr ? Item::make("fallback") : subject2)->name);
+    core::Console::log(console, (subject2 == nullptr ? Item::make(TEMPER_STR("fallback")) : subject2)->name);
     std::shared_ptr<Item> got = maybeItem(true);
     if (got != nullptr) {
       core::Console::log(console, got->name);
     }
-    std::shared_ptr<Names> names = Names::make(core::List::make<std::string>("kept"));
+    std::shared_ptr<Names> names = Names::make(core::List::make<core::Str>(TEMPER_STR("kept")));
     core::Console::log(console, names->run());
     core::Console::log(console, names->firstThen());
-    core::Console::log(console, core::List::get<std::string>(names->list, 0));
-    std::string second = core::List::get<std::string>(made(), 1);
+    core::Console::log(console, core::List::get<core::Str>(names->list, 0));
+    core::Str second = core::List::get<core::Str>(made(), 1);
     core::Console::log(console, second);
-    core::Console::log(console, std::to_string(core::List::length<std::string>(made())));
+    core::Console::log(console, std::to_string(core::List::length<core::Str>(made())));
   });
 }
 

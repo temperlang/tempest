@@ -14,11 +14,11 @@ struct Simple;
 
 struct Simple : public std::enable_shared_from_this<Simple> {
   struct temper_statics {
-    static temper::core::GlobalSlot<std::string> value;
-    static temper::core::GlobalSlot<std::string> other;
+    static temper::core::GlobalSlot<temper::core::Str> value;
+    static temper::core::GlobalSlot<temper::core::Str> other;
   };
-  static std::string const & value();
-  static std::string const & other();
+  static temper::core::Str const & value();
+  static temper::core::Str const & other();
   static std::shared_ptr<Simple> make();
 };
 
@@ -31,16 +31,16 @@ namespace static_properties_scope {
 
 namespace core = temper::core;
 
-core::GlobalSlot<std::string> Simple::temper_statics::value;
+core::GlobalSlot<core::Str> Simple::temper_statics::value;
 
-std::string const & Simple::value() {
+core::Str const & Simple::value() {
   global_init_init();
   return Simple::temper_statics::value.value;
 }
 
-core::GlobalSlot<std::string> Simple::temper_statics::other;
+core::GlobalSlot<core::Str> Simple::temper_statics::other;
 
-std::string const & Simple::other() {
+core::Str const & Simple::other() {
   global_init_init();
   return Simple::temper_statics::other.value;
 }
@@ -50,11 +50,11 @@ std::shared_ptr<Simple> Simple::make() {
   return self;
 }
 
-static std::string readSimpleValue() {
+static core::Str readSimpleValue() {
   return Simple::temper_statics::value.value;
 }
 
-static std::string readSimpleOther() {
+static core::Str readSimpleOther() {
   return Simple::temper_statics::other.value;
 }
 
@@ -63,8 +63,8 @@ void global_init_init() {
     Simple::temper_statics::value.construct();
     Simple::temper_statics::other.construct();
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
-    Simple::temper_statics::value.value = "foo";
-    Simple::temper_statics::other.value = "bar";
+    Simple::temper_statics::value.value = TEMPER_STR("foo");
+    Simple::temper_statics::other.value = TEMPER_STR("bar");
     core::Console::log(console, "Simple.value is " + readSimpleValue());
     core::Console::log(console, "Simple.other is " + readSimpleOther());
   });

@@ -29,11 +29,11 @@ struct Scaler : public std::enable_shared_from_this<Scaler> {
 };
 
 struct Button : public std::enable_shared_from_this<Button> {
-  std::string label;
+  temper::core::Str label;
   std::function<int32_t()> onPress;
-  static std::shared_ptr<Button> make(std::string label, std::function<int32_t()> const & onPress);
-  std::string press() const;
-  std::string get_label() const;
+  static std::shared_ptr<Button> make(temper::core::Str const & label, std::function<int32_t()> const & onPress);
+  temper::core::Str press() const;
+  temper::core::Str get_label() const;
   std::function<int32_t()> get_onPress() const;
 };
 
@@ -82,18 +82,18 @@ int32_t Scaler::triple(int32_t x) {
   return core::Int::mul(x, 3);
 }
 
-std::shared_ptr<Button> Button::make(std::string label, std::function<int32_t()> const & onPress) {
+std::shared_ptr<Button> Button::make(core::Str const & label, std::function<int32_t()> const & onPress) {
   std::shared_ptr<Button> self = std::make_shared<Button>();
   self->label = label;
   self->onPress = onPress;
   return self;
 }
 
-std::string Button::press() const {
+core::Str Button::press() const {
   return this->label + " " + std::to_string(this->onPress());
 }
 
-std::string Button::get_label() const {
+core::Str Button::get_label() const {
   return this->label;
 }
 
@@ -129,7 +129,7 @@ static int32_t sumFrom(std::shared_ptr<std::vector<int32_t>> const & xs, int32_t
   return sum;
 }
 
-static int32_t doubles(std::string s) {
+static int32_t doubles(core::Str const & s) {
   int32_t n = 0;
   int32_t end = core::String::end(s);
   {
@@ -164,9 +164,9 @@ void global_init_init() {
     std::shared_ptr<std::vector<int32_t>> ns = core::List::make<int32_t>(5, 2, 8, 1, 4);
     std::shared_ptr<std::vector<int32_t>> doubled = core::List::map(ns, [](int32_t n) -> int32_t { return core::Int::mul(n, 2); });
     std::shared_ptr<std::vector<int32_t>> big = core::List::filter(doubled, [](int32_t n) -> bool { return n > 4; });
-    core::Console::log(temper_globals::console.value, core::List::join(big, ", ", [](int32_t n) -> std::string { return std::to_string(n); }));
+    core::Console::log(temper_globals::console.value, core::List::join(big, TEMPER_STR(", "), [](int32_t n) -> core::Str { return std::to_string(n); }));
     std::shared_ptr<std::vector<int32_t>> order = core::List::sorted(ns, [](int32_t a, int32_t b) -> int32_t { return core::Int::sub(a, b); });
-    core::Console::log(temper_globals::console.value, core::List::join(order, " ", [](int32_t n) -> std::string { return std::to_string(n); }));
+    core::Console::log(temper_globals::console.value, core::List::join(order, TEMPER_STR(" "), [](int32_t n) -> core::Str { return std::to_string(n); }));
     int32_t total = 0;
     {
       int32_t length = core::List::length<int32_t>(ns);
@@ -178,7 +178,7 @@ void global_init_init() {
       }
     }
     core::Console::log(temper_globals::console.value, "total " + std::to_string(total));
-    std::shared_ptr<Button> button = Button::make("hits", makeCounter(0));
+    std::shared_ptr<Button> button = Button::make(TEMPER_STR("hits"), makeCounter(0));
     button->press();
     core::Console::log(temper_globals::console.value, button->press());
     std::shared_ptr<std::vector<std::function<int32_t()>>> makers = core::ListBuilder::make<std::function<int32_t()>>();
@@ -190,7 +190,7 @@ void global_init_init() {
         i = core::Int::add(i, 1);
       }
     }
-    core::Console::log(temper_globals::console.value, core::List::join(makers, " ", [](std::function<int32_t()> c) -> std::string { return std::to_string(c()); }));
+    core::Console::log(temper_globals::console.value, core::List::join(makers, TEMPER_STR(" "), [](std::function<int32_t()> c) -> core::Str { return std::to_string(c()); }));
     auto fn8 = []() -> std::shared_ptr<core::SafeGenerator<std::shared_ptr<core::Empty>>> {
       std::shared_ptr<int32_t> caseIndex = std::make_shared<int32_t>(0);
       std::shared_ptr<std::shared_ptr<std::vector<std::function<int32_t()>>>> fs = std::make_shared<std::shared_ptr<std::vector<std::function<int32_t()>>>>(nullptr);
@@ -222,7 +222,7 @@ void global_init_init() {
               return core::ValueResult<std::shared_ptr<core::Empty>>::make(core::empty());
             }
             case 3:
-              core::Console::log(temper_globals::console.value, core::List::join((*fs), " ", [](std::function<int32_t()> c) -> std::string { return std::to_string(c()); }));
+              core::Console::log(temper_globals::console.value, core::List::join((*fs), TEMPER_STR(" "), [](std::function<int32_t()> c) -> core::Str { return std::to_string(c()); }));
               *caseIndex = -1;
               return core::ValueResult<std::shared_ptr<core::Empty>>::make(core::empty());
             case 4: {
@@ -241,7 +241,7 @@ void global_init_init() {
       return core::safe_adapt_generator_fn<std::shared_ptr<core::Empty>>(convertedCoroutine);
     };
     functions_program::drive(5, fn8);
-    core::Console::log(temper_globals::console.value, "sum " + std::to_string(functions_program::sumFrom(ns, 4)) + " doubles " + std::to_string(functions_program::doubles("bookkeeper")));
+    core::Console::log(temper_globals::console.value, "sum " + std::to_string(functions_program::sumFrom(ns, 4)) + " doubles " + std::to_string(functions_program::doubles(TEMPER_STR("bookkeeper"))));
   });
 }
 

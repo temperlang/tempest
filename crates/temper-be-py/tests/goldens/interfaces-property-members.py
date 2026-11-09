@@ -13,6 +13,8 @@ __all__ = ('I', 'J', 'SI')
 
 _IT = _TypeVar('_IT', bound='I')
 _T = _TypeVar('_T', bound='I')
+_T_2 = _TypeVar('_T_2')
+_L = _TypeVar('_L')
 
 
 class I(metaclass=_ABCMeta):
@@ -82,6 +84,33 @@ class _SSub(SI[_T], _Generic[_T]):
     @property
     def thing(self, /) -> _T:
         return self._thing
+
+
+class _Holder(_Generic[_T_2], metaclass=_ABCMeta):
+    __slots__ = ()
+
+
+class _Labeled(_Holder[_C], _Generic[_L]):
+    __slots__ = ()
+
+    @_abstractmethod
+    def label(self, l: _L, /) -> str:
+        ...
+
+
+class _LabeledSub(_Labeled[str]):
+    __slots__ = ('_thing',)
+    _thing: _C
+
+    def __init__(self, /, thing: _C) -> None:
+        self._thing = thing
+
+    @property
+    def thing(self, /) -> _C:
+        return self._thing
+
+    def label(self, l: str, /) -> str:
+        return f'{l}: {self._thing.x}'
 
 
 class _AllAlone(I):  # pyright: ignore[reportUnusedClass]
@@ -186,6 +215,8 @@ _console.log(f'Generically, x is {_di.thing.x}.')
 _console.log(f'Genericallier, x is still {_dj.thing.x}.')
 _si: SI[_C] = _SSub(_a)
 _console.log(f'Sealed thing is {_si.thing.x}.')
+_labeled: _Labeled[str] = _LabeledSub(_a)
+_console.log(f"Labeled thing is {_labeled.label('first')}.")
 _high1: _High = _Low1(11)
 _high1_b: _High = _Low1(12)
 _high1_c: _High = _Low1(12)

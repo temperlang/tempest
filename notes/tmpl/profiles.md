@@ -451,7 +451,8 @@ global_init_init()`), `LIB/init.cpp`, and `LIB/main.cpp`, which calls
 the init, as Kotlin's. Names keep their case; keywords and names the
 translator prints or the runtime defines as macros take `_`
 (`explicit_`, `M_PI_`). Types are `bool`, `int32_t`, `int64_t`,
-`double`, and `std::string` by value, as Kotlin's; a `Console` is the
+`double`, and the runtime's shared `temper::core::Str` (a `std::string`
+until Temper #654), as Kotlin's; a `Console` is the
 runtime's `std::shared_ptr<temper::core::Console::Type>`, from
 `get_console()`, which logs to `std::cout`. Two differences: the header
 declares only exports, where Kotlin's declares every function, and

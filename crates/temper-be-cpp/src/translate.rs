@@ -134,6 +134,14 @@ fn not_yet<T>(what: impl Into<String>) -> R<T> {
 /// rules reserve.
 const CORE: &str = "core";
 
+/// Whether a type is passed by `const &` where it isn't assigned: one
+/// whose copy bumps a count or more, a `shared_ptr`, a `std::function`,
+/// or a string's `core::Str`, as Kotlin's (its `isIndirectType`, and the
+/// runtime's `IsIndirect`).
+pub(crate) fn indirect(ty: &str) -> bool {
+    ty.starts_with("std::shared_ptr<") || ty.starts_with("std::function<") || ty == "core::Str"
+}
+
 /// A module translated: its `.cpp`, and what its header declares.
 pub struct Translated {
     pub source: tree::Source,
@@ -369,7 +377,7 @@ impl<'a> Translator<'a> {
         format!("{name}<{}>", names.join(", "))
     }
 
-    /// Type arguments as C++ writes them: `<std::string, int32_t>`, or
+    /// Type arguments as C++ writes them: `<core::Str, int32_t>`, or
     /// nothing.
     fn template_args(&self, args: &[TypeId]) -> R<String> {
         if args.is_empty() {
@@ -487,7 +495,7 @@ impl<'a> Translator<'a> {
                 Scalar::Int32 => "int32_t",
                 Scalar::Int64 => "int64_t",
                 Scalar::Float64 => "double",
-                Scalar::String => "std::string",
+                Scalar::String => "core::Str",
                 Scalar::AnyValue => "std::shared_ptr<core::AnyValueBase>",
                 Scalar::Type => "std::type_index",
             }
@@ -1142,12 +1150,11 @@ impl<'a> Translator<'a> {
             if let Node::Param { decl } = p.nodes.get(param) {
                 let mut ty = self.ty(p.decls.get(decl).ty)?;
                 let mut name = self.name(decl);
-                // A `shared_ptr` by `const &`, as Kotlin passes one that's
-                // never assigned; callers name what a call could change
+                // A `shared_ptr`, `std::function`, or `core::Str` by
+                // `const &`, as Kotlin passes one that's never assigned;
+                // callers name what a call could change
                 // ([`operands`](Self::operands)).
-                let by_ref = (ty.starts_with("std::shared_ptr<")
-                    || ty.starts_with("std::function<"))
-                    && !self.by_value.get(i).copied().unwrap_or(false);
+                let by_ref = indirect(&ty) && !self.by_value.get(i).copied().unwrap_or(false);
                 if by_ref && !assigned.contains(&decl) {
                     ty.push_str(" const &");
                 }
@@ -1328,7 +1335,7 @@ impl<'a> Translator<'a> {
         for &param in p.nodes.list(params) {
             if let Node::Param { decl: param } = p.nodes.get(param) {
                 let mut ty = self.ty(p.decls.get(param).ty)?;
-                if ty.starts_with("std::shared_ptr<") || ty.starts_with("std::function<") {
+                if indirect(&ty) {
                     ty.push_str(" const &");
                 }
                 ps.push((ty, self.name(param)));
@@ -1411,7 +1418,7 @@ impl<'a> Translator<'a> {
         for &param in p.nodes.list(params) {
             if let Node::Param { decl: param } = p.nodes.get(param) {
                 let mut ty = self.ty(p.decls.get(param).ty)?;
-                if ty.starts_with("std::shared_ptr<") || ty.starts_with("std::function<") {
+                if indirect(&ty) {
                     ty.push_str(" const &");
                 }
                 ps.push((ty, self.name(param)));
@@ -2065,9 +2072,19 @@ impl<'a> Translator<'a> {
                     out.extend(self.deliver(expr, &Sink::Discard)?);
                     return Ok(());
                 } else {
+                    // A value known not to be null, discarded, is the
+                    // call that makes it (`lexer.scan("\n");` for a
+                    // `String?`), not its `NullableParam`'s `.value`.
+                    let mut expr = expr;
+                    while let Node::NonNull { value } = p.nodes.get(expr) {
+                        expr = value;
+                    }
                     let e = self.expr(expr)?;
                     if !e.is_statement() {
-                        return not_yet("an expression statement that isn't a call");
+                        return not_yet(format!(
+                            "an expression statement that isn't a call, `{}`",
+                            tree::expr(&e, 0)
+                        ));
                     }
                     Stmt::Expr(e)
                 }
@@ -2089,15 +2106,16 @@ impl<'a> Translator<'a> {
         match connection {
             Connection::Call(f) => {
                 let mut values = self.args(args)?;
-                // A string literal where the runtime's template deduces a
-                // type parameter, as `reduceFrom`'s `initial`, is a
-                // `std::string`, not the `const char*` C++ would deduce.
+                // A string made as a `std::string` where the runtime's
+                // template deduces a type parameter, as `reduceFrom`'s
+                // `initial`, is a `core::Str`, as Temper's strings are.
                 let p = self.p;
                 if let Some(sig) = p.types.signature(p.decls.get(decl).ty) {
                     let skip = values.len().saturating_sub(sig.params.len());
                     for (v, &t) in values.iter_mut().skip(skip).zip(sig.params) {
-                        if v.is_c_string() && matches!(p.types.get(t), TypeData::TypeParam { .. }) {
-                            *v = v.clone().std_string();
+                        if v.is_std_string() && matches!(p.types.get(t), TypeData::TypeParam { .. })
+                        {
+                            *v = v.clone().str_value();
                         }
                     }
                 }
@@ -2265,9 +2283,7 @@ impl<'a> Translator<'a> {
             }
         }
         matches!(p.nodes.get(id), Node::GetField { .. })
-            && self
-                .ty(p.nodes.ty(id))
-                .is_ok_and(|t| t.starts_with("std::shared_ptr<"))
+            && self.ty(p.nodes.ty(id)).is_ok_and(|t| indirect(&t))
             && changes(p, id)
     }
 
@@ -2540,15 +2556,12 @@ impl<'a> Translator<'a> {
             Node::GetStatic { target } => self.top(target),
             // A class's `shared_ptr` converts to its interfaces' itself.
             // A builtin value as an `AnyValue`, boxed, as Kotlin's; a
-            // string literal as the `std::string` it is.
+            // string as the `core::Str` it is.
             Node::Upcast { value }
                 if p.types.non_null(p.nodes.ty(id)) == TypeId::ANY_VALUE
                     && matches!(p.types.get(p.nodes.ty(value)), TypeData::Scalar(_)) =>
             {
-                let mut v = self.expr(value)?;
-                if v.is_c_string() {
-                    v = v.std_string();
-                }
+                let v = self.expr(value)?.str_value();
                 self.core("any_box").call(vec![v])
             }
             Node::Upcast { value } => self.expr(value)?,
@@ -2658,11 +2671,7 @@ impl<'a> Translator<'a> {
                 match spelling {
                     Spelling::Bin(op) => {
                         let b = args.pop().unwrap_or(Expr::Bool(false));
-                        let mut a = args.pop().unwrap_or(Expr::Bool(false));
-                        // Two literals would compare pointers.
-                        if strings && a.is_c_string() && b.is_c_string() {
-                            a = a.std_string();
-                        }
+                        let a = args.pop().unwrap_or(Expr::Bool(false));
                         Expr::bin(op, a, b)
                     }
                     Spelling::Unary(op) => {
@@ -2678,12 +2687,12 @@ impl<'a> Translator<'a> {
                         }
                     }
                     Spelling::Call(f) => {
-                        if strings && f == "Compare::cmp" && args.iter().any(Expr::is_c_string) {
-                            // A literal would deduce `const char*`.
-                            self.core("Compare::cmp<std::string>").call(args)
-                        } else {
-                            self.core(f).call(args)
+                        // A `std::string` would deduce the runtime's
+                        // templates, not take its `core::Str` overloads.
+                        if strings {
+                            args = args.into_iter().map(Expr::str_value).collect();
                         }
+                        self.core(f).call(args)
                     }
                     Spelling::Divide(op, f) => match literal(1) {
                         Some(d) if d != 0 && d != -1 => {
@@ -2821,8 +2830,8 @@ impl<'a> Translator<'a> {
             let strings = |i: usize| p.nodes.ty(ids[i]) == TypeId::STRING;
             let b = both.pop().unwrap_or(Expr::Bool(false));
             let a = both.pop().unwrap_or(Expr::Bool(false));
-            let a = if strings(0) { a.std_string() } else { a };
-            let b = if strings(1) { b.std_string() } else { b };
+            let a = if strings(0) { a.str_value() } else { a };
+            let b = if strings(1) { b.str_value() } else { b };
             let explicit = |t: &mut Self, id: NodeId, e: Expr| -> R<Expr> {
                 Ok(match p.nodes.get(id) {
                     Node::AsNullable { .. } => Expr::name(t.ty(p.nodes.ty(id))?).call(vec![e]),
@@ -2860,8 +2869,8 @@ impl<'a> Translator<'a> {
 
     /// A chain of `String.cat` as one concatenation: literals merged; an
     /// `Int32.toString()` without a radix as `std::to_string`, and a
-    /// `Boolean.toString()` as the runtime's; `+` between them, with the
-    /// first a `std::string` where the second is a literal too.
+    /// `Boolean.toString()` as the runtime's; `+` between them, literals
+    /// bare (`"…"`), as a `std::string`, which converts to `core::Str`.
     fn cat(&mut self, id: NodeId) -> R<Expr> {
         let mut parts = Vec::new();
         self.cat_parts(id, &mut parts);
@@ -2903,9 +2912,6 @@ impl<'a> Translator<'a> {
         }
         if out.len() == 1 {
             return Ok(out.pop().unwrap_or(Expr::Str(String::new())));
-        }
-        if out[0].is_c_string() && out[1].is_c_string() {
-            out[0] = out[0].clone().std_string();
         }
         Ok(Expr::Concat(out))
     }

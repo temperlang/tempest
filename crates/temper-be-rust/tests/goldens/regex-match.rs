@@ -250,6 +250,45 @@ pub(crate) fn init() -> temper_core::Result<()> {
                 })()
                 .unwrap_or_else(|_| Arc::new("-".to_string()))
             );
+            let not_low =
+                temper_std::regex::RegexNodeTrait::compiled(&temper_std::regex::one_or_more(
+                    temper_std::regex::RegexNode::new(temper_std::regex::CodeSet::new(
+                        Arc::new(vec![temper_std::regex::CodePart::new(
+                            temper_std::regex::CodeRange::new(0, 47),
+                        )]),
+                        Some(true),
+                    )),
+                    None,
+                ));
+            println!("not low: {}", not_low.find("-/a🌍-", None)?.full().value());
+            println!(
+                "not space or >: {}",
+                temper_std::regex::RegexNodeTrait::compiled(&temper_std::regex::Repeat::new(
+                    temper_std::regex::RegexNode::new(temper_std::regex::CodeSet::new(
+                        Arc::new(vec![
+                            temper_std::regex::CodePart::new(temper_std::regex::CodePoints::new(
+                                "\t",
+                            )),
+                            temper_std::regex::CodePart::new(temper_std::regex::CodePoints::new(
+                                "\n",
+                            )),
+                            temper_std::regex::CodePart::new(temper_std::regex::CodePoints::new(
+                                " ",
+                            )),
+                            temper_std::regex::CodePart::new(temper_std::regex::CodePoints::new(
+                                ">",
+                            )),
+                        ]),
+                        Some(true),
+                    )),
+                    1,
+                    None,
+                    Some(false),
+                ))
+                .find("ab>c", None)?
+                .full()
+                .value()
+            );
             let id_start =
                 temper_std::regex::RegexNodeTrait::compiled(&temper_std::regex::CodeSet::new(
                     Arc::new(vec![

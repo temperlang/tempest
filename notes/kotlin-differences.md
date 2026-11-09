@@ -408,7 +408,7 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   supertype ("Connected types cannot be targeted with is or as runtime
   type checks …"). Tempest treats them as ordinary classes for now and
   reports none of these ([milestone-4.md](history/milestone-4.md), "`is` and
-  `as` checks"). Since Kotlin's `connected-type-fallback` branch, a
+  `as` checks"). Since Kotlin's #642 (connected fallback types), a
   connected class may have a complete Temper implementation, a body for
   every method, which the interpreter, backends not in its
   `@connected([...])` list, and `--no-connected` use. Tempest matches
@@ -1328,7 +1328,7 @@ copied Kotlin's:
   small code-point helper that each module's class gets (its
   `temper-core` has none), its JS backend takes `Math.sign` of those
   differences, and its C# backend calls the runtime's helper, as
-  Kotlin's; Python, Rust, C++ (whose `std::string` compares bytes as
+  Kotlin's; Python, Rust, C++ (whose `core::Str` compares bytes as
   `unsigned char`, which for UTF-8 is code-point order), and Lua (whose
   `<` compares bytes with `strcoll`, the same in the C locale it starts
   in) order code points natively. One program, checked against the
@@ -1398,11 +1398,12 @@ copied Kotlin's:
 - **C++ shifts and comparisons:** Kotlin's C++ writes `a << b` and
   `a >> b` for `Int`, which C++14 leaves undefined for a negative `a`
   or a count past 31, where Temper masks the count; `<=>` on two string
-  literals as `Compare::cmp("b", "a")`, which compares pointers; and
+  literals as `Compare::cmp("b", "a")`, which compared pointers until
+  its literals became `TEMPER_STR`s (#654); and
   fails on `Boolean`'s `<=>` ("unsupported C++ binary operator:
   Compare::cmp"). Tempest's uses the runtime's `Int::shl` and
   `Int::shr` (C++'s `>>` only for a literal count in range), compares
-  literals as `std::string`s, and calls `Compare::cmp` for `Boolean`.
+  literals as `core::Str`s, and calls `Compare::cmp` for `Boolean`.
   A count in range doesn't make `<<` defined either: `5 << 30` on an
   `Int` overflows, undefined before C++20 (checked 2026-11-04);
   `Int::shl` shifts as `uint32_t` and casts back, wrapping as Temper
@@ -1430,12 +1431,24 @@ copied Kotlin's:
   early in a labeled block with a `goto` (whose unused labels fail
   `-Wall -Werror`), keeps `zero = zero`, writes every module-level value
   as a global even if only the top level uses it, builds strings
-  through a `std::stringstream` (`cat`), and declares every function in
-  the header, exported or not. Tempest's returns directly, uses `+` and
-  `std::to_string`, keeps top-level-only values as the init's locals,
-  and declares only exports.
+  through a `std::stringstream` (`cat`, its literals `TEMPER_STR`s), and
+  declares every function in the header, exported or not. Tempest's
+  returns directly, uses `+` and `std::to_string`, with bare literals
+  (`"n = " + std::to_string(n)`, a `std::string` that converts to the
+  `core::Str` it's kept as), keeps top-level-only values as the init's
+  locals, and declares only exports.
   Test: temper-be-cpp/tests/goldens/, and `runs` with `-Wall -Werror`
   and the rest of `STRICT`.
+- **C++ override slots** (since Kotlin's #645, synced 2026-11-09): in
+  a virtual member, Kotlin's takes a type parameter's value as
+  `temper::core::Param<T>` (`T const &` where `T` is a `shared_ptr`,
+  `std::function`, or `Str`) and an indirect parameter by `const &`
+  even if assigned, so an override's `label(Str const & l)` matches
+  `Labeled<L>`'s `label(Param<L> l)`. Tempest's passes a type
+  parameter's value, and an override's matching parameter, by value
+  (`label(core::Str l)`), which compiles and runs the same, but host
+  C++ overriding such a method needs the other signature. Not on
+  purpose; to follow.
 - **C++ temporaries:** Kotlin's C++ returns lists as `shared_ptr`s, so
   iterating one in place (`for (auto const &x : *obj->list())`) reads a
   vector already freed. Tempest's C++ will name such a list first
@@ -1767,9 +1780,9 @@ copied Kotlin's:
     in `int sum = …`), which Java rejects and C++'s `-Wshadow` reports;
     Kotlin numbers every name. C++ names no lambda parameter the body
     doesn't read (`-Wunused-parameter`), as it already did for
-    functions, and passes a string literal where a runtime template
-    deduces a type parameter as a `std::string` (`reduceFrom(vals,
-    std::string(""), …)`), where `const char*` wouldn't compile.
+    functions, and passes a concatenation where a runtime template
+    deduces a type parameter as a `core::Str` (`core::Str("n" +
+    s)`), since `+` makes a `std::string`.
   - **Java** reduces to another kind than the items' through Core's
     reducers (`listedReduceIntToObj`), as Kotlin's; to another object
     type, not yet. Java, C#, and C++ drop `orelse void`'s `void`.
@@ -1970,11 +1983,11 @@ copied Kotlin's:
     tempest's interfaces have `@abstractmethod`s and Kotlin's are
     empty; `x as T` for `x: T?` is `cast_none(x)`, Kotlin's an `if x is
     None: raise`.
-  - **C++** boxes a string literal as a `std::string`
-    (`any_box(std::string("two"))`), where Kotlin's boxes the `const
-    char*` (`any_box("two")`), an `AnyValueBox<const char*>` that a
-    check for a boxed `std::string` wouldn't match (not seen to fail:
-    no functional test casts a builtin back from `AnyValue`).
+  - **C++** boxed a string literal as a `std::string`, where Kotlin's
+    boxed the `const char*`, an `AnyValueBox<const char*>` that a check
+    for a boxed string wouldn't match; since #654 both box a
+    `core::Str` (`any_box(TEMPER_STR("two"))`), tempest's a
+    concatenation too (`any_box(core::Str(…))`).
   - **JS:** be-js's `listBuilderSplice` JSDoc takes neither a null
     `index` nor a read-only `newValues`, so strict tsc rejects Kotlin's
     own calls of it; tempest patches the types

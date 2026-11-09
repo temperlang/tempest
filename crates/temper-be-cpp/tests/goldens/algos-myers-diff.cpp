@@ -18,12 +18,12 @@ struct DiffPath;
 
 template <class T>
 struct Change : public std::enable_shared_from_this<Change<T>> {
-  std::string type;
+  temper::core::Str type;
   int32_t leftIndex;
   int32_t rightIndex;
   std::shared_ptr<std::vector<T>> items;
-  static std::shared_ptr<Change<T>> make(std::string type, int32_t leftIndex, int32_t rightIndex, std::shared_ptr<std::vector<T>> const & items);
-  std::string get_type() const;
+  static std::shared_ptr<Change<T>> make(temper::core::Str const & type, int32_t leftIndex, int32_t rightIndex, std::shared_ptr<std::vector<T>> const & items);
+  temper::core::Str get_type() const;
   int32_t get_leftIndex() const;
   int32_t get_rightIndex() const;
   std::shared_ptr<std::vector<T>> get_items() const;
@@ -39,31 +39,31 @@ struct Patch : public std::enable_shared_from_this<Patch<T>> {
 struct DiffPath : public std::enable_shared_from_this<DiffPath> {
   int32_t leftIndex;
   int32_t rightIndex;
-  std::string changeType;
+  temper::core::Str changeType;
   std::shared_ptr<DiffPath> previous;
-  static std::shared_ptr<DiffPath> make(int32_t leftIndex, int32_t rightIndex, std::string changeType, std::shared_ptr<DiffPath> const & previous);
+  static std::shared_ptr<DiffPath> make(int32_t leftIndex, int32_t rightIndex, temper::core::Str const & changeType, std::shared_ptr<DiffPath> const & previous);
   int32_t get_leftIndex() const;
   int32_t get_rightIndex() const;
-  std::string get_changeType() const;
+  temper::core::Str get_changeType() const;
   std::shared_ptr<DiffPath> get_previous() const;
 };
 
 // Storage, which the library reads and its init sets; read values
 // through the accessors below.
 namespace temper_globals {
-extern temper::core::GlobalSlot<std::string> ChangeTypeAddition;
-extern temper::core::GlobalSlot<std::string> ChangeTypeDeletion;
-extern temper::core::GlobalSlot<std::string> ChangeTypeUnchanged;
+extern temper::core::GlobalSlot<temper::core::Str> ChangeTypeAddition;
+extern temper::core::GlobalSlot<temper::core::Str> ChangeTypeDeletion;
+extern temper::core::GlobalSlot<temper::core::Str> ChangeTypeUnchanged;
 }  // namespace temper_globals
 
-std::string const & ChangeTypeAddition();
-std::string const & ChangeTypeDeletion();
-std::string const & ChangeTypeUnchanged();
+temper::core::Str const & ChangeTypeAddition();
+temper::core::Str const & ChangeTypeDeletion();
+temper::core::Str const & ChangeTypeUnchanged();
 
-std::string formatPatch(std::shared_ptr<Patch<std::string>> const & patch);
+temper::core::Str formatPatch(std::shared_ptr<Patch<temper::core::Str>> const & patch);
 
 template <class T>
-std::shared_ptr<Change<T>> Change<T>::make(std::string type, int32_t leftIndex, int32_t rightIndex, std::shared_ptr<std::vector<T>> const & items) {
+std::shared_ptr<Change<T>> Change<T>::make(temper::core::Str const & type, int32_t leftIndex, int32_t rightIndex, std::shared_ptr<std::vector<T>> const & items) {
   global_init_init();
   std::shared_ptr<Change<T>> self = std::make_shared<Change<T>>();
   self->type = type;
@@ -74,7 +74,7 @@ std::shared_ptr<Change<T>> Change<T>::make(std::string type, int32_t leftIndex, 
 }
 
 template <class T>
-std::string Change<T>::get_type() const {
+temper::core::Str Change<T>::get_type() const {
   return this->type;
 }
 
@@ -142,7 +142,7 @@ std::shared_ptr<Patch<T>> diff(std::shared_ptr<std::vector<T>> const & left, std
         int32_t i = 0;
         int32_t end;
         while (i < n) {
-          std::string changeType = temper::core::List::get<std::shared_ptr<DiffPath>>(pathElements, i)->changeType;
+          temper::core::Str changeType = temper::core::List::get<std::shared_ptr<DiffPath>>(pathElements, i)->changeType;
           end = temper::core::Int::add(i, 1);
           while (end < n && changeType == temper::core::List::get<std::shared_ptr<DiffPath>>(pathElements, end)->changeType) {
             end = temper::core::Int::add(end, 1);
@@ -204,44 +204,44 @@ namespace core = temper::core;
 
 namespace temper_globals {
 
-core::GlobalSlot<std::string> ChangeTypeAddition;
-core::GlobalSlot<std::string> ChangeTypeDeletion;
-core::GlobalSlot<std::string> ChangeTypeUnchanged;
+core::GlobalSlot<core::Str> ChangeTypeAddition;
+core::GlobalSlot<core::Str> ChangeTypeDeletion;
+core::GlobalSlot<core::Str> ChangeTypeUnchanged;
 
 }  // namespace temper_globals
 
-std::string const & ChangeTypeAddition() {
+core::Str const & ChangeTypeAddition() {
   global_init_init();
   return temper_globals::ChangeTypeAddition.value;
 }
 
-std::string const & ChangeTypeDeletion() {
+core::Str const & ChangeTypeDeletion() {
   global_init_init();
   return temper_globals::ChangeTypeDeletion.value;
 }
 
-std::string const & ChangeTypeUnchanged() {
+core::Str const & ChangeTypeUnchanged() {
   global_init_init();
   return temper_globals::ChangeTypeUnchanged.value;
 }
 
-std::string formatPatch(std::shared_ptr<Patch<std::string>> const & patch) {
+core::Str formatPatch(std::shared_ptr<Patch<core::Str>> const & patch) {
   global_init_init();
-  std::string formatted = "";
-  std::shared_ptr<std::vector<std::shared_ptr<Change<std::string>>>> changes = patch->changes;
-  int32_t n = core::List::length<std::shared_ptr<Change<std::string>>>(changes);
+  core::Str formatted = core::Str();
+  std::shared_ptr<std::vector<std::shared_ptr<Change<core::Str>>>> changes = patch->changes;
+  int32_t n = core::List::length<std::shared_ptr<Change<core::Str>>>(changes);
   {
     int32_t i = 0;
     while (i < n) {
-      std::shared_ptr<Change<std::string>> change = core::List::get<std::shared_ptr<Change<std::string>>>(changes, i);
-      std::string changeType = change->type;
-      std::shared_ptr<std::vector<std::string>> items = change->items;
-      std::string prefix = changeType == temper_globals::ChangeTypeAddition.value ? "+" : changeType == temper_globals::ChangeTypeDeletion.value ? "-" : " ";
-      int32_t nItems = core::List::length<std::string>(items);
+      std::shared_ptr<Change<core::Str>> change = core::List::get<std::shared_ptr<Change<core::Str>>>(changes, i);
+      core::Str changeType = change->type;
+      std::shared_ptr<std::vector<core::Str>> items = change->items;
+      core::Str prefix = changeType == temper_globals::ChangeTypeAddition.value ? TEMPER_STR("+") : changeType == temper_globals::ChangeTypeDeletion.value ? TEMPER_STR("-") : TEMPER_STR(" ");
+      int32_t nItems = core::List::length<core::Str>(items);
       {
         int32_t j = 0;
         while (j < nItems) {
-          std::string item = core::List::get<std::string>(items, j);
+          core::Str item = core::List::get<core::Str>(items, j);
           formatted = formatted + prefix + item + "\n";
           j = core::Int::add(j, 1);
         }
@@ -252,7 +252,7 @@ std::string formatPatch(std::shared_ptr<Patch<std::string>> const & patch) {
   return formatted;
 }
 
-std::shared_ptr<DiffPath> DiffPath::make(int32_t leftIndex, int32_t rightIndex, std::string changeType, std::shared_ptr<DiffPath> const & previous) {
+std::shared_ptr<DiffPath> DiffPath::make(int32_t leftIndex, int32_t rightIndex, core::Str const & changeType, std::shared_ptr<DiffPath> const & previous) {
   std::shared_ptr<DiffPath> self = std::make_shared<DiffPath>();
   self->leftIndex = leftIndex;
   self->rightIndex = rightIndex;
@@ -269,7 +269,7 @@ int32_t DiffPath::get_rightIndex() const {
   return this->rightIndex;
 }
 
-std::string DiffPath::get_changeType() const {
+core::Str DiffPath::get_changeType() const {
   return this->changeType;
 }
 
@@ -283,11 +283,11 @@ void global_init_init() {
     temper_globals::ChangeTypeDeletion.construct();
     temper_globals::ChangeTypeUnchanged.construct();
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
-    temper_globals::ChangeTypeAddition.value = "Addition";
-    temper_globals::ChangeTypeDeletion.value = "Deletion";
-    temper_globals::ChangeTypeUnchanged.value = "Unchanged";
-    std::shared_ptr<std::vector<std::string>> split = core::String::split("Hello,\nWorld!", "\n");
-    core::Console::log(console, myers_diff::formatPatch(myers_diff::diff<std::string>(split, core::String::split("Hello,\nCosmos!", "\n"), [](std::string a, std::string b) -> bool { return a == b; })));
+    temper_globals::ChangeTypeAddition.value = TEMPER_STR("Addition");
+    temper_globals::ChangeTypeDeletion.value = TEMPER_STR("Deletion");
+    temper_globals::ChangeTypeUnchanged.value = TEMPER_STR("Unchanged");
+    std::shared_ptr<std::vector<core::Str>> split = core::String::split(TEMPER_STR("Hello,\nWorld!"), TEMPER_STR("\n"));
+    core::Console::log(console, myers_diff::formatPatch(myers_diff::diff<core::Str>(split, core::String::split(TEMPER_STR("Hello,\nCosmos!"), TEMPER_STR("\n")), [](core::Str a, core::Str b) -> bool { return a == b; })));
   });
 }
 

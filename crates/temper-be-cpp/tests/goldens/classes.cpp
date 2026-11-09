@@ -23,7 +23,7 @@ struct Sql;
 
 struct Shape : public virtual temper::core::AnyValueBase {
   virtual int32_t get_area() const = 0;
-  virtual std::string describe() const;
+  virtual temper::core::Str describe() const;
 };
 
 struct Rect : public virtual Shape {
@@ -35,7 +35,7 @@ struct Rect : public virtual Shape {
   static std::shared_ptr<Rect> const & unit();
   static std::shared_ptr<Rect> make(int32_t w, int32_t h);
   int32_t get_area() const override;
-  std::string toString() const;
+  temper::core::Str toString() const;
   std::shared_ptr<Rect> scaled(int32_t k) const;
   int32_t get_w() const;
   int32_t get_h() const;
@@ -45,7 +45,7 @@ struct Square : public virtual Shape {
   int32_t side;
   static std::shared_ptr<Square> make(int32_t side);
   int32_t get_area() const override;
-  std::string describe() const override;
+  temper::core::Str describe() const override;
 };
 
 struct Counter : public std::enable_shared_from_this<Counter> {
@@ -78,11 +78,11 @@ struct Loose : public std::enable_shared_from_this<Loose> {
 
 struct Holder : public std::enable_shared_from_this<Holder> {
   std::shared_ptr<Loose> loose;
-  std::string tag;
-  static std::shared_ptr<Holder> make(std::shared_ptr<Loose> const & loose, std::string tag);
+  temper::core::Str tag;
+  static std::shared_ptr<Holder> make(std::shared_ptr<Loose> const & loose, temper::core::Str const & tag);
   bool eq(std::shared_ptr<Holder> const & other) const;
   std::shared_ptr<Loose> get_loose() const;
-  std::string get_tag() const;
+  temper::core::Str get_tag() const;
 };
 
 struct Version : public std::enable_shared_from_this<Version> {
@@ -95,14 +95,14 @@ struct Version : public std::enable_shared_from_this<Version> {
 };
 
 struct Sql : public std::enable_shared_from_this<Sql> {
-  std::shared_ptr<std::vector<std::string>> parts;
+  std::shared_ptr<std::vector<temper::core::Str>> parts;
   static std::shared_ptr<Sql> make();
-  void appendSafe(std::string s) const;
-  void appendString(temper::core::NullableParam<std::string> x) const;
+  void appendSafe(temper::core::Str const & s) const;
+  void appendString(temper::core::NullableParam<temper::core::Str> x) const;
   void appendInt(int32_t x) const;
   void appendShape(std::shared_ptr<Shape> const & x) const;
   void appendRect(std::shared_ptr<Rect> const & x) const;
-  std::string get_accumulated() const;
+  temper::core::Str get_accumulated() const;
 };
 
 }  // namespace classes
@@ -114,7 +114,7 @@ namespace classes {
 
 namespace core = temper::core;
 
-std::string Shape::describe() const {
+core::Str Shape::describe() const {
   std::shared_ptr<Shape const> self = std::shared_ptr<Shape const>(shared_from_this(), this);
   return "shape of area " + std::to_string(self->get_area());
 }
@@ -138,7 +138,7 @@ int32_t Rect::get_area() const {
   return core::Int::mul(this->w, this->h);
 }
 
-std::string Rect::toString() const {
+core::Str Rect::toString() const {
   return "Rect(" + std::to_string(this->w) + ", " + std::to_string(this->h) + ")";
 }
 
@@ -166,7 +166,7 @@ int32_t Square::get_area() const {
   return core::Int::mul(this->side, this->side);
 }
 
-std::string Square::describe() const {
+core::Str Square::describe() const {
   return "square of side " + std::to_string(this->side);
 }
 
@@ -245,7 +245,7 @@ int32_t Loose::get_n() const {
   return this->n;
 }
 
-std::shared_ptr<Holder> Holder::make(std::shared_ptr<Loose> const & loose, std::string tag) {
+std::shared_ptr<Holder> Holder::make(std::shared_ptr<Loose> const & loose, core::Str const & tag) {
   std::shared_ptr<Holder> self = std::make_shared<Holder>();
   self->loose = loose;
   self->tag = tag;
@@ -265,7 +265,7 @@ std::shared_ptr<Loose> Holder::get_loose() const {
   return this->loose;
 }
 
-std::string Holder::get_tag() const {
+core::Str Holder::get_tag() const {
   return this->tag;
 }
 
@@ -309,7 +309,7 @@ static std::type_index typeNamed(int32_t n) {
     } else if (n == 4) {
       return std::type_index(typeid(double));
     } else {
-      return std::type_index(typeid(std::string));
+      return std::type_index(typeid(core::Str));
     }
   }
 }
@@ -320,34 +320,34 @@ static std::type_index same(std::type_index t) {
 
 std::shared_ptr<Sql> Sql::make() {
   std::shared_ptr<Sql> self = std::make_shared<Sql>();
-  self->parts = core::ListBuilder::make<std::string>();
+  self->parts = core::ListBuilder::make<core::Str>();
   return self;
 }
 
-void Sql::appendSafe(std::string s) const {
-  core::ListBuilder::add<std::string>(this->parts, s);
+void Sql::appendSafe(core::Str const & s) const {
+  core::ListBuilder::add<core::Str>(this->parts, s);
 }
 
-void Sql::appendString(core::NullableParam<std::string> x) const {
-  core::ListBuilder::add<std::string>(this->parts, x == nullptr ? "NULL" : "'" + x.value + "'");
+void Sql::appendString(core::NullableParam<core::Str> x) const {
+  core::ListBuilder::add<core::Str>(this->parts, x == nullptr ? TEMPER_STR("NULL") : core::Str("'" + x.value + "'"));
 }
 
 void Sql::appendInt(int32_t x) const {
-  core::ListBuilder::add<std::string>(this->parts, std::to_string(x));
+  core::ListBuilder::add<core::Str>(this->parts, std::to_string(x));
 }
 
 void Sql::appendShape(std::shared_ptr<Shape> const & x) const {
   std::shared_ptr<Sql const> self = shared_from_this();
-  core::ListBuilder::add<std::string>(self->parts, "shape " + std::to_string(x->get_area()));
+  core::ListBuilder::add<core::Str>(self->parts, "shape " + std::to_string(x->get_area()));
 }
 
 void Sql::appendRect(std::shared_ptr<Rect> const & x) const {
   std::shared_ptr<Sql const> self = shared_from_this();
-  core::ListBuilder::add<std::string>(self->parts, "rect " + x->toString());
+  core::ListBuilder::add<core::Str>(self->parts, "rect " + x->toString());
 }
 
-std::string Sql::get_accumulated() const {
-  return core::List::join(this->parts, "", [](std::string p) -> std::string { return p; });
+core::Str Sql::get_accumulated() const {
+  return core::List::join(this->parts, core::Str(), [](core::Str p) -> core::Str { return p; });
 }
 
 void global_init_init() {
@@ -372,7 +372,7 @@ void global_init_init() {
     core::Console::log(console, std::to_string(c->get_doubled()));
     core::Console::log(console, core::Boolean::toString(c->same(Counter::make()->bump()->bump())));
     core::Console::log(console, core::Boolean::toString(Point::make(1, 2)->eq(Point::make(1, 2))) + " " + core::Boolean::toString(!Point::make(1, 2)->eq(Point::make(2, 1))));
-    core::Console::log(console, core::Boolean::toString(Holder::make(Loose::make(3), "a")->eq(Holder::make(Loose::make(-3), "a"))));
+    core::Console::log(console, core::Boolean::toString(Holder::make(Loose::make(3), TEMPER_STR("a"))->eq(Holder::make(Loose::make(-3), TEMPER_STR("a")))));
     core::Console::log(console, core::Boolean::toString(Version::make(1, 2)->compareTo(Version::make(1, 3)) < 0) + " " + core::Boolean::toString(Version::make(2, 0)->compareTo(Version::make(1, 9)) >= 0));
     core::Console::log(console, core::Boolean::toString(dynamic_cast<Square const *>(q.get()) != nullptr) + " " + core::Boolean::toString(dynamic_cast<Square const *>(s.get()) != nullptr));
     std::shared_ptr<Square> sq = core::checked_cast<Square>(q);
@@ -393,7 +393,7 @@ void global_init_init() {
     }
     core::Console::log(console, std::to_string(named) + " types");
     std::shared_ptr<Sql> sql = Sql::make();
-    sql->appendString("it");
+    sql->appendString(TEMPER_STR("it"));
     sql->appendString(nullptr);
     sql->appendInt(3);
     sql->appendShape(Square::make(2));
@@ -402,11 +402,11 @@ void global_init_init() {
     int32_t seven = 7;
     std::shared_ptr<Sql> accumulator = Sql::make();
     {
-      accumulator->appendSafe("SELECT ");
+      accumulator->appendSafe(TEMPER_STR("SELECT "));
       accumulator->appendInt(seven);
-      accumulator->appendSafe(", ");
-      accumulator->appendString("x");
-      accumulator->appendSafe(" FROM ");
+      accumulator->appendSafe(TEMPER_STR(", "));
+      accumulator->appendString(TEMPER_STR("x"));
+      accumulator->appendSafe(TEMPER_STR(" FROM "));
       accumulator->appendRect(Rect::make(2, 2));
     }
     core::Console::log(console, accumulator->get_accumulated());

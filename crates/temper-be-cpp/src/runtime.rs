@@ -109,6 +109,10 @@ pub const FILES: &[(&str, &str)] = &[
         include_str!("../../../vendor/temper/be-cpp/temper-core/regex.hpp"),
     ),
     (
+        "str.hpp",
+        include_str!("../../../vendor/temper/be-cpp/temper-core/str.hpp"),
+    ),
+    (
         "string.hpp",
         include_str!("../../../vendor/temper/be-cpp/temper-core/string.hpp"),
     ),

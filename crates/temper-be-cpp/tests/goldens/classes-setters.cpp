@@ -16,18 +16,18 @@ struct Whatever;
 struct ConcreteWhatever;
 
 struct Foo : public std::enable_shared_from_this<Foo> {
-  std::string backing;
-  static std::shared_ptr<Foo> make(std::string backing);
-  std::string get_bar();
-  void set_bar(std::string value);
+  temper::core::Str backing;
+  static std::shared_ptr<Foo> make(temper::core::Str const & backing);
+  temper::core::Str get_bar();
+  void set_bar(temper::core::Str const & value);
 };
 
 struct Bar : public std::enable_shared_from_this<Bar> {
-  std::string backing;
-  static std::shared_ptr<Bar> make(std::string backing);
-  std::string get_bar();
-  void set_bar(std::string value);
-  void usingSet(std::string value);
+  temper::core::Str backing;
+  static std::shared_ptr<Bar> make(temper::core::Str const & backing);
+  temper::core::Str get_bar();
+  void set_bar(temper::core::Str const & value);
+  void usingSet(temper::core::Str const & value);
 };
 
 struct Whatever : public virtual temper::core::AnyValueBase {
@@ -51,35 +51,35 @@ namespace setters {
 
 namespace core = temper::core;
 
-std::shared_ptr<Foo> Foo::make(std::string backing) {
+std::shared_ptr<Foo> Foo::make(core::Str const & backing) {
   std::shared_ptr<Foo> self = std::make_shared<Foo>();
   self->backing = backing;
   return self;
 }
 
-std::string Foo::get_bar() {
+core::Str Foo::get_bar() {
   return this->backing;
 }
 
-void Foo::set_bar(std::string value) {
+void Foo::set_bar(core::Str const & value) {
   this->backing = value;
 }
 
-std::shared_ptr<Bar> Bar::make(std::string backing) {
+std::shared_ptr<Bar> Bar::make(core::Str const & backing) {
   std::shared_ptr<Bar> self = std::make_shared<Bar>();
   self->backing = backing;
   return self;
 }
 
-std::string Bar::get_bar() {
+core::Str Bar::get_bar() {
   return this->backing;
 }
 
-void Bar::set_bar(std::string value) {
+void Bar::set_bar(core::Str const & value) {
   this->backing = value;
 }
 
-void Bar::usingSet(std::string value) {
+void Bar::usingSet(core::Str const & value) {
   std::shared_ptr<Bar> self = shared_from_this();
   self->set_bar(value);
 }
@@ -102,12 +102,12 @@ void ConcreteWhatever::set_something(int32_t value) {
 void global_init_init() {
   core::init_once([] {
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
-    core::Console::log(console, Foo::make("initial")->get_bar());
-    std::shared_ptr<Foo> foo = Foo::make("initial");
-    foo->set_bar("next");
+    core::Console::log(console, Foo::make(TEMPER_STR("initial"))->get_bar());
+    std::shared_ptr<Foo> foo = Foo::make(TEMPER_STR("initial"));
+    foo->set_bar(TEMPER_STR("next"));
     core::Console::log(console, foo->get_bar());
-    std::shared_ptr<Bar> bar = Bar::make("initial");
-    bar->usingSet("next");
+    std::shared_ptr<Bar> bar = Bar::make(TEMPER_STR("initial"));
+    bar->usingSet(TEMPER_STR("next"));
     core::Console::log(console, bar->get_bar());
     std::shared_ptr<Whatever> what = ConcreteWhatever::make(4);
     what->set_something(5);

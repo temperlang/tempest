@@ -12,5 +12,16 @@ public final class PrivateMethodGlobal {
         C c = new C();
         console.log("method1(10)=" + c.method1(10));
         console.log("method2(10)=" + c.method2(10));
+        Money a = new Money(150);
+        Money b = new Money(175);
+        console.log("plus: " + a.plus(b).toString());
+        console.log("same whole: " + a.sameWhole(b));
+        console.log("same rounded: " + a.sameRounded(b));
+        a.spendFrom(b);
+        a.spendFrom(b);
+        console.log("b spent: " + b.getTimesSpent());
+        Label label = new Label(1);
+        console.log("close: " + label.close(new TenSink()));
+        console.log("noted: " + label.noted("!"));
     }
 }

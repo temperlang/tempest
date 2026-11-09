@@ -770,22 +770,40 @@ inherited-getter java meta version 0.0.1
 private-method java file private-method/pom.xml
 private-method java file private-method/src/main/java/private_method/C.java
 private-method java file private-method/src/main/java/private_method/C.java.map
+private-method java file private-method/src/main/java/private_method/Label.java
+private-method java file private-method/src/main/java/private_method/Label.java.map
+private-method java file private-method/src/main/java/private_method/Money.java
+private-method java file private-method/src/main/java/private_method/Money.java.map
+private-method java file private-method/src/main/java/private_method/Note.java
+private-method java file private-method/src/main/java/private_method/Note.java.map
 private-method java file private-method/src/main/java/private_method/PrivateMethodGlobal.java
 private-method java file private-method/src/main/java/private_method/PrivateMethodGlobal.java.map
 private-method java file private-method/src/main/java/private_method/PrivateMethodMain.java
 private-method java file private-method/src/main/java/private_method/PrivateMethodMain.java.map
+private-method java file private-method/src/main/java/private_method/Sink.java
+private-method java file private-method/src/main/java/private_method/Sink.java.map
+private-method java file private-method/src/main/java/private_method/TenSink.java
+private-method java file private-method/src/main/java/private_method/TenSink.java.map
 private-method java meta group private_method
 private-method java meta name private-method
 private-method java meta version 0.0.1
 pure-virtual java file pure-virtual/pom.xml
+pure-virtual java file pure-virtual/src/main/java/pure_virtual/Box.java
+pure-virtual java file pure-virtual/src/main/java/pure_virtual/Box.java.map
+pure-virtual java file pure-virtual/src/main/java/pure_virtual/BoxWrapper.java
+pure-virtual java file pure-virtual/src/main/java/pure_virtual/BoxWrapper.java.map
 pure-virtual java file pure-virtual/src/main/java/pure_virtual/Greeter.java
 pure-virtual java file pure-virtual/src/main/java/pure_virtual/Greeter.java.map
 pure-virtual java file pure-virtual/src/main/java/pure_virtual/HiGreeter.java
 pure-virtual java file pure-virtual/src/main/java/pure_virtual/HiGreeter.java.map
+pure-virtual java file pure-virtual/src/main/java/pure_virtual/IntWrapper.java
+pure-virtual java file pure-virtual/src/main/java/pure_virtual/IntWrapper.java.map
 pure-virtual java file pure-virtual/src/main/java/pure_virtual/PureVirtualGlobal.java
 pure-virtual java file pure-virtual/src/main/java/pure_virtual/PureVirtualGlobal.java.map
 pure-virtual java file pure-virtual/src/main/java/pure_virtual/PureVirtualMain.java
 pure-virtual java file pure-virtual/src/main/java/pure_virtual/PureVirtualMain.java.map
+pure-virtual java file pure-virtual/src/main/java/pure_virtual/Wrapper.java
+pure-virtual java file pure-virtual/src/main/java/pure_virtual/Wrapper.java.map
 pure-virtual java meta group pure_virtual
 pure-virtual java meta name pure-virtual
 pure-virtual java meta version 0.0.1
@@ -1045,17 +1063,35 @@ private-method csharp file private-method/program/PrivateMethodProgram.csproj
 private-method csharp file private-method/program/Program.cs
 private-method csharp file private-method/src/C.cs
 private-method csharp file private-method/src/C.cs.map
+private-method csharp file private-method/src/ISink.cs
+private-method csharp file private-method/src/ISink.cs.map
+private-method csharp file private-method/src/Label.cs
+private-method csharp file private-method/src/Label.cs.map
 private-method csharp file private-method/src/Logging.cs
+private-method csharp file private-method/src/Money.cs
+private-method csharp file private-method/src/Money.cs.map
+private-method csharp file private-method/src/Note.cs
+private-method csharp file private-method/src/Note.cs.map
 private-method csharp file private-method/src/PrivateMethod.csproj
 private-method csharp file private-method/src/PrivateMethodGlobal.cs
 private-method csharp file private-method/src/PrivateMethodGlobal.cs.map
+private-method csharp file private-method/src/TenSink.cs
+private-method csharp file private-method/src/TenSink.cs.map
 private-method csharp meta name PrivateMethod
 pure-virtual csharp file pure-virtual/program/Program.cs
 pure-virtual csharp file pure-virtual/program/PureVirtualProgram.csproj
+pure-virtual csharp file pure-virtual/src/Box.cs
+pure-virtual csharp file pure-virtual/src/Box.cs.map
+pure-virtual csharp file pure-virtual/src/BoxWrapper.cs
+pure-virtual csharp file pure-virtual/src/BoxWrapper.cs.map
 pure-virtual csharp file pure-virtual/src/HiGreeter.cs
 pure-virtual csharp file pure-virtual/src/HiGreeter.cs.map
 pure-virtual csharp file pure-virtual/src/IGreeter.cs
 pure-virtual csharp file pure-virtual/src/IGreeter.cs.map
+pure-virtual csharp file pure-virtual/src/IWrapper.cs
+pure-virtual csharp file pure-virtual/src/IWrapper.cs.map
+pure-virtual csharp file pure-virtual/src/IntWrapper.cs
+pure-virtual csharp file pure-virtual/src/IntWrapper.cs.map
 pure-virtual csharp file pure-virtual/src/Logging.cs
 pure-virtual csharp file pure-virtual/src/PureVirtual.csproj
 pure-virtual csharp file pure-virtual/src/PureVirtualGlobal.cs
@@ -1172,6 +1208,7 @@ basics cpp file basics/main.cpp
 * cpp file temper-core/pair.hpp
 * cpp file temper-core/promise.hpp
 * cpp file temper-core/regex.hpp
+* cpp file temper-core/str.hpp
 * cpp file temper-core/string.hpp
 * cpp file temper-core/string_builder.hpp
 * cpp file temper-core/temper_bubble.hpp

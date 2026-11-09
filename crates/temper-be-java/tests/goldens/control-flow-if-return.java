@@ -29,6 +29,18 @@ public final class IfReturnGlobal {
         }
     }
 
+    static String nested(boolean a, boolean b) {
+        String result = "neither";
+        if (a) {
+            if (b) {
+                result = "both";
+            }
+        } else {
+            result = "not a";
+        }
+        return result;
+    }
+
     static {
         Console console = Core.getConsole(Logger.getLogger("if_return"));
         boolean t = true;
@@ -40,5 +52,7 @@ public final class IfReturnGlobal {
         console.log("halfAndHalf false -> " + halfAndHalf(f));
         console.log("implicit    true  -> " + implicit(t));
         console.log("implicit    false -> " + implicit(f));
+        console.log("nested      true  false -> " + nested(t, f));
+        console.log("nested      false true  -> " + nested(f, t));
     }
 }

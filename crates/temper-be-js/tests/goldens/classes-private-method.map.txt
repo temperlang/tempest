@@ -11,6 +11,97 @@
 20:3 -> ../private-method.temper.md:8:16  /** <- method2(x: Int): Int { helpe
 24:3 -> ../private-method.temper.md:8:16 (method2)  method2(x) { <- method2(x: Int): Int { helpe
 25:5 -> ../private-method.temper.md:8:39  return this.#helper(Math.imu <- helper(x * 3) }
-29:1 -> ../private-method.temper.md:11:5  const c = new C(); <- let c = new C();
-30:1 -> ../private-method.temper.md:13:5  console.log(`method1(10)=${c <- console.log("method1(10)=${
-31:1 -> ../private-method.temper.md:14:5  console.log(`method2(10)=${c <- console.log("method2(10)=${
+29:1 -> ../private-method.temper.md:30:5  class Money extends type() { <- class Money(
+29:7 -> ../private-method.temper.md:30:11 (Money)  Money extends type() { <- Money(
+29:12 -> ../private-method.temper.md:30:5   extends type() { <- class Money(
+30:3 -> ../private-method.temper.md:31:15  /** @type {number} */ <- cents: Int,
+31:3 -> ../private-method.temper.md:31:15  #cents; <- cents: Int,
+32:3 -> ../private-method.temper.md:33:18  /** @type {number} */ <-  spent: Int = 0;
+33:3 -> ../private-method.temper.md:33:18  #spent; <-  spent: Int = 0;
+35:3 -> ../private-method.temper.md:30:5  /** @param {number} cents */ <- class Money(
+36:3 -> ../private-method.temper.md:30:5  constructor(cents) { <- class Money(
+38:5 -> ../private-method.temper.md:31:15  this.#cents = cents; <- cents: Int,
+39:5 -> ../private-method.temper.md:33:18  this.#spent = 0; <-  spent: Int = 0;
+42:3 -> ../private-method.temper.md:34:15  /** @returns {number} */ <- whole(): Int { cents / 100 }
+43:3 -> ../private-method.temper.md:34:15 (whole)  #whole() { <- whole(): Int { cents / 100 }
+44:5 -> ../private-method.temper.md:34:30  return (this.#cents / 100) | <- cents / 100 }
+47:3 -> ../private-method.temper.md:35:15  /** @returns {number} */ <- get rounded(): Int { (cents
+48:3 -> ../private-method.temper.md:35:15  get #rounded() { <- get rounded(): Int { (cents
+48:7 -> ../private-method.temper.md:35:19 (rounded)  #rounded() { <- rounded(): Int { (cents + 50
+49:5 -> ../private-method.temper.md:35:36  return (((this.#cents + 50) <- (cents + 50) / 100 }
+52:3 -> ../private-method.temper.md:37:14  /** <- plus(other: Money): Money {
+56:3 -> ../private-method.temper.md:37:14 (plus)  plus(other) { <- plus(other: Money): Money {
+57:5 -> ../private-method.temper.md:37:42  return new Money((this.#cent <- new Money(cents + other.cent
+60:3 -> ../private-method.temper.md:38:14  /** <- sameWhole(other: Money): Boo
+64:3 -> ../private-method.temper.md:38:14 (sameWhole)  sameWhole(other) { <- sameWhole(other: Money): Boo
+65:5 -> ../private-method.temper.md:38:49  return this.#whole() === oth <- whole() == other.whole() }
+68:3 -> ../private-method.temper.md:39:14  /** <- sameRounded(other: Money): B
+72:3 -> ../private-method.temper.md:39:14 (sameRounded)  sameRounded(other) { <- sameRounded(other: Money): B
+73:5 -> ../private-method.temper.md:39:51  return this.#rounded === oth <- rounded == other.rounded }
+76:3 -> ../private-method.temper.md:40:14  /** @param {Money} other */ <- spendFrom(other: Money): Voi
+77:3 -> ../private-method.temper.md:40:14 (spendFrom)  spendFrom(other) { <- spendFrom(other: Money): Voi
+78:5 -> ../private-method.temper.md:41:9  other.#spent = (other.#spent <- other.spent = other.spent +
+81:3 -> ../private-method.temper.md:43:14  /** @returns {number} */ <- get timesSpent(): Int { spen
+82:3 -> ../private-method.temper.md:43:14  get timesSpent() { <- get timesSpent(): Int { spen
+82:7 -> ../private-method.temper.md:43:18 (timesSpent)  timesSpent() { <- timesSpent(): Int { spent }
+83:5 -> ../private-method.temper.md:43:38  return this.#spent; <- spent }
+86:3 -> ../private-method.temper.md:44:14  /** @returns {string} */ <- toString(): String { "${cent
+87:3 -> ../private-method.temper.md:44:14 (toString)  toString() { <- toString(): String { "${cent
+88:5 -> ../private-method.temper.md:44:35  return `${this.#cents} cents <- "${cents} cents" }
+92:1 -> ../private-method.temper.md:68:5  class Sink extends type() { <- interface Sink { end(): Int;
+92:7 -> ../private-method.temper.md:68:15 (Sink)  Sink extends type() { <- Sink { end(): Int; }
+92:11 -> ../private-method.temper.md:68:5   extends type() { <- interface Sink { end(): Int;
+93:3 -> ../private-method.temper.md:68:22  /** @type {() => number} */ <- end(): Int; }
+94:3 -> ../private-method.temper.md:68:22  end = /** @type {any} */ (un <- end(): Int; }
+97:1 -> ../private-method.temper.md:69:5  class TenSink extends type(S <- class TenSink extends Sink {
+97:7 -> ../private-method.temper.md:69:11 (TenSink)  TenSink extends type(Sink) { <- TenSink extends Sink { publi
+97:14 -> ../private-method.temper.md:69:5   extends type(Sink) { <- class TenSink extends Sink {
+98:3 -> ../private-method.temper.md:69:41  /** @returns {number} */ <- end(): Int { 10 } }
+99:3 -> ../private-method.temper.md:69:41 (end)  end() { <- end(): Int { 10 } }
+100:5 -> ../private-method.temper.md:69:54  return 10; <- 10 } }
+104:1 -> ../private-method.temper.md:70:5  class Note extends type() { <- class Note(public body: Stri
+104:7 -> ../private-method.temper.md:70:11 (Note)  Note extends type() { <- Note(public body: String) {
+104:11 -> ../private-method.temper.md:70:5   extends type() { <- class Note(public body: Stri
+105:3 -> ../private-method.temper.md:70:23  /** @type {string} */ <- body: String) {
+106:3 -> ../private-method.temper.md:70:23  #body; <- body: String) {
+108:3 -> ../private-method.temper.md:70:5  /** @param {string} body */ <- class Note(public body: Stri
+109:3 -> ../private-method.temper.md:70:5  constructor(body) { <- class Note(public body: Stri
+111:5 -> ../private-method.temper.md:70:23  this.#body = body; <- body: String) {
+114:3 -> ../private-method.temper.md:70:23  /** @returns {string} */ <- body: String) {
+115:3 -> ../private-method.temper.md:70:23  get body() { <- body: String) {
+115:7 -> ../private-method.temper.md:70:23 (body)  body() { <- body: String) {
+119:3 -> ../private-method.temper.md:71:14  /** <- text(more: String): Note { n
+123:3 -> ../private-method.temper.md:71:14 (text)  text(more) { <- text(more: String): Note { n
+124:5 -> ../private-method.temper.md:71:41  return new Note(this.#body + <- new Note("${body}${more}") }
+128:1 -> ../private-method.temper.md:74:5  class Label extends type() { <- class Label {
+128:7 -> ../private-method.temper.md:74:11 (Label)  Label extends type() { <- Label {
+128:12 -> ../private-method.temper.md:74:5   extends type() { <- class Label {
+129:3 -> ../private-method.temper.md:75:15  /** @type {number} */ <- end: Int;
+130:3 -> ../private-method.temper.md:75:15  #end; <- end: Int;
+132:3 -> ../private-method.temper.md:76:14  /** @param {number} end */ <- constructor(end: Int) { this
+133:3 -> ../private-method.temper.md:76:14  constructor(end) { <- constructor(end: Int) { this
+135:5 -> ../private-method.temper.md:76:38  this.#end = end; <- this.end = end; }
+138:3 -> ../private-method.temper.md:77:14  /** @returns {string} */ <- get text(): String { "label"
+139:3 -> ../private-method.temper.md:77:14  get text() { <- get text(): String { "label"
+139:7 -> ../private-method.temper.md:77:18 (text)  text() { <- text(): String { "label" }
+140:5 -> ../private-method.temper.md:77:35  return "label"; <- "label" }
+143:3 -> ../private-method.temper.md:78:14  /** <- close(sink: Sink): Int { sin
+147:3 -> ../private-method.temper.md:78:14 (close)  close(sink) { <- close(sink: Sink): Int { sin
+148:5 -> ../private-method.temper.md:78:39  return (sink.end() + this.#e <- sink.end() + end }
+151:3 -> ../private-method.temper.md:79:14  /** <- noted(more: String): String
+155:3 -> ../private-method.temper.md:79:14 (noted)  noted(more) { <- noted(more: String): String
+156:5 -> ../private-method.temper.md:79:44  return new Note(this.text).t <- new Note(text).text(more).bo
+160:1 -> ../private-method.temper.md:11:5  const c = new C(); <- let c = new C();
+161:1 -> ../private-method.temper.md:13:5  console.log(`method1(10)=${c <- console.log("method1(10)=${
+162:1 -> ../private-method.temper.md:14:5  console.log(`method2(10)=${c <- console.log("method2(10)=${
+163:1 -> ../private-method.temper.md:47:5  const a = new Money(150); <- let a = new Money(150);
+164:1 -> ../private-method.temper.md:48:5  const b = new Money(175); <- let b = new Money(175);
+165:1 -> ../private-method.temper.md:49:5  console.log(`plus: ${a.plus( <- console.log("plus: ${a.plus(
+166:1 -> ../private-method.temper.md:50:5  console.log(`same whole: ${a <- console.log("same whole: ${a
+167:1 -> ../private-method.temper.md:51:5  console.log(`same rounded: $ <- console.log("same rounded: $
+168:1 -> ../private-method.temper.md:52:5  a.spendFrom(b); <- a.spendFrom(b);
+169:1 -> ../private-method.temper.md:53:5  a.spendFrom(b); <- a.spendFrom(b);
+170:1 -> ../private-method.temper.md:54:5  console.log(`b spent: ${b.ti <- console.log("b spent: ${b.ti
+171:1 -> ../private-method.temper.md:82:5  const label = new Label(1); <- let label = new Label(1);
+172:1 -> ../private-method.temper.md:83:5  console.log(`close: ${label. <- console.log("close: ${label.
+173:1 -> ../private-method.temper.md:84:5  console.log(`noted: ${label. <- console.log("noted: ${label.

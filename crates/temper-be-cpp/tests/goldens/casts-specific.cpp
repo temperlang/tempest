@@ -50,18 +50,18 @@ std::shared_ptr<CharlieClass> CharlieClass::make() {
 }
 
 static void checkB(std::shared_ptr<AlphaInterface> const & instance) {
-  std::string value;
+  core::Str value;
   try {
     core::checked_cast<BravoClass>(instance);
-    value = "yep";
+    value = TEMPER_STR("yep");
   } catch (core::TemperBubble const &) {
-    value = "nope";
+    value = TEMPER_STR("nope");
   }
   core::Console::log(temper_globals::console.value, value);
 }
 
 static void checkIfB(std::shared_ptr<AlphaInterface> const & instance) {
-  core::Console::log(temper_globals::console.value, dynamic_cast<BravoClass const *>(instance.get()) != nullptr ? "yep" : "nope");
+  core::Console::log(temper_globals::console.value, dynamic_cast<BravoClass const *>(instance.get()) != nullptr ? TEMPER_STR("yep") : TEMPER_STR("nope"));
 }
 
 void global_init_init() {

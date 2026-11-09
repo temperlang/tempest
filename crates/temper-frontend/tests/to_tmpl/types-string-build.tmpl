@@ -2,27 +2,30 @@ tmpl 1 model 1 library build 0.0.0
 
 uses `temper-core`#2 0.1.0 {
   class StringBuilder#3 {
-    connected constructor constructor#14(): StringBuilder#3;
-    connected method append#15(substring: String): Void;
-    connected method appendCodePoint#16(cp: Int32): Void throws Bubble;
-    connected method appendBetween#20(source: String, begin: StringIndex#8, end: StringIndex#8): Void;
-    connected method toString#21(): String;
-    connected method clear#25(): Void;
+    connected constructor constructor#15(): StringBuilder#3;
+    connected method append#16(substring: String): Void;
+    connected method appendCodePoint#17(cp: Int32): Void throws Bubble;
+    connected method appendBetween#21(source: String, begin: StringIndex#8, end: StringIndex#8): Void;
+    connected method toString#22(): String;
+    connected method clear#26(): Void;
   }
   class StringIndex#8 extends StringIndexOption#9 {}
   interface StringIndexOption#9 {}
-  class String#17 {
-    connected method step#18(index: StringIndex#8, by: Int32): StringIndex#8;
-    connected static let begin#19: StringIndex#8;
+  class String#18 {
+    connected method step#19(index: StringIndex#8, by: Int32): StringIndex#8;
+    connected static let begin#20: StringIndex#8;
   }
-  interface Console#22 {
-    connected method log#23(message: String): Void;
+  interface Console#23 {
+    connected method log#24(message: String): Void;
   }
-  connected fn getConsole#27(name?: String): Console#22;
+  class Boolean#27 {
+    connected method toString#28(): String;
+  }
+  connected fn getConsole#30(name?: String): Console#23;
 }
 
 module build#0 {
-  let ~console#24: Console#22;
+  let ~console#25: Console#23;
 
   let builder#6: StringBuilder#3;
 
@@ -34,36 +37,50 @@ module build#0 {
 
   let built#12: String;
 
+  let marks#13: String;
+
   class StringBuilderOwner#1 {
     let builder#4: StringBuilder#3;
-    constructor constructor#5(builder#26: StringBuilder#3): StringBuilderOwner#1 {
-      this.builder#4 = builder#26;
+    constructor constructor#5(builder#29: StringBuilder#3): StringBuilderOwner#1 {
+      this.builder#4 = builder#29;
     }
   }
 
-  let owner#13: StringBuilderOwner#1;
+  let owner#14: StringBuilderOwner#1;
 
   init {
-    init ~console#24 = getConsole#27(omitted);
-    init builder#6 = new constructor#14();
-    builder#6.append#15("Hi ");
-    builder#6.appendCodePoint#16(127759)^;
+    init ~console#25 = getConsole#30(omitted);
+    init builder#6 = new constructor#15();
+    builder#6.append#16("Hi ");
+    builder#6.appendCodePoint#17(127759)^;
     init source#7 = "Wow!! Neato!";
-    init bangIndex#10 = source#7.step#18(begin#19, 3);
-    init spaceIndex#11 = source#7.step#18(bangIndex#10, 2);
-    builder#6.appendBetween#20(source#7, bangIndex#10, spaceIndex#11);
-    init built#12 = builder#6.toString#21();
-    builder#6.append#15("\n");
-    builder#6.append#15(built#12);
-    ~console#24.log#23(builder#6.toString#21());
-    (orelse(builder#6.appendCodePoint#16(1114112)^, ~console#24.log#23("High code blocked."))): Void;
-    (orelse(builder#6.appendCodePoint#16(55296)^, ~console#24.log#23("Surrogate blocked."))): Void;
-    ~console#24.log#23(builder#6.toString#21());
-    builder#6.clear#25();
-    builder#6.append#15("Back to square zero.");
-    ~console#24.log#23(builder#6.toString#21());
-    init owner#13 = new constructor#5(new constructor#14());
-    owner#13.builder#4.append#15("Hi from inside.");
-    ~console#24.log#23(owner#13.builder#4.toString#21());
+    init bangIndex#10 = source#7.step#19(begin#20, 3);
+    init spaceIndex#11 = source#7.step#19(bangIndex#10, 2);
+    builder#6.appendBetween#21(source#7, bangIndex#10, spaceIndex#11);
+    init built#12 = builder#6.toString#22();
+    builder#6.append#16("\n");
+    builder#6.append#16(built#12);
+    ~console#25.log#24(builder#6.toString#22());
+    (orelse(builder#6.appendCodePoint#17(1114112)^, ~console#25.log#24("High code blocked."))): Void;
+    (orelse(builder#6.appendCodePoint#17(55296)^, ~console#25.log#24("Surrogate blocked."))): Void;
+    ~console#25.log#24(builder#6.toString#22());
+    builder#6.clear#26();
+    builder#6.append#16("Back to square zero.");
+    ~console#25.log#24(builder#6.toString#22());
+    builder#6.clear#26();
+    builder#6.append#16("a??=b??/c??>d???e");
+    init marks#13 = builder#6.toString#22();
+    ~console#25.log#24(marks#13);
+    ~console#25.log#24(%String.cat("Same: ", %String.eq(marks#13, "a??=b??/c??>d???e").toString#28()));
+    builder#6.clear#26();
+    builder#6.append#16("??");
+    (orelse(builder#6.appendCodePoint#17(1)^, ~console#25.log#24("No U+1."))): Void;
+    builder#6.append#16("0");
+    (orelse(builder#6.appendCodePoint#17(8364)^, ~console#25.log#24("No euro."))): Void;
+    builder#6.append#16("1");
+    ~console#25.log#24(%String.cat("Digits after escapes: ", %String.eq(builder#6.toString#22(), %String.cat(%String.cat(%String.cat(%String.cat("??", "\u{1}"), "0"), "€"), "1")).toString#28()));
+    init owner#14 = new constructor#5(new constructor#15());
+    owner#14.builder#4.append#16("Hi from inside.");
+    ~console#25.log#24(owner#14.builder#4.toString#22());
   }
 }

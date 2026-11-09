@@ -77,27 +77,30 @@
 116:1 -> ../match.temper.md:230:5  let t$0; <- console.log(/[]+/.find(simpl
 117:1 -> ../match.temper.md:230:5  try { <- console.log(/[]+/.find(simpl
 122:1 -> ../match.temper.md:230:5  console.log(t$0); <- console.log(/[]+/.find(simpl
-123:1 -> ../match.temper.md:253:5  const idStart = /** @type {R <- let idStart = /[a-zA-Z_]/.da
-124:1 -> ../match.temper.md:254:5  const idContinue = new Or(Ob <- let idContinue = new Or([idS
-125:1 -> ../match.temper.md:255:5  const word = /** @type {Rege <- let word = new Sequence([
-126:1 -> ../match.temper.md:267:5  const expected = "def_456"; <- let expected = "def_456";
-127:1 -> ../match.temper.md:268:5  const found = word.find(`123 <- let found = word.find("123_a
-128:1 -> ../match.temper.md:269:5  console.log(`Found id: ${fou <- console.log("Found id: ${fou
-129:1 -> ../match.temper.md:282:5  const stringToEscape = "$(*^ <- let stringToEscape = "$(*^";
-130:1 -> ../match.temper.md:287:5  const regexWithInterpolatedS <- let regexWithInterpolatedStr
-131:1 -> ../match.temper.md:288:5  const stringToEscapeAndMore <- let stringToEscapeAndMore =
-132:1 -> ../match.temper.md:289:5  const escapedMatch = regexWi <- let escapedMatch = regexWith
-133:1 -> ../match.temper.md:290:5  console.log(escapedMatch.ful <- console.log(escapedMatch.ful
-134:1 -> ../match.temper.md:304:5  const ownFullMatch = /** @ty <- let ownFullMatch = /.(?full=
-135:1 -> ../match.temper.md:305:5  const ownFull = mappedGet(ow <- let ownFull = ownFullMatch.g
-136:1 -> ../match.temper.md:306:5  console.log(`Own full: ${own <- console.log("Own full: ${own
-137:1 -> ../match.temper.md:317:5  const comboLines = "It was t <- let comboLines =
-138:1 -> ../match.temper.md:320:5  { <- /\n|\r\n?/.split(comboLines)
-139:3 -> ../match.temper.md:320:5  /** @type {readonly string[] <- /\n|\r\n?/.split(comboLines)
-140:3 -> ../match.temper.md:320:5  const list = /** @type {Rege <- /\n|\r\n?/.split(comboLines)
-141:3 -> ../match.temper.md:320:5  const length2 = list.length; <- /\n|\r\n?/.split(comboLines)
-142:3 -> ../match.temper.md:320:5  let i2 = 0; <- /\n|\r\n?/.split(comboLines)
-143:3 -> ../match.temper.md:320:5  while (i2 < length2) { <- /\n|\r\n?/.split(comboLines)
-144:5 -> ../match.temper.md:320:5  const line = listedGet(/** @ <- /\n|\r\n?/.split(comboLines)
-145:5 -> ../match.temper.md:320:5  i2 = (i2 + 1) | 0; <- /\n|\r\n?/.split(comboLines)
-146:5 -> ../match.temper.md:321:7  console.log(`${line};`); <- console.log("${line};");
+123:1 -> ../match.temper.md:253:5  const notLow = /** @type {Re <- let notLow = oneOrMore(new C
+124:1 -> ../match.temper.md:254:5  console.log(`not low: ${notL <- console.log("not low: ${notL
+125:1 -> ../match.temper.md:255:5  console.log(`not space or >: <- console.log("not space or >:
+126:1 -> ../match.temper.md:269:5  const idStart = /** @type {R <- let idStart = /[a-zA-Z_]/.da
+127:1 -> ../match.temper.md:270:5  const idContinue = new Or(Ob <- let idContinue = new Or([idS
+128:1 -> ../match.temper.md:271:5  const word = /** @type {Rege <- let word = new Sequence([
+129:1 -> ../match.temper.md:283:5  const expected = "def_456"; <- let expected = "def_456";
+130:1 -> ../match.temper.md:284:5  const found = word.find(`123 <- let found = word.find("123_a
+131:1 -> ../match.temper.md:285:5  console.log(`Found id: ${fou <- console.log("Found id: ${fou
+132:1 -> ../match.temper.md:298:5  const stringToEscape = "$(*^ <- let stringToEscape = "$(*^";
+133:1 -> ../match.temper.md:303:5  const regexWithInterpolatedS <- let regexWithInterpolatedStr
+134:1 -> ../match.temper.md:304:5  const stringToEscapeAndMore <- let stringToEscapeAndMore =
+135:1 -> ../match.temper.md:305:5  const escapedMatch = regexWi <- let escapedMatch = regexWith
+136:1 -> ../match.temper.md:306:5  console.log(escapedMatch.ful <- console.log(escapedMatch.ful
+137:1 -> ../match.temper.md:320:5  const ownFullMatch = /** @ty <- let ownFullMatch = /.(?full=
+138:1 -> ../match.temper.md:321:5  const ownFull = mappedGet(ow <- let ownFull = ownFullMatch.g
+139:1 -> ../match.temper.md:322:5  console.log(`Own full: ${own <- console.log("Own full: ${own
+140:1 -> ../match.temper.md:333:5  const comboLines = "It was t <- let comboLines =
+141:1 -> ../match.temper.md:336:5  { <- /\n|\r\n?/.split(comboLines)
+142:3 -> ../match.temper.md:336:5  /** @type {readonly string[] <- /\n|\r\n?/.split(comboLines)
+143:3 -> ../match.temper.md:336:5  const list = /** @type {Rege <- /\n|\r\n?/.split(comboLines)
+144:3 -> ../match.temper.md:336:5  const length2 = list.length; <- /\n|\r\n?/.split(comboLines)
+145:3 -> ../match.temper.md:336:5  let i2 = 0; <- /\n|\r\n?/.split(comboLines)
+146:3 -> ../match.temper.md:336:5  while (i2 < length2) { <- /\n|\r\n?/.split(comboLines)
+147:5 -> ../match.temper.md:336:5  const line = listedGet(/** @ <- /\n|\r\n?/.split(comboLines)
+148:5 -> ../match.temper.md:336:5  i2 = (i2 + 1) | 0; <- /\n|\r\n?/.split(comboLines)
+149:5 -> ../match.temper.md:337:7  console.log(`${line};`); <- console.log("${line};");

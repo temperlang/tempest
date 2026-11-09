@@ -32,6 +32,23 @@ function implicit(b) {
   }
 }
 
+/**
+ * @param {boolean} a
+ * @param {boolean} b
+ * @returns {string}
+ */
+function nested(a, b) {
+  let result = "neither";
+  if (a) {
+    if (b) {
+      result = "both";
+    }
+  } else {
+    result = "not a";
+  }
+  return result;
+}
+
 let t = true;
 t = t;
 let f = !t;
@@ -41,3 +58,5 @@ console.log(`halfAndHalf true  -> ${halfAndHalf(t)}`);
 console.log(`halfAndHalf false -> ${halfAndHalf(f)}`);
 console.log(`implicit    true  -> ${implicit(t)}`);
 console.log(`implicit    false -> ${implicit(f)}`);
+console.log(`nested      true  false -> ${nested(t, f)}`);
+console.log(`nested      false true  -> ${nested(f, t)}`);

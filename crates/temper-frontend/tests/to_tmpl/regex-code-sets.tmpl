@@ -1,0 +1,67 @@
+tmpl 1 model 1 library `code-sets` 0.0.0
+
+uses std#1 0.6.0 {
+  module regex#2 {
+    class Regex#3 {
+      method find#15(text: String, begin?: StringIndex#13?): Match#11 throws Bubble;
+    }
+    class Group#9 {
+      let value#10: String;
+    }
+    class Match#11 {
+      let full#12: Group#9;
+    }
+    interface RegexNode#16 {
+      method compiled#17(): Regex#3;
+    }
+    class Repeat#18 extends RegexNode#16 {
+      let item#19: RegexNode#16;
+      let min#20: Int32;
+      let max#21: Int32?;
+      let reluctant#22: Boolean;
+      constructor constructor#23(item: RegexNode#16, min: Int32, max: Int32?, reluctant?: Boolean?): Repeat#18;
+    }
+    class CodeSet#24 extends RegexNode#16 {
+      let items#30: List#25<CodePart#29>;
+      let negated#31: Boolean;
+      constructor constructor#32(items: List#25<CodePart#29>, negated?: Boolean?): CodeSet#24;
+    }
+    interface CodePart#29 extends RegexNode#16 {}
+    interface SpecialSet#33 extends CodePart#29, Special#34 {}
+    interface Special#34 extends RegexNode#16 {}
+    let Digit#35: SpecialSet#33;
+    let Word#36: SpecialSet#33;
+    fn oneOrMore#37(item: RegexNode#16, reluctant?: Boolean?): Repeat#18;
+    class CodeRange#38 extends CodePart#29 {
+      let min#39: Int32;
+      let max#40: Int32;
+      constructor constructor#41(min: Int32, max: Int32): CodeRange#38;
+    }
+  }
+}
+
+uses `temper-core`#5 0.1.0 {
+  interface Console#6 {
+    connected method log#7(message: String): Void;
+  }
+  class StringIndex#13 extends StringIndexOption#14 {}
+  interface StringIndexOption#14 {}
+  class List#25<T#26> extends Listed#27<T#26> {}
+  interface Listed#27<T#28> {}
+  connected fn getConsole#42(name?: String): Console#6;
+}
+
+module `code-sets`#0 {
+  let ~console#8: Console#6;
+
+  let notHigh#4: Regex#3;
+
+  init {
+    init ~console#8 = getConsole#42(omitted);
+    ~console#8.log#7(%String.cat("digits: ", ((upcast(new constructor#23((upcast(new constructor#32((list((upcast(Digit#35)): CodePart#29)): List#25<CodePart#29>, (asNullable(false)): Boolean?))): RegexNode#16, 1, (null): Int32?, (asNullable(false)): Boolean?))): RegexNode#16).compiled#17().find#15("x09y", omitted)^.full#12.value#10));
+    ~console#8.log#7(%String.cat("word: ", ((upcast(new constructor#23((upcast(new constructor#32((list((upcast(Word#36)): CodePart#29)): List#25<CodePart#29>, (asNullable(false)): Boolean?))): RegexNode#16, 1, (null): Int32?, (asNullable(false)): Boolean?))): RegexNode#16).compiled#17().find#15("-azAZ09_-", omitted)^.full#12.value#10));
+    ~console#8.log#7(%String.cat("not word: ", ((upcast(new constructor#23((upcast(new constructor#32((list((upcast(Word#36)): CodePart#29)): List#25<CodePart#29>, (asNullable(true)): Boolean?))): RegexNode#16, 1, (null): Int32?, (asNullable(false)): Boolean?))): RegexNode#16).compiled#17().find#15("a-9z", omitted)^.full#12.value#10));
+    init notHigh#4 = ((upcast(oneOrMore#37((upcast(new constructor#32((list((upcast(new constructor#41(127, 1114111))): CodePart#29)): List#25<CodePart#29>, (asNullable(true)): Boolean?))): RegexNode#16, omitted))): RegexNode#16).compiled#17();
+    ~console#8.log#7(%String.cat("not high: ", notHigh#4.find#15("é-a🌍", omitted)^.full#12.value#10));
+  }
+}

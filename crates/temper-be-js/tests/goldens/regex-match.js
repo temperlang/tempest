@@ -120,6 +120,9 @@ try {
   t$0 = "-";
 }
 console.log(t$0);
+const notLow = /** @type {RegexNode} */ (/** @type {unknown} */ (oneOrMore(/** @type {RegexNode} */ (/** @type {unknown} */ (new CodeSet(Object.freeze([/** @type {CodePart} */ (/** @type {unknown} */ (new CodeRange(0, 47)))]), true)))))).compiled();
+console.log(`not low: ${notLow.find("-/a🌍-").full.value}`);
+console.log(`not space or >: ${/** @type {RegexNode} */ (/** @type {unknown} */ (new Repeat(/** @type {RegexNode} */ (/** @type {unknown} */ (new CodeSet(Object.freeze([/** @type {CodePart} */ (/** @type {unknown} */ (new CodePoints("\t"))), /** @type {CodePart} */ (/** @type {unknown} */ (new CodePoints("\n"))), /** @type {CodePart} */ (/** @type {unknown} */ (new CodePoints(" "))), /** @type {CodePart} */ (/** @type {unknown} */ (new CodePoints(">")))]), true))), 1, null, false))).compiled().find("ab>c").full.value}`);
 const idStart = /** @type {RegexNode} */ (/** @type {unknown} */ (new CodeSet(Object.freeze([/** @type {CodePart} */ (/** @type {unknown} */ (new CodeRange(97, 122))), /** @type {CodePart} */ (/** @type {unknown} */ (new CodeRange(65, 90))), /** @type {CodePart} */ (/** @type {unknown} */ (new CodePoints("_")))]), false))).compiled().data;
 const idContinue = new Or(Object.freeze([idStart, /** @type {RegexNode} */ (/** @type {unknown} */ (new CodeSet(Object.freeze([/** @type {CodePart} */ (/** @type {unknown} */ (new CodeRange(48, 57)))]), false))).compiled().data]));
 const word = /** @type {RegexNode} */ (/** @type {unknown} */ (new Sequence(Object.freeze([/** @type {RegexNode} */ (/** @type {unknown} */ (WordBoundary)), idStart, /** @type {RegexNode} */ (/** @type {unknown} */ (new Repeat(/** @type {RegexNode} */ (/** @type {unknown} */ (idContinue)), 0, null))), /** @type {RegexNode} */ (/** @type {unknown} */ (WordBoundary))])))).compiled();

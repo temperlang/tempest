@@ -117,6 +117,9 @@ public final class MatchGlobal {
             t = "-";
         }
         console.log(t);
+        Regex notLow = RegexGlobal.oneOrMore(new CodeSet(List.of(new CodeRange(0, 47)), true)).compiled();
+        console.log("not low: " + notLow.find("-/a🌍-").full.value);
+        console.log("not space or >: " + new Repeat(new CodeSet(List.of(new CodePoints("\t"), new CodePoints("\n"), new CodePoints(" "), new CodePoints(">")), true), 1, null, false).compiled().find("ab>c").full.value);
         RegexNode idStart = new CodeSet(List.of(new CodeRange(97, 122), new CodeRange(65, 90), new CodePoints("_")), false).compiled().data;
         Or idContinue = new Or(List.of(idStart, new CodeSet(List.of(new CodeRange(48, 57)), false).compiled().data));
         Regex word = new Sequence(List.of(RegexGlobal.WordBoundary, idStart, new Repeat(idContinue, 0, null), RegexGlobal.WordBoundary)).compiled();

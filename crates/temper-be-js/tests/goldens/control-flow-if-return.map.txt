@@ -1,31 +1,43 @@
 # generated line:column -> source:line:column, and the text at each
-1:1 -> ../if-return.temper.md:8:5  /** <- let explicit(b: Boolean): St
-5:1 -> ../if-return.temper.md:8:5  function explicit(b) { <- let explicit(b: Boolean): St
-5:10 -> ../if-return.temper.md:8:9 (explicit)  explicit(b) { <- explicit(b: Boolean): String
-5:18 -> ../if-return.temper.md:8:5  (b) { <- let explicit(b: Boolean): St
-6:3 -> ../if-return.temper.md:9:7  if (b) { <- if (b) {
-7:5 -> ../if-return.temper.md:10:9  return "true"; <- return "true"
-9:3 -> ../if-return.temper.md:12:7  return "false"; <- return "false"
-12:1 -> ../if-return.temper.md:17:5  /** <- let halfAndHalf(b: Boolean):
-16:1 -> ../if-return.temper.md:17:5  function halfAndHalf(b) { <- let halfAndHalf(b: Boolean):
-16:10 -> ../if-return.temper.md:17:9 (halfAndHalf)  halfAndHalf(b) { <- halfAndHalf(b: Boolean): Str
-16:21 -> ../if-return.temper.md:17:5  (b) { <- let halfAndHalf(b: Boolean):
-17:3 -> ../if-return.temper.md:18:7  if (b) { <- if (b) {
-18:5 -> ../if-return.temper.md:19:9  return "true"; <- return "true"
-20:3 -> ../if-return.temper.md:21:7  return "false"; <- "false" // implicit assignme
-23:1 -> ../if-return.temper.md:25:5  /** <- let implicit(b: Boolean): St
-27:1 -> ../if-return.temper.md:25:5  function implicit(b) { <- let implicit(b: Boolean): St
-27:10 -> ../if-return.temper.md:25:9 (implicit)  implicit(b) { <- implicit(b: Boolean): String
-27:18 -> ../if-return.temper.md:25:5  (b) { <- let implicit(b: Boolean): St
-28:3 -> ../if-return.temper.md:26:7  if (b) { <- if (b) {
-29:5 -> ../if-return.temper.md:27:9  return "true"; <- "true"
-31:5 -> ../if-return.temper.md:29:9  return "false"; <- "false"
-35:1 -> ../if-return.temper.md:33:5  let t = true; <- var t = true;
-36:1 -> ../if-return.temper.md:34:5  t = t; <- t = t;
-37:1 -> ../if-return.temper.md:35:5  let f = !t; <- var f = !t;
-38:1 -> ../if-return.temper.md:37:5  console.log(`explicit    tru <- console.log("explicit    tru
-39:1 -> ../if-return.temper.md:38:5  console.log(`explicit    fal <- console.log("explicit    fal
-40:1 -> ../if-return.temper.md:39:5  console.log(`halfAndHalf tru <- console.log("halfAndHalf tru
-41:1 -> ../if-return.temper.md:40:5  console.log(`halfAndHalf fal <- console.log("halfAndHalf fal
-42:1 -> ../if-return.temper.md:41:5  console.log(`implicit    tru <- console.log("implicit    tru
-43:1 -> ../if-return.temper.md:42:5  console.log(`implicit    fal <- console.log("implicit    fal
+1:1 -> ../if-return.temper.md:11:5  /** <- let explicit(b: Boolean): St
+5:1 -> ../if-return.temper.md:11:5  function explicit(b) { <- let explicit(b: Boolean): St
+5:10 -> ../if-return.temper.md:11:9 (explicit)  explicit(b) { <- explicit(b: Boolean): String
+5:18 -> ../if-return.temper.md:11:5  (b) { <- let explicit(b: Boolean): St
+6:3 -> ../if-return.temper.md:12:7  if (b) { <- if (b) {
+7:5 -> ../if-return.temper.md:13:9  return "true"; <- return "true"
+9:3 -> ../if-return.temper.md:15:7  return "false"; <- return "false"
+12:1 -> ../if-return.temper.md:20:5  /** <- let halfAndHalf(b: Boolean):
+16:1 -> ../if-return.temper.md:20:5  function halfAndHalf(b) { <- let halfAndHalf(b: Boolean):
+16:10 -> ../if-return.temper.md:20:9 (halfAndHalf)  halfAndHalf(b) { <- halfAndHalf(b: Boolean): Str
+16:21 -> ../if-return.temper.md:20:5  (b) { <- let halfAndHalf(b: Boolean):
+17:3 -> ../if-return.temper.md:21:7  if (b) { <- if (b) {
+18:5 -> ../if-return.temper.md:22:9  return "true"; <- return "true"
+20:3 -> ../if-return.temper.md:24:7  return "false"; <- "false" // implicit assignme
+23:1 -> ../if-return.temper.md:28:5  /** <- let implicit(b: Boolean): St
+27:1 -> ../if-return.temper.md:28:5  function implicit(b) { <- let implicit(b: Boolean): St
+27:10 -> ../if-return.temper.md:28:9 (implicit)  implicit(b) { <- implicit(b: Boolean): String
+27:18 -> ../if-return.temper.md:28:5  (b) { <- let implicit(b: Boolean): St
+28:3 -> ../if-return.temper.md:29:7  if (b) { <- if (b) {
+29:5 -> ../if-return.temper.md:30:9  return "true"; <- "true"
+31:5 -> ../if-return.temper.md:32:9  return "false"; <- "false"
+35:1 -> ../if-return.temper.md:37:5  /** <- let nested(a: Boolean, b: Bo
+40:1 -> ../if-return.temper.md:37:5  function nested(a, b) { <- let nested(a: Boolean, b: Bo
+40:10 -> ../if-return.temper.md:37:9 (nested)  nested(a, b) { <- nested(a: Boolean, b: Boolea
+40:16 -> ../if-return.temper.md:37:5  (a, b) { <- let nested(a: Boolean, b: Bo
+41:3 -> ../if-return.temper.md:38:7  let result = "neither"; <- var result = "neither";
+42:3 -> ../if-return.temper.md:39:7  if (a) { <- if (a) {
+43:5 -> ../if-return.temper.md:40:9  if (b) { <- if (b) {
+44:7 -> ../if-return.temper.md:41:11  result = "both"; <- result = "both";
+47:5 -> ../if-return.temper.md:44:9  result = "not a"; <- result = "not a";
+49:3 -> ../if-return.temper.md:46:7  return result; <- result
+52:1 -> ../if-return.temper.md:49:5  let t = true; <- var t = true;
+53:1 -> ../if-return.temper.md:50:5  t = t; <- t = t;
+54:1 -> ../if-return.temper.md:51:5  let f = !t; <- var f = !t;
+55:1 -> ../if-return.temper.md:53:5  console.log(`explicit    tru <- console.log("explicit    tru
+56:1 -> ../if-return.temper.md:54:5  console.log(`explicit    fal <- console.log("explicit    fal
+57:1 -> ../if-return.temper.md:55:5  console.log(`halfAndHalf tru <- console.log("halfAndHalf tru
+58:1 -> ../if-return.temper.md:56:5  console.log(`halfAndHalf fal <- console.log("halfAndHalf fal
+59:1 -> ../if-return.temper.md:57:5  console.log(`implicit    tru <- console.log("implicit    tru
+60:1 -> ../if-return.temper.md:58:5  console.log(`implicit    fal <- console.log("implicit    fal
+61:1 -> ../if-return.temper.md:59:5  console.log(`nested      tru <- console.log("nested      tru
+62:1 -> ../if-return.temper.md:60:5  console.log(`nested      fal <- console.log("nested      fal

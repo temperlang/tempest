@@ -13,12 +13,12 @@ void global_init_init();
 // Storage, which the library reads and its init sets; read values
 // through the accessors below.
 namespace temper_globals {
-extern temper::core::GlobalSlot<std::string> greeting;
+extern temper::core::GlobalSlot<temper::core::Str> greeting;
 extern temper::core::GlobalSlot<int32_t> total;
 extern temper::core::GlobalSlot<int32_t> ticks;
 }  // namespace temper_globals
 
-std::string const & greeting();
+temper::core::Str const & greeting();
 // The module's functions write it, so this reads it under their
 // lock and gives a copy.
 int32_t total();
@@ -27,7 +27,7 @@ int32_t total();
 int32_t ticks();
 
 void tick();
-std::string report();
+temper::core::Str report();
 
 }  // namespace module_state
 
@@ -42,7 +42,7 @@ namespace core = temper::core;
 
 namespace temper_globals {
 
-core::GlobalSlot<std::string> greeting;
+core::GlobalSlot<core::Str> greeting;
 static core::GlobalSlot<int32_t> count;
 static core::GlobalSlot<int32_t> limit;
 core::GlobalSlot<int32_t> total;
@@ -59,7 +59,7 @@ static T load(T const &variable) {
   return variable;
 }
 
-std::string const & greeting() {
+core::Str const & greeting() {
   global_init_init();
   return temper_globals::greeting.value;
 }
@@ -87,7 +87,7 @@ void tick() {
   temper_globals::ticks.value = core::Int::add(temper_globals::ticks.value, 1);
 }
 
-std::string report() {
+core::Str report() {
   global_init_init();
   int32_t int32 = bump();
   return temper_globals::greeting.value + " " + std::to_string(int32) + " of " + std::to_string(temper_globals::limit.value) + " " + std::to_string(load(temper_globals::total.value));
@@ -101,7 +101,7 @@ void global_init_init() {
     temper_globals::total.construct();
     temper_globals::ticks.construct();
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
-    temper_globals::greeting.value = "hi";
+    temper_globals::greeting.value = TEMPER_STR("hi");
     temper_globals::count.value = 0;
     temper_globals::limit.value = 3;
     temper_globals::total.value = 10;

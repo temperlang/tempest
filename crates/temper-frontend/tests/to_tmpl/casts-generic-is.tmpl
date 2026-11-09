@@ -1,0 +1,70 @@
+tmpl 1 model 1 library `generic-is` 0.0.0
+
+uses `temper-core`#13 0.1.0 {
+  class List#14<T#15> extends Listed#16<T#15> {
+    connected get length#27(): Int32;
+    connected method get#28(index: Int32): T#15;
+  }
+  interface Listed#16<T#17> {}
+  class StringBuilder#24 {
+    connected constructor constructor#26(): StringBuilder#24;
+    connected method append#33(substring: String): Void;
+    connected method toString#34(): String;
+  }
+  interface Console#36 {
+    connected method log#37(message: String): Void;
+  }
+  connected fn getConsole#39(name?: String): Console#36;
+}
+
+module `generic-is`#0 {
+  let ~console#38: Console#36;
+
+  interface Effect#1<T#4> {}
+
+  class Append#2<T#5> extends Effect#1<T#5> {
+    let text#7: String;
+    constructor constructor#8(text#21: String): Append#2<T#5> {
+      this.text#7 = text#21;
+    }
+  }
+
+  class Mark#3<T#6> extends Effect#1<T#6> {
+    let value#9: T#6;
+    constructor constructor#10(value#22: T#6): Mark#3<T#6> {
+      this.value#9 = value#22;
+    }
+  }
+
+  fn texts#11<T#12>(effects#23: List#14<Effect#1<T#12>>): String {
+    let out#25: StringBuilder#24 = new constructor#26();
+    {
+      let ~length#29: Int32 = effects#23.length#27();
+      var ~i#30: Int32 = 0;
+      ~loop#31: while (%Int32.lt(~i#30, ~length#29)) {
+        let e#32: Effect#1<T#12> = effects#23.get#28(~i#30);
+        ~i#30 = %Int32.add(~i#30, 1);
+        if (is(e#32, Append#2<T#12>)) {
+          out#25.append#33(((downcast(e#32)): Append#2<T#12>).text#7);
+        } else {
+          out#25.append#33("|");
+        }
+      }
+    }
+    return out#25.toString#34();
+  }
+
+  fn firstText#18<T#19>(effect#35: Effect#1<T#19>): String {
+    return (orelse(((as(effect#35)^): Append#2<T#19>).text#7, "none")): String;
+  }
+
+  let effects#20: List#14<Effect#1<Int32>>;
+
+  init {
+    init ~console#38 = getConsole#39(omitted);
+    init effects#20 = (list((upcast(new constructor#8<Int32>("a"))): Effect#1<Int32>, (upcast(new constructor#10<Int32>(1))): Effect#1<Int32>, (upcast(new constructor#8<Int32>("b"))): Effect#1<Int32>)): List#14<Effect#1<Int32>>;
+    ~console#38.log#37(texts#11<Int32>(effects#20));
+    ~console#38.log#37(firstText#18<Int32>(effects#20.get#28(0)));
+    ~console#38.log#37(firstText#18<Int32>(effects#20.get#28(1)));
+  }
+}

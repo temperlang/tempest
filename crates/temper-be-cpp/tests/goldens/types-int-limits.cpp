@@ -25,22 +25,22 @@ static core::GlobalSlot<std::shared_ptr<core::Console::Type>> console;
 
 }  // namespace temper_globals
 
-static void checkParse32(std::string string) {
-  std::string converted;
+static void checkParse32(core::Str const & string) {
+  core::Str converted;
   try {
     converted = std::to_string(core::String::toInt32(string, 16));
   } catch (core::TemperBubble const &) {
-    converted = "failed";
+    converted = TEMPER_STR("failed");
   }
   core::Console::log(temper_globals::console.value, "Parse " + string + " -> " + converted);
 }
 
-static void checkParse64(std::string string) {
-  std::string converted;
+static void checkParse64(core::Str const & string) {
+  core::Str converted;
   try {
     converted = std::to_string(core::String::toInt64(string, 16));
   } catch (core::TemperBubble const &) {
-    converted = "failed";
+    converted = TEMPER_STR("failed");
   }
   core::Console::log(temper_globals::console.value, "Parse " + string + " -> " + converted);
 }
@@ -49,7 +49,7 @@ void global_init_init() {
   core::init_once([] {
     temper_globals::console.construct();
     temper_globals::console.value = core::Console::get_console();
-    core::Console::log(temper_globals::console.value, "Int32");
+    core::Console::log(temper_globals::console.value, TEMPER_STR("Int32"));
     int32_t one = 1;
     int32_t big = core::Int::mul(2147483647, one);
     int32_t small = core::Int::mul(INT32_MIN, one);
@@ -72,7 +72,7 @@ void global_init_init() {
     core::Console::log(temper_globals::console.value, std::to_string(five) + " % -" + std::to_string(three) + " == " + std::to_string(core::Int::mod_wrap(five, core::Int::neg(three))));
     core::Console::log(temper_globals::console.value, "-" + std::to_string(five) + " % " + std::to_string(three) + " == " + std::to_string(core::Int::mod_wrap(core::Int::neg(five), three)));
     core::Console::log(temper_globals::console.value, "-" + std::to_string(five) + " % -" + std::to_string(three) + " == " + std::to_string(core::Int::mod_wrap(core::Int::neg(five), core::Int::neg(three))));
-    core::Console::log(temper_globals::console.value, "Int64");
+    core::Console::log(temper_globals::console.value, TEMPER_STR("Int64"));
     int64_t notSoBig = core::Int::toInt64(big);
     int64_t notSoSmall = core::Int::toInt64(small);
     core::Console::log(temper_globals::console.value, std::to_string(notSoBig) + " + 1 == " + std::to_string(core::Int64::add(notSoBig, int64_t{1})));
@@ -94,22 +94,22 @@ void global_init_init() {
     core::Console::log(temper_globals::console.value, std::to_string(five64) + " % -" + std::to_string(three64) + " == " + std::to_string(core::Int64::mod_wrap(five64, core::Int64::neg(three64))));
     core::Console::log(temper_globals::console.value, "-" + std::to_string(five64) + " % " + std::to_string(three64) + " == " + std::to_string(core::Int64::mod_wrap(core::Int64::neg(five64), three64)));
     core::Console::log(temper_globals::console.value, "-" + std::to_string(five64) + " % -" + std::to_string(three64) + " == " + std::to_string(core::Int64::mod_wrap(core::Int64::neg(five64), core::Int64::neg(three64))));
-    limits::checkParse32("7FFFFFFF");
-    limits::checkParse32("-80000000");
-    limits::checkParse32("80000000");
-    limits::checkParse32("-80000001");
+    limits::checkParse32(TEMPER_STR("7FFFFFFF"));
+    limits::checkParse32(TEMPER_STR("-80000000"));
+    limits::checkParse32(TEMPER_STR("80000000"));
+    limits::checkParse32(TEMPER_STR("-80000001"));
     core::Console::log(temper_globals::console.value, "Not so big: " + std::to_string(core::Int64::toInt32Unsafe(notSoBig)));
-    std::string value;
+    core::Str value;
     try {
       value = std::to_string(core::Int64::toInt32(big64));
     } catch (core::TemperBubble const &) {
-      value = "no";
+      value = TEMPER_STR("no");
     }
     core::Console::log(temper_globals::console.value, "Actually big: " + value);
-    limits::checkParse64("7FFFFFFFFFFFFFFF");
-    limits::checkParse64("-8000000000000000");
-    limits::checkParse64("8000000000000000");
-    limits::checkParse64("-8000000000000001");
+    limits::checkParse64(TEMPER_STR("7FFFFFFFFFFFFFFF"));
+    limits::checkParse64(TEMPER_STR("-8000000000000000"));
+    limits::checkParse64(TEMPER_STR("8000000000000000"));
+    limits::checkParse64(TEMPER_STR("-8000000000000001"));
     int64_t min = std::min(small64, big64);
     core::Console::log(temper_globals::console.value, std::to_string(min) + " < " + std::to_string(std::max(small64, big64)));
   });

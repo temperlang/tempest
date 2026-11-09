@@ -118,6 +118,9 @@ public static class MatchGlobal
             t1 = "-";
         }
         console.Log(t1);
+        Regex notLow = ((IRegexNode)RegexGlobal.OneOrMore(new CodeSet(Listed.CreateReadOnlyList<ICodePart>(new CodeRange(0, 47)), true))).Compiled();
+        console.Log("not low: " + notLow.Find("-/a🌍-").Full.Value);
+        console.Log("not space or >: " + ((IRegexNode)new Repeat(new CodeSet(Listed.CreateReadOnlyList<ICodePart>(new CodePoints("\t"), new CodePoints("\n"), new CodePoints(" "), new CodePoints(">")), true), 1, null, false)).Compiled().Find("ab>c").Full.Value);
         IRegexNode idStart = ((IRegexNode)new CodeSet(Listed.CreateReadOnlyList<ICodePart>(new CodeRange(97, 122), new CodeRange(65, 90), new CodePoints("_")), false)).Compiled().Data;
         Or idContinue = new Or(Listed.CreateReadOnlyList<IRegexNode>(idStart, ((IRegexNode)new CodeSet(Listed.CreateReadOnlyList<ICodePart>(new CodeRange(48, 57)), false)).Compiled().Data));
         Regex word = ((IRegexNode)new Sequence(Listed.CreateReadOnlyList<IRegexNode>(RegexGlobal.WordBoundary, idStart, new Repeat(idContinue, 0, null), RegexGlobal.WordBoundary))).Compiled();

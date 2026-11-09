@@ -11,12 +11,55 @@ namespace private_method {
 void global_init_init();
 
 struct C;
+struct Money;
+struct Sink;
+struct TenSink;
+struct Note;
+struct Label;
 
 struct C : public std::enable_shared_from_this<C> {
   static std::shared_ptr<C> make();
   int32_t helper(int32_t x) const;
   int32_t method1(int32_t x) const;
   int32_t method2(int32_t x) const;
+};
+
+struct Money : public std::enable_shared_from_this<Money> {
+  int32_t cents;
+  int32_t spent;
+  static std::shared_ptr<Money> make(int32_t cents);
+  int32_t whole() const;
+  int32_t get_rounded() const;
+  std::shared_ptr<Money> plus(std::shared_ptr<Money> const & other) const;
+  bool sameWhole(std::shared_ptr<Money> const & other) const;
+  bool sameRounded(std::shared_ptr<Money> const & other) const;
+  void spendFrom(std::shared_ptr<Money> const & other) const;
+  int32_t get_timesSpent() const;
+  temper::core::Str toString() const;
+};
+
+struct Sink : public virtual temper::core::AnyValueBase {
+  virtual int32_t end() const = 0;
+};
+
+struct TenSink : public virtual Sink {
+  static std::shared_ptr<TenSink> make();
+  int32_t end() const override;
+};
+
+struct Note : public std::enable_shared_from_this<Note> {
+  temper::core::Str body;
+  static std::shared_ptr<Note> make(temper::core::Str const & body);
+  std::shared_ptr<Note> text(temper::core::Str const & more) const;
+  temper::core::Str get_body() const;
+};
+
+struct Label : public std::enable_shared_from_this<Label> {
+  int32_t end;
+  static std::shared_ptr<Label> make(int32_t end);
+  temper::core::Str get_text() const;
+  int32_t close(std::shared_ptr<Sink> const & sink) const;
+  temper::core::Str noted(temper::core::Str const & more) const;
 };
 
 }  // namespace private_method
@@ -47,12 +90,109 @@ int32_t C::method2(int32_t x) const {
   return self->helper(core::Int::mul(x, 3));
 }
 
+std::shared_ptr<Money> Money::make(int32_t cents) {
+  std::shared_ptr<Money> self = std::make_shared<Money>();
+  self->cents = cents;
+  self->spent = 0;
+  return self;
+}
+
+int32_t Money::whole() const {
+  return this->cents / 100;
+}
+
+int32_t Money::get_rounded() const {
+  return core::Int::add(this->cents, 50) / 100;
+}
+
+std::shared_ptr<Money> Money::plus(std::shared_ptr<Money> const & other) const {
+  std::shared_ptr<Money const> self = shared_from_this();
+  return Money::make(core::Int::add(self->cents, other->cents));
+}
+
+bool Money::sameWhole(std::shared_ptr<Money> const & other) const {
+  std::shared_ptr<Money const> self = shared_from_this();
+  return self->whole() == other->whole();
+}
+
+bool Money::sameRounded(std::shared_ptr<Money> const & other) const {
+  std::shared_ptr<Money const> self = shared_from_this();
+  return self->get_rounded() == other->get_rounded();
+}
+
+void Money::spendFrom(std::shared_ptr<Money> const & other) const {
+  other->spent = core::Int::add(other->spent, 1);
+}
+
+int32_t Money::get_timesSpent() const {
+  return this->spent;
+}
+
+core::Str Money::toString() const {
+  return std::to_string(this->cents) + " cents";
+}
+
+std::shared_ptr<TenSink> TenSink::make() {
+  std::shared_ptr<TenSink> self = std::make_shared<TenSink>();
+  return self;
+}
+
+int32_t TenSink::end() const {
+  return 10;
+}
+
+std::shared_ptr<Note> Note::make(core::Str const & body) {
+  std::shared_ptr<Note> self = std::make_shared<Note>();
+  self->body = body;
+  return self;
+}
+
+std::shared_ptr<Note> Note::text(core::Str const & more) const {
+  std::shared_ptr<Note const> self = shared_from_this();
+  return Note::make(self->body + more);
+}
+
+core::Str Note::get_body() const {
+  return this->body;
+}
+
+std::shared_ptr<Label> Label::make(int32_t end) {
+  std::shared_ptr<Label> self = std::make_shared<Label>();
+  self->end = end;
+  return self;
+}
+
+core::Str Label::get_text() const {
+  return TEMPER_STR("label");
+}
+
+int32_t Label::close(std::shared_ptr<Sink> const & sink) const {
+  std::shared_ptr<Label const> self = shared_from_this();
+  return core::Int::add(sink->end(), self->end);
+}
+
+core::Str Label::noted(core::Str const & more) const {
+  std::shared_ptr<Label const> self = shared_from_this();
+  return Note::make(self->get_text())->text(more)->body;
+}
+
 void global_init_init() {
   core::init_once([] {
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
     std::shared_ptr<C> c = C::make();
     core::Console::log(console, "method1(10)=" + std::to_string(c->method1(10)));
     core::Console::log(console, "method2(10)=" + std::to_string(c->method2(10)));
+    std::shared_ptr<Money> a = Money::make(150);
+    std::shared_ptr<Money> b = Money::make(175);
+    core::Console::log(console, "plus: " + a->plus(b)->toString());
+    core::Console::log(console, "same whole: " + core::Boolean::toString(a->sameWhole(b)));
+    core::Console::log(console, "same rounded: " + core::Boolean::toString(a->sameRounded(b)));
+    a->spendFrom(b);
+    a->spendFrom(b);
+    core::Console::log(console, "b spent: " + std::to_string(b->get_timesSpent()));
+    std::shared_ptr<Label> label = Label::make(1);
+    core::Console::log(console, "close: " + std::to_string(label->close(TenSink::make())));
+    core::Console::log(console, "noted: " + label->noted(TEMPER_STR("!")));
   });
 }
 

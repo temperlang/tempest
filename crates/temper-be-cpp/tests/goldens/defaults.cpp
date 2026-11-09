@@ -18,15 +18,15 @@ struct Pad : public std::enable_shared_from_this<Pad> {
   static std::shared_ptr<Pad> make(temper::core::NullableParam<int32_t> left, temper::core::NullableParam<int32_t> right);
   static std::shared_ptr<Pad> make(temper::core::NullableParam<int32_t> left);
   static std::shared_ptr<Pad> make();
-  std::string apply(std::string text, temper::core::NullableParam<std::string> fill) const;
-  std::string apply(std::string text) const;
+  temper::core::Str apply(temper::core::Str const & text, temper::core::NullableParam<temper::core::Str> fill) const;
+  temper::core::Str apply(temper::core::Str const & text) const;
   int32_t get_left() const;
   int32_t get_right() const;
 };
 
-std::string wrap(std::string text, temper::core::NullableParam<std::string> open, temper::core::NullableParam<std::string> close);
-std::string wrap(std::string text, temper::core::NullableParam<std::string> open);
-std::string wrap(std::string text);
+temper::core::Str wrap(temper::core::Str const & text, temper::core::NullableParam<temper::core::Str> open, temper::core::NullableParam<temper::core::Str> close);
+temper::core::Str wrap(temper::core::Str const & text, temper::core::NullableParam<temper::core::Str> open);
+temper::core::Str wrap(temper::core::Str const & text);
 
 }  // namespace defaults
 
@@ -37,17 +37,17 @@ namespace defaults {
 
 namespace core = temper::core;
 
-std::string wrap(std::string text, core::NullableParam<std::string> open, core::NullableParam<std::string> close) {
-  std::string open2 = open == nullptr ? "[" : open.value;
-  std::string close2 = close == nullptr ? open2 : close.value;
+core::Str wrap(core::Str const & text, core::NullableParam<core::Str> open, core::NullableParam<core::Str> close) {
+  core::Str open2 = open == nullptr ? TEMPER_STR("[") : open.value;
+  core::Str close2 = close == nullptr ? open2 : close.value;
   return open2 + text + close2;
 }
 
-std::string wrap(std::string text, core::NullableParam<std::string> open) {
+core::Str wrap(core::Str const & text, core::NullableParam<core::Str> open) {
   return wrap(text, open, nullptr);
 }
 
-std::string wrap(std::string text) {
+core::Str wrap(core::Str const & text) {
   return wrap(text, nullptr, nullptr);
 }
 
@@ -68,9 +68,9 @@ std::shared_ptr<Pad> Pad::make() {
   return make(nullptr, nullptr);
 }
 
-std::string Pad::apply(std::string text, core::NullableParam<std::string> fill) const {
-  std::string fill2 = fill == nullptr ? "." : fill.value;
-  std::string out = text;
+core::Str Pad::apply(core::Str const & text, core::NullableParam<core::Str> fill) const {
+  core::Str fill2 = fill == nullptr ? TEMPER_STR(".") : fill.value;
+  core::Str out = text;
   {
     int32_t i = 0;
     while (i < this->left) {
@@ -88,7 +88,7 @@ std::string Pad::apply(std::string text, core::NullableParam<std::string> fill) 
   return out;
 }
 
-std::string Pad::apply(std::string text) const {
+core::Str Pad::apply(core::Str const & text) const {
   return apply(text, nullptr);
 }
 
@@ -121,18 +121,18 @@ struct Greeter;
 struct Counter;
 
 struct Greeter : public std::enable_shared_from_this<Greeter> {
-  std::string greeting;
-  std::string punct;
-  static std::shared_ptr<Greeter> make(temper::core::NullableParam<std::string> greeting, temper::core::NullableParam<std::string> punct);
-  static std::shared_ptr<Greeter> make(temper::core::NullableParam<std::string> greeting);
+  temper::core::Str greeting;
+  temper::core::Str punct;
+  static std::shared_ptr<Greeter> make(temper::core::NullableParam<temper::core::Str> greeting, temper::core::NullableParam<temper::core::Str> punct);
+  static std::shared_ptr<Greeter> make(temper::core::NullableParam<temper::core::Str> greeting);
   static std::shared_ptr<Greeter> make();
-  std::string greet(temper::core::NullableParam<std::string> name, temper::core::NullableParam<int32_t> times) const;
-  std::string greet(temper::core::NullableParam<std::string> name) const;
-  std::string greet() const;
-  static std::string shout(std::string text, temper::core::NullableParam<std::string> mark);
-  static std::string shout(std::string text);
-  std::string get_greeting() const;
-  std::string get_punct() const;
+  temper::core::Str greet(temper::core::NullableParam<temper::core::Str> name, temper::core::NullableParam<int32_t> times) const;
+  temper::core::Str greet(temper::core::NullableParam<temper::core::Str> name) const;
+  temper::core::Str greet() const;
+  static temper::core::Str shout(temper::core::Str const & text, temper::core::NullableParam<temper::core::Str> mark);
+  static temper::core::Str shout(temper::core::Str const & text);
+  temper::core::Str get_greeting() const;
+  temper::core::Str get_punct() const;
 };
 
 struct Counter : public std::enable_shared_from_this<Counter> {
@@ -169,21 +169,21 @@ static int32_t next() {
   return temper_globals::calls.value;
 }
 
-static std::string range(int32_t start, core::NullableParam<int32_t> end, core::NullableParam<int32_t> step) {
+static core::Str range(int32_t start, core::NullableParam<int32_t> end, core::NullableParam<int32_t> step) {
   int32_t end2 = end == nullptr ? core::Int::add(start, 10) : end.value;
   int32_t step2 = step == nullptr ? next() : step.value;
   return std::to_string(start) + ".." + std::to_string(end2) + " by " + std::to_string(step2);
 }
 
-static std::string range(int32_t start, core::NullableParam<int32_t> end) {
+static core::Str range(int32_t start, core::NullableParam<int32_t> end) {
   return range(start, end, nullptr);
 }
 
-static std::string range(int32_t start) {
+static core::Str range(int32_t start) {
   return range(start, nullptr, nullptr);
 }
 
-static std::string tag(std::string text, core::NullableParam<std::string> mark) {
+static core::Str tag(core::Str const & text, core::NullableParam<core::Str> mark) {
   if (mark == nullptr) {
     return text;
   } else {
@@ -191,35 +191,35 @@ static std::string tag(std::string text, core::NullableParam<std::string> mark) 
   }
 }
 
-static std::string tag(std::string text) {
+static core::Str tag(core::Str const & text) {
   return tag(text, nullptr);
 }
 
-static std::string named(core::NullableParam<std::string> name) {
-  core::NullableParam<std::string> name2 = name == nullptr ? core::NullableParam<std::string>("nobody") : name;
+static core::Str named(core::NullableParam<core::Str> name) {
+  core::NullableParam<core::Str> name2 = name == nullptr ? core::NullableParam<core::Str>(TEMPER_STR("nobody")) : name;
   {
     if (name2 == nullptr) {
-      return "null";
+      return TEMPER_STR("null");
     } else {
       return name2.value;
     }
   }
 }
 
-static std::string named() {
+static core::Str named() {
   return named(nullptr);
 }
 
-std::shared_ptr<Greeter> Greeter::make(core::NullableParam<std::string> greeting, core::NullableParam<std::string> punct) {
+std::shared_ptr<Greeter> Greeter::make(core::NullableParam<core::Str> greeting, core::NullableParam<core::Str> punct) {
   std::shared_ptr<Greeter> self = std::make_shared<Greeter>();
-  std::string greeting2 = greeting == nullptr ? "Hello" : greeting.value;
-  std::string punct2 = punct == nullptr ? "!" : punct.value;
+  core::Str greeting2 = greeting == nullptr ? TEMPER_STR("Hello") : greeting.value;
+  core::Str punct2 = punct == nullptr ? TEMPER_STR("!") : punct.value;
   self->greeting = greeting2;
   self->punct = punct2;
   return self;
 }
 
-std::shared_ptr<Greeter> Greeter::make(core::NullableParam<std::string> greeting) {
+std::shared_ptr<Greeter> Greeter::make(core::NullableParam<core::Str> greeting) {
   return make(greeting, nullptr);
 }
 
@@ -227,10 +227,10 @@ std::shared_ptr<Greeter> Greeter::make() {
   return make(nullptr, nullptr);
 }
 
-std::string Greeter::greet(core::NullableParam<std::string> name, core::NullableParam<int32_t> times) const {
-  std::string name2 = name == nullptr ? "world" : name.value;
+core::Str Greeter::greet(core::NullableParam<core::Str> name, core::NullableParam<int32_t> times) const {
+  core::Str name2 = name == nullptr ? TEMPER_STR("world") : name.value;
   int32_t times2 = times == nullptr ? 1 : times.value;
-  std::string out = "";
+  core::Str out = core::Str();
   {
     int32_t i = 0;
     while (i < times2) {
@@ -241,28 +241,28 @@ std::string Greeter::greet(core::NullableParam<std::string> name, core::Nullable
   return out;
 }
 
-std::string Greeter::greet(core::NullableParam<std::string> name) const {
+core::Str Greeter::greet(core::NullableParam<core::Str> name) const {
   return greet(name, nullptr);
 }
 
-std::string Greeter::greet() const {
+core::Str Greeter::greet() const {
   return greet(nullptr, nullptr);
 }
 
-std::string Greeter::shout(std::string text, core::NullableParam<std::string> mark) {
-  std::string mark2 = mark == nullptr ? "!" : mark.value;
+core::Str Greeter::shout(core::Str const & text, core::NullableParam<core::Str> mark) {
+  core::Str mark2 = mark == nullptr ? TEMPER_STR("!") : mark.value;
   return text + mark2 + mark2;
 }
 
-std::string Greeter::shout(std::string text) {
+core::Str Greeter::shout(core::Str const & text) {
   return shout(text, nullptr);
 }
 
-std::string Greeter::get_greeting() const {
+core::Str Greeter::get_greeting() const {
   return this->greeting;
 }
 
-std::string Greeter::get_punct() const {
+core::Str Greeter::get_punct() const {
   return this->punct;
 }
 
@@ -302,25 +302,25 @@ void global_init_init() {
     core::Console::log(console, defaults::range(1, 5, 3));
     core::Console::log(console, defaults::range(2, nullptr, 7));
     core::Console::log(console, "calls " + std::to_string(temper_globals::calls.value));
-    core::Console::log(console, defaults::tag("plain"));
-    core::Console::log(console, defaults::tag("marked", "#"));
+    core::Console::log(console, defaults::tag(TEMPER_STR("plain")));
+    core::Console::log(console, defaults::tag(TEMPER_STR("marked"), TEMPER_STR("#")));
     core::Console::log(console, defaults::named());
     core::Console::log(console, defaults::named(nullptr));
-    core::Console::log(console, defaults::named("Ada"));
+    core::Console::log(console, defaults::named(TEMPER_STR("Ada")));
     core::Console::log(console, Greeter::make()->greet());
-    core::Console::log(console, Greeter::make("Hi")->greet("you", 2));
-    core::Console::log(console, Greeter::make(nullptr, "?")->greet(nullptr, 2));
-    core::Console::log(console, Greeter::shout("hey"));
+    core::Console::log(console, Greeter::make(TEMPER_STR("Hi"))->greet(TEMPER_STR("you"), 2));
+    core::Console::log(console, Greeter::make(nullptr, TEMPER_STR("?"))->greet(nullptr, 2));
+    core::Console::log(console, Greeter::shout(TEMPER_STR("hey")));
     std::shared_ptr<Counter> counter = Counter::make();
     counter->add();
     int32_t int32 = counter->add(5);
     core::Console::log(console, "count " + std::to_string(int32) + " " + std::to_string(Counter::make(1)->add()));
-    core::Console::log(console, defaults::wrap("a"));
-    core::Console::log(console, defaults::wrap("b", "<"));
-    core::Console::log(console, defaults::wrap("c", "<", ">"));
+    core::Console::log(console, defaults::wrap(TEMPER_STR("a")));
+    core::Console::log(console, defaults::wrap(TEMPER_STR("b"), TEMPER_STR("<")));
+    core::Console::log(console, defaults::wrap(TEMPER_STR("c"), TEMPER_STR("<"), TEMPER_STR(">")));
     std::shared_ptr<Pad> pad = Pad::make();
-    core::Console::log(console, pad->apply("x"));
-    core::Console::log(console, Pad::make(0, 3)->apply("y", "-"));
+    core::Console::log(console, pad->apply(TEMPER_STR("x")));
+    core::Console::log(console, Pad::make(0, 3)->apply(TEMPER_STR("y"), TEMPER_STR("-")));
   });
 }
 

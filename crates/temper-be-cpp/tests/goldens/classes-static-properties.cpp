@@ -17,21 +17,21 @@ struct I;
 struct Simple : public std::enable_shared_from_this<Simple> {
   struct temper_statics {
     static temper::core::GlobalSlot<std::shared_ptr<Simple>> simon;
-    static temper::core::GlobalSlot<std::string> value;
+    static temper::core::GlobalSlot<temper::core::Str> value;
     static temper::core::GlobalSlot<int32_t> other;
   };
-  std::string name;
+  temper::core::Str name;
   static std::shared_ptr<Simple> const & simon();
-  static std::string const & value();
+  static temper::core::Str const & value();
   static int32_t const & other();
-  static std::shared_ptr<Simple> make(std::string name);
-  std::string get_name() const;
+  static std::shared_ptr<Simple> make(temper::core::Str const & name);
+  temper::core::Str get_name() const;
 };
 
 struct C : public std::enable_shared_from_this<C> {
   static std::shared_ptr<C> make();
   static void sayHi();
-  static std::string compose(std::string subject, std::string message);
+  static temper::core::Str compose(temper::core::Str const & subject, temper::core::Str const & message);
 };
 
 struct I : public virtual temper::core::AnyValueBase {
@@ -60,9 +60,9 @@ std::shared_ptr<Simple> const & Simple::simon() {
   return Simple::temper_statics::simon.value;
 }
 
-core::GlobalSlot<std::string> Simple::temper_statics::value;
+core::GlobalSlot<core::Str> Simple::temper_statics::value;
 
-std::string const & Simple::value() {
+core::Str const & Simple::value() {
   global_init_init();
   return Simple::temper_statics::value.value;
 }
@@ -74,13 +74,13 @@ int32_t const & Simple::other() {
   return Simple::temper_statics::other.value;
 }
 
-std::shared_ptr<Simple> Simple::make(std::string name) {
+std::shared_ptr<Simple> Simple::make(core::Str const & name) {
   std::shared_ptr<Simple> self = std::make_shared<Simple>();
   self->name = name;
   return self;
 }
 
-std::string Simple::get_name() const {
+core::Str Simple::get_name() const {
   return this->name;
 }
 
@@ -90,15 +90,15 @@ std::shared_ptr<C> C::make() {
 }
 
 void C::sayHi() {
-  core::Console::log(temper_globals::console.value, C::compose("C", "'hi.'"));
+  core::Console::log(temper_globals::console.value, C::compose(TEMPER_STR("C"), TEMPER_STR("'hi.'")));
 }
 
-std::string C::compose(std::string subject, std::string message) {
+core::Str C::compose(core::Str const & subject, core::Str const & message) {
   return subject + " says " + message;
 }
 
 void I::sayBye() {
-  core::Console::log(temper_globals::console.value, "I says 'bye.'");
+  core::Console::log(temper_globals::console.value, TEMPER_STR("I says 'bye.'"));
 }
 
 void global_init_init() {
@@ -108,7 +108,7 @@ void global_init_init() {
     Simple::temper_statics::value.construct();
     Simple::temper_statics::other.construct();
     temper_globals::console.value = core::Console::get_console();
-    Simple::temper_statics::simon.value = Simple::make("foo");
+    Simple::temper_statics::simon.value = Simple::make(TEMPER_STR("foo"));
     Simple::temper_statics::value.value = Simple::temper_statics::simon.value->name;
     Simple::temper_statics::other.value = 22;
     core::Console::log(temper_globals::console.value, "Simple.simon.name is " + Simple::temper_statics::simon.value->name);

@@ -24,11 +24,12 @@ pub enum Connection {
     Call(&'static str),
     /// A function template of the runtime's, given its receiver's type
     /// arguments, which C++ can't always deduce (a list of
-    /// `std::string`s and a `"…"`), then the arguments, the receiver
-    /// first: `core::List::getOr<std::string>(built, 5, "?")`.
+    /// `core::Str`s and a concatenation's `std::string`), then the
+    /// arguments, the receiver first: `core::List::getOr<core::Str>(built,
+    /// 5, TEMPER_STR("?"))`.
     Templated(&'static str),
     /// A function template of the runtime's that makes the call's value,
-    /// given that type's arguments: `core::Map::make<std::string,
+    /// given that type's arguments: `core::Map::make<core::Str,
     /// int32_t>(entries)`.
     Making(&'static str),
     /// A function template of the runtime's given the class the call
@@ -623,7 +624,7 @@ fn is_empty(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
         });
     };
     let s = t.expr(*s)?;
-    Ok(s.std_string().method("empty", Vec::new()))
+    Ok(s.method("empty", Vec::new()))
 }
 
 /// `std::to_string(n)` without a radix, else the runtime's

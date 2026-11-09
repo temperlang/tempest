@@ -43,12 +43,12 @@ void global_init_init() {
       }
       int32_t ci = 1;
       core::Console::log(console, "ci = " + std::to_string(ci));
-      core::Console::log(console, "failed to set ci");
+      core::Console::log(console, TEMPER_STR("failed to set ci"));
       core::Console::log(console, "ci = " + std::to_string(ci));
       int32_t c;
       c = 1;
       core::Console::log(console, "c = " + std::to_string(c));
-      core::Console::log(console, "failed to set c");
+      core::Console::log(console, TEMPER_STR("failed to set c"));
       core::Console::log(console, "c = " + std::to_string(c));
       {
         int32_t i2 = 0;

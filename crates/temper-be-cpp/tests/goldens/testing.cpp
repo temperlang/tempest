@@ -120,7 +120,7 @@ int main() {
         auto messages = test->messagesCombined();
         return temper::core::TestOutcome{
             test->get_passing(),
-            temper::core::is_null(messages) ? std::string() : static_cast<std::string>(messages)};
+            temper::core::is_null(messages) ? std::string() : temper::core::Str(messages).str()};
       }},
       {"names: punctuation, 'quotes', and ünïcode", [] {
         auto test = temper_std::Test::make();
@@ -128,7 +128,7 @@ int main() {
         auto messages = test->messagesCombined();
         return temper::core::TestOutcome{
             test->get_passing(),
-            temper::core::is_null(messages) ? std::string() : static_cast<std::string>(messages)};
+            temper::core::is_null(messages) ? std::string() : temper::core::Str(messages).str()};
       }},
       {"locals a test assigns", [] {
         auto test = temper_std::Test::make();
@@ -136,7 +136,7 @@ int main() {
         auto messages = test->messagesCombined();
         return temper::core::TestOutcome{
             test->get_passing(),
-            temper::core::is_null(messages) ? std::string() : static_cast<std::string>(messages)};
+            temper::core::is_null(messages) ? std::string() : temper::core::Str(messages).str()};
       }},
   });
 }

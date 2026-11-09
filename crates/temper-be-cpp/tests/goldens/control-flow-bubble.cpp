@@ -29,7 +29,7 @@ static int32_t more(core::NullableParam<int32_t>) {
   core::bubble();
 }
 
-static std::string something(core::NullableParam<std::string> x) {
+static core::Str something(core::NullableParam<core::Str> x) {
   {
     if (x != nullptr) {
       return x.value;
@@ -39,14 +39,14 @@ static std::string something(core::NullableParam<std::string> x) {
   }
 }
 
-static void report(core::NullableParam<std::string> x) {
-  std::string message;
+static void report(core::NullableParam<core::Str> x) {
+  core::Str message;
   try {
     message = bubble::something(x);
   } catch (core::TemperBubble const &) {
-    message = "null";
+    message = TEMPER_STR("null");
   }
-  std::string suffix;
+  core::Str suffix;
   try {
     int32_t value;
     try {
@@ -57,7 +57,7 @@ static void report(core::NullableParam<std::string> x) {
     }
     suffix = std::to_string(bubble::more(value));
   } catch (core::TemperBubble const &) {
-    suffix = "";
+    suffix = core::Str();
   }
   core::Console::log(temper_globals::console.value, message + suffix);
 }
@@ -70,7 +70,7 @@ static int32_t calcRows(int32_t cols, int32_t total) {
   return core::Int::div_wrap(total, cols);
 }
 
-static int32_t countBelow(std::string s) {
+static int32_t countBelow(core::Str const & s) {
   int32_t i = 0;
   while (i < core::String::toInt32(s)) {
     i = core::Int::add(i, 1);
@@ -124,7 +124,7 @@ static bool isNone(core::NullableParam<int32_t> r) {
   return r == nullptr;
 }
 
-static std::string viaOrElse(int32_t n) {
+static core::Str viaOrElse(int32_t n) {
   int32_t value;
   try {
     value = firstOver(n);
@@ -147,7 +147,7 @@ static std::string viaOrElse(int32_t n) {
 }
 
 static void branch(int32_t a, int32_t b) {
-  std::string c = a == 0 ? (b == 0 ? "00" : b == 1 ? "01" : b == 2 ? "02" : "0x") : a == 1 ? "1x" : a == 2 ? "2x" : a == 3 ? "3x" : "xx";
+  core::Str c = a == 0 ? (b == 0 ? TEMPER_STR("00") : b == 1 ? TEMPER_STR("01") : b == 2 ? TEMPER_STR("02") : TEMPER_STR("0x")) : a == 1 ? TEMPER_STR("1x") : a == 2 ? TEMPER_STR("2x") : a == 3 ? TEMPER_STR("3x") : TEMPER_STR("xx");
   core::Console::log(temper_globals::console.value, "branch(" + std::to_string(a) + ", " + std::to_string(b) + ") -> " + c);
 }
 
@@ -155,12 +155,12 @@ void global_init_init() {
   core::init_once([] {
     temper_globals::console.construct();
     temper_globals::console.value = core::Console::get_console();
-    bubble::report("hi");
+    bubble::report(TEMPER_STR("hi"));
     bubble::report(nullptr);
     core::Console::log(temper_globals::console.value, std::to_string(calcRows(3, 6)));
     int32_t value;
     try {
-      value = bubble::countBelow("abc");
+      value = bubble::countBelow(TEMPER_STR("abc"));
     } catch (core::TemperBubble const &) {
       value = -1;
     }

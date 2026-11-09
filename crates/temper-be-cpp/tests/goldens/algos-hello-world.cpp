@@ -22,7 +22,7 @@ namespace core = temper::core;
 void global_init_init() {
   core::init_once([] {
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
-    core::Console::log(console, "Hello, World!");
+    core::Console::log(console, TEMPER_STR("Hello, World!"));
   });
 }
 

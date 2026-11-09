@@ -19,6 +19,11 @@ template <class T>
 struct SI;
 template <class T>
 struct SSub;
+template <class T>
+struct Holder;
+template <class L>
+struct Labeled;
+struct LabeledSub;
 struct AllAlone;
 struct High;
 struct Low1;
@@ -27,15 +32,15 @@ struct Low2;
 struct Low3;
 
 struct I : public virtual temper::core::AnyValueBase {
-  virtual std::string get_x() = 0;
+  virtual temper::core::Str get_x() = 0;
 };
 
 struct J : public virtual I {};
 
 struct C : public virtual J {
-  std::string x;
-  static std::shared_ptr<C> make(std::string x);
-  std::string get_x() override;
+  temper::core::Str x;
+  static std::shared_ptr<C> make(temper::core::Str const & x);
+  temper::core::Str get_x() override;
 };
 
 template <class T>
@@ -57,17 +62,32 @@ struct SSub : public virtual SI<T> {
   T get_thing() const override;
 };
 
+template <class T>
+struct Holder : public virtual temper::core::AnyValueBase {};
+
+template <class L>
+struct Labeled : public virtual Holder<std::shared_ptr<C>> {
+  virtual temper::core::Str label(L l) const = 0;
+};
+
+struct LabeledSub : public virtual Labeled<temper::core::Str> {
+  std::shared_ptr<C> thing;
+  static std::shared_ptr<LabeledSub> make(std::shared_ptr<C> const & thing);
+  temper::core::Str label(temper::core::Str l) const override;
+  std::shared_ptr<C> get_thing() const;
+};
+
 struct AllAlone : public virtual I {};
 
 struct High : public virtual temper::core::AnyValueBase {
-  virtual std::string toString() const = 0;
+  virtual temper::core::Str toString() const = 0;
   virtual bool eq(std::shared_ptr<High> const & other) const = 0;
 };
 
 struct Low1 : public virtual High {
   int32_t i;
   static std::shared_ptr<Low1> make(int32_t i);
-  std::string toString() const override;
+  temper::core::Str toString() const override;
   bool eq(std::shared_ptr<High> const & other) const override;
   int32_t get_i() const;
 };
@@ -75,16 +95,16 @@ struct Low1 : public virtual High {
 struct Mid : public virtual High {};
 
 struct Low2 : public virtual Mid {
-  std::string s;
-  static std::shared_ptr<Low2> make(std::string s);
-  std::string toString() const override;
+  temper::core::Str s;
+  static std::shared_ptr<Low2> make(temper::core::Str const & s);
+  temper::core::Str toString() const override;
   bool eq(std::shared_ptr<High> const & other) const override;
-  std::string get_s() const;
+  temper::core::Str get_s() const;
 };
 
 struct Low3 : public virtual Mid {
   static std::shared_ptr<Low3> make();
-  std::string toString() const override;
+  temper::core::Str toString() const override;
   bool eq(std::shared_ptr<High> const & other) const override;
 };
 
@@ -130,14 +150,28 @@ static IT leastX(IT a, IT b) {
   }
 }
 
-std::shared_ptr<C> C::make(std::string x) {
+std::shared_ptr<C> C::make(core::Str const & x) {
   std::shared_ptr<C> self = std::make_shared<C>();
   self->x = x;
   return self;
 }
 
-std::string C::get_x() {
+core::Str C::get_x() {
   return this->x;
+}
+
+std::shared_ptr<LabeledSub> LabeledSub::make(std::shared_ptr<C> const & thing) {
+  std::shared_ptr<LabeledSub> self = std::make_shared<LabeledSub>();
+  self->thing = thing;
+  return self;
+}
+
+core::Str LabeledSub::label(core::Str l) const {
+  return l + ": " + this->thing->x;
+}
+
+std::shared_ptr<C> LabeledSub::get_thing() const {
+  return this->thing;
 }
 
 std::shared_ptr<Low1> Low1::make(int32_t i) {
@@ -146,7 +180,7 @@ std::shared_ptr<Low1> Low1::make(int32_t i) {
   return self;
 }
 
-std::string Low1::toString() const {
+core::Str Low1::toString() const {
   return "Low1(" + std::to_string(this->i) + ")";
 }
 
@@ -162,13 +196,13 @@ int32_t Low1::get_i() const {
   return this->i;
 }
 
-std::shared_ptr<Low2> Low2::make(std::string s) {
+std::shared_ptr<Low2> Low2::make(core::Str const & s) {
   std::shared_ptr<Low2> self = std::make_shared<Low2>();
   self->s = s;
   return self;
 }
 
-std::string Low2::toString() const {
+core::Str Low2::toString() const {
   return "Low2(" + this->s + ")";
 }
 
@@ -180,7 +214,7 @@ bool Low2::eq(std::shared_ptr<High> const & other) const {
   }
 }
 
-std::string Low2::get_s() const {
+core::Str Low2::get_s() const {
   return this->s;
 }
 
@@ -189,8 +223,8 @@ std::shared_ptr<Low3> Low3::make() {
   return self;
 }
 
-std::string Low3::toString() const {
-  return "Low3";
+core::Str Low3::toString() const {
+  return TEMPER_STR("Low3");
 }
 
 bool Low3::eq(std::shared_ptr<High> const & other) const {
@@ -200,8 +234,8 @@ bool Low3::eq(std::shared_ptr<High> const & other) const {
 void global_init_init() {
   core::init_once([] {
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
-    std::shared_ptr<C> a = C::make("foo");
-    std::shared_ptr<C> b = C::make("bar");
+    std::shared_ptr<C> a = C::make(TEMPER_STR("foo"));
+    std::shared_ptr<C> b = C::make(TEMPER_STR("bar"));
     core::Console::log(console, "leastX of " + a->x + " and " + b->x + " is " + property_members::leastX<std::shared_ptr<C>>(a, b)->x + ".");
     std::shared_ptr<I> i = a;
     core::Console::log(console, "As an I, a.x is " + i->get_x() + ".");
@@ -211,12 +245,14 @@ void global_init_init() {
     core::Console::log(console, "Genericallier, x is still " + std::shared_ptr<I>(dj->thing)->get_x() + ".");
     std::shared_ptr<SI<std::shared_ptr<C>>> si = SSub<std::shared_ptr<C>>::make(a);
     core::Console::log(console, "Sealed thing is " + si->get_thing()->x + ".");
+    std::shared_ptr<Labeled<core::Str>> labeled = LabeledSub::make(a);
+    core::Console::log(console, "Labeled thing is " + labeled->label(TEMPER_STR("first")) + ".");
     std::shared_ptr<High> high1 = Low1::make(11);
     std::shared_ptr<High> high1b = Low1::make(12);
     std::shared_ptr<High> high1c = Low1::make(12);
-    std::shared_ptr<High> high2 = Low2::make("two");
-    std::shared_ptr<High> high2b = Low2::make("to be");
-    std::shared_ptr<High> high2c = Low2::make("to be");
+    std::shared_ptr<High> high2 = Low2::make(TEMPER_STR("two"));
+    std::shared_ptr<High> high2b = Low2::make(TEMPER_STR("to be"));
+    std::shared_ptr<High> high2c = Low2::make(TEMPER_STR("to be"));
     std::shared_ptr<High> high3 = Low3::make();
     std::shared_ptr<High> high3b = Low3::make();
     std::shared_ptr<core::Pair<std::shared_ptr<High>, std::shared_ptr<High>>> value = core::PairFactory::make<std::shared_ptr<High>, std::shared_ptr<High>>(high1, high1b);

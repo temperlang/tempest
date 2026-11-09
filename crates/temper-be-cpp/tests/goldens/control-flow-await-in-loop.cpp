@@ -22,8 +22,8 @@ namespace core = temper::core;
 namespace temper_globals {
 
 static core::GlobalSlot<std::shared_ptr<core::Console::Type>> console;
-static core::GlobalSlot<std::shared_ptr<core::PromiseBuilder<std::string>>> once;
-static core::GlobalSlot<std::shared_ptr<core::PromiseBuilder<std::string>>> later;
+static core::GlobalSlot<std::shared_ptr<core::PromiseBuilder<core::Str>>> once;
+static core::GlobalSlot<std::shared_ptr<core::PromiseBuilder<core::Str>>> later;
 
 }  // namespace temper_globals
 
@@ -33,19 +33,19 @@ void global_init_init() {
     temper_globals::once.construct();
     temper_globals::later.construct();
     temper_globals::console.value = core::Console::get_console();
-    temper_globals::once.value = core::PromiseBuilderNs::make<std::string>();
-    core::complete(temper_globals::once.value, std::string("same"));
-    temper_globals::later.value = core::PromiseBuilderNs::make<std::string>();
+    temper_globals::once.value = core::PromiseBuilderNs::make<core::Str>();
+    core::complete(temper_globals::once.value, TEMPER_STR("same"));
+    temper_globals::later.value = core::PromiseBuilderNs::make<core::Str>();
     auto fn = []() -> std::shared_ptr<core::SafeGenerator<std::shared_ptr<core::Empty>>> {
       std::shared_ptr<int32_t> caseIndex = std::make_shared<int32_t>(0);
       std::shared_ptr<int32_t> i = std::make_shared<int32_t>(0);
-      std::shared_ptr<std::string> s = std::make_shared<std::string>("");
+      std::shared_ptr<core::Str> s = std::make_shared<core::Str>(core::Str());
       std::shared_ptr<int32_t> j = std::make_shared<int32_t>(0);
-      std::shared_ptr<std::string> s2 = std::make_shared<std::string>("");
-      std::shared_ptr<std::string> t = std::make_shared<std::string>("");
-      std::shared_ptr<std::shared_ptr<core::Promise<std::string>>> awaited = std::make_shared<std::shared_ptr<core::Promise<std::string>>>(nullptr);
-      std::shared_ptr<std::shared_ptr<core::Promise<std::string>>> awaited2 = std::make_shared<std::shared_ptr<core::Promise<std::string>>>(nullptr);
-      std::shared_ptr<std::shared_ptr<core::Promise<std::string>>> awaited3 = std::make_shared<std::shared_ptr<core::Promise<std::string>>>(nullptr);
+      std::shared_ptr<core::Str> s2 = std::make_shared<core::Str>(core::Str());
+      std::shared_ptr<core::Str> t = std::make_shared<core::Str>(core::Str());
+      std::shared_ptr<std::shared_ptr<core::Promise<core::Str>>> awaited = std::make_shared<std::shared_ptr<core::Promise<core::Str>>>(nullptr);
+      std::shared_ptr<std::shared_ptr<core::Promise<core::Str>>> awaited2 = std::make_shared<std::shared_ptr<core::Promise<core::Str>>>(nullptr);
+      std::shared_ptr<std::shared_ptr<core::Promise<core::Str>>> awaited3 = std::make_shared<std::shared_ptr<core::Promise<core::Str>>>(nullptr);
       auto convertedCoroutine = [=](std::shared_ptr<core::SafeGenerator<std::shared_ptr<core::Empty>>> generator) -> std::shared_ptr<core::GeneratorResult<std::shared_ptr<core::Empty>>> {
         while (true) {
           int32_t caseIndexLocal = (*caseIndex);
@@ -77,7 +77,7 @@ void global_init_init() {
               *caseIndex = 7;
               break;
             case 4:
-              *s = "?";
+              *s = TEMPER_STR("?");
               *caseIndex = 5;
               break;
             case 5:
@@ -121,7 +121,7 @@ void global_init_init() {
               }
               break;
             case 10:
-              *s2 = "?";
+              *s2 = TEMPER_STR("?");
               *caseIndex = 11;
               break;
             case 11:
@@ -138,7 +138,7 @@ void global_init_init() {
               }
               break;
             case 13:
-              *t = "?";
+              *t = TEMPER_STR("?");
               *caseIndex = 14;
               break;
             case 14:
@@ -160,7 +160,7 @@ void global_init_init() {
       return core::safe_adapt_generator_fn<std::shared_ptr<core::Empty>>(convertedCoroutine);
     };
     core::async_run(fn);
-    core::complete(temper_globals::later.value, std::string("later"));
+    core::complete(temper_globals::later.value, TEMPER_STR("later"));
   });
 }
 

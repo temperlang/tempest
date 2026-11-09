@@ -70,7 +70,7 @@ void global_init_init() {
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
     double a = 3.0;
     double b = a + 1.0;
-    std::string values = core::List::join(core::List::make<double>(a, b, norm(a, b)), ", ", [](double it) -> std::string { return core::Float64::toString(it); });
+    core::Str values = core::List::join(core::List::make<double>(a, b, norm(a, b)), TEMPER_STR(", "), [](double it) -> core::Str { return core::Float64::toString(it); });
     core::Console::log(console, values + " triangle");
     core::Console::log(console, core::Float64::toString(functions::something(core::List::make<double>(a, b))));
   });

@@ -51,7 +51,7 @@ void global_init_init() {
         int32_t i3 = 0;
         while (i3 < 4) {
           {
-            std::string str = "row " + std::to_string(i3) + " =";
+            core::Str str = "row " + std::to_string(i3) + " =";
             int32_t j = 0;
             while (true) {
               int32_t t = n;
@@ -134,14 +134,14 @@ void global_init_init() {
         int32_t i5 = 0;
         while (i5 < 10) {
           {
-            std::string str2 = "row " + std::to_string(i5) + " =";
+            core::Str str2 = "row " + std::to_string(i5) + " =";
             int32_t j3 = 0;
             while (true) {
               int32_t t2 = val;
               val = core::Int::add(t2, 1);
               str2 = str2 + " " + std::to_string(t2);
               if (i5 == 4) {
-                core::Console::log(console, "break");
+                core::Console::log(console, TEMPER_STR("break"));
                 goto outerEnd;
               }
               if (i5 <= j3) {

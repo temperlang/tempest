@@ -22,12 +22,12 @@ namespace core = temper::core;
 namespace temper_globals {
 
 static core::GlobalSlot<std::shared_ptr<core::Console::Type>> console;
-static core::GlobalSlot<std::shared_ptr<std::deque<std::string>>> deque;
+static core::GlobalSlot<std::shared_ptr<std::deque<core::Str>>> deque;
 
 }  // namespace temper_globals
 
 static void checkEmpty() {
-  core::Console::log(temper_globals::console.value, core::Deque::isEmpty<std::string>(temper_globals::deque.value) ? "Empty" : "Not empty");
+  core::Console::log(temper_globals::console.value, core::Deque::isEmpty<core::Str>(temper_globals::deque.value) ? TEMPER_STR("Empty") : TEMPER_STR("Not empty"));
 }
 
 void global_init_init() {
@@ -35,20 +35,20 @@ void global_init_init() {
     temper_globals::console.construct();
     temper_globals::deque.construct();
     temper_globals::console.value = core::Console::get_console();
-    temper_globals::deque.value = core::Deque::make<std::string>();
+    temper_globals::deque.value = core::Deque::make<core::Str>();
     checkEmpty();
-    if (!core::Deque::isEmpty<std::string>(temper_globals::deque.value)) {
-      core::Console::log(temper_globals::console.value, core::Deque::removeFirst<std::string>(temper_globals::deque.value));
+    if (!core::Deque::isEmpty<core::Str>(temper_globals::deque.value)) {
+      core::Console::log(temper_globals::console.value, core::Deque::removeFirst<core::Str>(temper_globals::deque.value));
     }
-    core::Deque::add<std::string>(temper_globals::deque.value, "foo");
-    core::Deque::add<std::string>(temper_globals::deque.value, "bar");
-    core::Console::log(temper_globals::console.value, core::Deque::removeFirst<std::string>(temper_globals::deque.value));
-    core::Deque::add<std::string>(temper_globals::deque.value, "baz");
-    core::Console::log(temper_globals::console.value, core::Deque::removeFirst<std::string>(temper_globals::deque.value));
-    core::Deque::add<std::string>(temper_globals::deque.value, "boo");
+    core::Deque::add<core::Str>(temper_globals::deque.value, TEMPER_STR("foo"));
+    core::Deque::add<core::Str>(temper_globals::deque.value, TEMPER_STR("bar"));
+    core::Console::log(temper_globals::console.value, core::Deque::removeFirst<core::Str>(temper_globals::deque.value));
+    core::Deque::add<core::Str>(temper_globals::deque.value, TEMPER_STR("baz"));
+    core::Console::log(temper_globals::console.value, core::Deque::removeFirst<core::Str>(temper_globals::deque.value));
+    core::Deque::add<core::Str>(temper_globals::deque.value, TEMPER_STR("boo"));
     checkEmpty();
-    while (!core::Deque::isEmpty<std::string>(temper_globals::deque.value)) {
-      core::Console::log(temper_globals::console.value, core::Deque::removeFirst<std::string>(temper_globals::deque.value));
+    while (!core::Deque::isEmpty<core::Str>(temper_globals::deque.value)) {
+      core::Console::log(temper_globals::console.value, core::Deque::removeFirst<core::Str>(temper_globals::deque.value));
     }
     checkEmpty();
   });

@@ -1,0 +1,81 @@
+tmpl 1 model 1 library `getter-constness` 0.0.0
+
+uses `temper-core`#25 0.1.0 {
+  class Int32#26 {
+    connected method toString#27(radix?: Int32): String;
+  }
+  interface Console#28 {
+    connected method log#29(message: String): Void;
+  }
+  connected fn getConsole#33(name?: String): Console#28;
+}
+
+module `getter-constness`#0 {
+  let ~console#30: Console#28;
+
+  interface HasState#1 {
+    abstract get state#5(): Int32;
+    abstract set state#6(x#23: Int32): Void;
+  }
+
+  class Holder#2 extends HasState#1 {
+    private var current#7: Int32;
+    constructor constructor#11(): Holder#2 {
+      this.current#7 = 0;
+    }
+    get state#8(): Int32 {
+      return this.current#7;
+    }
+    set state#9(x#24: Int32): Void {
+      this.current#7 = x#24;
+    }
+    method describe#10(): String {
+      return %String.cat("state ", this.state#8().toString#27(omitted));
+    }
+  }
+
+  let holder#20: Holder#2;
+
+  let hasState#21: HasState#1;
+
+  class Node#3 {
+    let name#12: String;
+    constructor constructor#17(name#31: String): Node#3 {
+      this.name#12 = name#31;
+    }
+    get me#13(): Node#3 {
+      return this;
+    }
+    get myName#14(): String {
+      return this.me#13().name#12;
+    }
+    method wrap#15(): Wrapper#4 {
+      return new constructor#19(this);
+    }
+    method wrappedName#16(): String {
+      return this.wrap#15().node#18.name#12;
+    }
+  }
+
+  class Wrapper#4 {
+    let node#18: Node#3;
+    constructor constructor#19(node#32: Node#3): Wrapper#4 {
+      this.node#18 = node#32;
+    }
+  }
+
+  let node#22: Node#3;
+
+  init {
+    init ~console#30 = getConsole#33(omitted);
+    init holder#20 = new constructor#11();
+    holder#20.state#9(2);
+    ~console#30.log#29(holder#20.describe#10());
+    init hasState#21 = (upcast(holder#20)): HasState#1;
+    hasState#21.state#6(3);
+    ~console#30.log#29(hasState#21.state#5().toString#27(omitted));
+    init node#22 = new constructor#17("n");
+    ~console#30.log#29(node#22.myName#14());
+    ~console#30.log#29(node#22.wrappedName#16());
+  }
+}

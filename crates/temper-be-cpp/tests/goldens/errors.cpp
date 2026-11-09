@@ -16,7 +16,7 @@ struct Box : public std::enable_shared_from_this<Box> {
   int32_t value;
   static std::shared_ptr<Box> make(int32_t value);
   int32_t get() const;
-  std::string bad() const;
+  temper::core::Str bad() const;
   int32_t get_value() const;
 };
 
@@ -44,11 +44,11 @@ static int32_t undeclared() {
   core::bubble();
 }
 
-static int32_t misspelled(std::string) {
+static int32_t misspelled(core::Str const &) {
   core::bubble();
 }
 
-static int32_t misspelledMethod(std::string) {
+static int32_t misspelledMethod(core::Str const &) {
   core::bubble();
 }
 
@@ -64,11 +64,11 @@ static int32_t afterUnclosed(int32_t x) {
   return core::Int::mul(x, 3);
 }
 
-static std::string dropped(int32_t) {
+static core::Str dropped(int32_t) {
   core::bubble();
 }
 
-static std::string stored(int32_t) {
+static core::Str stored(int32_t) {
   core::bubble();
 }
 
@@ -86,7 +86,7 @@ int32_t Box::get() const {
   return this->value;
 }
 
-std::string Box::bad() const {
+core::Str Box::bad() const {
   core::bubble();
 }
 
@@ -111,13 +111,13 @@ void global_init_init() {
     }
     int32_t c;
     try {
-      c = errors::misspelled("a");
+      c = errors::misspelled(TEMPER_STR("a"));
     } catch (core::TemperBubble const &) {
       c = -1;
     }
     int32_t d;
     try {
-      d = errors::misspelledMethod("a");
+      d = errors::misspelledMethod(TEMPER_STR("a"));
     } catch (core::TemperBubble const &) {
       d = -1;
     }
@@ -128,19 +128,19 @@ void global_init_init() {
       e = -1;
     }
     std::shared_ptr<Box> box = Box::make(3);
-    std::string f;
+    core::Str f;
     try {
       f = box->bad();
     } catch (core::TemperBubble const &) {
-      f = "caught";
+      f = TEMPER_STR("caught");
     }
     core::Console::log(console, std::to_string(good(1)) + " " + std::to_string(a) + " " + std::to_string(b) + " " + std::to_string(c) + " " + std::to_string(d) + " " + std::to_string(e));
     core::Console::log(console, std::to_string(errors::unknownType(core::any_box(1))) + " " + std::to_string(afterUnclosed(2)) + " " + std::to_string(box->get()) + " " + f);
-    std::string g;
+    core::Str g;
     try {
       g = stored(1);
     } catch (core::TemperBubble const &) {
-      g = "caught";
+      g = TEMPER_STR("caught");
     }
     int32_t h;
     try {
@@ -154,11 +154,11 @@ void global_init_init() {
     } catch (core::TemperBubble const &) {
       i = -1;
     }
-    std::string j;
+    core::Str j;
     try {
       j = dropped(1);
     } catch (core::TemperBubble const &) {
-      j = "dropped";
+      j = TEMPER_STR("dropped");
     }
     core::Console::log(console, g + " " + std::to_string(h) + " " + std::to_string(i) + " " + j);
   });

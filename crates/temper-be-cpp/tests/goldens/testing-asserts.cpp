@@ -18,7 +18,7 @@ struct Vec2 : public std::enable_shared_from_this<Vec2> {
   double x;
   double y;
   static std::shared_ptr<Vec2> make(double x, double y);
-  std::string toString();
+  temper::core::Str toString();
   double get_x() const;
   double get_y() const;
 };
@@ -58,7 +58,7 @@ std::shared_ptr<Vec2> Vec2::make(double x, double y) {
   return self;
 }
 
-std::string Vec2::toString() {
+core::Str Vec2::toString() {
   std::shared_ptr<Vec2> self = shared_from_this();
   return "(" + core::Float64::toString(self->x) + ", " + core::Float64::toString(self->y) + ") size squared " + core::Float64::toString(asserts::normSquared(self));
 }
@@ -90,23 +90,23 @@ int32_t TestHelper::get_j() const {
   return this->j;
 }
 
-static void assertMoreThings(std::shared_ptr<temper_std::Test> const & t, std::shared_ptr<TestHelper> const & helper, std::shared_ptr<std::vector<std::shared_ptr<std::vector<std::string>>>> const & strings) {
+static void assertMoreThings(std::shared_ptr<temper_std::Test> const & t, std::shared_ptr<TestHelper> const & helper, std::shared_ptr<std::vector<std::shared_ptr<std::vector<core::Str>>>> const & strings) {
   {
     int32_t i = 0;
-    while (i < core::List::length<std::shared_ptr<std::vector<std::string>>>(strings)) {
+    while (i < core::List::length<std::shared_ptr<std::vector<core::Str>>>(strings)) {
       {
         int32_t j = 0;
-        while (j < core::List::length<std::string>(core::List::get<std::shared_ptr<std::vector<std::string>>>(strings, i))) {
+        while (j < core::List::length<core::Str>(core::List::get<std::shared_ptr<std::vector<core::Str>>>(strings, i))) {
           {
             int32_t actual = helper->i;
             int32_t expected = helper->j;
-            t->assert_(actual == expected, [=]() -> std::string { return "expected helper.i == (" + std::to_string(expected) + ") not (" + std::to_string(actual) + ")"; });
+            t->assert_(actual == expected, [=]() -> core::Str { return "expected helper.i == (" + std::to_string(expected) + ") not (" + std::to_string(actual) + ")"; });
           }
-          std::string s = core::List::get<std::string>(core::List::get<std::shared_ptr<std::vector<std::string>>>(strings, i), j);
+          core::Str s = core::List::get<core::Str>(core::List::get<std::shared_ptr<std::vector<core::Str>>>(strings, i), j);
           {
-            std::string actual = s;
-            std::string expected = "hi";
-            t->assert_(actual == expected, [=]() -> std::string { return "expected s == (" + expected + ") not (" + actual + ")"; });
+            core::Str actual = s;
+            core::Str expected = TEMPER_STR("hi");
+            t->assert_(actual == expected, [=]() -> core::Str { return "expected s == (" + expected + ") not (" + actual + ")"; });
           }
           j = core::Int::add(j, 1);
         }
@@ -119,7 +119,7 @@ static void assertMoreThings(std::shared_ptr<temper_std::Test> const & t, std::s
 void global_init_init() {
   core::init_once([] {
     temper_std::global_init_testing();
-    std::string name = "case";
+    core::Str name = TEMPER_STR("case");
   });
 }
 
@@ -130,21 +130,21 @@ void global_init_init() {
 namespace asserts {
 
 void aTestCase(std::shared_ptr<temper_std::Test> const & test) {
-  test->assert_(core::Float64::eq(asserts::normSquared(Vec2::make(0.0, 0.0)), 0.0), []() -> std::string { return "Oh noes"; });
+  test->assert_(core::Float64::eq(asserts::normSquared(Vec2::make(0.0, 0.0)), 0.0), []() -> core::Str { return TEMPER_STR("Oh noes"); });
 }
 
 void aFailingTest(std::shared_ptr<temper_std::Test> const & test) {
-  test->assert_(false, []() -> std::string { return "because it's wrong"; });
+  test->assert_(false, []() -> core::Str { return TEMPER_STR("because it's wrong"); });
   std::shared_ptr<TestHelper> helper = TestHelper::make(3, 2);
-  asserts::assertMoreThings(test, helper, core::List::make<std::shared_ptr<std::vector<std::string>>>(core::List::make<std::string>("bye")));
+  asserts::assertMoreThings(test, helper, core::List::make<std::shared_ptr<std::vector<core::Str>>>(core::List::make<core::Str>(TEMPER_STR("bye"))));
 }
 
 void exported(std::shared_ptr<temper_std::Test> const & test) {
   std::shared_ptr<Vec2> vec = Vec2::make(1.5, 2.5);
   {
-    std::string actual = vec->toString();
-    std::string expected = "(1.5, 2.5) size squared 8.5";
-    test->assert_(actual == expected, [=]() -> std::string { return "expected vec.toString() == (" + expected + ") not (" + actual + ")"; });
+    core::Str actual = vec->toString();
+    core::Str expected = TEMPER_STR("(1.5, 2.5) size squared 8.5");
+    test->assert_(actual == expected, [=]() -> core::Str { return "expected vec.toString() == (" + expected + ") not (" + actual + ")"; });
   }
 }
 
@@ -173,7 +173,7 @@ int main() {
         auto messages = test->messagesCombined();
         return temper::core::TestOutcome{
             test->get_passing(),
-            temper::core::is_null(messages) ? std::string() : static_cast<std::string>(messages)};
+            temper::core::is_null(messages) ? std::string() : temper::core::Str(messages).str()};
       }},
       {"a failing test", [] {
         auto test = temper_std::Test::make();
@@ -181,7 +181,7 @@ int main() {
         auto messages = test->messagesCombined();
         return temper::core::TestOutcome{
             test->get_passing(),
-            temper::core::is_null(messages) ? std::string() : static_cast<std::string>(messages)};
+            temper::core::is_null(messages) ? std::string() : temper::core::Str(messages).str()};
       }},
       {"exported", [] {
         auto test = temper_std::Test::make();
@@ -189,7 +189,7 @@ int main() {
         auto messages = test->messagesCombined();
         return temper::core::TestOutcome{
             test->get_passing(),
-            temper::core::is_null(messages) ? std::string() : static_cast<std::string>(messages)};
+            temper::core::is_null(messages) ? std::string() : temper::core::Str(messages).str()};
       }},
   });
 }

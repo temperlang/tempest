@@ -22,13 +22,13 @@ namespace core = temper::core;
 void global_init_init() {
   core::init_once([] {
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
-    core::Console::log(console, "1.min(3)");
+    core::Console::log(console, TEMPER_STR("1.min(3)"));
     core::Console::log(console, std::to_string(std::min(1, 3)));
-    core::Console::log(console, "3.min(1)");
+    core::Console::log(console, TEMPER_STR("3.min(1)"));
     core::Console::log(console, std::to_string(std::min(3, 1)));
-    core::Console::log(console, "1.max(3)");
+    core::Console::log(console, TEMPER_STR("1.max(3)"));
     core::Console::log(console, std::to_string(std::max(1, 3)));
-    core::Console::log(console, "3.max(1)");
+    core::Console::log(console, TEMPER_STR("3.max(1)"));
     core::Console::log(console, std::to_string(std::max(3, 1)));
   });
 }

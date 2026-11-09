@@ -15,13 +15,13 @@ struct Circle;
 struct Rectangle;
 
 struct Stringable : public virtual temper::core::AnyValueBase {
-  virtual std::string toString() const = 0;
+  virtual temper::core::Str toString() const = 0;
 };
 
 struct Circle : public virtual Stringable {
   int32_t radius;
   static std::shared_ptr<Circle> make(int32_t radius);
-  std::string toString() const override;
+  temper::core::Str toString() const override;
   int32_t get_radius() const;
 };
 
@@ -48,7 +48,7 @@ std::shared_ptr<Circle> Circle::make(int32_t radius) {
   return self;
 }
 
-std::string Circle::toString() const {
+core::Str Circle::toString() const {
   return "Circle of radius " + std::to_string(this->radius);
 }
 

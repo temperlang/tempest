@@ -1,31 +1,68 @@
 tmpl 1 model 1 library `pure-virtual` 0.0.0
 
-uses `temper-core`#7 0.1.0 {
-  interface Console#8 {
-    connected method log#9(message: String): Void;
+uses `temper-core`#21 0.1.0 {
+  interface Console#22 {
+    connected method log#23(message: String): Void;
   }
-  connected fn getConsole#11(name?: String): Console#8;
+  class Int32#29 {
+    connected method toString#30(radix?: Int32): String;
+  }
+  connected fn getConsole#31(name?: String): Console#22;
 }
 
 module `pure-virtual`#0 {
-  let ~console#10: Console#8;
+  let ~console#24: Console#22;
 
   interface Greeter#1 {
-    abstract method greet#3(): Void;
+    abstract method greet#8(): Void;
   }
 
   class HiGreeter#2 extends Greeter#1 {
-    constructor constructor#5(): HiGreeter#2 {}
-    method greet#4(): Void {
-      ~console#10.log#9("Hi, virtually!");
+    constructor constructor#10(): HiGreeter#2 {}
+    method greet#9(): Void {
+      ~console#24.log#23("Hi, virtually!");
     }
   }
 
-  let greeter#6: Greeter#1;
+  let greeter#18: Greeter#1;
+
+  interface Wrapper#3<T#7> {
+    abstract method wrap#11(item#25: T#7): T#7;
+  }
+
+  class Box#4 {
+    let label#12: String;
+    constructor constructor#13(label#26: String): Box#4 {
+      this.label#12 = label#26;
+    }
+  }
+
+  class BoxWrapper#5 extends Wrapper#3<Box#4> {
+    constructor constructor#15(): BoxWrapper#5 {}
+    method wrap#14(var item#27: Box#4): Box#4 {
+      item#27 = new constructor#13(%String.cat(%String.cat("[", item#27.label#12), "]"));
+      return item#27;
+    }
+  }
+
+  class IntWrapper#6 extends Wrapper#3<Int32> {
+    constructor constructor#17(): IntWrapper#6 {}
+    method wrap#16(item#28: Int32): Int32 {
+      return %Int32.add(item#28, 1);
+    }
+  }
+
+  let boxWrapper#19: Wrapper#3<Box#4>;
+
+  let intWrapper#20: Wrapper#3<Int32>;
 
   init {
-    init ~console#10 = getConsole#11(omitted);
-    init greeter#6 = (upcast(new constructor#5())): Greeter#1;
-    greeter#6.greet#3();
+    init ~console#24 = getConsole#31(omitted);
+    init greeter#18 = (upcast(new constructor#10())): Greeter#1;
+    greeter#18.greet#8();
+    init boxWrapper#19 = (upcast(new constructor#15())): Wrapper#3<Box#4>;
+    init intWrapper#20 = (upcast(new constructor#17())): Wrapper#3<Int32>;
+    ~console#24.log#23(boxWrapper#19.wrap#11(new constructor#13("box")).label#12);
+    ~console#24.log#23(intWrapper#20.wrap#11(41).toString#30(omitted));
   }
 }

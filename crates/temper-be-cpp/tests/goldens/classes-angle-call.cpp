@@ -23,9 +23,9 @@ struct Blah : public std::enable_shared_from_this<Blah<T>> {
 };
 
 struct Hi : public std::enable_shared_from_this<Hi> {
-  std::shared_ptr<Blah<std::string>> thing;
-  static std::shared_ptr<Hi> make(std::shared_ptr<Blah<std::string>> const & thing);
-  std::shared_ptr<Blah<std::string>> get_thing() const;
+  std::shared_ptr<Blah<temper::core::Str>> thing;
+  static std::shared_ptr<Hi> make(std::shared_ptr<Blah<temper::core::Str>> const & thing);
+  std::shared_ptr<Blah<temper::core::Str>> get_thing() const;
 };
 
 struct Classy : public std::enable_shared_from_this<Classy> {
@@ -65,19 +65,19 @@ static core::GlobalSlot<std::shared_ptr<core::Console::Type>> console;
 
 }  // namespace temper_globals
 
-std::shared_ptr<Hi> Hi::make(std::shared_ptr<Blah<std::string>> const & thing) {
+std::shared_ptr<Hi> Hi::make(std::shared_ptr<Blah<core::Str>> const & thing) {
   std::shared_ptr<Hi> self = std::make_shared<Hi>();
   self->thing = thing;
   return self;
 }
 
-std::shared_ptr<Blah<std::string>> Hi::get_thing() const {
+std::shared_ptr<Blah<core::Str>> Hi::get_thing() const {
   return this->thing;
 }
 
 static std::type_index whatever(int32_t n) {
   if (n == 0) {
-    core::Console::log(temper_globals::console.value, "0");
+    core::Console::log(temper_globals::console.value, TEMPER_STR("0"));
   }
   return std::type_index(typeid(void));
 }
@@ -125,11 +125,11 @@ void global_init_init() {
     temper_globals::console.construct();
     temper_globals::console.value = core::Console::get_console();
     whatever(1);
-    std::shared_ptr<std::vector<std::string>> someThings = core::List::make<std::string>("a", "b");
-    std::string first = Classy::first<std::string>(someThings);
-    std::string second = Classy::make(1)->indexed<std::string>(someThings);
+    std::shared_ptr<std::vector<core::Str>> someThings = core::List::make<core::Str>(TEMPER_STR("a"), TEMPER_STR("b"));
+    core::Str first = Classy::first<core::Str>(someThings);
+    core::Str second = Classy::make(1)->indexed<core::Str>(someThings);
     core::Console::log(temper_globals::console.value, "Some things: " + first + ", " + second);
-    core::Console::log(temper_globals::console.value, "Picked: " + Picker::make()->pick<std::string>(someThings));
+    core::Console::log(temper_globals::console.value, "Picked: " + Picker::make()->pick<core::Str>(someThings));
   });
 }
 

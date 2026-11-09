@@ -31,33 +31,33 @@ static bool before(bool a, bool b) {
   return a < b;
 }
 
-static std::string shifts(int32_t n) {
+static core::Str shifts(int32_t n) {
   return std::to_string(core::Int::shl(1, n)) + " " + std::to_string(core::Int::shr(-8, n)) + " " + std::to_string(core::Int::ushr(-8, core::Int::sub(n, 4)));
 }
 
-static std::string quoted(std::string s) {
+static core::Str quoted(core::Str const & s) {
   return "[" + s + "]";
 }
 
-static std::string swap(std::shared_ptr<std::vector<std::string>> const & a, std::shared_ptr<std::vector<std::string>> const & b) {
-  return core::List::get<std::string>(b, 0) + core::List::get<std::string>(a, 0);
+static core::Str swap(std::shared_ptr<std::vector<core::Str>> const & a, std::shared_ptr<std::vector<core::Str>> const & b) {
+  return core::List::get<core::Str>(b, 0) + core::List::get<core::Str>(a, 0);
 }
 
-static std::string move(std::shared_ptr<std::vector<std::string>> const & xs) {
-  return core::List::get<std::string>(xs, 0);
+static core::Str move(std::shared_ptr<std::vector<core::Str>> const & xs) {
+  return core::List::get<core::Str>(xs, 0);
 }
 
 void global_init_init() {
   core::init_once([] {
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
-    std::string std_ = "s";
+    core::Str std_ = TEMPER_STR("s");
     int32_t M_PI_ = 3;
     core::Console::log(console, std_ + " " + std::to_string(explicit_(1)) + " " + std::to_string(core_(7, 2)) + " " + std::to_string(M_PI_));
-    core::Console::log(console, core::Boolean::toString(before(false, true)) + " " + core::Boolean::toString(std::string("?\?=") < "?\?>"));
+    core::Console::log(console, core::Boolean::toString(before(false, true)) + " " + core::Boolean::toString(TEMPER_STR("?\?=") < TEMPER_STR("?\?>")));
     core::Console::log(console, shifts(33));
-    core::Console::log(console, core::Boolean::toString(std::string("a\000b", 3) == std::string("a\000b", 3)) + " " + core::Boolean::toString(std::string("a\000b", 3) == std::string("a\000c", 3)));
-    std::shared_ptr<std::vector<std::string>> xs = core::List::make<std::string>("x");
-    std::shared_ptr<std::vector<std::string>> ys = core::List::make<std::string>("y");
+    core::Console::log(console, core::Boolean::toString(TEMPER_STR("a\000b", 3) == TEMPER_STR("a\000b", 3)) + " " + core::Boolean::toString(TEMPER_STR("a\000b", 3) == TEMPER_STR("a\000c", 3)));
+    std::shared_ptr<std::vector<core::Str>> xs = core::List::make<core::Str>(TEMPER_STR("x"));
+    std::shared_ptr<std::vector<core::Str>> ys = core::List::make<core::Str>(TEMPER_STR("y"));
     core::Console::log(console, hiding::quoted(std_) + " " + hiding::swap(xs, ys) + " " + hiding::move(xs));
   });
 }

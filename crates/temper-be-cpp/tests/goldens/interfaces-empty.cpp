@@ -41,7 +41,7 @@ std::shared_ptr<HiGreeter> HiGreeter::make() {
 }
 
 void HiGreeter::greet() const {
-  core::Console::log(temper_globals::console.value, "Hi!");
+  core::Console::log(temper_globals::console.value, TEMPER_STR("Hi!"));
 }
 
 void global_init_init() {

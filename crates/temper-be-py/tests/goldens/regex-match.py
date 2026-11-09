@@ -112,6 +112,9 @@ try:
 except Exception:
     _t_0 = '-'
 _console.log(_t_0)
+_not_low: _Regex = _one_or_more(_CodeSet((_CodeRange(0, 47),), True)).compiled()
+_console.log(f"not low: {_not_low.find('-/a🌍-').full.value}")
+_console.log('not space or >: ' + _Repeat(_CodeSet((_CodePoints('\t'), _CodePoints('\n'), _CodePoints(' '), _CodePoints('>')), True), 1, None, False).compiled().find('ab>c').full.value)
 _id_start: _RegexNode = _CodeSet((_CodeRange(97, 122), _CodeRange(65, 90), _CodePoints('_')), False).compiled().data
 _id_continue: _Or = _Or((_id_start, _CodeSet((_CodeRange(48, 57),), False).compiled().data))
 _word: _Regex = _Sequence((_word_boundary, _id_start, _Repeat(_id_continue, 0, None), _word_boundary)).compiled()

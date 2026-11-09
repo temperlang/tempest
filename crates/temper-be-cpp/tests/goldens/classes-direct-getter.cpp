@@ -14,7 +14,7 @@ struct C;
 
 struct C : public std::enable_shared_from_this<C> {
   static std::shared_ptr<C> make();
-  std::string get_place() const;
+  temper::core::Str get_place() const;
 };
 
 }  // namespace direct_getter
@@ -31,8 +31,8 @@ std::shared_ptr<C> C::make() {
   return self;
 }
 
-std::string C::get_place() const {
-  return "Hilo, HI";
+core::Str C::get_place() const {
+  return TEMPER_STR("Hilo, HI");
 }
 
 void global_init_init() {

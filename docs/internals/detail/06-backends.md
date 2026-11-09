@@ -167,9 +167,11 @@ to write beside the output. CI checks the copy is current
 both compilers' output can mix; fixes are visible as patches and meant
 for upstream.
 
-**Cons:** the copy was taken from a Kotlin branch,
-`connected-type-fallback`, not `main` ([`vendor/temper/SOURCE.md`](../../../vendor/temper/SOURCE.md)).
-And some patches add API (a top-level turn and `awakeUpon` for Java,
+**Cons:** the copy follows Kotlin's `main` only as often as someone
+syncs it ([`vendor/temper/SOURCE.md`](../../../vendor/temper/SOURCE.md)
+names the commit), and a runtime change there, such as C++'s strings
+becoming a shared `Str` (#654), needs the backend to follow it in the
+same change. And some patches add API (a top-level turn and `awakeUpon` for Java,
 `awake_upon` for Rust, async for Lua), while six backends' package
 files still name `temper-core` 0.6.0, the version Kotlin publishes
 without them. A tempest-built package built against the published
@@ -268,7 +270,7 @@ spills nor fails; its translator hoists and orders operands itself.
 | **Statements in expressions** | translator, after `spill_with` | translator (`hoist`, `sink`), after `spill_with` | translator (`spilled`) | translator (`pre`, `t$0`) | translator, after `spill` | translator (`:=` for `??`) | native block expressions |
 | **Order of evaluation** | its own analysis ([`effects`](../../../crates/temper-be-cpp/src/effects.rs)), since C++ leaves argument order open | left to right | left to right | left to right | left to right | left to right | left to right |
 | **Checked by** | `g++ -Wall -Wextra -Wpedantic -Werror` and more; ASan, UBSan, TSan | `csc`, nullable references, warnings and analyzers as errors | `javac -Xlint:all -Werror` | `tsc --checkJs --strict` | `luac`, LuaLS | mypy and pyright, strict | `cargo build`, clippy |
-| **Notable** | module `var`s under a lock; shifts defined for every count; only exports in headers | parameter names are API, never renamed; culture-invariant formatting | lists that may hold null via `Core.listOf` | source maps ([`translate_with_source_maps`](../../../crates/temper-be-js/src/lib.rs)) | `goto` only for `continue` and jumps out of inner loops; LuaCATS annotations | module privates start with `_` | module state safe across threads; `Arc<String>` strings |
+| **Notable** | module `var`s under a lock; shifts defined for every count; only exports in headers; strings the runtime's shared `core::Str`, literals `TEMPER_STR("…")`, as Kotlin | parameter names are API, never renamed; culture-invariant formatting | lists that may hold null via `Core.listOf` | source maps ([`translate_with_source_maps`](../../../crates/temper-be-js/src/lib.rs)) | `goto` only for `continue` and jumps out of inner loops; LuaCATS annotations | module privates start with `_` | module state safe across threads; `Arc<String>` strings |
 
 Each row is from the crate's `lib.rs` doc comment and its profile;
 the per-language API rules are in

@@ -13,6 +13,8 @@ pub(crate) fn init() -> temper_core::Result<()> {
             println!("halfAndHalf false -> {}", half_and_half(f));
             println!("implicit    true  -> {}", implicit(t));
             println!("implicit    false -> {}", implicit(f));
+            println!("nested      true  false -> {}", nested(t, f));
+            println!("nested      false true  -> {}", nested(f, t));
             Ok(())
         })
         .clone()
@@ -38,4 +40,16 @@ pub(crate) fn implicit(b: bool) -> Arc<String> {
     } else {
         Arc::new("false".to_string())
     }
+}
+
+pub(crate) fn nested(a: bool, b: bool) -> Arc<String> {
+    let mut result = Arc::new("neither".to_string());
+    if a {
+        if b {
+            result = Arc::new("both".to_string());
+        }
+    } else {
+        result = Arc::new("not a".to_string());
+    }
+    result.clone()
 }

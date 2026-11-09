@@ -1,37 +1,127 @@
 tmpl 1 model 1 library `private-method` 0.0.0
 
-uses `temper-core`#10 0.1.0 {
-  interface Console#11 {
-    connected method log#12(message: String): Void;
+uses `temper-core`#40 0.1.0 {
+  interface Console#41 {
+    connected method log#42(message: String): Void;
   }
-  class Int32#14 {
-    connected method toString#15(radix?: Int32): String;
+  class Int32#44 {
+    connected method toString#45(radix?: Int32): String;
   }
-  connected fn getConsole#16(name?: String): Console#11;
+  class Boolean#51 {
+    connected method toString#52(): String;
+  }
+  connected fn getConsole#58(name?: String): Console#41;
 }
 
 module `private-method`#0 {
-  let ~console#13: Console#11;
+  let ~console#43: Console#41;
 
   class C#1 {
-    constructor constructor#5(): C#1 {}
-    private method helper#2(x#7: Int32): Int32 {
-      return %Int32.add(x#7, 1);
+    constructor constructor#10(): C#1 {}
+    private method helper#7(x#37: Int32): Int32 {
+      return %Int32.add(x#37, 1);
     }
-    method method1#3(x#8: Int32): Int32 {
-      return this.helper#2(%Int32.mul(x#8, 2));
+    method method1#8(x#38: Int32): Int32 {
+      return this.helper#7(%Int32.mul(x#38, 2));
     }
-    method method2#4(x#9: Int32): Int32 {
-      return this.helper#2(%Int32.mul(x#9, 3));
+    method method2#9(x#39: Int32): Int32 {
+      return this.helper#7(%Int32.mul(x#39, 3));
     }
   }
 
-  let c#6: C#1;
+  let c#33: C#1;
+
+  class Money#2 {
+    private let cents#11: Int32;
+    private var spent#12: Int32;
+    constructor constructor#21(cents#50: Int32): Money#2 {
+      this.cents#11 = cents#50;
+      this.spent#12 = 0;
+    }
+    private method whole#13(): Int32 {
+      return %Int32.divSafe(this.cents#11, 100);
+    }
+    private get rounded#14(): Int32 {
+      return %Int32.divSafe(%Int32.add(this.cents#11, 50), 100);
+    }
+    method plus#15(other#46: Money#2): Money#2 {
+      return new constructor#21(%Int32.add(this.cents#11, other#46.cents#11));
+    }
+    method sameWhole#16(other#47: Money#2): Boolean {
+      return %Int32.eq(this.whole#13(), other#47.whole#13());
+    }
+    method sameRounded#17(other#48: Money#2): Boolean {
+      return %Int32.eq(this.rounded#14(), other#48.rounded#14());
+    }
+    method spendFrom#18(other#49: Money#2): Void {
+      other#49.spent#12 = %Int32.add(other#49.spent#12, 1);
+    }
+    get timesSpent#19(): Int32 {
+      return this.spent#12;
+    }
+    method toString#20(): String {
+      return %String.cat(this.cents#11.toString#45(omitted), " cents");
+    }
+  }
+
+  let a#34: Money#2;
+
+  let b#35: Money#2;
+
+  interface Sink#3 {
+    abstract method end#22(): Int32;
+  }
+
+  class TenSink#4 extends Sink#3 {
+    constructor constructor#24(): TenSink#4 {}
+    method end#23(): Int32 {
+      return 10;
+    }
+  }
+
+  class Note#5 {
+    let body#25: String;
+    constructor constructor#27(body#54: String): Note#5 {
+      this.body#25 = body#54;
+    }
+    method text#26(more#53: String): Note#5 {
+      return new constructor#27(%String.cat(this.body#25, more#53));
+    }
+  }
+
+  class Label#6 {
+    private let end#28: Int32;
+    constructor constructor#32(end#55: Int32): Label#6 {
+      this.end#28 = end#55;
+    }
+    get text#29(): String {
+      return "label";
+    }
+    method close#30(sink#56: Sink#3): Int32 {
+      return %Int32.add(sink#56.end#22(), this.end#28);
+    }
+    method noted#31(more#57: String): String {
+      return new constructor#27(this.text#29()).text#26(more#57).body#25;
+    }
+  }
+
+  let label#36: Label#6;
 
   init {
-    init ~console#13 = getConsole#16(omitted);
-    init c#6 = new constructor#5();
-    ~console#13.log#12(%String.cat("method1(10)=", c#6.method1#3(10).toString#15(omitted)));
-    ~console#13.log#12(%String.cat("method2(10)=", c#6.method2#4(10).toString#15(omitted)));
+    init ~console#43 = getConsole#58(omitted);
+    init c#33 = new constructor#10();
+    ~console#43.log#42(%String.cat("method1(10)=", c#33.method1#8(10).toString#45(omitted)));
+    ~console#43.log#42(%String.cat("method2(10)=", c#33.method2#9(10).toString#45(omitted)));
+    init a#34 = new constructor#21(150);
+    init b#35 = new constructor#21(175);
+    ~console#43.log#42(%String.cat("plus: ", a#34.plus#15(b#35).toString#20()));
+    ~console#43.log#42(%String.cat("same whole: ", a#34.sameWhole#16(b#35).toString#52()));
+    ~console#43.log#42(%String.cat("same rounded: ", a#34.sameRounded#17(b#35).toString#52()));
+    a#34.spendFrom#18(b#35);
+    a#34.spendFrom#18(b#35);
+    ~console#43.log#42(%String.cat("b spent: ", b#35.timesSpent#19().toString#45(omitted)));
+    init label#36 = new constructor#32(1);
+    ~console#43.log#42(%String.cat("close: ", label#36.close#30((upcast(new constructor#24())): Sink#3).toString#45(omitted)));
+    ~console#43.log#42(%String.cat("noted: ", label#36.noted#31("!")));
   }
 }

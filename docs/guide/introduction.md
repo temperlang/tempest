@@ -199,12 +199,12 @@ class Person:
 namespace person {
 
 struct Person : public std::enable_shared_from_this<Person> {
-  std::string name;
+  temper::core::Str name;
   std::shared_ptr<temper_std::Date> dateOfBirth;
-  static std::shared_ptr<Person> make(std::string name, std::shared_ptr<temper_std::Date> const & dateOfBirth);
+  static std::shared_ptr<Person> make(temper::core::Str const & name, std::shared_ptr<temper_std::Date> const & dateOfBirth);
   int32_t ageAt(std::shared_ptr<temper_std::Date> const & date) const;
   int32_t get_age() const;
-  std::string get_name() const;
+  temper::core::Str get_name() const;
   std::shared_ptr<temper_std::Date> get_dateOfBirth() const;
 };
 

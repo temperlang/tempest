@@ -141,8 +141,9 @@ pub enum Expr {
     /// An `int64_t` literal: `int64_t{5}`, or `INT64_MIN`.
     Long(i64),
     Float(f64),
-    /// A string literal: a `const char*` in C++, which converts to
-    /// `std::string` where one is wanted.
+    /// A string literal: a `TEMPER_STR("…")`, the runtime's `core::Str`
+    /// made once, on first use, or `core::Str()` for the empty string,
+    /// as Kotlin's; in a concatenation, the bare `"…"`.
     Str(String),
     Bool(bool),
     Call(Box<Expr>, Vec<Expr>),
@@ -158,8 +159,9 @@ pub enum Expr {
         then: Box<Expr>,
         els: Box<Expr>,
     },
-    /// String concatenation of `std::string`s and literals, `a + b + c`,
-    /// never two literals in a row.
+    /// String concatenation of strings (`core::Str`s and `std::string`s)
+    /// and bare literals, `a + b + c`, never two literals in a row: a
+    /// `std::string`, which converts to `core::Str` where one is wanted.
     Concat(Vec<Expr>),
     /// A lambda called at once, `[&]() -> T { … }()`: statements where
     /// only an expression may go, printed on one line.
@@ -223,31 +225,25 @@ impl Expr {
         }
     }
 
-    /// Whether it's a `const char*` rather than a `std::string`: a string
-    /// literal, or a choice of two.
-    pub fn is_c_string(&self) -> bool {
+    /// Whether it's a string made as a `std::string`, not a `core::Str`:
+    /// a concatenation or `std::to_string`'s.
+    pub fn is_std_string(&self) -> bool {
         match self {
-            // One with a NUL is printed as a `std::string` already.
-            Expr::Str(s) => !s.contains('\0'),
-            Expr::Cond { then, els, .. } => then.is_c_string() && els.is_c_string(),
+            Expr::Concat(_) => true,
+            Expr::Call(f, _) => matches!(&**f, Expr::Name(n) if n == "std::to_string"),
             _ => false,
         }
     }
 
-    /// A `std::string` for a string-typed expression: a literal as
-    /// `std::string("…")`, where C++ would otherwise compare or add
-    /// pointers, or deduce `const char*`.
-    pub fn std_string(self) -> Expr {
-        match self {
-            Expr::Str(_) if self.is_c_string() => Expr::name("std::string").call(vec![self]),
-            Expr::Cond { cond, then, els } if then.is_c_string() && els.is_c_string() => {
-                Expr::Cond {
-                    cond,
-                    then: Box::new(then.std_string()),
-                    els,
-                }
-            }
-            e => e,
+    /// A `core::Str` for a string-typed expression: one made as a
+    /// `std::string` ([`is_std_string`](Self::is_std_string)) as
+    /// `core::Str(…)`, where C++ would otherwise deduce `std::string` or
+    /// find a choice of the two ambiguous.
+    pub fn str_value(self) -> Expr {
+        if self.is_std_string() {
+            Expr::name("core::Str").call(vec![self])
+        } else {
+            self
         }
     }
 
@@ -468,12 +464,37 @@ fn hidden(c: char) -> bool {
         || (n & 0xfffe) == 0xfffe
 }
 
-/// Prints a string literal, in UTF-8, as C++ compilers read sources by
-/// default and as `std::string` holds Temper's strings. A `?` after a `?`
-/// is escaped, since C++14 still reads trigraphs (`??=`), and a string
-/// with a NUL in it is a `std::string` of its length, since a literal
-/// would end there.
+/// A string literal as a `core::Str`: `TEMPER_STR("…")`, whose
+/// `static` the runtime makes once, on first use, so evaluating it
+/// allocates nothing, with the size after it where the text has a NUL,
+/// and `core::Str()` for the empty string, as Kotlin's.
+pub fn str_literal(text: &str) -> String {
+    if text.is_empty() {
+        return "core::Str()".into();
+    }
+    let quoted = quoted(text);
+    if text.contains('\0') {
+        format!("TEMPER_STR({quoted}, {})", text.len())
+    } else {
+        format!("TEMPER_STR({quoted})")
+    }
+}
+
+/// Prints a string literal as a bare `"…"` (a `const char*`), as a
+/// concatenation's parts are: a string with a NUL in it is a
+/// `std::string` of its length, since a literal would end there.
 pub fn string_literal(text: &str) -> String {
+    let out = quoted(text);
+    if text.contains('\0') {
+        return format!("std::string({out}, {})", text.len());
+    }
+    out
+}
+
+/// A string's text as a quoted C++ literal, in UTF-8, as C++ compilers
+/// read sources by default and as `core::Str` holds Temper's strings. A
+/// `?` after a `?` is escaped, since C++14 still reads trigraphs (`??=`).
+fn quoted(text: &str) -> String {
     let mut out = String::from("\"");
     let mut prev = '\0';
     for c in text.chars() {
@@ -497,9 +518,6 @@ pub fn string_literal(text: &str) -> String {
         prev = c;
     }
     out.push('"');
-    if text.contains('\0') {
-        return format!("std::string({out}, {})", text.len());
-    }
     out
 }
 
@@ -548,7 +566,7 @@ pub fn expr(e: &Expr, min: u8) -> String {
         Expr::Long(i64::MIN) => "INT64_MIN".into(),
         Expr::Long(n) => format!("int64_t{{{n}}}"),
         Expr::Float(f) => float_literal(*f),
-        Expr::Str(s) => string_literal(s),
+        Expr::Str(s) => str_literal(s),
         Expr::Bool(b) => b.to_string(),
         Expr::Call(f, args) => {
             let args: Vec<String> = args.iter().map(|a| expr(a, COND)).collect();
@@ -581,14 +599,21 @@ pub fn expr(e: &Expr, min: u8) -> String {
                 format!("{}{inner}", op.text())
             }
         }
+        // A `std::string` choice as a `core::Str`, which C++ would find
+        // ambiguous beside a `core::Str`.
         Expr::Cond { cond, then, els } => format!(
             "{} ? {} : {}",
             expr(cond, COND + 1),
-            expr(then, COND + 1),
-            expr(els, COND)
+            expr(&then.clone().str_value(), COND + 1),
+            expr(&els.clone().str_value(), COND)
         ),
         Expr::Concat(parts) => {
-            let parts: Vec<String> = parts.iter().map(|p| expr(p, ADD + 1)).collect();
+            let parts: Vec<String> = (parts.iter())
+                .map(|p| match p {
+                    Expr::Str(s) => string_literal(s),
+                    p => expr(p, ADD + 1),
+                })
+                .collect();
             parts.join(" + ")
         }
         Expr::Run { result, body } => {
@@ -1010,12 +1035,17 @@ mod tests {
             "std::numeric_limits<double>::quiet_NaN()"
         );
         assert_eq!(
-            expr(
-                &Expr::Str("a".into()).std_string().method("empty", vec![]),
-                0
-            ),
-            "std::string(\"a\").empty()"
+            expr(&Expr::Str("a".into()).method("empty", vec![]), 0),
+            "TEMPER_STR(\"a\").empty()"
         );
+        let concat = Expr::Concat(vec![Expr::Str("n=".into()), Expr::name("n")]);
+        assert_eq!(expr(&concat, 0), "\"n=\" + n");
+        let choice = Expr::Cond {
+            cond: Box::new(Expr::name("c")),
+            then: Box::new(concat),
+            els: Box::new(Expr::Str(String::new())),
+        };
+        assert_eq!(expr(&choice, 0), "c ? core::Str(\"n=\" + n) : core::Str()");
     }
 
     /// `core::` spelled out only where it's the alias, not another
@@ -1042,5 +1072,8 @@ mod tests {
             "\"\\uE000\\uFFFF\\U0010FFFF\u{1f600}\""
         );
         assert_eq!(string_literal("a\u{0}1"), "std::string(\"a\\0001\", 3)");
+        assert_eq!(str_literal("a\u{0}1"), "TEMPER_STR(\"a\\0001\", 3)");
+        assert_eq!(str_literal("hi"), "TEMPER_STR(\"hi\")");
+        assert_eq!(str_literal(""), "core::Str()");
     }
 }

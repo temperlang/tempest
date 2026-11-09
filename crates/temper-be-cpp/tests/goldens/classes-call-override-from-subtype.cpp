@@ -41,15 +41,15 @@ struct Slippy : public virtual Slappy {
 };
 
 struct A : public virtual temper::core::AnyValueBase {
-  virtual std::string a() const;
-  virtual std::string get_thing() const;
+  virtual temper::core::Str a() const;
+  virtual temper::core::Str get_thing() const;
 };
 
 struct B : public virtual A {};
 
 struct C : public virtual A {
-  std::string a() const override;
-  std::string get_thing() const override;
+  temper::core::Str a() const override;
+  temper::core::Str get_thing() const override;
 };
 
 struct D : public virtual B, public virtual C {
@@ -57,26 +57,26 @@ struct D : public virtual B, public virtual C {
 };
 
 struct ASplit : public virtual temper::core::AnyValueBase {
-  virtual std::string a() const;
+  virtual temper::core::Str a() const;
 };
 
 struct BSplit : public virtual ASplit {};
 
 struct CSplit : public virtual temper::core::AnyValueBase {
-  virtual std::string a() const;
+  virtual temper::core::Str a() const;
 };
 
 struct DSplit : public virtual BSplit, public virtual CSplit {
   static std::shared_ptr<DSplit> make();
-  std::string a() const override;
+  temper::core::Str a() const override;
 };
 
 struct ADeep : public virtual temper::core::AnyValueBase {
-  virtual std::string a() const;
+  virtual temper::core::Str a() const;
 };
 
 struct B1Deep : public virtual ADeep {
-  std::string a() const override;
+  temper::core::Str a() const override;
 };
 
 struct B2Deep : public virtual B1Deep {};
@@ -91,7 +91,7 @@ struct DDeep : public virtual B2Deep, public virtual CDeep {
 
 struct EDeep : public virtual CDeep, public virtual B2Deep {
   static std::shared_ptr<EDeep> make();
-  std::string a() const override;
+  temper::core::Str a() const override;
 };
 
 }  // namespace call_override_from_subtype
@@ -126,20 +126,20 @@ int32_t Slippy::get_thingumses() const {
   return 4;
 }
 
-std::string A::a() const {
-  return "A wins!";
+core::Str A::a() const {
+  return TEMPER_STR("A wins!");
 }
 
-std::string A::get_thing() const {
-  return "A has thing!";
+core::Str A::get_thing() const {
+  return TEMPER_STR("A has thing!");
 }
 
-std::string C::a() const {
-  return "C wins!";
+core::Str C::a() const {
+  return TEMPER_STR("C wins!");
 }
 
-std::string C::get_thing() const {
-  return "C has thing!";
+core::Str C::get_thing() const {
+  return TEMPER_STR("C has thing!");
 }
 
 std::shared_ptr<D> D::make() {
@@ -147,12 +147,12 @@ std::shared_ptr<D> D::make() {
   return self;
 }
 
-std::string ASplit::a() const {
-  return "A wins!";
+core::Str ASplit::a() const {
+  return TEMPER_STR("A wins!");
 }
 
-std::string CSplit::a() const {
-  return "C wins!";
+core::Str CSplit::a() const {
+  return TEMPER_STR("C wins!");
 }
 
 std::shared_ptr<DSplit> DSplit::make() {
@@ -160,16 +160,16 @@ std::shared_ptr<DSplit> DSplit::make() {
   return self;
 }
 
-std::string DSplit::a() const {
+core::Str DSplit::a() const {
   return CSplit::a();
 }
 
-std::string ADeep::a() const {
-  return "A wins!";
+core::Str ADeep::a() const {
+  return TEMPER_STR("A wins!");
 }
 
-std::string B1Deep::a() const {
-  return "B1 wins!";
+core::Str B1Deep::a() const {
+  return TEMPER_STR("B1 wins!");
 }
 
 std::shared_ptr<DDeep> DDeep::make() {
@@ -182,7 +182,7 @@ std::shared_ptr<EDeep> EDeep::make() {
   return self;
 }
 
-std::string EDeep::a() const {
+core::Str EDeep::a() const {
   return ADeep::a();
 }
 

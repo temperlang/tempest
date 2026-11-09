@@ -33,6 +33,28 @@ pub(crate) fn init() -> temper_core::Result<()> {
                 Arc::new("Back to square zero.".to_string()),
             );
             println!("{}", temper_core::string::builder::to_string(&builder));
+            temper_core::string::builder::clear(&builder);
+            temper_core::string::builder::append(
+                &builder,
+                Arc::new("a??=b??/c??>d???e".to_string()),
+            );
+            let marks = temper_core::string::builder::to_string(&builder);
+            println!("{marks}");
+            println!("Same: {}", marks.as_str() == "a??=b??/c??>d???e");
+            temper_core::string::builder::clear(&builder);
+            temper_core::string::builder::append(&builder, Arc::new("??".to_string()));
+            if temper_core::string::builder::append_code_point(&builder, 1).is_err() {
+                println!("No U+1.");
+            }
+            temper_core::string::builder::append(&builder, Arc::new("0".to_string()));
+            if temper_core::string::builder::append_code_point(&builder, 8364).is_err() {
+                println!("No euro.");
+            }
+            temper_core::string::builder::append(&builder, Arc::new("1".to_string()));
+            println!(
+                "Digits after escapes: {}",
+                temper_core::string::builder::to_string(&builder).as_str() == "??\u{1}0€1"
+            );
             let owner = StringBuilderOwner::new(Arc::new(std::sync::RwLock::new(String::new())));
             temper_core::string::builder::append(
                 &owner.0.builder,
