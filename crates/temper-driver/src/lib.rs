@@ -1,16 +1,20 @@
 //! What tools share over the backends, as a library: the registry of
 //! backends this build has ([`Registry`]); one way from a settled
 //! library to each backend's files ([`checked`], [`with_std`],
-//! [`translate`]), which `tempest build` ([`build`]), the commands for
-//! one backend, and the playground's wasm (`temper-wasm`) all take; and, natively, running built libraries'
-//! tests with each language's own tools ([`test_run`]), as each backend
-//! says ([`temper_tmpl::Tools`]).
+//! [`translate`]), which `tempest build` ([`build`]) and the
+//! playground's wasm (`temper-wasm`) both take; and, natively, running
+//! built libraries' tests ([`test_run`]) and top levels ([`run`]) with
+//! each language's own tools, as each backend says
+//! ([`temper_tmpl::Tools`]); and `tempest init`'s skeleton ([`init`]).
 //!
 //! Each built-in backend is a cargo feature (`cpp`, `csharp`, `java`,
 //! `js`, `lua`, `py`, and `rust`), all on by default.
 
 pub mod build;
+pub mod init;
 // Not in the wasm, which runs no tools.
+#[cfg(any(unix, windows))]
+pub mod run;
 #[cfg(any(unix, windows))]
 pub mod test_run;
 
@@ -24,6 +28,14 @@ use temper_tmpl::{Backend, Profile, Program, validate};
 /// it, so a name left out can say so; the playground's wasm numbers
 /// backends by their places here.
 pub const KNOWN: [&str; 7] = ["cpp", "csharp", "java", "js", "lua", "py", "rust"];
+
+/// Kotlin Temper's backends that tempest doesn't have yet, alphabetically,
+/// so the command can say so rather than that there's no such backend:
+/// `cppv` (a second, "versatile" C++ backend, for C++11 and older),
+/// `data` (the data files `dataFile` declares, among Kotlin's defaults),
+/// `java8` (Java for its version 8), and `mypyc` (Python for mypyc to
+/// compile).
+pub const NOT_YET: [&str; 4] = ["cppv", "data", "java8", "mypyc"];
 
 /// The backends this run has: those built in, by cargo feature, and
 /// later those that join while it runs (docs/internals, "Dynamic

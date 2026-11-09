@@ -8,8 +8,8 @@ publish.workspace = true
 license.workspace = true
 
 # Each backend is a feature, all on by default (temper-driver's), so a
-# smaller build can leave some out; `tempest js` and such then say it
-# wasn't built in. `net` is temper-frontend's web client for std `net`.
+# smaller build can leave some out; `tempest build -b js` and such then
+# say it wasn't built in. `net` is temper-frontend's web client for std `net`.
 [features]
 default = ["net", "py", "rust", "js", "java", "csharp", "cpp", "lua"]
 net = ["temper-frontend/net"]
@@ -28,5 +28,8 @@ temper-lsp = { path = "../temper-lsp" }
 temper-tmpl = { path = "../temper-tmpl" }
 
 [dev-dependencies]
+# Reads `cargo metadata`, to keep `tempest licenses` current
+# (tests/licenses.rs); already in the workspace, for temper-lsp.
+serde_json = "1"
 temper-be-testkit = { path = "../temper-be-testkit" }
 temper-funtests = { path = "../temper-funtests" }

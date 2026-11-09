@@ -1,17 +1,36 @@
 //! How Rust runs built libraries' tests, for `tempest test -b rust`:
 //! `cargo test` in each library's crate (`CARGO`), offline, with one
 //! target directory, `temper.out/rust/target`, for them all, reading
-//! what it prints.
+//! what it prints. `tempest run -b rust` builds the library's crate the
+//! same way, quietly, then runs its program (`src/main.rs`), as
+//! Kotlin's `cargo run` does.
 
 use std::path::Path;
 use std::process::Command;
-use temper_tmpl::tools::{output, tool, tool_output};
+use temper_tmpl::tools::{output, program, step, tool, tool_output};
 use temper_tmpl::{TestResults, Tested, Tools};
 
 pub const TOOLS: Tools = Tools {
     prepare: None,
     test,
+    run,
 };
+
+fn run(dir: &Path, library: &Tested, _: &[Tested]) -> Result<bool, String> {
+    let target = std::path::absolute(dir.join("target")).map_err(|e| e.to_string())?;
+    step(
+        Command::new(tool("CARGO", "cargo"))
+            .args(["build", "--offline", "--bin", &library.name])
+            .env("CARGO_TARGET_DIR", &target)
+            .current_dir(dir.join(&library.name)),
+        "cargo build",
+    )?;
+    let exe =
+        target
+            .join("debug")
+            .join(format!("{}{}", library.name, std::env::consts::EXE_SUFFIX));
+    program(&mut Command::new(exe), &library.name)
+}
 
 fn test(dir: &Path, library: &Tested, _: &[Tested]) -> TestResults {
     let target = std::path::absolute(dir.join("target")).map_err(|e| e.to_string())?;

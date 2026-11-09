@@ -47,7 +47,7 @@ impl IgnoreFile {
 
     /// Whether its patterns say to skip `path`, as the scan names it, or
     /// `None` if none matches.
-    fn decides(&self, path: &str, is_dir: bool) -> Option<bool> {
+    pub fn decides(&self, path: &str, is_dir: bool) -> Option<bool> {
         let rest = match self.inside.as_str() {
             "" => path,
             inside => path.strip_prefix(inside)?.strip_prefix('/')?,

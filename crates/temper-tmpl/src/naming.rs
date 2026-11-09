@@ -364,6 +364,111 @@ pub fn pascal_case(name: &str) -> String {
     out
 }
 
+/// Converts a camelCase or snake_case name to `dash-case` as Kotlin
+/// Temper does (`IdentStyle.Camel.convertTo(IdentStyle.Dash, …)`), as
+/// `temper init` names a library after its directory: words break as
+/// [`snake_case`]'s do, are lowercased, and are joined with `-` where
+/// they'd otherwise run together (`fooBar2` is `foo-bar2`, `XMLParser`
+/// `xml-parser`). A leading digit or other non-letter gets a leading `_`.
+pub fn dash_case(name: &str) -> String {
+    // Join, as Kotlin's `mapLower` and `delimitDash`.
+    let mut out = String::new();
+    let mut prior = Tok::Nil;
+    for (t, w) in words(name) {
+        let middle = prior != Tok::Nil;
+        if middle && prior == Tok::Caseless && t == Tok::Caseless {
+            out.push('\u{b7}');
+        } else if middle
+            && (prior.category() == t.category() || (prior == Tok::Digit && t.letters()))
+        {
+            out.push('-');
+        } else if !middle && !t.letters() {
+            out.push('_');
+        }
+        if t.letters() {
+            out.extend(w.chars().flat_map(char::to_lowercase));
+        } else {
+            out.push_str(&w);
+        }
+        prior = t;
+    }
+    out
+}
+
+/// A dashed name as a title, as Kotlin Temper's `dashToTitle` makes one
+/// for `temper init`'s files (`IdentStyle.Dash` to `Pascal`, then
+/// `Pascal` to `Human`): `my-proj` is `My Proj`, `foo-bar2` `Foo Bar 2`,
+/// and, as in Kotlin, `a-b` is `AB`, one-letter words running together.
+pub fn dashed_title(name: &str) -> String {
+    // Dash to Pascal: words broken at delimiters and at changes of kind
+    // (a lowercase letter after an uppercase one continues a word), as
+    // Kotlin's `breakOnDelimiter`, then joined as `pascal_case` joins.
+    let mut dashed: Vec<(Tok, String)> = Vec::new();
+    let (mut word_tok, mut word) = (Tok::Nil, String::new());
+    for c in name.chars() {
+        let t = Tok::of(c);
+        if t == Tok::Delimiter {
+            if !word.is_empty() {
+                dashed.push((word_tok, std::mem::take(&mut word)));
+            }
+            word_tok = Tok::Nil;
+            continue;
+        }
+        let same = t == word_tok || (t == Tok::Lower && word_tok == Tok::Upper);
+        if !word.is_empty() && !same {
+            dashed.push((word_tok, std::mem::take(&mut word)));
+        }
+        word.push(c);
+        word_tok = t;
+    }
+    if !word.is_empty() {
+        dashed.push((word_tok, word));
+    }
+    let mut pascal = String::new();
+    let mut prior = Tok::Nil;
+    for (t, w) in dashed {
+        let middle = prior != Tok::Nil;
+        let cased = matches!(t, Tok::Lower | Tok::Upper);
+        if middle && prior == Tok::Caseless && t == Tok::Caseless {
+            pascal.push('\u{b7}');
+        } else if (middle && ((!cased && prior == t) || (prior == Tok::Digit && t.letters())))
+            || (!middle && !t.letters())
+        {
+            pascal.push('_');
+        }
+        if t.letters() {
+            let lower: String = w.chars().flat_map(char::to_lowercase).collect();
+            let mut chars = lower.chars();
+            if let Some(first) = chars.next() {
+                pascal.extend(first.to_uppercase());
+                pascal.push_str(chars.as_str());
+            }
+        } else {
+            pascal.push_str(&w);
+        }
+        prior = t;
+    }
+    // Pascal to Human: words as camelCase breaks them, joined with a
+    // space between words of one kind, or between letters and digits.
+    let mut out = String::new();
+    let mut prior = Tok::Nil;
+    for (t, w) in words(&pascal) {
+        let middle = prior != Tok::Nil;
+        if middle && prior == Tok::Caseless && t == Tok::Caseless {
+            out.push('\u{b7}');
+        } else if middle
+            && (prior.category() == t.category()
+                || (prior == Tok::Digit && t.letters())
+                || (prior.letters() && t == Tok::Digit))
+        {
+            out.push(' ');
+        }
+        out.push_str(&w);
+        prior = t;
+    }
+    out
+}
+
 /// Candidate names for an expression a pass or backend stores in a
 /// temporary, best first (notes/tmpl/analyses.md, "Naming hints"): the
 /// name of the declaration it reads or calls, a callee's with a leading
@@ -1035,5 +1140,31 @@ impl Scopes {
             (Some(&x), Some(&y)) => self.within(x, y) || self.within(y, x),
             _ => true,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{dash_case, dashed_title};
+
+    /// As Kotlin's `temper init` names libraries after their directories
+    /// (checked against its output, 2026-11-09).
+    #[test]
+    fn dash_case_and_titles_as_kotlin_init() {
+        for (dir, dashed, title) in [
+            ("my-Proj", "my-proj", "My Proj"),
+            ("MyProj", "my-proj", "My Proj"),
+            ("my_proj", "my-proj", "My Proj"),
+            ("fooBar2", "foo-bar2", "Foo Bar 2"),
+            ("XMLParser", "xml-parser", "Xml Parser"),
+            ("__x", "x", "X"),
+        ] {
+            assert_eq!(dash_case(dir), dashed, "{dir}");
+            assert_eq!(dashed_title(dashed), title, "{dir}");
+        }
+        assert_eq!(dash_case("123abc"), "_123-abc");
+        assert_eq!(dashed_title("x-123-abc"), "X 123 Abc");
+        assert_eq!(dashed_title("a-b"), "AB");
+        assert_eq!(dashed_title("config-lib"), "Config Lib");
     }
 }

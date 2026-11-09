@@ -21,38 +21,173 @@ fn tempest(args: &[&str]) -> (i32, String, String) {
 
 #[test]
 fn usage() {
+    // Usage errors are 2, as before; Kotlin's are 127, kotlinx-cli's.
     assert_eq!(tempest(&["build", "-b"]).0, 2);
     assert_eq!(tempest(&["build", "-b", "cobol"]).0, 2);
+    assert_eq!(tempest(&["build", "-b", "interp"]).0, 2);
     assert_eq!(tempest(&["build", "dir"]).0, 2);
+    assert_eq!(tempest(&["build", "--bogus"]).0, 2);
+    assert_eq!(tempest(&["build", "--logformat", "xml"]).0, 2);
+    assert_eq!(tempest(&["build", "-w", "a", "-w", "b"]).0, 2);
+    assert_eq!(tempest(&["build", "--no-connected=yes"]).0, 2);
     assert_eq!(tempest(&["test", "-b", "cobol"]).0, 2);
     assert_eq!(tempest(&["frobnicate"]).0, 2);
     assert_eq!(tempest(&[]).0, 2);
     assert_eq!(tempest(&["test", "a", "b"]).0, 2);
+    assert_eq!(tempest(&["test", "-w", "a", "b"]).0, 2);
     assert_eq!(tempest(&["test", "--std"]).0, 2);
     assert_eq!(tempest(&["test", "--bench"]).0, 2);
-    assert_eq!(tempest(&["lsp", "--stdio-ish"]).0, 2);
-    for backend in temper_driver::KNOWN {
-        // A backend left out fails the same way whatever the arguments.
-        let code = if built_in(backend) { 2 } else { 1 };
-        assert_eq!(tempest(&[backend]).0, code);
-        assert_eq!(tempest(&[backend, "--out"]).0, code);
-    }
-    let (code, out, _) = tempest(&["--help"]);
+    assert_eq!(tempest(&["run", "-b", "py"]).0, 2);
+    assert_eq!(tempest(&["run", "--library", "a"]).0, 2);
     assert_eq!(
-        (code, out.as_str()),
-        (
-            0,
-            "usage: tempest build [-w DIR] [-b BACKEND]... [--no-connected] [--verbose] [--std DIR]\n       \
-             tempest test [-b interp|BACKEND] [--verbose] [--std DIR] [DIR]\n       \
-             tempest lsp [--std DIR]\n       \
-             tempest py [--out DIR] [--std DIR] FILE...\n       \
-             tempest rust [--out DIR] [--std DIR] FILE...\n       \
-             tempest js [--out DIR] [--std DIR] FILE...\n       \
-             tempest java [--out DIR] [--std DIR] FILE...\n       \
-             tempest csharp [--out DIR] [--std DIR] FILE...\n       \
-             tempest cpp [--out DIR] [--std DIR] FILE...\n       \
-             tempest lua [--out DIR] [--std DIR] FILE...\n"
-        )
+        tempest(&["run", "--library", "a", "-b", "py", "-b", "js"]).0,
+        2
+    );
+    assert_eq!(tempest(&["init", "dir"]).0, 2);
+    assert_eq!(tempest(&["lsp", "--stdio-ish"]).0, 2);
+    assert_eq!(tempest(&["serve", "--tokens", "some"]).0, 2);
+    assert_eq!(tempest(&["version", "now"]).0, 2);
+    assert_eq!(tempest(&["help", "frobnicate"]).0, 2);
+    // The one-backend commands are gone, and say what does their work.
+    for backend in temper_driver::KNOWN {
+        let (code, _, err) = tempest(&[backend, "a.temper"]);
+        assert_eq!(code, 2);
+        let expected = format!("`tempest build -b {backend}`");
+        assert!(err.contains(&expected), "{err}");
+    }
+}
+
+/// `help`, `--help`, and each command's `--help` print to stdout and
+/// succeed, as Kotlin's.
+#[test]
+fn help() {
+    for args in [&["help"][..], &["--help"], &["-h"]] {
+        let (code, out, _) = tempest(args);
+        assert_eq!(code, 0);
+        assert!(
+            out.starts_with("tempest, Temper's command line tool"),
+            "{out}"
+        );
+        for command in [
+            "build", "doc", "help", "init", "license", "licenses", "lsp", "repl", "run", "serve",
+            "test", "version", "watch",
+        ] {
+            assert!(
+                out.contains(&format!("\n    {command} - ")),
+                "{command}: {out}"
+            );
+        }
+    }
+    let (code, out, _) = tempest(&["help", "build"]);
+    assert_eq!(code, 0);
+    assert!(
+        out.starts_with("usage: tempest build [OPTION]...\n"),
+        "{out}"
+    );
+    for flag in [
+        "-w, --workroot DIR",
+        "-ign, --ignorefile FILE",
+        "-o, --output-directory DIR",
+        "-b, --backend BACKEND",
+        "--no-connected",
+        "-v, --verbose",
+        "--logformat text|json",
+        "--std DIR",
+    ] {
+        assert!(out.contains(flag), "{flag}: {out}");
+    }
+    // The work root as Kotlin's code finds it, which its help text
+    // words the other way around (notes/kotlin-differences.md).
+    let rule = "for the nearest\n            directory holding a temper.out directory, or else the\n            farthest holding a config.temper.md.";
+    assert!(out.contains(rule), "{out}");
+    assert_eq!(
+        tempest(&["build", "--help"]),
+        (0, out.clone(), String::new())
+    );
+    assert_eq!(tempest(&["build", "-h", "-b", "cobol"]).1, out);
+    for command in [
+        "test", "run", "init", "serve", "lsp", "version", "license", "licenses", "help",
+    ] {
+        let (code, out, _) = tempest(&["help", command]);
+        assert_eq!(code, 0, "{command}");
+        assert!(
+            out.starts_with(&format!("usage: tempest {command}")),
+            "{out}"
+        );
+    }
+}
+
+/// `version` names the build's version, and the commit where git says.
+#[test]
+fn version() {
+    for flag in ["version", "--version"] {
+        let (code, out, err) = tempest(&[flag]);
+        assert_eq!((code, err.as_str()), (0, ""));
+        assert!(out.starts_with("tempest 0."), "{out}");
+        assert!(out.ends_with('\n') && out.lines().count() == 1, "{out}");
+    }
+}
+
+/// `license` prints the repository's legal files, each under a heading,
+/// as Kotlin's `temper license` does; `licenses`, the crates built in
+/// (kept current by tests/licenses.rs).
+#[test]
+fn license_and_licenses() {
+    let (code, out, _) = tempest(&["license"]);
+    assert_eq!(code, 0);
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    for file in [
+        "COPYRIGHT",
+        "NOTICE",
+        "LICENSE-APACHE",
+        "LICENSE-MIT",
+        "LICENSE-CC-BY-SA-4.0",
+    ] {
+        let dashes = "-".repeat(file.len() + 8);
+        let heading = format!("{dashes}\n--- {file} ---\n{dashes}\n");
+        assert!(out.contains(&heading), "{file}");
+        let text = fs::read_to_string(root.join(file)).unwrap();
+        assert!(out.contains(&text), "{file}");
+    }
+    let (code, out, _) = tempest(&["licenses"]);
+    assert_eq!(code, 0);
+    let file =
+        fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/licenses.txt"));
+    assert_eq!(out, file.unwrap());
+    assert!(out.contains("\n--- serde_json "), "{out}");
+}
+
+/// What isn't in tempest yet says so, with a pointer, and exits with 3:
+/// Kotlin's `watch`, `repl`, and `doc`, its backends `cppv`, `data`,
+/// `java8`, and `mypyc`, and its language server's `--port`.
+#[test]
+fn not_yet() {
+    for command in ["watch", "repl", "doc"] {
+        let (code, out, err) = tempest(&[command, "-w", "."]);
+        assert_eq!((code, out.as_str()), (3, ""), "{command}");
+        let expected = format!(
+            "tempest: {command} isn't in tempest yet. Kotlin Temper's `temper {command}` has it; "
+        );
+        assert!(err.starts_with(&expected), "{err}");
+        assert!(err.ends_with(" (docs/tools/cli.md).\n"), "{err}");
+        // Its help says the same.
+        let (code, out, _) = tempest(&["help", command]);
+        assert_eq!(code, 0);
+        assert!(out.starts_with(&expected), "{out}");
+    }
+    for backend in temper_driver::NOT_YET {
+        for args in [&["build", "-b", backend][..], &["test", "-b", backend]] {
+            let (code, _, err) = tempest(args);
+            let expected = format!("tempest: the {backend} backend isn't in tempest yet; ");
+            assert_eq!(code, 3, "{args:?}");
+            assert!(err.starts_with(&expected), "{err}");
+        }
+    }
+    let (code, _, err) = tempest(&["serve", "--port", "4000"]);
+    assert_eq!(code, 3);
+    assert!(
+        err.contains("over standard input and output, not a TCP port"),
+        "{err}"
     );
 }
 
@@ -64,7 +199,7 @@ fn built_in(backend: &str) -> bool {
 #[test]
 fn backends_left_out() {
     for backend in temper_driver::KNOWN.into_iter().filter(|b| !built_in(b)) {
-        let (code, _, err) = tempest(&[backend, "a.temper"]);
+        let (code, _, err) = tempest(&["build", "-b", backend]);
         let expected = format!("tempest: built without the {backend} backend\n");
         assert_eq!((code, err.as_str()), (1, expected.as_str()));
     }
@@ -163,265 +298,125 @@ fn built_in_std() {
     });
 }
 
-#[test]
-#[cfg(feature = "py")]
-fn py_prints_python() {
+/// Fibonacci, from Kotlin's functional tests, as a library of its name.
+fn with_fibonacci(test: &str, f: impl FnOnce(&str)) {
     let fib = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../vendor/temper/functional-tests/algos/fibonacci/fibonacci.temper.md");
-    let (code, out, err) = tempest(&["py", &fib.to_string_lossy()]);
-    assert_eq!(code, 0, "{err}");
-    assert!(out.starts_with("# ==> fibonacci/pyproject.toml\n"), "{out}");
-    assert!(
-        out.contains("# ==> fibonacci/fibonacci/fibonacci.py\n"),
-        "{out}"
-    );
-    assert!(out.contains("def _fib(i: int, /) -> int:\n"), "{out}");
+    let fib = fs::read_to_string(fib).unwrap();
+    let files = [
+        ("config.temper.md", "    export let name = \"fibonacci\";\n"),
+        ("fibonacci.temper.md", fib.as_str()),
+    ];
+    with_library(test, &files, f);
 }
 
+/// `build -b BACKEND -o DIR`, which replaced `tempest BACKEND --out DIR`,
+/// writes each backend's files under DIR, as Kotlin lays them out under
+/// `temper.out`, and nothing in the work root.
 #[test]
-#[cfg(feature = "rust")]
-fn rust_prints_rust() {
-    let fib = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../vendor/temper/functional-tests/algos/fibonacci/fibonacci.temper.md");
-    let (code, out, err) = tempest(&["rust", &fib.to_string_lossy()]);
-    assert_eq!(code, 0, "{err}");
-    assert!(out.starts_with("// ==> fibonacci/Cargo.toml\n"), "{out}");
-    assert!(out.contains("// ==> fibonacci/src/mod.rs\n"), "{out}");
-    assert!(
-        out.contains("pub(crate) fn fib(mut i: i32) -> i32 {\n"),
-        "{out}"
-    );
-}
-
-#[test]
-#[cfg(feature = "rust")]
-fn rust_writes_a_crate() {
-    let fib = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../vendor/temper/functional-tests/algos/fibonacci/fibonacci.temper.md");
-    let out = std::env::temp_dir().join(format!("tempest-cli-{}-rust", std::process::id()));
-    let _ = fs::remove_dir_all(&out);
-    let (code, stdout, err) = tempest(&[
-        "rust",
-        "--out",
-        &out.to_string_lossy(),
-        &fib.to_string_lossy(),
-    ]);
-    assert_eq!((code, stdout.as_str()), (0, ""), "{err}");
-    for file in [
-        "Cargo.toml",
-        "src/lib.rs",
-        "src/main.rs",
-        "src/mod.rs",
-        "src/support/mod.rs",
-    ] {
-        assert!(out.join("fibonacci").join(file).is_file(), "{file}");
-    }
-    let _ = fs::remove_dir_all(&out);
-}
-
-#[test]
-#[cfg(feature = "js")]
-fn js_prints_js() {
-    let fib = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../vendor/temper/functional-tests/algos/fibonacci/fibonacci.temper.md");
-    let (code, out, err) = tempest(&["js", &fib.to_string_lossy()]);
-    assert_eq!(code, 0, "{err}");
-    assert!(out.starts_with("// ==> fibonacci/package.json\n"), "{out}");
-    assert!(
-        out.contains("// ==> fibonacci/fibonacci.internal.js\n"),
-        "{out}"
-    );
-    assert!(out.contains("function fib(i) {\n"), "{out}");
-}
-
-#[test]
-#[cfg(feature = "js")]
-fn js_writes_a_package() {
-    let fib = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../vendor/temper/functional-tests/algos/fibonacci/fibonacci.temper.md");
-    let out = std::env::temp_dir().join(format!("tempest-cli-{}-js", std::process::id()));
-    let _ = fs::remove_dir_all(&out);
-    let (code, stdout, err) = tempest(&[
-        "js",
-        "--out",
-        &out.to_string_lossy(),
-        &fib.to_string_lossy(),
-    ]);
-    assert_eq!((code, stdout.as_str()), (0, ""), "{err}");
-    for file in [
-        "package.json",
-        "index.js",
-        "fibonacci.js",
-        "fibonacci.internal.js",
-        "fibonacci.internal.js.map",
-    ] {
-        assert!(out.join("fibonacci").join(file).is_file(), "{file}");
-    }
-    // The map names the source by a path that leads to it.
-    let module = fs::read_to_string(out.join("fibonacci/fibonacci.internal.js")).unwrap();
-    assert!(module.ends_with("\n//# sourceMappingURL=fibonacci.internal.js.map\n"));
-    let map = fs::read_to_string(out.join("fibonacci/fibonacci.internal.js.map")).unwrap();
-    let source = map.split("\"sources\":[\"").nth(1).unwrap();
-    let source = &source[..source.find('"').unwrap()];
-    assert!(source.ends_with("/fibonacci.temper.md"), "{map}");
-    assert_eq!(
-        fs::canonicalize(out.join("fibonacci").join(source)).unwrap(),
-        fs::canonicalize(&fib).unwrap()
-    );
-    let _ = fs::remove_dir_all(&out);
-}
-
-#[test]
-#[cfg(feature = "java")]
-fn java_prints_java() {
-    let fib = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../vendor/temper/functional-tests/algos/fibonacci/fibonacci.temper.md");
-    let (code, out, err) = tempest(&["java", &fib.to_string_lossy()]);
-    assert_eq!(code, 0, "{err}");
-    assert!(out.starts_with("// ==> fibonacci/pom.xml\n"), "{out}");
-    assert!(
-        out.contains("// ==> fibonacci/src/main/java/fibonacci/FibonacciGlobal.java\n"),
-        "{out}"
-    );
-    assert!(out.contains("    static int fib(int i) {\n"), "{out}");
-}
-
-#[test]
-#[cfg(feature = "java")]
-fn java_writes_a_package() {
-    let fib = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../vendor/temper/functional-tests/algos/fibonacci/fibonacci.temper.md");
-    let out = std::env::temp_dir().join(format!("tempest-cli-{}-java", std::process::id()));
-    let _ = fs::remove_dir_all(&out);
-    let (code, stdout, err) = tempest(&[
-        "java",
-        "--out",
-        &out.to_string_lossy(),
-        &fib.to_string_lossy(),
-    ]);
-    assert_eq!((code, stdout.as_str()), (0, ""), "{err}");
-    for file in [
-        "pom.xml",
-        "src/main/java/fibonacci/FibonacciGlobal.java",
-        "src/main/java/fibonacci/FibonacciMain.java",
-    ] {
-        assert!(out.join("fibonacci").join(file).is_file(), "{file}");
-    }
-    let _ = fs::remove_dir_all(&out);
-}
-
-#[test]
-#[cfg(feature = "csharp")]
-fn csharp_prints_csharp() {
-    let fib = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../vendor/temper/functional-tests/algos/fibonacci/fibonacci.temper.md");
-    let (code, out, err) = tempest(&["csharp", &fib.to_string_lossy()]);
-    assert_eq!(code, 0, "{err}");
-    assert!(
-        out.starts_with("// ==> fibonacci/src/Fibonacci.csproj\n"),
-        "{out}"
-    );
-    assert!(
-        out.contains("// ==> fibonacci/src/FibonacciGlobal.cs\n"),
-        "{out}"
-    );
-    assert!(
-        out.contains("    internal static int Fib(int i)\n"),
-        "{out}"
-    );
-}
-
-#[test]
-#[cfg(feature = "csharp")]
-fn csharp_writes_projects() {
-    let fib = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../vendor/temper/functional-tests/algos/fibonacci/fibonacci.temper.md");
-    let out = std::env::temp_dir().join(format!("tempest-cli-{}-csharp", std::process::id()));
-    let _ = fs::remove_dir_all(&out);
-    let (code, stdout, err) = tempest(&[
-        "csharp",
-        "--out",
-        &out.to_string_lossy(),
-        &fib.to_string_lossy(),
-    ]);
-    assert_eq!((code, stdout.as_str()), (0, ""), "{err}");
-    for file in [
-        "src/Fibonacci.csproj",
-        "src/FibonacciGlobal.cs",
-        "src/Logging.cs",
-        "program/FibonacciProgram.csproj",
-        "program/Program.cs",
-    ] {
-        assert!(out.join("fibonacci").join(file).is_file(), "{file}");
-    }
-    let _ = fs::remove_dir_all(&out);
-}
-
-#[test]
-#[cfg(feature = "cpp")]
-fn cpp_prints_cpp() {
-    let fib = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../vendor/temper/functional-tests/algos/fibonacci/fibonacci.temper.md");
-    let (code, out, err) = tempest(&["cpp", &fib.to_string_lossy()]);
-    assert_eq!(code, 0, "{err}");
-    assert!(out.starts_with("// ==> fibonacci/init.hpp\n"), "{out}");
-    assert!(out.contains("// ==> fibonacci/init.cpp\n"), "{out}");
-    assert!(out.contains("static int32_t fib(int32_t i) {\n"), "{out}");
-}
-
-#[test]
-#[cfg(feature = "cpp")]
-fn cpp_writes_files() {
-    let fib = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../vendor/temper/functional-tests/algos/fibonacci/fibonacci.temper.md");
-    let out = std::env::temp_dir().join(format!("tempest-cli-{}-cpp", std::process::id()));
-    let _ = fs::remove_dir_all(&out);
-    let (code, stdout, err) = tempest(&[
-        "cpp",
-        "--out",
-        &out.to_string_lossy(),
-        &fib.to_string_lossy(),
-    ]);
-    assert_eq!((code, stdout.as_str()), (0, ""), "{err}");
-    for file in ["init.hpp", "init.cpp", "main.cpp"] {
-        assert!(out.join("fibonacci").join(file).is_file(), "{file}");
-    }
-    let _ = fs::remove_dir_all(&out);
-}
-
-#[test]
-#[cfg(feature = "lua")]
-fn lua_prints_lua() {
-    let fib = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../vendor/temper/functional-tests/algos/fibonacci/fibonacci.temper.md");
-    let (code, out, err) = tempest(&["lua", &fib.to_string_lossy()]);
-    assert_eq!(code, 0, "{err}");
-    assert!(out.starts_with("-- ==> fibonacci/init.lua\n"), "{out}");
-    assert!(
-        out.contains("-- ==> fibonacci/fibonacci-dev-1.rockspec\n"),
-        "{out}"
-    );
-    assert!(out.contains("local function fib(i)\n"), "{out}");
-}
-
-#[test]
-#[cfg(feature = "lua")]
-fn lua_writes_files() {
-    let fib = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../vendor/temper/functional-tests/algos/fibonacci/fibonacci.temper.md");
-    let out = std::env::temp_dir().join(format!("tempest-cli-{}-lua", std::process::id()));
-    let _ = fs::remove_dir_all(&out);
-    let (code, stdout, err) = tempest(&[
-        "lua",
-        "--out",
-        &out.to_string_lossy(),
-        &fib.to_string_lossy(),
-    ]);
-    assert_eq!((code, stdout.as_str()), (0, ""), "{err}");
-    for file in ["init.lua", "fibonacci-dev-1.rockspec"] {
-        assert!(out.join("fibonacci").join(file).is_file(), "{file}");
-    }
-    let _ = fs::remove_dir_all(&out);
+fn build_writes_each_backend_to_a_directory() {
+    // Each backend, files it writes, and a line one of them has.
+    let expected: [(&str, &[&str], &str, &str); 7] = [
+        (
+            "py",
+            &["pyproject.toml", "fibonacci/fibonacci.py"],
+            "fibonacci/fibonacci.py",
+            "def _fib(i: int, /) -> int:\n",
+        ),
+        (
+            "rust",
+            &[
+                "Cargo.toml",
+                "src/lib.rs",
+                "src/main.rs",
+                "src/mod.rs",
+                "src/support/mod.rs",
+            ],
+            "src/mod.rs",
+            "pub(crate) fn fib(mut i: i32) -> i32 {\n",
+        ),
+        (
+            "js",
+            &[
+                "package.json",
+                "index.js",
+                "fibonacci.js",
+                "fibonacci.internal.js",
+                "fibonacci.internal.js.map",
+            ],
+            "fibonacci.internal.js",
+            "function fib(i) {\n",
+        ),
+        (
+            "java",
+            &[
+                "pom.xml",
+                "src/main/java/fibonacci/FibonacciGlobal.java",
+                "src/main/java/fibonacci/FibonacciMain.java",
+            ],
+            "src/main/java/fibonacci/FibonacciGlobal.java",
+            "    static int fib(int i) {\n",
+        ),
+        (
+            "csharp",
+            &[
+                "src/Fibonacci.csproj",
+                "src/FibonacciGlobal.cs",
+                "src/Logging.cs",
+                "program/FibonacciProgram.csproj",
+                "program/Program.cs",
+            ],
+            "src/FibonacciGlobal.cs",
+            "    internal static int Fib(int i)\n",
+        ),
+        (
+            "cpp",
+            &["init.hpp", "init.cpp", "main.cpp"],
+            "init.cpp",
+            "static int32_t fib(int32_t i) {\n",
+        ),
+        (
+            "lua",
+            &["init.lua", "fibonacci-dev-1.rockspec"],
+            "init.lua",
+            "local function fib(i)\n",
+        ),
+    ];
+    with_fibonacci("out-dir", |dir| {
+        let out = std::env::temp_dir().join(format!("tempest-cli-{}-out", std::process::id()));
+        let _ = fs::remove_dir_all(&out);
+        for (backend, files, file, line) in expected {
+            if !built_in(backend) {
+                continue;
+            }
+            let out_dir = out.to_string_lossy();
+            let (code, stdout, err) = tempest(&["build", "-w", dir, "-b", backend, "-o", &out_dir]);
+            assert_eq!((code, stdout.as_str()), (0, ""), "{backend}: {err}");
+            let package = out.join(backend).join("fibonacci");
+            for file in files {
+                assert!(package.join(file).is_file(), "{backend}: {file}");
+            }
+            let text = fs::read_to_string(package.join(file)).unwrap();
+            assert!(text.contains(line), "{backend}: {text}");
+            assert!(out.join(backend).join("temper-core").is_dir(), "{backend}");
+        }
+        assert!(!Path::new(dir).join("temper.out").exists());
+        // JS's source map names the source by a path that leads to it.
+        if built_in("js") {
+            let package = out.join("js/fibonacci");
+            let module = fs::read_to_string(package.join("fibonacci.internal.js")).unwrap();
+            assert!(module.ends_with("\n//# sourceMappingURL=fibonacci.internal.js.map\n"));
+            let map = fs::read_to_string(package.join("fibonacci.internal.js.map")).unwrap();
+            let source = map.split("\"sources\":[\"").nth(1).unwrap();
+            let source = &source[..source.find('"').unwrap()];
+            assert!(source.ends_with("/fibonacci.temper.md"), "{map}");
+            assert_eq!(
+                fs::canonicalize(package.join(source)).unwrap(),
+                fs::canonicalize(Path::new(dir).join("fibonacci.temper.md")).unwrap()
+            );
+        }
+        let _ = fs::remove_dir_all(&out);
+    });
 }
 
 /// `tempest build` writes each library under `temper.out`, laid out as
@@ -702,7 +697,7 @@ fn tests_of_a_library_that_does_not_build_count() {
     });
 }
 
-/// Errors don't stop `build`, `test`, or a backend's command, as in
+/// Errors don't stop `build` or `test`, as in
 /// Kotlin Temper: each is reported, and fails only where it runs, so
 /// every backend's code is written, the tests that don't reach an error
 /// pass, and the exit status is 1; a type-only error runs on as written
@@ -747,11 +742,15 @@ fn errors_fail_only_where_they_run() {
             let written = Path::new(dir).join("temper.out").join(backend).join("a");
             assert!(written.is_dir(), "{backend}");
         }
-        // A backend's own command prints the code, and the errors.
-        let (code, out, err) = tempest(&["py", &format!("{dir}/a.temper")]);
-        assert!(out.contains("def after(x: int, /) -> int:"), "{out}");
-        assert!(err.ends_with("4 errors\n"), "{err}");
+        // One backend, to a directory: the code, and the errors.
+        // Outside the library, where it would be host code.
+        let py = format!("{dir}-py-out");
+        let (code, _, err) = tempest(&["build", "-w", dir, "-b", "py", "-o", &py]);
+        let text = fs::read_to_string(format!("{py}/py/a/a/a.py")).unwrap();
+        assert!(text.contains("def after(x: int, /) -> int:"), "{text}");
+        assert!(err.ends_with("a: 4 errors\n"), "{err}");
         assert_eq!(code, 1);
+        let _ = fs::remove_dir_all(&py);
         // Tests run, on the interpreter and on a backend, those that
         // reach an error failing, but for a type-only error, which runs
         // on as written there (`mismatched`), still exiting with 1.
@@ -765,5 +764,284 @@ fn errors_fail_only_where_they_run() {
             assert!(out.contains("  failed  misspelled - "), "{out}");
             assert_eq!(code, 1);
         }
+    });
+}
+
+/// `--logformat json` writes Kotlin's records, a line each, all to
+/// stderr: each diagnostic with its position in UTF-16 code units, each
+/// failed test, the summary, and the task's result last.
+#[test]
+fn logformat_json() {
+    let files = [(
+        "a.temper",
+        "export let f(n: Int): Int { n * 3 }\n\
+         let g(): Int { tripel(1) }\n\
+         test(\"t1\") { assert(f(2) == 6); }\n\
+         test(\"t2\") { assert(f(2) == 7); }\n",
+    )];
+    with_library("json", &files, |dir| {
+        let undeclared = format!(
+            "{{ \"level\": \"error\", \"template\": \"UndeclaredName\", \"pos\": {{ \"loc\": \
+             \"{dir}/a.temper\", \"left\": 51, \"right\": 57 }}, \"values\": [], \"message\": \
+             \"tripel has not been declared\" }}"
+        );
+        let (code, out, err) = tempest(&["build", "-w", dir, "-b", "js", "--logformat", "json"]);
+        assert_eq!((code, out.as_str()), (1, ""), "{err}");
+        assert_eq!(
+            err,
+            format!("{undeclared}\n{{ \"task\": \"Build\", \"ok\": false }}\n")
+        );
+        let (code, out, err) = tempest(&["test", "-w", dir, "--logformat", "json"]);
+        assert_eq!((code, out.as_str()), (1, ""), "{err}");
+        let expected = [
+            undeclared.as_str(),
+            "{ \"level\": \"error\", \"template\": \"TestFailed\", \"values\": [ \"interp\", \
+             \"t2\", \"expected f(2) == (7) not (6)\" ], \"message\": \"Test failed (interp): t2 \
+             - expected f(2) == (7) not (6)\" }",
+            "{ \"level\": \"summary\", \"template\": \"TestSummaryAllRun\", \"values\": [ 1, 2 ], \
+             \"message\": \"Tests passed: 1 of 2\" }",
+            "{ \"task\": \"Test\", \"ok\": false }",
+        ];
+        assert_eq!(err.lines().collect::<Vec<_>>(), expected);
+        // Python's results, as Kotlin's records name the backend.
+        if built_in("py") && Command::new("python3").arg("--version").output().is_ok() {
+            let (code, _, err) = tempest(&["test", "-w", dir, "-b", "py", "--logformat", "json"]);
+            assert_eq!(code, 1);
+            assert!(err.contains("\"values\": [ \"py\", \"t2\", "), "{err}");
+            assert!(
+                err.ends_with("{ \"task\": \"Test\", \"ok\": false }\n"),
+                "{err}"
+            );
+        }
+        // Nothing to test is a record too.
+        let (code, _, err) = tempest(&["test", "-w", dir, "--library", "b", "--logformat", "json"]);
+        assert_eq!(code, 1);
+        assert!(
+            err.starts_with("{ \"level\": \"error\", \"template\": \"NoSuchLibrary\", "),
+            "{err}"
+        );
+    });
+}
+
+/// `init` writes Kotlin's skeleton, byte for byte, named after its
+/// directory, and won't write over a project.
+#[test]
+fn init_writes_kotlins_skeleton() {
+    let base = std::env::temp_dir().join(format!("tempest-cli-{}-init", std::process::id()));
+    let _ = fs::remove_dir_all(&base);
+    fs::create_dir_all(&base).unwrap();
+    let dir = base.join("my-Proj");
+    let (code, out, err) = tempest(&["init", "-o", &dir.to_string_lossy()]);
+    assert_eq!((code, err.as_str()), (0, ""));
+    let real = fs::canonicalize(&dir).unwrap();
+    assert_eq!(
+        out,
+        format!(
+            "Initialized new Temper project \"my-proj\" in {}\n",
+            real.display()
+        )
+    );
+    // As Kotlin's `temper init -o my-Proj` writes them (2026-11-09).
+    let config = "# My Proj\n\
+                  \n\
+                  This file is used for library configuration.\n\
+                  \n\
+                  The `name` export defines the library name:\n\
+                  \n\
+                  \x20   export let name = \"my-proj\";\n\
+                  \n\
+                  By default, the current directory is imported as a module. It can import\n\
+                  other module directories. See Temper documentation for additional config\n\
+                  options.\n";
+    let module = "# Implementation for My Proj\n\
+                  \n\
+                  Library discussion goes here.\n\
+                  \n\
+                  \x20   // Library implementation code goes here.\n\
+                  \n\
+                  Additional documentation and code blocks may follow.\n";
+    assert_eq!(
+        fs::read_to_string(dir.join("src/config.temper.md")).unwrap(),
+        config
+    );
+    assert_eq!(
+        fs::read_to_string(dir.join("src/my-proj.temper.md")).unwrap(),
+        module
+    );
+    assert_eq!(fs::read_dir(dir.join("src")).unwrap().count(), 2);
+    // It builds and tests as a library.
+    let (code, out, err) = tempest(&["test", "-w", &dir.to_string_lossy()]);
+    assert_eq!((code, out.as_str()), (0, "Tests passed: 0 of 0\n"), "{err}");
+    // Not over a project.
+    let (code, out, err) = tempest(&["init", "-o", &dir.to_string_lossy()]);
+    assert_eq!(
+        (code, out.as_str(), err.as_str()),
+        (1, "", "Directory src already exists\nInit failed\n")
+    );
+    let other = base.join("other");
+    fs::create_dir_all(&other).unwrap();
+    fs::write(other.join("config.temper.md"), "").unwrap();
+    let (code, _, err) = tempest(&["init", "-o", &other.to_string_lossy()]);
+    assert_eq!(
+        (code, err.as_str()),
+        (1, "Temper config already exists\nInit failed\n")
+    );
+    assert!(!other.join("src").exists());
+    // `config` is `config-lib`, so it isn't the config file.
+    let (code, out, _) = tempest(&["init", "-o", &base.join("config").to_string_lossy()]);
+    assert_eq!(code, 0);
+    assert!(
+        out.starts_with("Initialized new Temper project \"config-lib\" in "),
+        "{out}"
+    );
+    assert!(base.join("config/src/config-lib.temper.md").is_file());
+    let _ = fs::remove_dir_all(&base);
+}
+
+/// `run` builds the work root and runs a library's top level on the
+/// interpreter and each backend whose tools are here (skipped where
+/// they're missing, unless `TEMPEST_REQUIRE_CHECKERS` is set), what it
+/// logs on stdout; a library that imports another runs with it.
+#[test]
+fn run_a_library() {
+    let files = [
+        ("a.temper", "export let triple(n: Int): Int { n * 3 }\n"),
+        ("b/config.temper.md", "    export let name = \"b\";\n"),
+        (
+            "b/b.temper",
+            "let { triple } = import(\"a\");\nconsole.log(\"hello ${triple(14).toString()}\");\n",
+        ),
+    ];
+    with_library("run", &files, |dir| {
+        let (code, out, err) = tempest(&["run", "-w", dir, "--library", "b", "-b", "interp"]);
+        assert_eq!((code, out.as_str()), (0, "hello 42\n"), "{err}");
+        assert!(!Path::new(dir).join("temper.out").exists());
+        for backend in ["py", "js", "lua", "rust", "java", "cpp", "csharp"] {
+            if !built_in(backend) {
+                continue;
+            }
+            let (code, out, err) = tempest(&["run", "-w", dir, "--library", "b", "-b", backend]);
+            if err.contains("couldn't run") {
+                assert!(
+                    std::env::var_os("TEMPEST_REQUIRE_CHECKERS").is_none(),
+                    "{backend}'s tools are missing (needed with TEMPEST_REQUIRE_CHECKERS):\n{err}"
+                );
+                eprintln!("skipped {backend}: its tools are missing");
+                continue;
+            }
+            assert_eq!((code, out.trim_end()), (0, "hello 42"), "{backend}: {err}");
+            assert!(
+                Path::new(dir)
+                    .join("temper.out")
+                    .join(backend)
+                    .join("b")
+                    .is_dir()
+            );
+        }
+        // A library that isn't there.
+        let (code, _, err) = tempest(&["run", "-w", dir, "--library", "c", "-b", "interp"]);
+        assert_eq!(code, 1);
+        assert!(err.contains("No library named c under "), "{err}");
+    });
+    // Errors don't stop it, but fail it.
+    let files = [(
+        "a.temper",
+        "console.log(\"before\");\nlet x: Int = nope;\nconsole.log(\"after\");\n",
+    )];
+    with_library("run-errors", &files, |dir| {
+        let (code, out, err) = tempest(&["run", "-w", dir, "--library", "a", "-b", "interp"]);
+        assert!(out.starts_with("before\n"), "{out}");
+        assert!(err.contains("nope has not been declared"), "{err}");
+        assert_eq!(code, 1);
+    });
+}
+
+/// `test`'s flags: `-w`, `--library`, several `-b` (each backend's
+/// summary, then the total, as Kotlin's), and `--ignorefile` and
+/// `.temperignore` beside `.gitignore`.
+#[test]
+fn test_flags() {
+    let files = [
+        ("a.temper", "test(\"a\") { assert(true) }\n"),
+        ("b/config.temper.md", "    export let name = \"b\";\n"),
+        ("b/b.temper", "test(\"b\") { assert(false) }\n"),
+    ];
+    with_library("test-flags", &files, |dir| {
+        let (code, out, _) = tempest(&["test", "-w", dir]);
+        assert!(out.ends_with("Tests passed: 1 of 2\n"), "{out}");
+        assert_eq!(code, 1);
+        let (code, out, _) = tempest(&["test", "-w", dir, "--library", "a"]);
+        assert_eq!((code, out.as_str()), (0, "Tests passed: 1 of 1\n"));
+        let (code, _, err) = tempest(&["test", "-w", dir, "--library", "c"]);
+        assert_eq!(code, 1);
+        assert_eq!(err, format!("No library named c under {dir}\n"));
+        // Each backend in turn, then the total.
+        if built_in("py") && Command::new("python3").arg("--version").output().is_ok() {
+            let (code, out, err) = tempest(&[
+                "test",
+                "-w",
+                dir,
+                "--library",
+                "a",
+                "-b",
+                "interp",
+                "-b",
+                "py",
+            ]);
+            assert_eq!(
+                (code, out.as_str()),
+                (
+                    0,
+                    "interp: Tests passed: 1 of 1\npy: Tests passed: 1 of 1\nTests passed: 2 of 2\n"
+                ),
+                "{err}"
+            );
+        }
+        // An ignore file, from anywhere, relative to its own directory.
+        let list = format!("{dir}-ignore");
+        fs::write(&list, "b/\n").unwrap();
+        let (code, out, _) = tempest(&["test", "-w", dir, "-ign", &list]);
+        assert_eq!((code, out.as_str()), (0, "Tests passed: 1 of 1\n"));
+        let (code, out, _) = tempest(&["test", "-w", dir, "--ignorefile", "/dev/null"]);
+        assert!(out.ends_with("Tests passed: 1 of 2\n"), "{out}");
+        assert_eq!(code, 1);
+        let (code, _, err) = tempest(&["test", "-w", dir, "-ign", &format!("{list}-not")]);
+        assert_eq!(code, 1);
+        assert!(err.starts_with("tempest: --ignorefile "), "{err}");
+        // A .temperignore is read as a .gitignore is, after it.
+        fs::write(Path::new(dir).join(".temperignore"), "b/\n").unwrap();
+        let (code, out, _) = tempest(&["test", "-w", dir]);
+        assert_eq!((code, out.as_str()), (0, "Tests passed: 1 of 1\n"));
+        fs::write(Path::new(dir).join(".gitignore"), "b/\n").unwrap();
+        fs::write(Path::new(dir).join(".temperignore"), "!b/\n").unwrap();
+        let (_, out, _) = tempest(&["test", "-w", dir]);
+        assert!(out.ends_with("Tests passed: 1 of 2\n"), "{out}");
+        // And --ignorefile has the last word over both.
+        let (_, out, _) = tempest(&["test", "-w", dir, "-ign", &list]);
+        assert_eq!(out, "Tests passed: 1 of 1\n");
+        fs::write(&list, "!b/\n").unwrap();
+        fs::remove_file(Path::new(dir).join(".temperignore")).unwrap();
+        let (_, out, _) = tempest(&["test", "-w", dir, "-ign", &list]);
+        assert!(out.ends_with("Tests passed: 1 of 2\n"), "{out}");
+        // `run` and `build` take it too, where Kotlin's `run` reads no
+        // ignore file at all.
+        fs::write(&list, "b/\n").unwrap();
+        let (code, _, err) = tempest(&[
+            "run",
+            "-w",
+            dir,
+            "--library",
+            "b",
+            "-b",
+            "interp",
+            "-ign",
+            &list,
+        ]);
+        assert_eq!(code, 1);
+        assert!(err.contains("No library named b under "), "{err}");
+        let (code, _, err) = tempest(&["build", "-w", dir, "-b", "js", "-ign", &list]);
+        assert_eq!(code, 0, "{err}");
+        assert!(!Path::new(dir).join("temper.out/js/b").exists());
+        let _ = fs::remove_file(&list);
     });
 }

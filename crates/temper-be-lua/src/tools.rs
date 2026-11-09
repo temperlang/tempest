@@ -1,17 +1,30 @@
 //! How Lua runs built libraries' tests, for `tempest test -b lua`: each
 //! library's `tests/init-test.lua` under `lua` (or `LUA`), with LuaUnit
 //! beside the libraries, as Kotlin copies it, and `LUA_PATH` of
-//! `?.lua;?/init.lua`, writing JUnit XML.
+//! `?.lua;?/init.lua`, writing JUnit XML. `tempest run -b lua` runs the
+//! library's `init.lua` the same way, as Kotlin's `Lua51Specifics` does.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use temper_tmpl::tools::{junit_file, output, tool};
+use temper_tmpl::tools::{junit_file, output, program, tool};
 use temper_tmpl::{TestResults, Tested, Tools};
 
 pub const TOOLS: Tools = Tools {
     prepare: Some(write_luaunit),
     test,
+    run,
 };
+
+fn run(dir: &Path, library: &Tested, _: &[Tested]) -> Result<bool, String> {
+    program(
+        Command::new(tool("LUA", "lua"))
+            .args(["-e", "TEMPER_LUA_DEBUG_FUNCS=false"])
+            .arg(PathBuf::from(&library.name).join("init.lua"))
+            .env("LUA_PATH", "?.lua;?/init.lua")
+            .current_dir(dir),
+        "lua",
+    )
+}
 
 /// LuaUnit beside the libraries, as Kotlin copies it there for tests.
 fn write_luaunit(dir: &Path, _: &[Tested]) -> Result<(), String> {

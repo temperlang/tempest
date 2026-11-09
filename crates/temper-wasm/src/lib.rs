@@ -108,7 +108,8 @@ pub extern "C" fn run(ptr: *const u8, len: usize, markdown: u32) {
 /// Translates the input buffer, as a library named `main` from a file
 /// `main.temper` (or `main.temper.md`), with the std modules it imports,
 /// by the backend numbered by its place in [`temper_driver::KNOWN`] (`0` for
-/// C++, …, `6` for Rust), as `tempest py` and the rest do, and keeps the
+/// C++, …, `6` for Rust), through the driver's compile path, as `tempest
+/// build` does, and keeps the
 /// generated files as JSON, `{"files": [{"path": ..., "text":
 /// ...}, ...]}`, laid out as Kotlin's `temper.out/LANG` under it, or
 /// `{"error": ...}` with what went wrong. JavaScript's module comes with

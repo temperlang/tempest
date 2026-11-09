@@ -851,9 +851,69 @@ Other differences we won't copy:
   "TODO Support multiple ignore files"). Tempest reads every
   `.gitignore` under the work root, and those above it in its git
   repository, as git does, so a library copied into an ignored build
-  directory isn't a second one of the same name.
+  directory isn't a second one of the same name; and every
+  `.temperignore` the same way, after the `.gitignore` beside it
+  (2026-11-09). Kotlin's `--ignorefile FILE` adds one more, with the
+  last word, relative to its own directory, as Kotlin's; `/dev/null`
+  adds nothing, where in Kotlin it means no ignore file. Kotlin's `run`
+  (and `repl -b`) read no ignore file at all, so `temper run` can find
+  libraries that `build` and `test` skip, such as a copy in an ignored
+  directory, which then clashes by name; tempest's `run` reads them as
+  the others do, and takes `-ign`.
   Test: temper-frontend/tests/library_tests.rs,
-  `gitignore_files_skip_what_they_list`, and `ignore.rs`'s own tests.
+  `gitignore_files_skip_what_they_list`, and `ignore.rs`'s own tests;
+  tempest/tests/cli.rs, `test_flags`.
+
+- **The command line** (2026-11-09): tempest takes `temper`'s commands
+  and flags ([docs/tools/cli.md](../docs/tools/cli.md)), with these
+  fixes and differences:
+  - **Usage errors exit with 2**, as most Unix tools do; Kotlin's are
+    127 (kotlinx-cli's), which shells use for "command not found", and
+    `temper help bogus` says "Too many arguments! Couldn't process
+    argument bogus!". What tempest lacks yet (`watch`, `repl`, `doc`,
+    the `cppv`, `data`, `java8`, and `mypyc` backends, and `serve
+    --port`) exits with 3, saying so.
+    Test: tempest/tests/cli.rs, `usage` and `not_yet`.
+  - **The work root's help text:** Kotlin's `--workroot` help says the
+    default is "the farthest ancestor directory that contains a
+    `temper.out` directory, or the closest ancestor directory that
+    contains a `config.temper.md`", but its code (`defaultWorkdir`)
+    takes the nearest `temper.out` and the farthest config, as tempest
+    does; tempest's help says what the code does.
+    Test: tempest/tests/cli.rs, `help`.
+  - **A library that isn't there:** `temper test --library nope` passes
+    with "Tests passed: 0 of 0" and exits with 0, and `temper run
+    --library nope -b interp` prints nothing and exits with 0 (with
+    `-b py`, a stack trace: "Missing py library name for
+    RunLibraryRequest"). Tempest says "No library named nope under
+    ROOT" and exits with 1.
+    Test: tempest/tests/cli.rs, `test_flags` and `run_a_library`.
+  - **`run`'s output:** Kotlin prints what the program printed after it
+    finishes, on stderr, through its console, and on the interpreter
+    twice, each line prefixed with the module (`-work/lib//:hello 42`).
+    Tempest streams it to stdout, once, as it's printed.
+    Test: tempest/tests/cli.rs, `run_a_library`.
+  - **`init`** writes Kotlin's files byte for byte, but its message
+    goes to stdout, where Kotlin's console writes everything to stderr;
+    and a directory whose name isn't ASCII (`Café`) works, where
+    Kotlin's JVM fails in a C locale with an `InvalidPathException`
+    stack trace before it starts.
+    Test: tempest/tests/cli.rs, `init_writes_kotlins_skeleton`;
+    temper-driver/src/init.rs, `names_as_kotlin`.
+  - **`--logformat json`** writes Kotlin's record shape, adding
+    `message`; diagnostics' `template` names are tempest's (`Message`'s
+    variants, `UndeclaredName` for Kotlin's `BecauseNameUndeclared`)
+    and their `values` are empty, as tempest keeps a diagnostic's text,
+    not its arguments.
+    Test: tempest/tests/cli.rs, `logformat_json`.
+  - **Tempest's additions:** `test` defaults to the interpreter (Kotlin
+    requires `-b`) and takes a `DIR` where the work root's search
+    starts; `build` and `run` take `-o DIR`; `--version` works (Kotlin
+    has only `version`); and with several `-b`, `test` prints each
+    backend's summary before Kotlin's total. The one-backend commands
+    (`tempest py FILE`) are gone, as Kotlin has nothing like them.
+    Test: tempest/tests/cli.rs, `test_flags`, `version`, and
+    `build_writes_each_backend_to_a_directory`.
 
 - **Code with errors** (2026-11-05): where Kotlin's TmpL has garbage
   nodes, which each backend writes its own way (a comment in Java, a
@@ -878,10 +938,8 @@ Other differences we won't copy:
   Kotlin's `temper build` does; `tempest test` runs the tests, on the
   interpreter and on each backend, failing those that reach an error
   and exiting with 1, as Kotlin's `temper test` does, with no override
-  needed (`tempest run` doesn't exist yet). `tempest py FILE` and the
-  other backends' commands print the errors and the code, and exit with
-  1; before, they printed the code and exited with 0. More stays local
-  than in Kotlin:
+  needed; `tempest run` runs past them too, and exits with 1 (2026-11-09).
+  More stays local than in Kotlin:
   - **A `let` or assignment of an error** (`let s: String = x;`) is the
     error itself, as a statement, so nothing after it is written, and
     Java's and Rust's checks stay clean.
@@ -1204,7 +1262,7 @@ copied Kotlin's:
   Kotlin includes `sourcesContent`; tempest leaves it out, since tmpl
   carries no source text.
   Test: temper-be-js/tests/functional.rs, `source_maps`;
-  tempest/tests/cli.rs, `js_writes_a_package`.
+  tempest/tests/cli.rs, `build_writes_each_backend_to_a_directory`.
 - **String ordering by code point (intended difference):** Temper orders
   strings by code point, as the interpreter does. Kotlin's Java output
   compares strings with `compareTo`, which orders UTF-16 code units, so

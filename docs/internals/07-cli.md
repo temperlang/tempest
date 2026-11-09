@@ -10,14 +10,29 @@ and `build`, which writes every library in every language to
 binary, so it needs nothing beside it.
 
 ```text
-tempest test [-b interp|BACKEND] [-v] [DIR]
-tempest build [-w DIR] [-b BACKEND]... [-v]
-tempest lsp
+tempest test [-b interp|BACKEND]... [--library NAME] [-v] [-w DIR | DIR]
+tempest build [-w DIR] [-b BACKEND]... [-o DIR] [-v]
+tempest run --library NAME -b interp|BACKEND [-w DIR]
+tempest init [-o DIR]
+tempest serve | lsp
+tempest version | license | licenses | help [COMMAND]
 ```
 
-`lsp` is a language server for editors, over stdin and stdout, on the
-same library finding and `Sources` as `test` and `build`; it's the
-`temper-lsp` crate, with [a page of its own](09-language-server.md).
+Its commands and flags are Kotlin Temper's `temper`'s, by the same
+names and short forms; every one, and how each differs, is in
+[the command line](../tools/cli.md). `build`, `test`, and `run` also
+take `--ignorefile`, `--no-connected`, and `--logformat json`, which
+writes a JSON record per line, as Kotlin's does
+([`log`](../../crates/temper-frontend/src/log.rs)). `run` builds the
+work root, then runs a library's top level with the backend's tools,
+or on the interpreter; `init` writes Kotlin's project skeleton
+([`init`](../../crates/temper-driver/src/init.rs)). `watch`, `repl`,
+and `doc` say they aren't in tempest yet, and exit with 3.
+
+`serve`, or `lsp`, is a language server for editors, over stdin and
+stdout, on the same library finding and `Sources` as `test` and
+`build`; it's the `temper-lsp` crate, with
+[a page of its own](09-language-server.md).
 
 ## Finding libraries
 
@@ -25,7 +40,9 @@ Both commands start the same way. From the directory given, they find
 the *work root*: the nearest directory holding `temper.out`, or else
 the highest one holding a `config.temper.md`. Under it, each directory
 with a `config.temper.md` is a library, and each directory in a library
-is a module. Directories that `.gitignore` files list are skipped.
+is a module. Directories that `.gitignore` and `.temperignore` files
+list are skipped, as is what `--ignorefile` lists, which has the last
+word.
 
 All reading goes through one [`Sources`](../../crates/temper-frontend/src/sources.rs)
 value, so the compiler never touches the file system itself. It stacks
@@ -77,7 +94,8 @@ flowchart TD
 
 - **On the interpreter** (the default), each library settles and runs
   its tests in-process. That's fast: no files are written.
-- **With `-b BACKEND`**, each library is built as `build` does, then
+- **With `-b BACKEND`**, each library is built as `build` does
+  ([`test_backend`](../../crates/temper-driver/src/test_run.rs)), then
   its tests run with the language's own tools: Python's
   `temper_core.testing`, Mocha for JavaScript, LuaUnit, JUnit through
   `javac`, `dotnet test`, `cargo test`, or CMake and the test program
@@ -85,7 +103,9 @@ flowchart TD
   `BACKEND`'s [`Tools`](../../crates/temper-tmpl/src/backend.rs), and
   the driver just runs them. Their results are read back into the same
   summary, so `-b interp` and `-b py` print alike.
-- **`build`** writes `temper.out/BACKEND/LIBRARY/…`, laid out as Temper
+- **With several `-b`**, each backend runs in turn, with its own
+  summary, then the total, which is Kotlin's one line.
+- **`build`** writes `temper.out/BACKEND/LIBRARY/…` (or under `-o DIR`), laid out as Temper
   always has, with package files (`pyproject.toml`, `Cargo.toml`,
   `package.json`, the pom, the `.csproj`s, and a rockspec), and each
   backend's runtime beside the libraries. A library that imports
@@ -159,15 +179,16 @@ Tests passed: 1 of 2
 ## Where in the code
 
 - [`temper-driver`](../../crates/temper-driver/src/lib.rs): the [`Registry`](../../crates/temper-driver/src/lib.rs), [`KNOWN`](../../crates/temper-driver/src/lib.rs), and the compile path above.
-- [`main.rs`](../../crates/tempest/src/main.rs): argument parsing, [`test`](../../crates/tempest/src/main.rs), [`test_on`](../../crates/tempest/src/main.rs) for a backend, [`build_command`](../../crates/tempest/src/main.rs), and [`lsp`](../../crates/tempest/src/main.rs).
+- [`main.rs`](../../crates/tempest/src/main.rs): argument parsing ([`parse`](../../crates/tempest/src/main.rs)), [`build_command`](../../crates/tempest/src/main.rs), [`test_command`](../../crates/tempest/src/main.rs), [`run_library`](../../crates/tempest/src/main.rs), [`init_command`](../../crates/tempest/src/main.rs), and [`serve`](../../crates/tempest/src/main.rs); [`help.rs`](../../crates/tempest/src/help.rs): what `help` prints.
 - [`serve`](../../crates/temper-lsp/src/lib.rs): the language server.
 - [`build`](../../crates/temper-driver/src/build.rs): every library, each backend, in dependency order.
-- [`run`](../../crates/temper-driver/src/test_run.rs) in `test_run`: any backend's test tools, as each backend crate's `tools` module gives them ([`Tools`](../../crates/temper-tmpl/src/backend.rs)), with JUnit XML and tool lookup shared in [`tools`](../../crates/temper-tmpl/src/tools.rs).
+- [`test_backend`](../../crates/temper-driver/src/test_run.rs) and [`run`](../../crates/temper-driver/src/test_run.rs) in `test_run`: any backend's test tools, as each backend crate's `tools` module gives them ([`Tools`](../../crates/temper-tmpl/src/backend.rs)), with JUnit XML and tool lookup shared in [`tools`](../../crates/temper-tmpl/src/tools.rs).
+- [`run`](../../crates/temper-driver/src/run.rs) in `run`: `tempest run`, through each backend's `Tools::run`, or on the interpreter; [`init`](../../crates/temper-driver/src/init.rs): `tempest init`.
 - Tests: `crates/temper-driver/tests/` (dependencies between libraries, and the built-in runtimes).
-- [`test_dir`](../../crates/temper-frontend/src/library_tests.rs), [`test_library`](../../crates/temper-frontend/src/library_tests.rs), and [`Tally`](../../crates/temper-frontend/src/library_tests.rs): tests on the interpreter, and the summary.
-- [`work_root`](../../crates/temper-frontend/src/project.rs), [`find_libraries`](../../crates/temper-frontend/src/project.rs), and [`load_library`](../../crates/temper-frontend/src/project.rs): finding and loading libraries.
+- [`test_libraries`](../../crates/temper-frontend/src/library_tests.rs), [`test_library`](../../crates/temper-frontend/src/library_tests.rs), and [`Tally`](../../crates/temper-frontend/src/library_tests.rs): tests on the interpreter, and the summary; [`log`](../../crates/temper-frontend/src/log.rs): JSON records.
+- [`work_root`](../../crates/temper-frontend/src/project.rs), [`find_libraries_ignoring`](../../crates/temper-frontend/src/project.rs), [`ignore_file`](../../crates/temper-frontend/src/project.rs), and [`load_library`](../../crates/temper-frontend/src/project.rs): finding and loading libraries.
 - [`program`](../../crates/temper-frontend/src/stdlib.rs) in `stdlib`: std, built in, as its own library.
-- Tests: `crates/tempest/tests/` (the CLI, and the layout of `temper.out`); [all the tests](detail/07-cli.md#tests).
+- Tests: `crates/tempest/tests/` (the CLI, the layout of `temper.out`, and `licenses`' currency); [all the tests](detail/07-cli.md#tests).
 
 ## Dynamic backends (future work)
 
@@ -180,7 +201,7 @@ then as DLLs, only if processes prove too slow. The wasm build keeps a
 fixed list of built-in backends. What has to change first:
 [dynamic backends, in detail](detail/07-cli.md#dynamic-backends-planned).
 
-`watch`, `run`, `repl`, and the rest of Temper's commands come later
+`watch`, `repl`, and `doc` come later
 ([parity with Kotlin's `temper`](detail/07-cli.md#parity-with-kotlins-temper));
 [the next page](08-playground.md) says how `watch` will reuse all this,
 and [page 9](09-language-server.md) how `lsp` does.

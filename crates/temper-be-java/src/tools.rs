@@ -3,17 +3,86 @@
 //! tests, against JUnit 5's jars in Maven's local repository, as
 //! Kotlin's `pom.xml` names them, and a small runner of JUnit's launcher
 //! under `java`, as this crate's own tests do; Kotlin runs Maven
-//! instead, which needs its network.
+//! instead, which needs its network. `tempest run -b java` compiles the
+//! runtime, std, and the libraries the same way, quietly, and runs the
+//! library's `…Main` class under `java`, as Kotlin runs it by exec.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use temper_tmpl::tools::{files_with, output, tool, tool_output};
+use temper_tmpl::tools::{files_with, output, program, tool, tool_output};
 use temper_tmpl::{TestResults, Tested, Tools};
 
 pub const TOOLS: Tools = Tools {
     prepare: None,
     test,
+    run,
 };
+
+/// Compiles the runtime, std, and the libraries' main sources with
+/// `javac` (`JAVAC`) into `classes`, with `extra` sources and `classpath`.
+fn compile_main(
+    dir: &Path,
+    all: &[Tested],
+    classes: &Path,
+    extra: &[PathBuf],
+    classpath: &std::ffi::OsStr,
+) -> Result<(), String> {
+    let mut sources = Vec::new();
+    let roots = ["temper-core", "std"].into_iter().map(String::from);
+    for root in roots.chain(all.iter().map(|l| l.name.clone())) {
+        files_with(&dir.join(root).join("src/main/java"), "java", &mut sources);
+    }
+    sources.extend(extra.iter().cloned());
+    javac(classes, classpath, &sources)
+}
+
+/// `javac` on `files` into a directory, against a class path.
+fn javac(into: &Path, classpath: &std::ffi::OsStr, files: &[PathBuf]) -> Result<(), String> {
+    let built = output(
+        Command::new(tool("JAVAC", "javac"))
+            .args(["-encoding", "UTF-8", "-nowarn", "-d"])
+            .arg(into)
+            .arg("-cp")
+            .arg(classpath)
+            .args(files),
+        "javac",
+    )?;
+    match built.status.success() {
+        true => Ok(()),
+        false => Err(format!("javac failed\n{}", tool_output(&built))),
+    }
+}
+
+/// Compiles as [`test`] does, without JUnit, into
+/// `temper.out/java/LIBRARY/target/tempest/classes`, and runs the
+/// library's main class, the one its `…Main.java` declares.
+fn run(dir: &Path, library: &Tested, all: &[Tested]) -> Result<bool, String> {
+    let here = dir.join(&library.name);
+    let mut mains = Vec::new();
+    files_with(&here.join("src/main/java"), "java", &mut mains);
+    let main = (mains.iter())
+        .filter(|f| {
+            f.file_name()
+                .is_some_and(|n| n.to_string_lossy().ends_with("Main.java"))
+        })
+        .find_map(|f| f.strip_prefix(here.join("src/main/java")).ok())
+        .map(|f| {
+            f.with_extension("")
+                .to_string_lossy()
+                .replace(['/', '\\'], ".")
+        })
+        .ok_or_else(|| format!("no main class in {}", here.display()))?;
+    let classes = here.join("target/tempest/classes");
+    let _ = std::fs::remove_dir_all(&classes);
+    compile_main(dir, all, &classes, &[], std::ffi::OsStr::new(""))?;
+    program(
+        Command::new(tool("JAVA", "java"))
+            .args(["-XX:TieredStopAtLevel=1", "-XX:+UseSerialGC", "-cp"])
+            .arg(&classes)
+            .arg(main),
+        "java",
+    )
+}
 
 /// [`JUNIT`]'s jars in Maven's local repository (`~/.m2/repository`),
 /// or the first that's missing.
@@ -98,34 +167,14 @@ fn test(dir: &Path, library: &Tested, all: &[Tested]) -> TestResults {
     let out = dir.join(&library.name).join("target/tempest");
     let _ = std::fs::remove_dir_all(&out);
     let (main, tests) = (out.join("classes"), out.join("test-classes"));
-    let mut sources = Vec::new();
-    let roots = ["temper-core", "std"].into_iter().map(String::from);
-    for root in roots.chain(all.iter().map(|l| l.name.clone())) {
-        files_with(&dir.join(root).join("src/main/java"), "java", &mut sources);
-    }
     let runner = out.join("tempest/RunTests.java");
     let written = runner
         .parent()
         .map_or(Ok(()), std::fs::create_dir_all)
         .and_then(|()| std::fs::write(&runner, RUN_TESTS));
     written.map_err(|e| format!("{}: {e}", runner.display()))?;
-    sources.push(runner);
     let classpath = std::env::join_paths(&jars).map_err(|e| e.to_string())?;
-    let javac = |into: &Path, classpath: &std::ffi::OsStr, files: &[PathBuf]| {
-        output(
-            Command::new(tool("JAVAC", "javac"))
-                .args(["-encoding", "UTF-8", "-nowarn", "-d"])
-                .arg(into)
-                .arg("-cp")
-                .arg(classpath)
-                .args(files),
-            "javac",
-        )
-    };
-    let built = javac(&main, &classpath, &sources)?;
-    if !built.status.success() {
-        return Err(format!("javac failed\n{}", tool_output(&built)));
-    }
+    compile_main(dir, all, &main, &[runner], &classpath)?;
     let mut test_sources = Vec::new();
     files_with(
         &dir.join(&library.name).join("src/test/java"),
@@ -134,10 +183,7 @@ fn test(dir: &Path, library: &Tested, all: &[Tested]) -> TestResults {
     );
     let with_main = std::env::join_paths(std::iter::once(main.clone()).chain(jars.iter().cloned()))
         .map_err(|e| e.to_string())?;
-    let built = javac(&tests, &with_main, &test_sources)?;
-    if !built.status.success() {
-        return Err(format!("javac failed\n{}", tool_output(&built)));
-    }
+    javac(&tests, &with_main, &test_sources)?;
     let everything = std::env::join_paths([tests.clone(), main].into_iter().chain(jars))
         .map_err(|e| e.to_string())?;
     let run = output(

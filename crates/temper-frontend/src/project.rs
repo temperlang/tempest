@@ -21,11 +21,15 @@
 //!   as Kotlin resolves it; the library's modules then build with the
 //!   importer's ([`Library::libraries`]).
 //! - Directories named `temper.out` or `temper.keep`, or starting with
-//!   `.`, are skipped, as is what `.gitignore` files list ([`ignore`]):
-//!   the work root's, those below it, and those above it in its git
-//!   repository, where Kotlin reads only the nearest one at or above
-//!   where it starts. Kotlin also builds files outside any library as one
-//!   more, which we leave out.
+//!   `.`, are skipped, as is what `.gitignore` and `.temperignore` files
+//!   list ([`ignore`]): the work root's, those below it, and those above
+//!   it in its git repository, where Kotlin reads only the nearest one
+//!   at or above where it starts. A directory's `.temperignore` comes
+//!   after its `.gitignore`, so it has the last word there. An ignore
+//!   file named on the command line (`--ignorefile`, [`ignore_file`]),
+//!   as Kotlin takes one, has the last word everywhere
+//!   ([`find_libraries_ignoring`]). Kotlin also builds files outside any
+//!   library as one more, which we leave out.
 //!
 //! Paths are kept as given, joined with `/`, which every platform reads,
 //! so diagnostics show them relative to where the search started. Files
@@ -134,6 +138,59 @@ fn slug(line: &str) -> String {
     out
 }
 
+/// Text made a dashed identifier as Kotlin's `DashedIdentifier.from`
+/// makes one, as `temper init` names a library: ASCII letters lowercased;
+/// what can't start an identifier dropped at the start, but a digit,
+/// which gets `x-` before it; and any run of other characters a `-`,
+/// as GitHub's heading anchors make them, with none at the end. `None`
+/// if nothing is left.
+pub fn dashed_from(text: &str) -> Option<String> {
+    use temper_syntax::id_parts::{CONTINUE, MEDIAL, START, contains};
+    #[derive(PartialEq)]
+    enum State {
+        Start,
+        Continue,
+        AfterMedial,
+    }
+    let mut out = String::new();
+    let mut state = State::Start;
+    for c in text.chars().map(|c| c.to_ascii_lowercase()) {
+        match state {
+            State::Start if contains(START, c) => {
+                out.push(c);
+                state = State::Continue;
+            }
+            State::Start if contains(CONTINUE, c) => {
+                out.push_str("x-");
+                out.push(c);
+                state = State::Continue;
+            }
+            State::Start => {}
+            State::Continue if contains(CONTINUE, c) => out.push(c),
+            State::Continue if contains(MEDIAL, c) => {
+                out.push(c);
+                state = State::AfterMedial;
+            }
+            State::Continue => {
+                out.push('-');
+                state = State::AfterMedial;
+            }
+            State::AfterMedial if contains(CONTINUE, c) => {
+                out.push(c);
+                state = State::Continue;
+            }
+            State::AfterMedial => {}
+        }
+    }
+    if state == State::AfterMedial && out.ends_with('-') {
+        out.pop();
+    }
+    // Valid only ending after an identifier character.
+    let valid = out.chars().last().is_some_and(|c| contains(CONTINUE, c))
+        && out.chars().next().is_some_and(|c| contains(START, c));
+    valid.then_some(out)
+}
+
 /// A name, if it's a dashed identifier as Kotlin's `DashedIdentifier`
 /// allows: ASCII letters, digits, and `-` or `_` between them, starting
 /// with a letter.
@@ -173,10 +230,27 @@ pub fn work_root(sources: &Sources, dir: &str) -> String {
 /// The libraries under a work root, in path order, each with its config
 /// read.
 pub fn find_libraries(sources: &Sources, root: &str) -> Vec<LibrarySources> {
+    find_libraries_ignoring(sources, root, None)
+}
+
+/// The libraries under a work root, as [`find_libraries`] finds them,
+/// skipping also what `extra` lists, which has the last word on any
+/// path, as Kotlin's `--ignorefile` ([`ignore_file`]).
+pub fn find_libraries_ignoring(
+    sources: &Sources,
+    root: &str,
+    extra: Option<&IgnoreFile>,
+) -> Vec<LibrarySources> {
     let root = normalize(&slashed(root));
     let mut libraries = Vec::new();
     let mut ignores = ignores_above(sources, &root);
-    scan(sources, &root, None, &mut libraries, &mut ignores);
+    let mut scanning = Scan {
+        sources,
+        libraries: &mut libraries,
+        ignores: &mut ignores,
+        extra,
+    };
+    scanning.scan(&root, None);
     for library in &mut libraries {
         let config = format!("{}/{CONFIG_FILE}", library.root);
         let text = sources.read(&config).map(|t| t.into_owned());
@@ -213,8 +287,47 @@ pub fn duplicate_names(libraries: &[LibrarySources]) -> Vec<&str> {
     duplicates
 }
 
-/// The ignore file's name.
-const IGNORE_FILE: &str = ".gitignore";
+/// The ignore files' names, in the order a directory's are read, so a
+/// `.temperignore` has the last word over a `.gitignore` beside it.
+const IGNORE_FILES: [&str; 2] = [".gitignore", ".temperignore"];
+
+/// An ignore file named on the command line, as Kotlin's `--ignorefile`
+/// takes one: its patterns apply relative to its own directory, as in
+/// Kotlin, to a work root at or below it, and match nothing under a work
+/// root elsewhere. The error says why it can't be read.
+pub fn ignore_file(sources: &Sources, root: &str, path: &str) -> Result<IgnoreFile, String> {
+    let path = slashed(path);
+    let text = sources.read(&path).map_err(|e| format!("{path}: {e}"))?;
+    let absolute = |p: &str| {
+        std::path::absolute(p)
+            .map(|a| normalize(&slashed(&a.to_string_lossy())))
+            .unwrap_or_else(|_| normalize(p))
+    };
+    let root = normalize(&slashed(root));
+    let (root_abs, file_abs) = (absolute(&root), absolute(&path));
+    let dir = file_abs.rsplit_once('/').map_or("", |(d, _)| d);
+    let dir = if dir.is_empty() { "/" } else { dir };
+    let under = |inner: &str, outer: &str| -> Option<String> {
+        if inner == outer {
+            return Some(String::new());
+        }
+        let outer = outer.trim_end_matches('/');
+        (inner.strip_prefix(outer)?.strip_prefix('/')).map(str::to_string)
+    };
+    if let Some(prefix) = under(&root_abs, dir) {
+        // At or above the work root.
+        return Ok(IgnoreFile::parse(&text, scanned(&root), &prefix));
+    }
+    if let Some(rest) = under(dir, &root_abs) {
+        // Below it, where the scan's paths reach it.
+        let inside = match scanned(&root) {
+            "" => rest,
+            root => format!("{root}/{rest}"),
+        };
+        return Ok(IgnoreFile::parse(&text, &inside, ""));
+    }
+    Ok(IgnoreFile::parse("", scanned(&root), ""))
+}
 
 /// The ignore files above the work root, outermost first, up to its git
 /// repository's root, the nearest directory holding `.git`: none outside
@@ -236,10 +349,14 @@ fn ignores_above(sources: &Sources, root: &str) -> Vec<IgnoreFile> {
             return found;
         }
         dir = normalize(&format!("{dir}/.."));
-        if has(&dir, IGNORE_FILE) {
-            let prefix = names[names.len() - up..].join("/");
-            if let Ok(text) = sources.read(&format!("{dir}/{IGNORE_FILE}")) {
-                found.push(IgnoreFile::parse(&text, scanned(root), &prefix));
+        // Found innermost first, and reversed at the end, so each
+        // directory's last file goes first here.
+        for name in IGNORE_FILES.iter().rev() {
+            if has(&dir, name) {
+                let prefix = names[names.len() - up..].join("/");
+                if let Ok(text) = sources.read(&format!("{dir}/{name}")) {
+                    found.push(IgnoreFile::parse(&text, scanned(root), &prefix));
+                }
             }
         }
     }
@@ -255,57 +372,74 @@ fn scanned(dir: &str) -> &str {
     if dir == "." { "" } else { dir }
 }
 
-/// Adds the sources under `dir` to the library whose root is the index
-/// `library` in `libraries`, or to a new one if `dir` has a config file,
-/// skipping what `ignores`, the ignore files that apply, outermost first,
-/// and `dir`'s own, list.
-fn scan(
-    sources: &Sources,
-    dir: &str,
-    library: Option<usize>,
-    libraries: &mut Vec<LibrarySources>,
-    ignores: &mut Vec<IgnoreFile>,
-) {
-    let mut entries = sources.list(dir).unwrap_or_default();
-    let own = (entries.iter().any(|e| e.name == IGNORE_FILE && !e.is_dir))
-        .then(|| sources.read(&format!("{dir}/{IGNORE_FILE}")).ok())
-        .flatten();
-    if let Some(text) = &own {
-        ignores.push(IgnoreFile::parse(text, scanned(dir), ""));
-    }
-    let path_of = |name: &str| match dir {
-        "." => name.to_string(),
-        _ => format!("{dir}/{name}"),
-    };
-    entries.retain(|e| !ignore::ignored(ignores, &path_of(&e.name), e.is_dir));
-    let library = if (entries.iter()).any(|e| e.name == CONFIG_FILE && !e.is_dir) {
-        libraries.push(LibrarySources {
-            root: dir.to_string(),
-            files: Vec::new(),
-            host_files: Vec::new(),
-            config: Config::default(),
-        });
-        Some(libraries.len() - 1)
-    } else {
-        library
-    };
-    for Entry { name, is_dir } in entries {
-        let path = path_of(&name);
-        if is_dir {
-            if !(name.starts_with('.') || name == "temper.out" || name == "temper.keep") {
-                scan(sources, &path, library, libraries, ignores);
-            }
-        } else if let Some(i) = library {
-            let config = name == CONFIG_FILE && libraries[i].root == dir;
-            if is_source(&name) && !config {
-                libraries[i].files.push(path);
-            } else if !config {
-                libraries[i].host_files.push(path);
+/// A scan for libraries under a work root: what it has found, and the
+/// ignore files that apply where it is, outermost first, then `extra`,
+/// which has the last word.
+struct Scan<'a> {
+    sources: &'a Sources,
+    libraries: &'a mut Vec<LibrarySources>,
+    ignores: &'a mut Vec<IgnoreFile>,
+    extra: Option<&'a IgnoreFile>,
+}
+
+impl Scan<'_> {
+    /// Adds the sources under `dir` to the library whose root is the
+    /// index `library` in `libraries`, or to a new one if `dir` has a
+    /// config file, skipping what the ignore files, and `dir`'s own,
+    /// list.
+    fn scan(&mut self, dir: &str, library: Option<usize>) {
+        let sources = self.sources;
+        let mut entries = sources.list(dir).unwrap_or_default();
+        let mut own = 0;
+        for name in IGNORE_FILES {
+            if entries.iter().any(|e| e.name == name && !e.is_dir) {
+                if let Ok(text) = sources.read(&format!("{dir}/{name}")) {
+                    self.ignores
+                        .push(IgnoreFile::parse(&text, scanned(dir), ""));
+                    own += 1;
+                }
             }
         }
-    }
-    if own.is_some() {
-        ignores.pop();
+        let path_of = |name: &str| match dir {
+            "." => name.to_string(),
+            _ => format!("{dir}/{name}"),
+        };
+        let (ignores, extra) = (&*self.ignores, self.extra);
+        entries.retain(|e| {
+            let path = path_of(&e.name);
+            let skip = (extra.and_then(|f| f.decides(&path, e.is_dir)))
+                .unwrap_or_else(|| ignore::ignored(ignores, &path, e.is_dir));
+            !skip
+        });
+        let library = if (entries.iter()).any(|e| e.name == CONFIG_FILE && !e.is_dir) {
+            self.libraries.push(LibrarySources {
+                root: dir.to_string(),
+                files: Vec::new(),
+                host_files: Vec::new(),
+                config: Config::default(),
+            });
+            Some(self.libraries.len() - 1)
+        } else {
+            library
+        };
+        for Entry { name, is_dir } in entries {
+            let path = path_of(&name);
+            if is_dir {
+                if !(name.starts_with('.') || name == "temper.out" || name == "temper.keep") {
+                    self.scan(&path, library);
+                }
+            } else if let Some(i) = library {
+                let library = &mut self.libraries[i];
+                let config = name == CONFIG_FILE && library.root == dir;
+                if is_source(&name) && !config {
+                    library.files.push(path);
+                } else if !config {
+                    library.host_files.push(path);
+                }
+            }
+        }
+        let kept = self.ignores.len() - own;
+        self.ignores.truncate(kept);
     }
 }
 

@@ -42,13 +42,22 @@ pub struct Tools {
     pub prepare: Option<Prepare>,
     /// Runs a library's tests.
     pub test: fn(dir: &Path, library: &Tested, all: &[Tested]) -> TestResults,
+    /// Runs a library's top level, as `tempest run` does: building what
+    /// needs building quietly, then the program with the command's own
+    /// standard output and error, so what it prints streams. Whether the
+    /// program succeeded, or why it couldn't run.
+    pub run: Run,
 }
+
+/// Runs a library built in `temper.out/BACKEND` (`dir`, absolute), given
+/// every library built there.
+pub type Run = fn(dir: &Path, library: &Tested, all: &[Tested]) -> Result<bool, String>;
 
 /// Readies `temper.out/BACKEND` for tests, given every library built
 /// there.
 pub type Prepare = fn(dir: &Path, all: &[Tested]) -> Result<(), String>;
 
-/// A library that built, with how many tests it has.
+/// A library that built, with how many tests it has (none, for `run`).
 pub struct Tested {
     pub name: String,
     pub tests: usize,

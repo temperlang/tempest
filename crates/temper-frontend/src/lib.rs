@@ -22,6 +22,8 @@
 //!   memory, in layers.
 //! - [`project`]: libraries on disk, found as `temper test` finds them.
 //! - [`library_tests`]: running libraries' tests, for `tempest test`.
+//! - [`log`]: commands' reports as text or JSON records
+//!   (`--logformat`).
 //! - [`stdlib`]: Temper's std library, built in.
 //! - [`to_tmpl`]: a settled library as tmpl, the backend IR.
 //! - `web_client`: HTTP requests for std's `net`, with the `net` feature.
@@ -38,6 +40,7 @@ mod imports;
 pub mod interp;
 pub mod library;
 pub mod library_tests;
+pub mod log;
 mod macros;
 pub mod order;
 pub mod print;

@@ -162,9 +162,10 @@ page doesn't repeat those.
 - **Docs:** the guide uses `temper init`, `build`, `test`, `watch`,
   `repl` (and its `describe`), `version`, and `help`; the language
   server is `temper serve --port N`.
-- **tempest:** `tempest build`, `tempest test`, and `tempest lsp` (on
-  standard input and output); no `init`, `watch`, `run`, `repl`, `doc`,
-  or `version` yet ([the command line](tools/cli.md)).
+- **tempest:** `temper`'s commands and flags, as `tempest build`,
+  `test`, `run`, `init`, `version`, `license`, `licenses`, `help`, and
+  `serve` (or `lsp`, on standard input and output only); no `watch`,
+  `repl`, or `doc` yet, which say so ([the command line](tools/cli.md)).
 - **Suggested:** finish CLI parity ([the plan](../notes/switch-over.md)),
   then decide whether the binary is called `temper`.
 

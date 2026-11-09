@@ -9,8 +9,9 @@ by writing a very simple library.
 
 > **Note:** these steps use `temper`, the command line tool from
 > Temper's releases. tempest, the compiler in this repository, has
-> `tempest build` and `tempest test` so far, but not yet `init`,
-> `version`, `watch`, or `repl` ([the command line](../tools/cli.md);
+> the same commands, with the same flags, as `tempest init`, `build`,
+> `test`, `run`, `version`, and the rest, but not yet `watch` or `repl`
+> ([the command line](../tools/cli.md);
 > [inconsistencies](../inconsistencies.md#i9-the-command-line)).
 
 ## Getting started overview

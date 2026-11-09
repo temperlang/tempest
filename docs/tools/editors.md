@@ -25,10 +25,12 @@ its settings, are in [editors/vscode](../../editors/vscode/README.md).
 
 ## The language server
 
-`tempest lsp` speaks the protocol over standard input and output.
+`tempest lsp`, or `tempest serve`, speaks the protocol over standard
+input and output.
 [How it works](../internals/09-language-server.md) is in the internals.
 
 > **Note:** Temper's first compiler starts its server with `temper
 > serve --port N`, and its extension, "Temper Language Support",
-> is built from its repository; tempest's is `tempest lsp`, on standard
-> input and output ([inconsistencies](../inconsistencies.md#i9-the-command-line)).
+> is built from its repository; tempest's is `tempest lsp` (or
+> `tempest serve`, without `--port`), on standard input and output
+> ([inconsistencies](../inconsistencies.md#i9-the-command-line)).

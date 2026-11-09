@@ -53,7 +53,7 @@ pub mod tools;
 mod types;
 pub mod validate;
 
-pub use backend::{Backend, OutFile, TestResults, Tested, Tools};
+pub use backend::{Backend, OutFile, Run, TestResults, Tested, Tools};
 pub use builder::Builder;
 pub use decls::{Decl, DeclKind, DeclTable, Facts, Strings};
 pub use ids::{DeclId, FileId, NodeId, SourceFile, Span, StrId, TypeId};

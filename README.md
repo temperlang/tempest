@@ -74,7 +74,9 @@ browser.
   Wherewith) pass all their tests in all seven languages.
 - **Editors:** a language server, `tempest lsp`, and a VS Code
   extension ([editors/vscode](editors/vscode/README.md)).
-- **Coming:** the rest of the `temper` command line
+- **The command line** takes `temper`'s commands and flags: `build`,
+  `test`, `run`, `init`, `serve`, `version`, `license`, `licenses`, and
+  `help`; `watch`, `repl`, and `doc` are coming
   ([docs/tools/cli.md](docs/tools/cli.md)).
 
 ## Try it

@@ -1,101 +1,80 @@
 //! The `tempest` command, a thin layer over the other crates, which do
-//! the work as libraries: argument parsing and output.
+//! the work as libraries: argument parsing and output. Its commands and
+//! flags are Kotlin Temper's `temper`'s, where tempest has them
+//! (docs/tools/cli.md):
 //!
-//!     tempest build [-w DIR] [-b BACKEND]... [--no-connected] [--verbose] [--std DIR]
-//!     tempest test [-b interp|BACKEND] [--verbose] [--std DIR] [DIR]
-//!     tempest lsp [--std DIR]
-//!     tempest py [--out DIR] [--std DIR] FILE...
-//!     tempest rust [--out DIR] [--std DIR] FILE...
-//!     tempest js [--out DIR] [--std DIR] FILE...
-//!     tempest java [--out DIR] [--std DIR] FILE...
-//!     tempest csharp [--out DIR] [--std DIR] FILE...
-//!     tempest cpp [--out DIR] [--std DIR] FILE...
-//!     tempest lua [--out DIR] [--std DIR] FILE...
+//!     tempest build [-w DIR] [-ign FILE] [-o DIR] [-b BACKEND]... [--no-connected]
+//!                   [-v] [--logformat text|json] [--std DIR]
+//!     tempest test [-w DIR | DIR] [-ign FILE] [--library NAME] [-b interp|BACKEND]...
+//!                  [--no-connected] [-v] [--logformat text|json] [--std DIR]
+//!     tempest run --library NAME -b interp|BACKEND [-w DIR] [-ign FILE] [-o DIR]
+//!                 [--no-connected] [-v] [--logformat text|json] [--std DIR]
+//!     tempest init [-o DIR]
+//!     tempest serve|lsp [--std DIR]
+//!     tempest version | license | licenses | help [COMMAND]
 //!
-//! `test` runs the tests of the libraries under DIR's work root on the
-//! interpreter, as Kotlin Temper's `temper test` does
-//! ([`temper_frontend::library_tests`]), printing only failures and a
-//! summary, or with `--verbose` (`-v`), every test's result and the
-//! libraries' output. DIR defaults to the current
-//! directory. `-b interp` names the interpreter, as Kotlin's does. With
-//! another backend, `-b py` say, it builds the libraries for that backend
-//! as `build` does, saying what each needs that isn't covered yet, then
-//! runs the tests of those that built with the language's own tools
-//! ([`temper_driver::test_run`]), reporting as on the interpreter; tests of a library
-//! that didn't build count as not run. Std modules are built in ([`temper_frontend::stdlib`]), or
-//! come from `--std`'s directory, to test against another copy.
-//!
-//! `build` translates every library under the work root (DIR with `-w`,
-//! or else found from the current directory as `test` finds it) for each
-//! backend that `-b` names, or Kotlin's defaults that tempest has
-//! (`csharp`, `java`, `js`, `lua`, `py`, and `rust`), writing
-//! `temper.out/BACKEND/LIBRARY/…` laid out as Kotlin Temper's `temper
-//! build` does, with each backend's runtime beside the libraries
-//! ([`temper_driver::build`]). What it doesn't cover yet, it says, per library, and fails.
+//! - `build` translates every library under the work root for each
+//!   backend `-b` names, or Kotlin's defaults that tempest has (`csharp`,
+//!   `java`, `js`, `lua`, `py`, and `rust`), writing
+//!   `temper.out/BACKEND/LIBRARY/…` (or under `-o DIR`) as Kotlin's
+//!   `temper build` does ([`temper_driver::build`]).
+//! - `test` runs the libraries' tests on each backend `-b` names, in
+//!   turn, or on the interpreter, by default or as `-b interp`
+//!   ([`temper_frontend::library_tests`], [`temper_driver::test_run`]),
+//!   printing failures (or with `-v`, every result) and Kotlin's summary,
+//!   and with several backends, each one's summary and then the total.
+//!   DIR is where the work root's search starts, as `-w`'s default
+//!   starts from the current directory.
+//! - `run` builds the work root for one backend, then runs a library's
+//!   top level with that language's tools, or on the interpreter
+//!   ([`temper_driver::run`]).
+//! - `init` writes a new project's skeleton, as Kotlin's
+//!   ([`temper_driver::init`]).
+//! - `serve`, or `lsp`, serves an editor over stdio as a language server
+//!   ([`temper_lsp`]); Kotlin's `--port` says that it's stdio only.
+//! - `version`, `license`, and `licenses` are about tempest itself; the
+//!   last lists the crates built into it, from a file that a test keeps
+//!   current (`tests/licenses.rs`).
+//! - `watch`, `repl`, and `doc`, and Kotlin's backends `cppv`, `data`,
+//!   `java8`, and `mypyc`, say they aren't in tempest yet.
 //!
 //! **Errors** don't stop any command, as in Kotlin Temper: every error is
 //! reported, and each fails only where it runs (tmpl's `Error`), so
-//! `build` and the commands for one backend still write every backend's
-//! code, and `test` still runs the tests, on the interpreter and on each
-//! backend, where the code with errors fails only the tests that reach
-//! it. Each exits with 1 when there were errors, whatever else happened,
-//! as Kotlin's `temper build` and `temper test` do.
-//! Each backend uses a library's host code for its `@connected` functions
-//! and classes, or their Temper implementations where they don't list it,
-//! as Kotlin's does; `--no-connected` uses Temper implementations wherever
-//! there are any ([`temper_tmpl::host`]).
+//! `build` still writes every backend's code, and `test` and `run` still
+//! run, on the interpreter and on each backend, where the code with
+//! errors fails only what reaches it. Each exits with 1 when there were
+//! errors, as Kotlin's `temper build` and `temper test` do.
 //!
-//! `py`, `rust`, `js`, `java`, `csharp`, `cpp`, and `lua` build FILEs as
-//! one library, named after the first file (`fibonacci` for
-//! `fibonacci.temper.md`), translate it to tmpl and then with that
-//! backend's first, Kotlin-compatible variant (its crate's `BACKEND`), as
-//! `build` does, and print each generated file after a line marking its
-//! path in the language's line comment (`# ==> PATH`), or with `--out`,
-//! write them under DIR, laid out as Kotlin Temper's `temper.out/LANG`,
-//! without the runtime, which `build` copies beside them. Written, JS's
-//! module has a source map beside it, as Kotlin's has, naming the
-//! sources by their paths relative to the package.
+//! Each backend is a cargo feature, all on by default ([`temper_driver`]);
+//! one left out says so and fails.
 //!
-//! `lsp` serves an editor over stdio as a language server ([`temper_lsp`]):
-//! diagnostics as you type, hover, go to definition, completion, find
-//! references, rename, document symbols, and signature help, over the
-//! library around each open file.
-//!
-//! Each backend is a cargo feature, all on by default ([`temper_driver`]); one
-//! left out says so and fails.
-//!
-//! Exits with 0 on success, 1 on failure, and 2 on a usage error.
+//! **Exit codes:** 0 on success, 1 on failure, 2 on a usage error, and 3
+//! for what isn't in tempest yet (a command, a backend, or `--port`).
 
-use std::cell::OnceCell;
+mod help;
+
 use std::io::{self, Write};
 use std::path::Path;
 use std::process::ExitCode;
 use std::sync::OnceLock;
-use temper_driver::{Registry, build, test_run};
-use temper_frontend::library::Library;
-use temper_frontend::library_tests::{Tally, test_dir};
-use temper_frontend::project::{load_imports, source_kind, work_root};
-use temper_frontend::settle::settle;
+use temper_driver::{NOT_YET, Registry, build, init, run, test_run};
+use temper_frontend::ignore::IgnoreFile;
+use temper_frontend::library_tests::{Tally, TestOptions, test_libraries};
+use temper_frontend::log::{LogFormat, task};
+use temper_frontend::project::{ignore_file, work_root};
 use temper_frontend::sources::Sources;
 use temper_tmpl::Backend;
 
-const USAGE: &str =
-    "usage: tempest build [-w DIR] [-b BACKEND]... [--no-connected] [--verbose] [--std DIR]
-       tempest test [-b interp|BACKEND] [--verbose] [--std DIR] [DIR]
-       tempest lsp [--std DIR]
-       tempest py [--out DIR] [--std DIR] FILE...
-       tempest rust [--out DIR] [--std DIR] FILE...
-       tempest js [--out DIR] [--std DIR] FILE...
-       tempest java [--out DIR] [--std DIR] FILE...
-       tempest csharp [--out DIR] [--std DIR] FILE...
-       tempest cpp [--out DIR] [--std DIR] FILE...
-       tempest lua [--out DIR] [--std DIR] FILE...";
+/// Exit codes.
+const FAILED: u8 = 1;
+const USAGE: u8 = 2;
+const NOT_YET_CODE: u8 = 3;
 
 fn main() -> ExitCode {
     // Calls and lowering recurse; give them room (see `interp`).
     let thread = std::thread::Builder::new().stack_size(64 << 20).spawn(|| {
         let args: Vec<String> = std::env::args().skip(1).collect();
-        ExitCode::from(run(&args))
+        ExitCode::from(run_command(&args))
     });
     thread
         .and_then(|t| t.join().map_err(|_| io::Error::other("panicked")))
@@ -104,210 +83,191 @@ fn main() -> ExitCode {
 
 /// Runs a command, `args` not including the program's name, and returns
 /// the exit code.
-fn run(args: &[String]) -> u8 {
-    match args.first().map(String::as_str) {
-        Some("test") => test(&args[1..]),
-        Some("build") => build_command(&args[1..]),
-        Some("lsp") => lsp(&args[1..]),
-        Some("help" | "--help" | "-h") => {
-            println!("{USAGE}");
-            0
+fn run_command(args: &[String]) -> u8 {
+    let Some(name) = args.first() else {
+        eprint!("{}", help::overview());
+        return USAGE;
+    };
+    let rest = &args[1..];
+    // `--help` or `-h` anywhere after a command asks for its help.
+    if rest.iter().any(|a| a == "--help" || a == "-h") && help::command(name).is_some() {
+        print!("{}", help::command(name).unwrap_or_default());
+        return 0;
+    }
+    match name.as_str() {
+        "build" => build_command(rest),
+        "test" => test_command(rest),
+        "run" => run_library(rest),
+        "init" => init_command(rest),
+        "lsp" | "serve" => serve(name, rest),
+        "version" | "--version" => version(rest),
+        "license" => about(name, rest, &license_text()),
+        "licenses" => about(name, rest, LICENSES),
+        "help" | "--help" | "-h" => help_command(rest),
+        "watch" | "repl" | "doc" => {
+            eprintln!("{}", not_yet_command(name));
+            NOT_YET_CODE
         }
-        Some(name) => match named(name) {
-            Ok(backend) => generate(&args[1..], backend),
-            Err(1) => 1,
-            Err(_) => usage(),
-        },
-        None => usage(),
+        _ if temper_driver::KNOWN.contains(&name.as_str()) => {
+            eprintln!(
+                "tempest: no command {name}; `tempest build -b {name}` writes {name}'s code, \
+                 and `-o DIR` puts it in DIR"
+            );
+            USAGE
+        }
+        _ => {
+            eprintln!("tempest: no command {name}");
+            eprint!("{}", help::overview());
+            USAGE
+        }
     }
 }
 
-/// `tempest test [-b interp|BACKEND] [--verbose] [--std DIR] [DIR]`.
-fn test(args: &[String]) -> u8 {
-    let (mut std_dir, mut dir, mut verbose) = (None, None, false);
-    let mut backend = None;
+/// What a command that isn't in tempest yet says, with what to do
+/// meanwhile.
+pub fn not_yet_command(name: &str) -> String {
+    let meanwhile = match name {
+        "watch" => "meanwhile, run `tempest build` or `tempest test` after each change",
+        "repl" => "meanwhile, the playground runs Temper as you type",
+        _ => "meanwhile, a library's .temper.md files are its documentation",
+    };
+    format!(
+        "tempest: {name} isn't in tempest yet. Kotlin Temper's `temper {name}` has it; \
+         {meanwhile} (docs/tools/cli.md)."
+    )
+}
+
+/// A command's options, as parsed: Kotlin's names, short forms, and the
+/// values they take.
+#[derive(Default)]
+struct Flags {
+    std_dir: Option<String>,
+    workroot: Option<String>,
+    ignorefile: Option<String>,
+    output: Option<String>,
+    backends: Vec<String>,
+    library: Option<String>,
+    no_connected: bool,
+    verbose: bool,
+    log: LogFormat,
+    port: Option<String>,
+    tokens: Option<String>,
+    positional: Vec<String>,
+}
+
+/// Each option: its long name, its short one if any, and whether it
+/// takes a value.
+const OPTIONS: [(&str, Option<&str>, bool); 11] = [
+    ("std", None, true),
+    ("workroot", Some("w"), true),
+    ("ignorefile", Some("ign"), true),
+    ("output-directory", Some("o"), true),
+    ("backend", Some("b"), true),
+    ("library", None, true),
+    ("no-connected", None, false),
+    ("verbose", Some("v"), false),
+    ("logformat", None, true),
+    ("port", None, true),
+    ("tokens", None, true),
+];
+
+/// Parses a command's arguments, allowing the options in `allowed` (by
+/// long name) and up to `positional` other arguments; or says what's
+/// wrong and gives the usage error's exit code. Values follow their
+/// options, or join them after `=` (`--workroot=DIR`).
+fn parse(command: &str, args: &[String], allowed: &[&str], positional: usize) -> Result<Flags, u8> {
+    let mut flags = Flags::default();
     let mut args = args.iter();
+    let wrong = |what: String| {
+        eprintln!("tempest {command}: {what}");
+        eprintln!("`tempest help {command}` shows its options.");
+        USAGE
+    };
     while let Some(arg) = args.next() {
-        match arg.as_str() {
-            "--verbose" | "-v" => verbose = true,
-            "--std" => match args.next() {
-                Some(d) => std_dir = Some(d.clone()),
-                None => return usage(),
+        let Some(flag) = arg.strip_prefix('-').filter(|f| !f.is_empty()) else {
+            if flags.positional.len() == positional {
+                return Err(wrong(format!("unexpected argument {arg}")));
+            }
+            flags.positional.push(arg.clone());
+            continue;
+        };
+        let flag = flag.strip_prefix('-').unwrap_or(flag);
+        let (flag, joined) = match flag.split_once('=') {
+            Some((f, v)) => (f, Some(v.to_string())),
+            None => (flag, None),
+        };
+        let option = OPTIONS
+            .iter()
+            .find(|(long, short, _)| *long == flag || *short == Some(flag))
+            .filter(|(long, _, _)| allowed.contains(long));
+        let Some(&(long, _, takes)) = option else {
+            return Err(wrong(format!("unknown option {arg}")));
+        };
+        let value = match (takes, joined) {
+            (true, Some(v)) => Some(v),
+            (true, None) => match args.next() {
+                Some(v) => Some(v.clone()),
+                None => return Err(wrong(format!("--{long} needs a value"))),
             },
-            // The interpreter, as Kotlin's `-b interp`, or a backend.
-            "-b" | "--backend" => match args.next().map(String::as_str) {
-                Some("interp") => backend = None,
-                Some(name) => match named(name) {
-                    Ok(b) => backend = Some(b),
-                    Err(1) => return 1,
-                    Err(_) => return usage(),
-                },
-                None => return usage(),
+            (false, Some(_)) => return Err(wrong(format!("--{long} takes no value"))),
+            (false, None) => None,
+        };
+        let value = value.unwrap_or_default();
+        let once = |slot: &mut Option<String>| match slot.replace(value.clone()) {
+            Some(_) => Err(wrong(format!("--{long} given twice"))),
+            None => Ok(()),
+        };
+        match long {
+            "std" => once(&mut flags.std_dir)?,
+            "workroot" => once(&mut flags.workroot)?,
+            "ignorefile" => once(&mut flags.ignorefile)?,
+            "output-directory" => once(&mut flags.output)?,
+            "library" => once(&mut flags.library)?,
+            "port" => once(&mut flags.port)?,
+            "tokens" => once(&mut flags.tokens)?,
+            "backend" => {
+                if !flags.backends.contains(&value) {
+                    flags.backends.push(value);
+                }
+            }
+            "no-connected" => flags.no_connected = true,
+            "verbose" => flags.verbose = true,
+            "logformat" => match LogFormat::named(&value) {
+                Some(format) => flags.log = format,
+                None => return Err(wrong(format!("--logformat is text or json, not {value}"))),
             },
-            _ if arg.starts_with('-') || dir.is_some() => return usage(),
-            _ => dir = Some(arg.clone()),
+            _ => unreachable!("every option is matched"),
         }
     }
-    let sources = match std_dir {
-        Some(std_dir) => Sources::with_std_dir(&std_dir),
-        None => Sources::standard(),
-    };
-    let dir = dir.as_deref().unwrap_or(".");
-    if let Some(backend) = backend {
-        return test_on(&sources, dir, backend, verbose);
-    }
-    let mut out = io::BufWriter::new(io::stdout().lock());
-    let passed = test_dir(&sources, dir, verbose, &mut out, &mut io::stderr());
-    let _ = out.flush();
-    if passed { 0 } else { 1 }
+    Ok(flags)
 }
 
-/// `tempest test -b BACKEND`: builds the libraries under DIR's work root
-/// for the backend, as `build` does, saying what each needs that isn't
-/// covered yet, then runs the tests of those that built with the
-/// language's own tools ([`test_run`]), printing failures (or with
-/// `--verbose`, every result) and the summary, as `-b interp` does.
-fn test_on(sources: &Sources, dir: &str, backend: &'static Backend, verbose: bool) -> u8 {
-    let root = work_root(sources, dir);
-    let mut out = io::BufWriter::new(io::stdout().lock());
-    let built = build::build(
-        sources,
-        &root,
-        &[backend],
-        build::Options::default(),
-        &mut out,
-        &mut io::stderr(),
-    );
-    let Some(built) = built else {
-        let _ = out.flush();
-        return 1;
-    };
-    // Libraries with errors still built, and their tests run, as on the
-    // interpreter and in Kotlin's `temper test`, but the run fails.
-    let failed: Vec<&str> = (built.results.iter())
-        .filter(|(_, _, r)| r.is_err())
-        .map(|(l, _, _)| l.as_str())
-        .collect();
-    let tested: Vec<test_run::Tested> = (built.tests.iter())
-        .filter(|(name, _)| !failed.contains(&name.as_str()))
-        .map(|(name, tests)| test_run::Tested {
-            name: name.clone(),
-            tests: *tests,
+impl Flags {
+    fn sources(&self) -> Sources {
+        match &self.std_dir {
+            Some(std_dir) => Sources::with_std_dir(std_dir),
+            None => Sources::standard(),
+        }
+    }
+
+    /// The work root: `-w`'s, or else found from `from`, as Kotlin's
+    /// default is from the current directory.
+    fn root(&self, sources: &Sources, from: &str) -> String {
+        match &self.workroot {
+            Some(root) => root.clone(),
+            None => work_root(sources, from),
+        }
+    }
+
+    /// `--ignorefile`'s file, read, if given; or why it can't be.
+    fn ignore(&self, sources: &Sources, root: &str) -> Result<Option<IgnoreFile>, u8> {
+        let Some(path) = &self.ignorefile else {
+            return Ok(None);
+        };
+        ignore_file(sources, root, path).map(Some).map_err(|why| {
+            eprintln!("tempest: --ignorefile {why}");
+            FAILED
         })
-        .collect();
-    let dir = Path::new(&root).join("temper.out").join(backend.name);
-    let mut tally = Tally::default();
-    let mut ok = failed.is_empty() && built.errors.is_empty();
-    // Tests of libraries that didn't build didn't run.
-    for (name, tests) in &built.tests {
-        if failed.contains(&name.as_str()) {
-            tally.defined += tests;
-            tally.not_run += tests;
-        }
-    }
-    for (name, result) in test_run::run(backend, &dir, &tested) {
-        match result {
-            Ok(tests) => {
-                let failing = tests.results.iter().any(|(_, f)| f.is_some());
-                if verbose || failing {
-                    let _ = writeln!(out, "Testing {name} on {}", backend.name);
-                    for (test, failure) in &tests.results {
-                        let _ = match failure {
-                            None if verbose => writeln!(out, "  ok      {test}"),
-                            None => Ok(()),
-                            // Its first line, as a stack trace may follow.
-                            Some(cause) => {
-                                let cause = cause.lines().next().unwrap_or("");
-                                writeln!(out, "  failed  {test} - {cause}")
-                            }
-                        };
-                    }
-                }
-                tally.add(&tests);
-            }
-            Err(why) => {
-                ok = false;
-                let _ = writeln!(out, "{name}: {}: {why}", backend.name);
-                let defined = (tested.iter())
-                    .find(|t| t.name == name)
-                    .map_or(0, |t| t.tests);
-                tally.defined += defined;
-                tally.not_run += defined;
-            }
-        }
-    }
-    let _ = writeln!(out, "{}", tally.summary());
-    let _ = out.flush();
-    if ok && tally.all_passed() { 0 } else { 1 }
-}
-
-/// `tempest lsp [--std DIR]`: a language server on stdin and stdout.
-fn lsp(args: &[String]) -> u8 {
-    let std_dir = match args {
-        [] => None,
-        [flag, dir] if flag == "--std" => Some(dir.clone()),
-        _ => return usage(),
-    };
-    temper_lsp::serve(io::stdin(), io::stdout().lock(), std_dir)
-}
-
-/// `tempest build [-w DIR] [-b BACKEND]... [--no-connected] [--verbose]
-/// [--std DIR]`.
-fn build_command(args: &[String]) -> u8 {
-    let (mut std_dir, mut root, mut verbose) = (None, None, false);
-    let mut backends: Vec<&Backend> = Vec::new();
-    let mut no_connected = false;
-    let mut args = args.iter();
-    while let Some(arg) = args.next() {
-        match arg.as_str() {
-            "--verbose" | "-v" => verbose = true,
-            "--no-connected" => no_connected = true,
-            "--std" | "-w" | "--workroot" | "-b" | "--backend" => {
-                let Some(value) = args.next() else {
-                    return usage();
-                };
-                match arg.as_str() {
-                    "--std" => std_dir = Some(value.clone()),
-                    "-w" | "--workroot" => root = Some(value.clone()),
-                    _ => match named(value) {
-                        Ok(b) if backends.iter().any(|c| c.name == b.name) => {}
-                        Ok(b) => backends.push(b),
-                        Err(1) => return 1,
-                        Err(code) => {
-                            eprintln!("tempest: no backend {value}");
-                            return code;
-                        }
-                    },
-                }
-            }
-            _ => return usage(),
-        }
-    }
-    if backends.is_empty() {
-        backends = registry().defaults();
-    }
-    let sources = match std_dir {
-        Some(std_dir) => Sources::with_std_dir(&std_dir),
-        None => Sources::standard(),
-    };
-    let root = root.unwrap_or_else(|| work_root(&sources, "."));
-    let mut out = io::BufWriter::new(io::stdout().lock());
-    let options = build::Options {
-        verbose,
-        no_connected,
-    };
-    let built = build::build(
-        &sources,
-        &root,
-        &backends,
-        options,
-        &mut out,
-        &mut io::stderr(),
-    );
-    let _ = out.flush();
-    match built {
-        Some(built) if built.ok() => 0,
-        _ => 1,
     }
 }
 
@@ -317,136 +277,378 @@ fn registry() -> &'static Registry {
     REGISTRY.get_or_init(Registry::built_in)
 }
 
-/// A backend this build has, by name, or else the exit code: 1 for one
-/// it was built without, saying so, or 2 for a name that isn't one.
-fn named(name: &str) -> Result<&'static Backend, u8> {
+/// A backend by name: `None` for the interpreter, where `interp` is
+/// allowed; or else the exit code, saying why: 1 for one this build was
+/// built without, 3 for one of Kotlin's that tempest doesn't have yet,
+/// and 2 for a name that isn't one.
+fn backend(name: &str, interp: bool) -> Result<Option<&'static Backend>, u8> {
     match registry().get(name) {
-        Some(backend) => Ok(backend),
+        Some(backend) => Ok(Some(backend)),
+        None if interp && name == "interp" => Ok(None),
         None if registry().lacks(name) => {
             eprintln!("tempest: built without the {name} backend");
-            Err(1)
+            Err(FAILED)
         }
-        None => Err(2),
+        None if NOT_YET.contains(&name) => {
+            eprintln!(
+                "tempest: the {name} backend isn't in tempest yet; Kotlin Temper's `temper` \
+                 has it (docs/tools/cli.md)."
+            );
+            Err(NOT_YET_CODE)
+        }
+        None => {
+            let names: Vec<&str> = temper_driver::KNOWN.to_vec();
+            let interp = if interp { ", or interp" } else { "" };
+            eprintln!(
+                "tempest: no backend {name}; backends are {}{interp}",
+                names.join(", ")
+            );
+            Err(USAGE)
+        }
     }
 }
 
-/// `tempest py|rust|js|java|csharp|cpp|lua [--out DIR] [--std DIR] FILE...`.
-fn generate(args: &[String], backend: &Backend) -> u8 {
-    let (mut std_dir, mut out_dir, mut files) = (None, None, Vec::new());
-    let mut args = args.iter();
-    while let Some(arg) = args.next() {
-        match arg.as_str() {
-            "--std" => match args.next() {
-                Some(d) => std_dir = Some(d.clone()),
-                None => return usage(),
-            },
-            "--out" => match args.next() {
-                Some(d) => out_dir = Some(d.clone()),
-                None => return usage(),
-            },
-            _ if arg.starts_with('-') => return usage(),
-            _ => files.push(arg.clone()),
-        }
+/// Every backend named, in order, or the exit code.
+fn backends(names: &[String], interp: bool) -> Result<Vec<Option<&'static Backend>>, u8> {
+    names.iter().map(|n| backend(n, interp)).collect()
+}
+
+/// Ends a command, as Kotlin does in JSON with its task's record.
+fn finish(log: LogFormat, label: &str, ok: bool) -> u8 {
+    if log == LogFormat::Json {
+        eprintln!("{}", task(label, ok));
     }
-    let Some(first) = files.first() else {
-        return usage();
+    if ok { 0 } else { FAILED }
+}
+
+/// `tempest build`.
+fn build_command(args: &[String]) -> u8 {
+    let allowed = [
+        "std",
+        "workroot",
+        "ignorefile",
+        "output-directory",
+        "backend",
+        "no-connected",
+        "verbose",
+        "logformat",
+    ];
+    let flags = match parse("build", args, &allowed, 0) {
+        Ok(flags) => flags,
+        Err(code) => return code,
     };
-    let sources = match std_dir {
-        Some(std_dir) => Sources::with_std_dir(&std_dir),
-        None => Sources::standard(),
+    let chosen: Vec<&Backend> = match backends(&flags.backends, false) {
+        Ok(chosen) => chosen.into_iter().flatten().collect(),
+        Err(code) => return code,
     };
-    let mut library = Library::new();
-    for path in &files {
-        let text = match sources.read(path) {
-            Ok(text) => text.into_owned(),
-            Err(err) => {
-                eprintln!("{path}: {err}");
-                return 1;
-            }
+    let chosen = match chosen.is_empty() {
+        true => registry().defaults(),
+        false => chosen,
+    };
+    let sources = flags.sources();
+    let root = flags.root(&sources, ".");
+    let ignore = match flags.ignore(&sources, &root) {
+        Ok(ignore) => ignore,
+        Err(code) => return code,
+    };
+    let options = build::Options {
+        verbose: flags.verbose,
+        no_connected: flags.no_connected,
+        out_dir: flags.output.as_deref().map(Path::new),
+        ignore: ignore.as_ref(),
+        log: flags.log,
+    };
+    let mut out = io::BufWriter::new(io::stdout().lock());
+    let built = build::build(
+        &sources,
+        &root,
+        &chosen,
+        options,
+        &mut out,
+        &mut io::stderr(),
+    );
+    let _ = out.flush();
+    finish(flags.log, "Build", built.is_some_and(|b| b.ok()))
+}
+
+/// `tempest test`: each backend in turn, or the interpreter.
+fn test_command(args: &[String]) -> u8 {
+    let allowed = [
+        "std",
+        "workroot",
+        "ignorefile",
+        "library",
+        "backend",
+        "no-connected",
+        "verbose",
+        "logformat",
+    ];
+    let flags = match parse("test", args, &allowed, 1) {
+        Ok(flags) => flags,
+        Err(code) => return code,
+    };
+    if flags.workroot.is_some() && !flags.positional.is_empty() {
+        eprintln!("tempest test: give -w or DIR, not both");
+        return USAGE;
+    }
+    let chosen = match backends(&flags.backends, true) {
+        Ok(chosen) if chosen.is_empty() => vec![None],
+        Ok(chosen) => chosen,
+        Err(code) => return code,
+    };
+    let sources = flags.sources();
+    let from = flags.positional.first().map_or(".", String::as_str);
+    let root = flags.root(&sources, from);
+    let ignore = match flags.ignore(&sources, &root) {
+        Ok(ignore) => ignore,
+        Err(code) => return code,
+    };
+    let options = TestOptions {
+        verbose: flags.verbose,
+        library: flags.library.as_deref(),
+        ignore: ignore.as_ref(),
+        log: flags.log,
+    };
+    let build_options = build::Options {
+        verbose: false,
+        no_connected: flags.no_connected,
+        out_dir: None,
+        ignore: ignore.as_ref(),
+        log: flags.log,
+    };
+    let json = flags.log == LogFormat::Json;
+    let several = chosen.len() > 1;
+    let (mut all_ok, mut total, mut stopped) = (true, Tally::default(), false);
+    let mut out = io::BufWriter::new(io::stdout().lock());
+    let mut err = io::stderr();
+    for backend in chosen {
+        let tested = match backend {
+            None => test_libraries(&sources, &root, &options, &mut out, &mut err),
+            Some(backend) => test_run::test_backend(
+                &sources,
+                &root,
+                backend,
+                &options,
+                build_options,
+                &mut out,
+                &mut err,
+            ),
         };
-        library.add_file(path, &text, source_kind(path));
+        // Nothing to test, the same for every backend, as said.
+        let Some((ok, tally)) = tested else {
+            (all_ok, stopped) = (false, true);
+            break;
+        };
+        if !json {
+            let name = backend.map_or("interp", |b| b.name);
+            let _ = match several {
+                true => writeln!(out, "{name}: {}", tally.summary()),
+                false => writeln!(out, "{}", tally.summary()),
+            };
+        }
+        let _ = out.flush();
+        all_ok &= ok;
+        total.sum(&tally);
     }
-    load_imports(&sources, &mut library);
-    let settled = settle(library);
-    // Every diagnostic, then the code anyway, each error failing where it
-    // runs, as `build` does; errors make the exit status 1.
-    let mut diagnostics = String::new();
-    temper_frontend::library_tests::write_located_diagnostics(&settled, &mut diagnostics);
-    eprint!("{diagnostics}");
-    let errors = (settled.library.diagnostics.iter())
-        .filter(|d| d.level == temper_frontend::library::Level::Error)
-        .count();
-    let file = first.rsplit(['/', '\\']).next().unwrap_or(first);
-    let name = (file.strip_suffix(".temper.md"))
-        .or_else(|| file.strip_suffix(".temper"))
-        .unwrap_or(file);
-    // std, settled only if the library uses it.
-    let std = OnceCell::new();
-    let std = || {
-        (std.get_or_init(|| temper_frontend::stdlib::program(&sources))
-            .as_ref())
-        .map_err(|e| format!("std: {e}"))
+    match (json, several) {
+        _ if stopped => {}
+        (true, _) => eprintln!("{}", total.summary_record()),
+        (false, true) => {
+            let _ = writeln!(out, "{}", total.summary());
+        }
+        (false, false) => {}
+    }
+    let _ = out.flush();
+    finish(flags.log, "Test", all_ok)
+}
+
+/// `tempest run --library NAME -b BACKEND`.
+fn run_library(args: &[String]) -> u8 {
+    let allowed = [
+        "std",
+        "library",
+        "backend",
+        "workroot",
+        "ignorefile",
+        "output-directory",
+        "no-connected",
+        "verbose",
+        "logformat",
+    ];
+    let flags = match parse("run", args, &allowed, 0) {
+        Ok(flags) => flags,
+        Err(code) => return code,
     };
-    let program = temper_driver::checked(&settled, name)
-        .and_then(|p| temper_driver::with_std(p, backend, std));
-    let program = match program {
-        Ok(program) => program,
-        Err(e) => {
-            eprintln!("{e}");
-            return 1;
+    let Some(library) = flags.library.as_deref() else {
+        eprintln!("tempest run: --library NAME is required");
+        return USAGE;
+    };
+    let backend = match flags.backends.as_slice() {
+        [name] => match backend(name, true) {
+            Ok(backend) => backend,
+            Err(code) => return code,
+        },
+        [] => {
+            eprintln!("tempest run: -b BACKEND is required (interp for the interpreter)");
+            return USAGE;
+        }
+        _ => {
+            eprintln!("tempest run: one -b BACKEND only");
+            return USAGE;
         }
     };
-    // The sources' directory, for source maps.
-    let source_dir = Path::new(first)
-        .parent()
-        .map(|p| p.to_string_lossy().into_owned())
-        .filter(|p| !p.is_empty())
-        .unwrap_or_else(|| ".".into());
-    // Written files get source maps, which lead back to the sources.
-    let maps = (out_dir.as_deref()).map(|d| {
-        temper_driver::sources_prefix(
-            &Path::new(d).join(&program.library.name),
-            &format!("{source_dir}/x"),
-        )
-    });
-    let generated = match temper_driver::translate(&program, backend, maps.as_deref()) {
-        Ok(files) => files,
-        Err(e) => {
-            eprintln!("{e}");
-            return 1;
-        }
+    let sources = flags.sources();
+    let root = flags.root(&sources, ".");
+    let ignore = match flags.ignore(&sources, &root) {
+        Ok(ignore) => ignore,
+        Err(code) => return code,
     };
-    match out_dir {
-        Some(dir) => {
-            for (file, text) in &generated {
-                let path = Path::new(&dir).join(file);
-                let written = path
-                    .parent()
-                    .map_or(Ok(()), std::fs::create_dir_all)
-                    .and_then(|()| std::fs::write(&path, text));
-                if let Err(err) = written {
-                    eprintln!("{}: {err}", path.display());
-                    return 1;
-                }
-            }
+    let options = build::Options {
+        verbose: flags.verbose,
+        no_connected: flags.no_connected,
+        out_dir: flags.output.as_deref().map(Path::new),
+        ignore: ignore.as_ref(),
+        log: flags.log,
+    };
+    let mut out = io::stdout();
+    let ok = run::run(
+        &sources,
+        &root,
+        library,
+        backend,
+        options,
+        &mut out,
+        &mut io::stderr(),
+    );
+    finish(flags.log, "Run", ok)
+}
+
+/// `tempest init [-o DIR]`.
+fn init_command(args: &[String]) -> u8 {
+    let flags = match parse("init", args, &["output-directory"], 0) {
+        Ok(flags) => flags,
+        Err(code) => return code,
+    };
+    let dir = flags.output.as_deref().unwrap_or(".");
+    match init::init(Path::new(dir)) {
+        Ok(made) => {
+            println!(
+                "Initialized new Temper project \"{}\" in {}",
+                made.name,
+                made.dir.display()
+            );
+            0
         }
-        None => {
-            let mut out = io::BufWriter::new(io::stdout().lock());
-            for (file, text) in &generated {
-                let _ = writeln!(out, "{} ==> {file}", backend.comment);
-                let _ = out.write_all(text.as_bytes());
-            }
-            let _ = out.flush();
+        Err(why) => {
+            eprintln!("{why}");
+            eprintln!("Init failed");
+            FAILED
         }
     }
-    if errors > 0 {
-        eprintln!("{}", build::error_count(errors));
-        return 1;
+}
+
+/// `tempest serve` or `tempest lsp`: a language server on stdin and
+/// stdout.
+fn serve(name: &str, args: &[String]) -> u8 {
+    let flags = match parse(name, args, &["std", "port", "tokens"], 0) {
+        Ok(flags) => flags,
+        Err(code) => return code,
+    };
+    if let Some(tokens) = &flags.tokens {
+        if !["add", "full", "none"].contains(&tokens.as_str()) {
+            eprintln!("tempest {name}: --tokens is add, full, or none, not {tokens}");
+            return USAGE;
+        }
+    }
+    if let Some(port) = &flags.port {
+        eprintln!(
+            "tempest {name}: tempest serves the language server over standard input and \
+             output, not a TCP port; run `tempest {name}` without --port {port}, with the \
+             client talking over stdio."
+        );
+        return NOT_YET_CODE;
+    }
+    temper_lsp::serve(io::stdin(), io::stdout().lock(), flags.std_dir)
+}
+
+/// `tempest version`: its version and the commit it was built from.
+fn version(args: &[String]) -> u8 {
+    if let Err(code) = parse("version", args, &[], 0) {
+        return code;
+    }
+    match option_env!("TEMPEST_COMMIT") {
+        Some(commit) => println!("tempest {} ({commit})", env!("CARGO_PKG_VERSION")),
+        None => println!("tempest {}", env!("CARGO_PKG_VERSION")),
     }
     0
 }
 
-fn usage() -> u8 {
-    eprintln!("{USAGE}");
-    2
+/// `tempest license` and `licenses`, which print a text.
+fn about(name: &str, args: &[String], text: &str) -> u8 {
+    if let Err(code) = parse(name, args, &[], 0) {
+        return code;
+    }
+    print!("{text}");
+    0
+}
+
+/// `tempest help [COMMAND]`.
+fn help_command(args: &[String]) -> u8 {
+    match args {
+        [] => {
+            print!("{}", help::overview());
+            0
+        }
+        [name] => match help::command(name) {
+            Some(text) => {
+                print!("{text}");
+                0
+            }
+            None => {
+                eprintln!("tempest help: no command {name}");
+                eprint!("{}", help::overview());
+                USAGE
+            }
+        },
+        _ => {
+            eprintln!("tempest help: one command at a time");
+            USAGE
+        }
+    }
+}
+
+/// The third-party crates built into tempest and their licenses, which
+/// `tests/licenses.rs` keeps current from Cargo's metadata.
+const LICENSES: &str = include_str!("licenses.txt");
+
+/// Tempest's copyright and licenses, as Kotlin's `temper license` prints
+/// Temper's: each of the repository's legal files under a heading, with
+/// NOTICE, which lists the third-party material in tempest's sources.
+fn license_text() -> String {
+    let files = [
+        ("COPYRIGHT", include_str!("../../../COPYRIGHT")),
+        ("NOTICE", include_str!("../../../NOTICE")),
+        ("LICENSE-APACHE", include_str!("../../../LICENSE-APACHE")),
+        ("LICENSE-MIT", include_str!("../../../LICENSE-MIT")),
+        (
+            "LICENSE-CC-BY-SA-4.0",
+            include_str!("../../../LICENSE-CC-BY-SA-4.0"),
+        ),
+    ];
+    let mut out = String::new();
+    for (name, text) in files {
+        if !out.is_empty() {
+            out.push_str("\n\n");
+        }
+        out.push_str(&heading(name));
+        out.push_str(text);
+    }
+    out
+}
+
+/// A name in a box of dashes, as Kotlin's license files head each part.
+pub fn heading(name: &str) -> String {
+    let text = format!("--- {name} ---");
+    let line = "-".repeat(text.chars().count());
+    format!("{line}\n{text}\n{line}\n")
 }

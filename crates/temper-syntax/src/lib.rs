@@ -13,12 +13,14 @@
 //!   metadata as JSON, and call joins rewritten.
 //! - [`print`](mod@print) writes trees as text, for tests and comparisons.
 //! - [`nfkc`] checks that identifiers are in Unicode NFKC.
+//! - [`id_parts`] holds Unicode's identifier character classes, which
+//!   the lexer and library names (Kotlin's `DashedIdentifier`) use.
 
 pub mod adapt;
 pub mod ast;
 pub mod balance;
 mod grammar;
-mod id_parts;
+pub mod id_parts;
 pub mod lex;
 pub mod literate;
 pub mod module;

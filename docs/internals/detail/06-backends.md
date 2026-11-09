@@ -207,13 +207,17 @@ list or count backends).
 **Chosen:** each crate's `tools.rs` says how its language runs a built
 library's tests for `tempest test -b`, through
 [`Tools`](../../../crates/temper-tmpl/src/backend.rs)'s `test` (and an
-optional `prepare`), with shared helpers in tmpl's
+optional `prepare`), and its top level for `tempest run -b`, through
+its `run`, with shared helpers in tmpl's
 [`tools`](../../../crates/temper-tmpl/src/tools.rs). Most
 read JUnit XML; Rust reads what `cargo test` prints, and Java a
 line-per-test runner it compiles. `temper-driver`'s
 [`test_run`](../../../crates/temper-driver/src/test_run.rs) runs them
 for any backend that has them, summarizing as the interpreter's runner
-does.
+does, and its [`run`](../../../crates/temper-driver/src/run.rs) runs a
+library, building quietly first where the language needs a build
+(Cargo, CMake, `javac`, `dotnet build`), then the program with the
+command's own output, so what it prints streams.
 
 | Backend | How its tests run |
 |---|---|

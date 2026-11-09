@@ -4,17 +4,41 @@
 //! target, its tests with std and the libraries it imports, by `g++` or
 //! whatever CMake finds (`CXX`), two jobs at once, then that program run
 //! in the library's directory, which writes `test-results.xml`, as
-//! Kotlin's `RunCpp` runs its `g++` build.
+//! Kotlin's `RunCpp` runs its `g++` build. `tempest run -b cpp` builds
+//! the `LIBRARY-main` target the same way, quietly, and runs it.
 
 use std::path::Path;
 use std::process::Command;
-use temper_tmpl::tools::{junit_file, output, tool, tool_output};
+use temper_tmpl::tools::{junit_file, output, program, step, tool, tool_output};
 use temper_tmpl::{TestResults, Tested, Tools};
 
 pub const TOOLS: Tools = Tools {
     prepare: None,
     test,
+    run,
 };
+
+fn run(dir: &Path, library: &Tested, _: &[Tested]) -> Result<bool, String> {
+    let here = dir.join(&library.name);
+    let cmake = tool("CMAKE", "cmake");
+    step(
+        Command::new(&cmake)
+            .args(["-S", ".", "-B", "build", "-DCMAKE_BUILD_TYPE=Debug"])
+            .current_dir(&here),
+        "cmake",
+    )?;
+    let target = format!("{}-main", library.name);
+    step(
+        Command::new(&cmake)
+            .args(["--build", "build", "--target", &target, "-j", "2"])
+            .current_dir(&here),
+        "cmake --build",
+    )?;
+    program(
+        Command::new(here.join("build").join(&target)).current_dir(&here),
+        &target,
+    )
+}
 
 fn test(dir: &Path, library: &Tested, _: &[Tested]) -> TestResults {
     let here = dir.join(&library.name);

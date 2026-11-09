@@ -7,12 +7,17 @@
 //! { … }`. Like `temper test`, it prints only what failed, then Kotlin's
 //! summary, `Tests passed: 29 of 29`, unless asked for every test's
 //! result, and fails if a test failed or didn't run, or a library has
-//! errors.
+//! errors. [`test_libraries`] does the same under a work root, with
+//! `tempest test`'s options ([`TestOptions`]): one library, an ignore
+//! file, and JSON records, leaving the summary to the caller, which may
+//! sum several backends' tallies.
 
+use crate::ignore::IgnoreFile;
 use crate::interp::run_tests;
 use crate::library::Level;
+use crate::log::{LogFormat, Value, record, write_json_diagnostics};
 use crate::project::{
-    LibrarySources, duplicate_names, find_libraries, library_of, load_library, work_root,
+    LibrarySources, duplicate_names, find_libraries_ignoring, library_of, load_library, work_root,
 };
 use crate::settle::{Settled, settle};
 use crate::sources::Sources;
@@ -30,33 +35,112 @@ pub fn test_dir(
     err: &mut dyn Write,
 ) -> bool {
     let root = work_root(sources, dir);
-    let libraries = find_libraries(sources, &root);
-    if libraries.is_empty() {
-        let _ = writeln!(err, "No Temper library (config.temper.md) under {root}");
+    let options = TestOptions {
+        verbose,
+        ..TestOptions::default()
+    };
+    let Some((ok, tally)) = test_libraries(sources, &root, &options, out, err) else {
         return false;
-    }
-    let duplicates = duplicate_names(&libraries);
-    for name in &duplicates {
-        let _ = writeln!(err, "Two libraries are named {name} under {root}");
-    }
-    if !duplicates.is_empty() {
-        return false;
-    }
+    };
+    let _ = writeln!(out, "{}", tally.summary());
+    let _ = out.flush();
+    ok
+}
+
+/// How to test, as `tempest test`'s flags say.
+#[derive(Default)]
+pub struct TestOptions<'a> {
+    /// Every test's result, and the libraries' output.
+    pub verbose: bool,
+    /// Only this library's tests, by its name (`--library`), as Kotlin's.
+    pub library: Option<&'a str>,
+    /// An ignore file with the last word (`--ignorefile`).
+    pub ignore: Option<&'a IgnoreFile>,
+    /// Text, or JSON records, all to `err`, as Kotlin's `--logformat`.
+    pub log: LogFormat,
+}
+
+/// Tests the libraries under a work root on the interpreter, as
+/// [`test_dir`] does, without the summary: whether all passed, without
+/// errors, and the tally; or `None`, having said why, if there's nothing
+/// to test (no library, two of one name, or none named as asked). In JSON (`options.log`), everything goes to
+/// `err` as records ([`crate::log`]): diagnostics, Kotlin's `TestFailed`
+/// for each failure, and with `verbose`, `TestPassed` and `Output`.
+pub fn test_libraries(
+    sources: &Sources,
+    root: &str,
+    options: &TestOptions,
+    out: &mut dyn Write,
+    err: &mut dyn Write,
+) -> Option<(bool, Tally)> {
+    let json = options.log == LogFormat::Json;
     let mut tally = Tally::default();
+    let libraries = libraries_to_test(
+        sources,
+        root,
+        options.ignore,
+        options.library,
+        options.log,
+        err,
+    )?;
     let mut ok = true;
     for library in &libraries {
+        if options
+            .library
+            .is_some_and(|name| name != library.config.name)
+        {
+            continue;
+        }
         let tests = match test_library(sources, library, &libraries) {
             Ok(tests) => tests,
             Err(message) => {
-                let _ = writeln!(err, "{message}");
+                problem(options.log, err, "LibraryUnreadable", &message, &[]);
                 ok = false;
                 continue;
             }
         };
-        let _ = err.write_all(tests.diagnostics.as_bytes());
+        let _ = err.write_all(match json {
+            true => tests.json_diagnostics.as_bytes(),
+            false => tests.diagnostics.as_bytes(),
+        });
         ok &= tests.errors == 0;
         let failed = tests.failure.is_some() || tests.results.iter().any(|(_, f)| f.is_some());
-        if !verbose && !failed {
+        if json {
+            let name = &library.config.name;
+            if options.verbose {
+                for line in &tests.output {
+                    let values = [name.as_str().into(), line.as_str().into()];
+                    let _ = writeln!(err, "{}", record("info", "Output", None, &values, line));
+                }
+            }
+            for (test, failure) in &tests.results {
+                match failure {
+                    Some(cause) => test_failed(err, "interp", test, cause),
+                    None if options.verbose => {
+                        let values = ["interp".into(), test.as_str().into()];
+                        let message = format!("Test passed (interp): {test}");
+                        let _ = writeln!(
+                            err,
+                            "{}",
+                            record("info", "TestPassed", None, &values, &message)
+                        );
+                    }
+                    None => {}
+                }
+            }
+            if let Some(failure) = &tests.failure {
+                problem(
+                    options.log,
+                    err,
+                    "LibraryFailed",
+                    failure,
+                    &[name.as_str().into()],
+                );
+            }
+            tally.add(&tests);
+            continue;
+        }
+        if !options.verbose && !failed {
             tally.add(&tests);
             continue;
         }
@@ -66,7 +150,7 @@ pub fn test_dir(
         }
         for (name, failure) in &tests.results {
             let _ = match failure {
-                None if verbose => writeln!(out, "  ok      {name}"),
+                None if options.verbose => writeln!(out, "  ok      {name}"),
                 None => Ok(()),
                 Some(cause) => writeln!(out, "  failed  {name} - {cause}"),
             };
@@ -76,9 +160,72 @@ pub fn test_dir(
         }
         tally.add(&tests);
     }
-    let _ = writeln!(out, "{}", tally.summary());
-    let _ = out.flush();
-    ok && tally.all_passed()
+    Some((ok && tally.all_passed(), tally))
+}
+
+/// The libraries under a work root, or `None`, having said why: there
+/// are none, two share a name, or none has the name asked for.
+pub fn libraries_to_test(
+    sources: &Sources,
+    root: &str,
+    ignore: Option<&IgnoreFile>,
+    library: Option<&str>,
+    log: LogFormat,
+    err: &mut dyn Write,
+) -> Option<Vec<LibrarySources>> {
+    let libraries = find_libraries_ignoring(sources, root, ignore);
+    if libraries.is_empty() {
+        let message = format!("No Temper library (config.temper.md) under {root}");
+        problem(log, err, "NoLibraries", &message, &[root.into()]);
+        return None;
+    }
+    let duplicates = duplicate_names(&libraries);
+    for name in &duplicates {
+        let message = format!("Two libraries are named {name} under {root}");
+        problem(
+            log,
+            err,
+            "DuplicateLibraryName",
+            &message,
+            &[(*name).into(), root.into()],
+        );
+    }
+    if !duplicates.is_empty() {
+        return None;
+    }
+    if let Some(name) = library {
+        if !libraries.iter().any(|l| l.config.name == name) {
+            let message = format!("No library named {name} under {root}");
+            problem(
+                log,
+                err,
+                "NoSuchLibrary",
+                &message,
+                &[name.into(), root.into()],
+            );
+            return None;
+        }
+    }
+    Some(libraries)
+}
+
+/// Says what went wrong: its text, a line, or an error record.
+pub fn problem(log: LogFormat, err: &mut dyn Write, template: &str, text: &str, values: &[Value]) {
+    let _ = match log {
+        LogFormat::Text => writeln!(err, "{text}"),
+        LogFormat::Json => writeln!(err, "{}", record("error", template, None, values, text)),
+    };
+}
+
+/// Kotlin's `TestFailed` record: the backend, the test, and why.
+pub fn test_failed(err: &mut dyn Write, backend: &str, test: &str, cause: &str) {
+    let values = [backend.into(), test.into(), cause.into()];
+    let message = format!("Test failed ({backend}): {test} - {cause}");
+    let _ = writeln!(
+        err,
+        "{}",
+        record("error", "TestFailed", None, &values, &message)
+    );
 }
 
 /// A library's tests, run.
@@ -94,6 +241,8 @@ pub struct LibraryTests {
     pub failure: Option<String>,
     /// The library's diagnostics, a line each, with file, line and column.
     pub diagnostics: String,
+    /// The same as JSON records ([`crate::log`]).
+    pub json_diagnostics: String,
     /// How many of those are errors.
     pub errors: usize,
 }
@@ -122,6 +271,8 @@ pub fn test_library(
 pub fn run_settled_tests(settled: &Settled, fuel: Option<u64>) -> LibraryTests {
     let mut diagnostics = String::new();
     write_located_diagnostics(settled, &mut diagnostics);
+    let mut json_diagnostics = String::new();
+    write_json_diagnostics(settled, &mut json_diagnostics);
     let errors = (settled.library.diagnostics.iter())
         .filter(|d| d.level == Level::Error)
         .count();
@@ -153,6 +304,7 @@ pub fn run_settled_tests(settled: &Settled, fuel: Option<u64>) -> LibraryTests {
         output,
         failure: run.failure,
         diagnostics,
+        json_diagnostics,
         errors,
     }
 }
@@ -228,6 +380,38 @@ impl Tally {
     /// Whether every test declared ran and passed.
     pub fn all_passed(&self) -> bool {
         self.failed == 0 && self.not_run == 0 && self.unexpected == 0
+    }
+
+    /// Kotlin's summary as a JSON record, its template's name and its
+    /// values, as `--logformat json` writes it.
+    pub fn summary_record(&self) -> String {
+        let passed = self.run - self.failed;
+        let total = self.defined;
+        let (template, values): (&str, Vec<Value>) = match (self.not_run, self.unexpected) {
+            (0, 0) => ("TestSummaryAllRun", vec![passed.into(), total.into()]),
+            (n, 0) => (
+                "TestSummaryNotAllRun",
+                vec![passed.into(), total.into(), n.into()],
+            ),
+            (0, u) => (
+                "TestSummaryUnexpected",
+                vec![passed.into(), total.into(), u.into()],
+            ),
+            (n, u) => (
+                "TestSummaryNotRunAndUnexpected",
+                vec![passed.into(), total.into(), n.into(), u.into()],
+            ),
+        };
+        record("summary", template, None, &values, &self.summary())
+    }
+
+    /// Adds another tally, as Kotlin sums its backends'.
+    pub fn sum(&mut self, other: &Tally) {
+        self.run += other.run;
+        self.failed += other.failed;
+        self.defined += other.defined;
+        self.not_run += other.not_run;
+        self.unexpected += other.unexpected;
     }
 
     /// Kotlin's summary line: `Tests passed: 28 of 29 (1 not run)`.

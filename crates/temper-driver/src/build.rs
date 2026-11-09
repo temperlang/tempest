@@ -13,7 +13,8 @@
 //!   whose names come from std's own naming, as std's modules that build
 //!   as a library ([`temper_frontend::stdlib::program`]) give them; std's
 //!   output is written beside the libraries that use it, as Kotlin's.
-//! - **Output:** `temper.out/BACKEND/LIBRARY/…`, each backend's layout as
+//! - **Output:** `temper.out/BACKEND/LIBRARY/…` (or `DIR/BACKEND/…`
+//!   with `-o DIR`, [`Options::out_dir`]), each backend's layout as
 //!   Kotlin's, with the package files it writes (`pyproject.toml`,
 //!   `Cargo.toml`, `package.json`, `pom.xml`, the `.csproj`s, and the
 //!   rockspec), and the backend's runtime beside the libraries, as
@@ -40,15 +41,17 @@
 //!   with the others. With `--verbose`, every gap in tmpl's translation
 //!   comes first, one per line (`LIBRARY: not yet in tmpl: …`), from
 //!   [`temper_frontend::to_tmpl::gaps`].
+//! - **Reports** are text, or with `--logformat json`
+//!   ([`Options::log`]), a JSON record per line ([`temper_frontend::log`]).
 
 use crate::{checked, interface, sources_prefix, translate, uses_std};
 use std::io::Write;
 use std::path::Path;
+use temper_frontend::ignore::IgnoreFile;
 use temper_frontend::library::Level;
-use temper_frontend::library_tests::write_located_diagnostics;
-use temper_frontend::project::{
-    CONFIG_FILE, LibrarySources, duplicate_names, find_libraries, library_of, load_library,
-};
+use temper_frontend::library_tests::{libraries_to_test, problem, write_located_diagnostics};
+use temper_frontend::log::{LogFormat, write_json_diagnostics};
+use temper_frontend::project::{LibrarySources, library_of, load_library};
 use temper_frontend::settle::settle;
 use temper_frontend::sources::Sources;
 use temper_frontend::to_tmpl::gaps;
@@ -58,13 +61,30 @@ use temper_tmpl::{Backend, Program};
 
 /// How to build.
 #[derive(Clone, Copy, Debug, Default)]
-pub struct Options {
+pub struct Options<'a> {
     /// Says what was written.
     pub verbose: bool,
     /// Uses connected functions' and classes' Temper implementations
     /// wherever there are any, rather than host code, as Kotlin's
     /// `--no-connected`.
     pub no_connected: bool,
+    /// Where to write each backend's directory, in place of the work
+    /// root's `temper.out` (`-o`).
+    pub out_dir: Option<&'a Path>,
+    /// An ignore file with the last word (`--ignorefile`).
+    pub ignore: Option<&'a IgnoreFile>,
+    /// Text, or JSON records (`--logformat`).
+    pub log: LogFormat,
+}
+
+impl Options<'_> {
+    /// Where a build under `root` writes each backend's directory.
+    pub fn out(&self, root: &str) -> std::path::PathBuf {
+        match self.out_dir {
+            Some(dir) => dir.to_path_buf(),
+            None => Path::new(root).join("temper.out"),
+        }
+    }
 }
 
 /// What a build did: each library's result per backend.
@@ -86,9 +106,9 @@ impl Built {
 }
 
 /// Builds the libraries under a work root for the backends given,
-/// writing to `ROOT/temper.out`, and diagnostics and failures to `err`,
-/// and with `verbose`, what was written to `out`. `None` if there's no
-/// library, or two share a name.
+/// writing to `ROOT/temper.out` (or `options.out_dir`), and diagnostics
+/// and failures to `err`, and with `verbose`, what was written to `out`.
+/// `None` if there's no library, or two share a name.
 pub fn build(
     sources: &Sources,
     root: &str,
@@ -97,19 +117,8 @@ pub fn build(
     out: &mut dyn Write,
     err: &mut dyn Write,
 ) -> Option<Built> {
-    let libraries = find_libraries(sources, root);
-    if libraries.is_empty() {
-        let _ = writeln!(err, "No Temper library ({CONFIG_FILE}) under {root}");
-        return None;
-    }
-    let duplicates = duplicate_names(&libraries);
-    for name in &duplicates {
-        let _ = writeln!(err, "Two libraries are named {name} under {root}");
-    }
-    if !duplicates.is_empty() {
-        return None;
-    }
-    let temper_out = Path::new(root).join("temper.out");
+    let libraries = libraries_to_test(sources, root, options.ignore, None, options.log, err)?;
+    let temper_out = options.out(root);
     let mut results = Vec::new();
     let mut programs = Vec::new();
     let mut tests = Vec::new();
@@ -139,7 +148,14 @@ pub fn build(
         true => match temper_frontend::stdlib::program(sources) {
             Ok(std) => Some(std),
             Err(why) => {
-                let _ = writeln!(err, "std: {why}");
+                let text = format!("std: {why}");
+                problem(
+                    options.log,
+                    err,
+                    "StdFailed",
+                    &text,
+                    &[why.to_string().into()],
+                );
                 None
             }
         },
@@ -195,11 +211,20 @@ pub fn build(
     }
     for (library, backend, result) in &results {
         if let Err(why) = result {
-            let _ = writeln!(err, "{library}: {backend}: {why}");
+            let text = format!("{library}: {backend}: {why}");
+            let values = [
+                library.as_str().into(),
+                (*backend).into(),
+                why.as_str().into(),
+            ];
+            problem(options.log, err, "NotBuilt", &text, &values);
         }
     }
-    for (library, count) in &errors {
-        let _ = writeln!(err, "{library}: {}", error_count(*count));
+    // Each error has a record of its own in JSON.
+    if options.log == LogFormat::Text {
+        for (library, count) in &errors {
+            let _ = writeln!(err, "{library}: {}", error_count(*count));
+        }
     }
     Some(Built {
         results,
@@ -259,7 +284,10 @@ fn program(
     // Its tests, which count where it fails, as not run.
     let count = settled.modules.iter().map(|m| m.test_cases.len()).sum();
     let mut diagnostics = String::new();
-    write_located_diagnostics(&settled, &mut diagnostics);
+    match options.log {
+        LogFormat::Text => write_located_diagnostics(&settled, &mut diagnostics),
+        LogFormat::Json => write_json_diagnostics(&settled, &mut diagnostics),
+    }
     let _ = err.write_all(diagnostics.as_bytes());
     let count_errors = (settled.library.diagnostics.iter())
         .filter(|d| d.level == Level::Error)
@@ -277,7 +305,9 @@ fn program(
     // With `--verbose`, every gap, not only the first.
     if translated.is_err() && options.verbose {
         for gap in gaps(&settled, &library.config.name) {
-            let _ = writeln!(err, "{}: {gap}", library.config.name);
+            let text = format!("{}: {gap}", library.config.name);
+            let values = [library.config.name.as_str().into(), gap.to_string().into()];
+            problem(options.log, err, "NotYetInTmpl", &text, &values);
         }
     }
     let mut program = translated.map_err(|e| {

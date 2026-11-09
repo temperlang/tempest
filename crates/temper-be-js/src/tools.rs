@@ -3,17 +3,31 @@
 //! --recursive` with its xunit reporter, Node finding `@temperlang/core`,
 //! `@temperlang/std`, and the libraries in `temper.out/js/node_modules`,
 //! linked to their directories, as npm's workspace that Kotlin makes
-//! links them.
+//! links them. `tempest run -b js` imports the library's package under
+//! Node (`node`, or `NODE`), as Kotlin's `index.js` does.
 
 use std::path::Path;
 use std::process::Command;
-use temper_tmpl::tools::{junit_file, output, tool};
+use temper_tmpl::tools::{junit_file, output, program, tool};
 use temper_tmpl::{TestResults, Tested, Tools};
 
 pub const TOOLS: Tools = Tools {
     prepare: Some(link),
     test,
+    run,
 };
+
+fn run(dir: &Path, library: &Tested, _: &[Tested]) -> Result<bool, String> {
+    // Library names are dashed identifiers, which need no escaping.
+    let name = &library.name;
+    program(
+        Command::new(tool("NODE", "node"))
+            .args(["--input-type=module", "-e"])
+            .arg(format!("await import(\"{name}\");"))
+            .current_dir(dir),
+        "node",
+    )
+}
 
 /// Links the runtime, std, and every library into `node_modules`, by the
 /// names imports use.

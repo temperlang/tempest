@@ -419,6 +419,7 @@ dependencies = [
 name = "tempest"
 version = "0.0.0"
 dependencies = [
+ "serde_json",
  "temper-be-testkit",
  "temper-driver",
  "temper-frontend",

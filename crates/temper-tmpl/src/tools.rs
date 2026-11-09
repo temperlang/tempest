@@ -18,6 +18,26 @@ pub fn output(command: &mut Command, what: &str) -> Result<Output, String> {
         .map_err(|e| format!("couldn't run {what}: {e}"))
 }
 
+/// Runs a step that must succeed before a program can run, such as its
+/// build, quietly, or says why it failed, with the end of what it printed.
+pub fn step(command: &mut Command, what: &str) -> Result<(), String> {
+    let run = output(command, what)?;
+    match run.status.success() {
+        true => Ok(()),
+        false => Err(format!("{what} failed\n{}", tool_output(&run))),
+    }
+}
+
+/// Runs a program with this process's standard input, output, and error,
+/// so what it prints streams, as [`crate::Tools::run`] does; whether it
+/// succeeded.
+pub fn program(command: &mut Command, what: &str) -> Result<bool, String> {
+    command
+        .status()
+        .map(|s| s.success())
+        .map_err(|e| format!("couldn't run {what}: {e}"))
+}
+
 /// The end of what a tool printed, which says most, as a traceback's.
 pub fn tool_output(run: &Output) -> String {
     let text = format!(
