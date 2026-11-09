@@ -759,6 +759,93 @@ fn bracket_recovery_stays_local() {
     }
 }
 
+/// Operands side by side with no operator between them, as in `cents 100`
+/// for `cents % 100`, are one error, at the stray operand, and the
+/// statement is kept: a declaration is still declared, with the first
+/// operand's type, so later uses of it are no errors. Each case is the
+/// source, the stray's text, and the error's text.
+#[test]
+fn missing_operator_keeps_the_statement() {
+    let cases: &[(&str, &str, &str)] = &[
+        // The playground's case.
+        (
+            "let cents = 1234;\nlet part = cents  100;\nlet more = part + 1;\n\
+             console.log(\"${part} ${more}\");\n",
+            "100",
+            "Expected an operator or `;` before `100`",
+        ),
+        (
+            "let a = 1; let b = 2;\nlet c = a b;\nlet d = c * 2;\n",
+            "b",
+            "Expected an operator or `;` before `b`",
+        ),
+        (
+            "let f(): Int { 1 }\nlet g(): Int { 2 }\nlet c = f() g();\n\
+             let d = c.toString();\n",
+            "g()",
+            "Expected an operator or `;` before `g`",
+        ),
+        // An assignment.
+        (
+            "var x = 0;\nlet a = 1;\nx = a 1;\nlet y = x + 1;\n",
+            "1",
+            "Expected an operator or `;` before `1`",
+        ),
+        // An argument.
+        (
+            "let a = 1;\nlet f(n: Int): Int { n }\nlet c = f(a 1);\nlet d = c + 1;\n",
+            "1",
+            "Expected an operator or `,` before `1`",
+        ),
+        // A return.
+        (
+            "let a = 1;\nlet f(): Int { return a 1; }\nlet c = f() + 1;\n",
+            "1",
+            "Expected an operator or `;` before `1`",
+        ),
+        // A condition.
+        (
+            "let a = true; let b = false;\nvar z = 0;\nif (a b) { z = 1; }\nlet w = z + 1;\n",
+            "b",
+            "Expected an operator or `,` before `b`",
+        ),
+        // The first operand's type is the declaration's.
+        (
+            "let cents = 1234;\nlet part = cents 100;\nlet s: Int = part;\nlet more = part + 1;\n",
+            "100",
+            "Expected an operator or `;` before `100`",
+        ),
+    ];
+    for &(source, stray, expected) in cases {
+        let mut library = Library::new();
+        library.add_file("test.temper", source, SourceKind::Standalone);
+        let settled = settle(library);
+        let found: Vec<(&str, String)> = (settled.library.diagnostics.iter())
+            .map(|d| {
+                let span = d.span.start as usize..d.span.end as usize;
+                (&source[span], d.message.text())
+            })
+            .collect();
+        assert_eq!(found, [(stray, expected.to_string())], "{source}");
+    }
+    // Typed as the first operand: an `Int` that doesn't fit a `String`.
+    let source = "let cents = 1234;\nlet part = cents 100;\nlet s: String = part;\n";
+    let mut library = Library::new();
+    library.add_file("test.temper", source, SourceKind::Standalone);
+    let settled = settle(library);
+    let found: Vec<String> = (settled.library.diagnostics.iter())
+        .map(|d| d.message.text())
+        .collect();
+    assert_eq!(
+        found,
+        [
+            "Expected an operator or `;` before `100`",
+            "Cannot assign to String from Int32"
+        ],
+        "{source}"
+    );
+}
+
 #[test]
 fn mutated_inputs_settle() {
     with_stack(|| {

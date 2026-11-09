@@ -28,8 +28,8 @@ A missing bracket stays local, so what follows still parses:
     let unclosed(x: Int: Int { x * 2 }
     let afterUnclosed(x: Int): Int { x * 3 }
 
-A statement that doesn't parse leaves its name undeclared, and a
-method call on it fails where it runs:
+A missing operator is one error, and `part` is still declared, with
+`cents`'s type, so only its `let` fails, where it runs:
 
     let dropped(cents: Int): String throws Bubble {
       let part = cents  100;

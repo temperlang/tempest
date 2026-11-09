@@ -516,3 +516,53 @@ error 8..13: In {...} object syntax, any `class` property must appear first
 ():o
 --- ast
 (Call : o)
+
+=== missing operator in a let: the declaration kept, one error at the stray
+let part = cents  100; part;
+--- ast
+(Block (Decl ^part \init (Block (Error) cents)) part #void)
+error 18..21: Expected an operator or `;` before `100`
+
+=== missing operator between words
+let c = a b c;
+--- ast
+(Block (Decl ^c \init (Block (Error) a)) #void)
+error 10..13: Expected an operator or `;` before `b`
+
+=== missing operator between calls
+let c = f() g();
+--- ast
+(Block (Decl ^c \init (Block (Error) (Call f))) #void)
+error 12..15: Expected an operator or `;` before `g`
+
+=== missing operator in an assignment
+x = a 1;
+--- ast
+(Block (Call #desugarOperation = x (Block (Error) a)) #void)
+error 6..7: Expected an operator or `;` before `1`
+
+=== missing operator in arguments
+f(x, a 1, g() h(), y);
+--- ast
+(Block (Call f x (Block (Error) a) (Block (Error) (Call g)) y) #void)
+error 7..8: Expected an operator or `,` before `1`
+error 14..17: Expected an operator or `,` before `h`
+
+=== missing operator after return
+let f() { return a 1; }
+--- ast
+(Call let \word ^f (Fun (Block (Call return (Block (Error) a)) #void)))
+error 19..20: Expected an operator or `;` before `1`
+
+=== missing operator in a condition
+if (a b) { c }
+--- ast
+(Call if (Block (Error) a) (Fun (Block c)))
+error 6..7: Expected an operator or `,` before `b`
+
+=== missing operator: not recovered after `a<b, c>` or in a let's name
+or(a< 2, a > 0); f(let x y);
+--- ast
+(Block (Error) (Call f (Error)) #void)
+error 0..15: Expected a TopLevel here
+error 19..26: Expected a Argument here

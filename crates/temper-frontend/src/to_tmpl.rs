@@ -434,13 +434,22 @@ impl Translator<'_> {
     }
 
     /// The message of the error that `node` is, or that's reported where
-    /// it is, or that its callee is, if not a type-only one: an `Error`
-    /// node, a member that isn't there, or a call of a name not declared,
+    /// it is, or that its callee or first statement is, if not a type-only
+    /// one: an `Error` node, a member that isn't there, or a call of a name
+    /// not declared,
     /// which tmpl gives as an `Error` that fails when run.
     fn error_at(&self, node: FNode) -> Option<String> {
         let lib = &self.s.library;
         if self.kind(node) == NodeKind::Error {
             return Some(lib.error_text(node));
+        }
+        // A block whose first statement is an error, as the parser makes
+        // of `cents 100`, missing an operator, fails there.
+        if self.kind(node) == NodeKind::Block {
+            let first = self.children(node).first().copied();
+            if let Some(message) = first.and_then(|first| self.error_at(first)) {
+                return Some(message);
+            }
         }
         if self.kind(node) == NodeKind::Call {
             let children = self.children(node);
@@ -1226,6 +1235,14 @@ impl Translator<'_> {
             }
             let item = self.b.module_let(decl);
             items.push(self.own(item, node));
+            // A `let` of an error is that error, and what follows can't run.
+            if failed || self.stored_error(node).is_some() {
+                if !failed {
+                    self.stmt(node, &mut init)?;
+                    failed = true;
+                }
+                continue;
+            }
             if let Some(value) = core::let_parts(&self.s.library.tree, node).2 {
                 let value = self.expr(value)?;
                 let value = self.fit(value, self.b.program().decls.get(decl).ty);

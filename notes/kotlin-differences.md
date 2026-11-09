@@ -704,6 +704,37 @@ Kotlin's parser too.
 Test: temper-frontend/tests/settle.rs, `bracket_recovery_stays_local`;
 `balance` unit tests; temper-wasm `compiles_with_narrow_syntax_errors`.
 
+**Missing operators** (ours, 2026-11-09; `temper-syntax/src/grammar.rs`,
+`operand`). Two operands side by side with no operator between them, as
+`let part = cents  100;` for `cents % 100`, `a b`, or `f() g()`, make
+Kotlin drop the whole statement: "Expected a TopLevel here" over the
+`let` or assignment, then "No declaration for part" and type errors at
+every later use (5 errors for the playground's case). In an argument,
+a condition (`if (a b)`), or after `return`, Kotlin keeps the statement
+but reports "Expected a Argument here" over both operands. Tempest, in
+a `let`'s initializer, an assignment's right side, an argument, and
+after `return`, `throw`, `yield`, or `await`, keeps the first operand
+and makes the rest one error at the stray one: "Expected an operator
+or `;` before `100`" (`,` in an argument). The value is a block of the
+error then the first operand, so it fails where it runs but has the
+first's type: `part` is declared, as an `Int`, and later uses are no
+errors. tmpl writes a `let` of it as the error, as for any `let` of an
+error, now at the top level too: there it was written as
+`let x = return Err(...)` in Rust, which didn't build, and after any
+top-level error later `let`s are now declared but not initialized, as
+later statements were already left out. Not after `a<b, c>` (`or(a< 2, a > 0)`), where `<` and `>`
+were likely comparisons, nor in a `let`'s name or a formal's
+(`let f(x Int)` still loses `f`, as in Kotlin). Correct input parses
+exactly as before (check_ast.py: the only new differences are 81 stage
+test dumps under `expect/`, the `missing-operator` deviation).
+Recommended for Kotlin's grammar too.
+Test: temper-frontend/tests/settle.rs,
+`missing_operator_keeps_the_statement`; temper-syntax
+ast/edge-cases.cases, "missing operator ..."; temper-wasm
+`compiles_with_a_missing_operator`; tempest/tests/cli.rs,
+`missing_operator_is_one_error`; testkit `errors` (`dropped`) on every
+backend.
+
 #### Deliberate deviations in the lexer and parser
 
 Each has cases in temper-syntax's `tests/*.cases` or `tests/parse/*.cases`,
@@ -754,6 +785,11 @@ to report those inputs as expected.
   ([kotlin-differences.md](kotlin-differences.md), "Bracket recovery").
   Balanced input is untouched; `deviations.py` excuses inputs whose
   output shows recovery (`B` lines, or its diagnostics), as `brackets`.
+- **Operands with no operator between them keep their statement**
+  (`operand`): the first operand is kept and the rest are one
+  `MissingOperator` error ("Missing operators", above). `deviations.py`
+  excuses inputs whose output shows one where Kotlin's has an error, as
+  `missing-operator`.
 - **`${` nests inside a hole,** as anywhere else in code. Kotlin makes the
   `$` an error and the `{` a block.
 - **Spans cover all of a node's parts.** Kotlin leaves operands adopted by a

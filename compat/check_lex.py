@@ -4,7 +4,8 @@
 """Compare temper-syntax's tokens with Kotlin Temper's lexer.
 
 Runs both on every .temper and .temper.md file under the given directories
-(default: the temper, chromarite and ordable checkouts beside this repository) and on the cases in
+(default: the temper, chromarite and ordable checkouts beside this
+repository) and on the cases in
 crates/temper-syntax/tests/*.cases, and reports inputs that differ, apart
 from those listed in deviations.py, where we deliberately differ. For the
 cases, it also checks that the expected tokens saved with them are current. Each side prints
@@ -22,15 +23,15 @@ import subprocess
 import sys
 from pathlib import Path
 
-from deviations import REASONS, known, known_file, recovered
+from deviations import REASONS, known, known_file, missing_operator, recovered
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
-DEFAULT_LIB = Path(__file__).resolve().parents[2] / "temper/cli/build/install/temper/lib"
+DEFAULT_LIB = ROOT.parent / "temper/cli/build/install/temper/lib"
 DEFAULT_DIRS = [
-    Path(__file__).resolve().parents[2] / "temper",
-    Path(__file__).resolve().parents[2] / "chromarite",
-    Path(__file__).resolve().parents[2] / "ordable",
+    ROOT.parent / "temper",
+    ROOT.parent / "chromarite",
+    ROOT.parent / "ordable",
 ]
 SKIP_PARTS = {"build", "node_modules", "temper.out"}
 
@@ -65,6 +66,8 @@ def compare(files: list[str], kotlin: dict, rust: dict, verbose: bool, check: st
         reason = known(CASE_NAMES.get(path, path), check)
         if theirs != ours and not reason and recovered(ours):
             reason = "brackets"
+        if theirs != ours and not reason and missing_operator(theirs, ours):
+            reason = "missing-operator"
         if theirs == ours:
             # Whole files of cases may hold some that match.
             if reason and not known_file(CASE_NAMES.get(path, path)):

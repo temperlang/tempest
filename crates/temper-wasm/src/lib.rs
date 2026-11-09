@@ -865,6 +865,31 @@ mod tests {
         );
     }
 
+    /// The playground's case: an operator missing in `cents % 100` is one
+    /// error, at `100`; `part` is still declared, so its later uses are
+    /// fine; the run fails where the error is; and the code is written.
+    #[test]
+    fn compiles_with_a_missing_operator() {
+        let source = "let cents = 1234;\n\
+                      let part = cents  100;\n\
+                      console.log(\"${part}\");\n\
+                      let more = part + 1;\n";
+        let py = built_in().position(|b| b == "py").map_or(0, |i| 1 << i);
+        let json = compile_source(source, RUN, py);
+        let expected = "{\"diagnostics\":[{\"level\":\"error\",\
+                        \"message\":\"Expected an operator or `;` before `100`\",\
+                        \"file\":\"main.temper\",\"from\":36,\"to\":39,\"line\":2,\"column\":19}],\
+                        \"run\":{\"output\":[],\
+                        \"failure\":\"Failed: Expected an operator or `;` before `100`\"},";
+        assert!(json.starts_with(expected), "{json}");
+        if py != 0 {
+            assert!(
+                json.contains("_cents: int = 1234\\nraise RuntimeError()\\n"),
+                "{json}"
+            );
+        }
+    }
+
     /// The editor's queries over what `analyze` kept, at UTF-16
     /// offsets, past an emoji and with an error before them.
     #[test]

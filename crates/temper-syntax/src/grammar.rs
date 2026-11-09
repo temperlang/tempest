@@ -1245,6 +1245,8 @@ impl Grammar {
     /// AwaitReturnThrowYield := {Await, Return, Throw, Yield} y callTree(( y
     ///   (name("await") / name("return") / name("throw") / name("yield")) y
     ///   opt(Expr / Garbage("Argument", stopBefore closeBrackets + ";")) y ))
+    ///
+    /// The Expr recovers from a missing operator ([`operand`](Self::operand)).
     fn await_return_throw_yield(&mut self, p: usize) -> R {
         let p = self.check(
             p,
@@ -1261,7 +1263,7 @@ impl Grammar {
                 |g, p| g.name_text(p, "yield"),
             )?;
             let p = g.opt(p, |g, p| {
-                first!(g, p, Grammar::expr, |g, p| g.garbage(
+                first!(g, p, |g, p| g.operand(p, ";"), |g, p| g.garbage(
                     p,
                     Message::Unparsable("Argument"),
                     &[],
@@ -1781,9 +1783,11 @@ impl Grammar {
     }
 
     /// DeclInit := "=".asSymbol(init) y Expr
+    ///
+    /// The Expr recovers from a missing operator ([`operand`](Self::operand)).
     fn decl_init(&mut self, p: usize) -> R {
         let p = self.as_symbol(p, "=", self.sym.init)?;
-        self.expr(p)
+        self.operand(p, ";")
     }
 
     /// DeclMultiNested := ":".asSymbol(as) y (CurlyGroup y ( y DeclMultiNamed y ))
@@ -1948,6 +1952,87 @@ impl Grammar {
             CLOSE_OR_COMMA,
             true,
         )
+    }
+
+    /// An `Expr` where one ends a statement or argument, or, as tempest's
+    /// own recovery, operands side by side with no operator between them,
+    /// as in `cents 100` for `cents % 100`: the rest are one error, and the
+    /// first is kept, after it in a block, so the block fails where it runs
+    /// but has the first's type, and what's around it still parses, where
+    /// Kotlin's grammar gives up on the whole statement.
+    /// `separator` is what could have gone between them instead, for the
+    /// message: `;` or `,`.
+    fn operand(&mut self, p: usize, separator: &'static str) -> R {
+        self.with_strays(p, separator, |g, p| {
+            first!(g, p, Grammar::expr, |g, p| g.juxtaposed_words(p, separator))
+        })
+    }
+
+    /// What `f` matches, and if operands follow it where none can, those
+    /// as one error, in a block with it. See [`operand`](Self::operand).
+    fn with_strays(
+        &mut self,
+        p: usize,
+        separator: &'static str,
+        f: impl FnOnce(&mut Grammar, usize) -> R,
+    ) -> R {
+        let mark = self.events.len();
+        let q = f(self, p)?;
+        // After `a<b, c>`, a stray is more likely `<` and `>` meant as
+        // comparisons, as in `or(a < 2, a > 0)`, so that's left to fail.
+        if q <= p || !self.is_stray(q) || self.is(p, O::Angle) {
+            return Some(q);
+        }
+        let start = Event::Start(self.before(p), self.origin(p));
+        let message = Message::MissingOperator(self.first_token_text(q), separator);
+        let mut stop = CLOSE_OR_SEMI.to_vec();
+        stop.extend([",", "=>"]);
+        let Some(end) = self.garbage(q, message, &[], &stop, true) else {
+            return Some(q);
+        };
+        // The error first, so it fails before the first operand runs, and
+        // the block's type is the first operand's.
+        let error = self.events.pop().unwrap();
+        self.events.splice(mark..mark, [start, error]);
+        self.events.push(Event::Finish(self.after(end), Fin::Block));
+        Some(end)
+    }
+
+    /// Whether the part at `p` starts an operand: an operator node, or a
+    /// word or number. Where an `Expr` ends a statement or argument, only a
+    /// close part or a separator follows it.
+    fn is_stray(&self, p: usize) -> bool {
+        self.part(p).is_some_and(|part| match part.kind {
+            PartKind::Open => true,
+            PartKind::Token => matches!(part.token, TokenKind::Word | TokenKind::Number),
+            PartKind::Close => false,
+        })
+    }
+
+    /// The text of the first token at or after `p`.
+    fn first_token_text(&self, p: usize) -> String {
+        let token = self.parts[p..]
+            .iter()
+            .find(|part| part.kind == PartKind::Token);
+        token.map_or_else(String::new, |part| self.part_text(part).to_string())
+    }
+
+    /// Words or numbers side by side in one leaf, as in `cents 100`, but not
+    /// `let x`: the rest as one error, then the first as an `Expr`, in a
+    /// block. Tempest's own recovery, for [`operand`](Self::operand).
+    fn juxtaposed_words(&mut self, p: usize, separator: &'static str) -> R {
+        let first = self.open_op(p, O::Leaf)?;
+        let close = self.parts[p].close as usize;
+        let p = self.check(p, close >= first + 2 && self.tok(first, "let").is_none())?;
+        let rest = first + 1;
+        self.tree(p, Fin::Block, |g, _| {
+            let message = Message::MissingOperator(g.first_token_text(rest), separator);
+            g.events
+                .push(Event::Error(message, rest as u32, close as u32 - 1));
+            let after = g.expr(first)?;
+            g.check(after, after == rest)?;
+            g.close(close)
+        })
     }
 
     /// Expr := QuasiTree / QuasiAst / QuasiHole / Jump / AwaitReturnThrowYield / Id /
@@ -2280,6 +2365,9 @@ impl Grammar {
     ///     shiftLeft y Type y )))
     ///   / (Infix operators y callTree(( y desugarOperation y Expr y name(InfixOp) y
     ///     shiftLeft y Expr y )))
+    ///
+    /// The last Expr of an assignment, `=`, recovers from a missing operator
+    /// ([`operand`](Self::operand)).
     fn infix(&mut self, p: usize) -> R {
         // Like `prefix`, this can't match a group ending in a close bracket,
         // as in `a[b]` and `f<T>`; checked first, as there.
@@ -2305,13 +2393,17 @@ impl Grammar {
             },
             |g, p| {
                 let p = g.check(p, g.is_type(p, OpType::Infix))?;
+                let assignment = g.is(p, O::Eq);
                 g.tree(p, Fin::Call, |g, p| {
                     let p = g.open(p)?;
                     let p = g.implied_builtin(p, Builtin::DesugarOperation)?;
                     let p = g.expr(p)?;
                     let p = g.operator_name(p, OpType::Infix, &[O::CallJoin])?;
                     let p = g.shift_left(p)?;
-                    let p = g.expr(p)?;
+                    let p = match assignment {
+                        true => g.operand(p, ";")?,
+                        false => g.expr(p)?,
+                    };
                     g.close(p)
                 })
             },
@@ -2804,16 +2896,16 @@ impl Grammar {
             |g, p| {
                 let p = g.open_op(p, O::Comma)?;
                 let p = g.opt(p, |g, p| {
-                    let p = g.arg(p, formal)?;
+                    let p = g.arg_with_strays(p, formal)?;
                     Some(g.any(p, |g, p| {
                         let p = g.tok(p, ",")?;
-                        g.arg(p, formal)
+                        g.arg_with_strays(p, formal)
                     }))
                 });
                 let p = g.opt(p, |g, p| g.tok(p, ","));
                 g.close(p)
             },
-            |g, p| g.arg(p, formal),
+            |g, p| g.arg_with_strays(p, formal),
             |g, p| g.garbage(p, Message::Unparsable("Arguments"), &[], &[")", "=>"], true),
         )
     }
@@ -2830,6 +2922,10 @@ impl Grammar {
     /// for an Arg, both are ArgNoInit. Kotlin's `/` binds tighter than its
     /// `y`, so `declTree(LetArg)` is an alternative after the optional
     /// `\_complexArg_`, not instead of it.
+    ///
+    /// As tempest's own recovery, before the Garbage, an Arg that's words
+    /// side by side with no operator between them, as in `f(a b)`, is the
+    /// first of them and an error ([`operand`](Self::operand)).
     fn arg(&mut self, p: usize, formal: bool) -> R {
         first!(
             self,
@@ -2882,6 +2978,7 @@ impl Grammar {
                     )
                 })
             },
+            |g, p| g.recovered_arg(p, formal),
             |g, p| g.garbage(
                 p,
                 Message::Unparsable("Argument"),
@@ -2890,6 +2987,21 @@ impl Grammar {
                 true
             ),
         )
+    }
+
+    /// An Arg, and if operands follow it with no operator between, as in
+    /// `f(a() b())`, those as an error ([`operand`](Self::operand)).
+    fn arg_with_strays(&mut self, p: usize, formal: bool) -> R {
+        match formal {
+            true => self.arg(p, true),
+            false => self.with_strays(p, ",", |g, p| g.arg(p, false)),
+        }
+    }
+
+    /// Words side by side as an Arg, but not a Formal.
+    fn recovered_arg(&mut self, p: usize, formal: bool) -> R {
+        let p = self.check(p, !formal)?;
+        self.juxtaposed_words(p, ",")
     }
 
     fn arg_actual(&mut self, p: usize) -> R {

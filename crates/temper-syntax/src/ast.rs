@@ -196,6 +196,10 @@ pub enum Message {
     UnmatchedCloseBracket,
     /// Ours: a `<` with no `>`, and maybe the comparison likely meant.
     UnclosedAngle(Option<String>),
+    /// Ours: operands side by side with no operator between them, as in
+    /// `cents 100`; the text of the first one that's stray, and what else
+    /// could have gone before it, `;` or `,`.
+    MissingOperator(String, &'static str),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -222,6 +226,7 @@ impl Message {
             Message::MissingCloseBracket { .. } => "MissingCloseBracket",
             Message::UnmatchedCloseBracket => "UnmatchedCloseBracket",
             Message::UnclosedAngle(_) => "UnclosedAngle",
+            Message::MissingOperator(..) => "MissingOperator",
         }
     }
 
@@ -230,6 +235,7 @@ impl Message {
         match self {
             Message::Unparsable(production) => Some(production),
             Message::Int32OutOfBounds(n) | Message::Int64OutOfBounds(n) => Some(n),
+            Message::MissingOperator(stray, _) => Some(stray),
             _ => None,
         }
     }
@@ -265,6 +271,9 @@ impl Message {
             Message::UnclosedAngle(None) => "Expected `>` to close `<`".into(),
             Message::UnclosedAngle(Some(meant)) => {
                 format!("Expected `>` to close `<`, or did you mean `{meant}`?")
+            }
+            Message::MissingOperator(stray, separator) => {
+                format!("Expected an operator or `{separator}` before `{stray}`")
             }
         }
     }

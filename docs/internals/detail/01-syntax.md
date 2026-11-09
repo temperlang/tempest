@@ -18,6 +18,7 @@ the [syntax reference](../../language/syntax.md).
   - [Keywords are names, and almost everything is an operator](#keywords-are-names-and-almost-everything-is-an-operator)
   - [Token adapters as separate passes](#token-adapters-as-separate-passes)
   - [Bracket recovery](#bracket-recovery)
+  - [Missing operators](#missing-operators)
   - [Errors as values, and bounded depth](#errors-as-values-and-bounded-depth)
   - [Call joins rewritten before macros](#call-joins-rewritten-before-macros)
   - [A file's tree copied into the library](#a-files-tree-copied-into-the-library)
@@ -224,6 +225,35 @@ recommended for Kotlin too
 ([notes/kotlin-differences.md](../../../notes/kotlin-differences.md),
 "Bracket recovery").
 
+### Missing operators
+
+**Chosen:** where an operand ends a statement or argument (a `let`'s
+initializer, an assignment's right side, an argument, and after
+`return`), two operands side by side with no operator between them,
+as `let part = cents  100;`, keep their statement.
+[`operand`](../../../crates/temper-syntax/src/grammar.rs) keeps the
+first and makes the rest one error at the stray one, "Expected an
+operator or `;` before `100`", in a block with the error first, so it
+fails where it runs but has the first operand's type. Not after
+`a<b, c>`, where `<` and `>` were likely comparisons, nor in names.
+
+**Alternatives:** Kotlin's grammar, which drops the whole statement
+("Expected a TopLevel here"), so `part` is undeclared and every later
+use is another error; or the block in source order, first operand then
+error, whose type would be unknown.
+
+**Pros:** one error, where the fix goes, and later uses of `part` are
+typed. Only reached where Kotlin's grammar fails, so correct input
+parses as before.
+
+**Cons:** a guess: in a formal (`let f(x Int)`, missing a `:`), the
+message names an operator, and the function is still lost.
+
+**Why:** errors as values, as for bracket recovery. Tempest's choice
+(2026-11-09), recommended for Kotlin too
+([notes/kotlin-differences.md](../../../notes/kotlin-differences.md),
+"Missing operators").
+
 ### Errors as values, and bounded depth
 
 **Chosen:** no step fails. A bad character is an `Error`
@@ -420,11 +450,12 @@ per paragraph, so prose next to a declaration can document it.
 |---|---|---|
 | Lexer cases | `tests/kotlin-lexer-tests.cases` (98), `kotlin-token-cluster-tests.cases` (62), `edge-cases.cases` (19) | Tokens, many taken from Kotlin's own tests |
 | Parser cases | `tests/parse/*.cases` (177) | Operator trees, adapters, multi-quoted strings |
-| Grammar cases | `tests/ast/*.cases` (223) | Grammar trees and diagnostics, 194 from Kotlin's `BuildTreeTest` |
+| Grammar cases | `tests/ast/*.cases` (231) | Grammar trees and diagnostics, 194 from Kotlin's `BuildTreeTest` |
 | Module cases | `tests/module/*.cases` (21) | Call joins, metadata, documentation genre |
 | Property fuzzers | [`lex.rs`](../../../crates/temper-syntax/tests/lex.rs), [`parse.rs`](../../../crates/temper-syntax/tests/parse.rs), [`ast.rs`](../../../crates/temper-syntax/tests/ast.rs) | Random edits of every case: spans in bounds and covering children, every token in the tree once and in order, origins valid, no node reached twice, parsing twice gives the same tree |
 | Deep input | `deep_and_nested_inputs_parse` in [`parse.rs`](../../../crates/temper-syntax/tests/parse.rs) | 400 nested calls, a 1000-term sum, and Kotlin's exponential cases, on a normal stack |
 | NFKC | `matches_the_jdk` in [`nfkc.rs`](../../../crates/temper-syntax/tests/nfkc.rs) | The tables against the JDK's answers |
+| Missing operators | "missing operator" cases in `tests/ast/edge-cases.cases`; `missing_operator_keeps_the_statement` in [`settle.rs`](../../../crates/temper-frontend/tests/settle.rs); `compiles_with_a_missing_operator` in [`temper-wasm`](../../../crates/temper-wasm/src/lib.rs) | One error at the stray operand; the declaration kept and typed, its later uses no errors |
 | Bracket recovery | `balance` unit tests; `bracket_recovery_stays_local` in [`settle.rs`](../../../crates/temper-frontend/tests/settle.rs); `compiles_with_narrow_syntax_errors` in [`temper-wasm`](../../../crates/temper-wasm/src/lib.rs) | Each fix's error and place; later declarations still typed and run |
 | Against Kotlin | `compat/check_lex.py`, `check_parse.py`, `check_ast.py` (`--module`), `check_literate.py`, and `fuzz_lex.py`, `fuzz_parse.py`, `fuzz_ast.py` | Every corpus file and case, and fuzzed edits, diffed against Kotlin's output, except deliberate differences listed in `compat/deviations.py` |
 

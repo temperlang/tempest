@@ -13,10 +13,23 @@ REASONS = {
     "spans": "spans cover all of a node or token's parts",
     "join-spans": "spans of what rewriting a call join makes cover what it wraps",
     "brackets": "brackets that don't balance are recovered from locally",
+    "missing-operator": "operands side by side with no operator keep their statement",
 }
 
 # What our parse and grammar step outputs show for bracket recovery.
 BRACKET_RECOVERY = re.compile(r"B\t|E\t\w+\t(MissingCloseBracket|UnmatchedCloseBracket|UnclosedAngle)")
+
+
+# What our grammar step output shows for operands with no operator between.
+MISSING_OPERATOR = re.compile(r"E\t\w+\tMissingOperator")
+
+
+def missing_operator(kotlin: list[str], rust: list[str]) -> bool:
+    """Whether our output recovers from operands with no operator between
+    them, where Kotlin's reports an error too."""
+    return any(MISSING_OPERATOR.match(line) for line in rust) and any(
+        line.startswith("E\t") for line in kotlin
+    )
 
 
 def recovered(rust: list[str]) -> bool:
@@ -74,6 +87,8 @@ def classify(text: str, markdown: bool, kotlin: list[str], rust: list[str]) -> s
     we recovered, so they're all the "brackets" deviation."""
     if recovered(rust):
         return "brackets"
+    if missing_operator(kotlin, rust):
+        return "missing-operator"
     if strip_spans(kotlin) == strip_spans(rust):
         return "spans"
     if strip_spans(without_comments(kotlin)) == strip_spans(without_comments(rust)):

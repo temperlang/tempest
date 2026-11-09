@@ -815,6 +815,40 @@ fn tests_of_a_library_that_does_not_build_count() {
     });
 }
 
+/// An operator missing, as in the playground's `cents  100`, is one error
+/// at the stray operand; `part` is still declared, so its later uses are
+/// no errors; every backend's code is written; and the run fails there.
+#[test]
+#[cfg(feature = "py")]
+fn missing_operator_is_one_error() {
+    let files = [(
+        "a.temper",
+        "let cents = 1234;\nlet part = cents  100;\nconsole.log(\"${part}\");\n\
+         let more = part + 1;\n",
+    )];
+    with_library("missing-operator", &files, |dir| {
+        let (code, out, err) = tempest(&["build", "-w", dir]);
+        // The one error, with its path, and the count.
+        let error = "a.temper:2:19: error: Expected an operator or `;` before `100`\n";
+        assert!(err.ends_with(&format!("{error}a: 1 error\n")), "{err}");
+        assert_eq!(
+            (code, out.as_str(), err.lines().count()),
+            (1, "", 2),
+            "{err}"
+        );
+        for backend in ["csharp", "java", "js", "lua", "py", "rust"] {
+            let written = Path::new(dir).join("temper.out").join(backend).join("a");
+            assert!(written.is_dir(), "{backend}");
+        }
+        let (code, out, err) = tempest(&["run", "-w", dir, "--library", "a", "-b", "interp"]);
+        assert!(
+            err.contains("Failed: Expected an operator or `;` before `100`"),
+            "{out}{err}"
+        );
+        assert_eq!(code, 1);
+    });
+}
+
 /// Errors don't stop `build` or `test`, as in
 /// Kotlin Temper: each is reported, and fails only where it runs, so
 /// every backend's code is written, the tests that don't reach an error
