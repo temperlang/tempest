@@ -39,19 +39,24 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.85.0
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@cfcaf53ba4c621917ec7f78a66bff7a8848ddad4 # 1.85.0 branch, 2026-10-16
         with:
           targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-node@v4
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        # uv itself, checked against its SHA-256 for Linux x64 (from
+        # setup-uv's known-checksums.json; docs/contributing/ci.md).
+        with:
+          version: "0.13.5"
+          checksum: f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f
       - id: kelpto
         run: echo "ref=$(tr -d '[:space:]' < site/docs/kelpto-ref)" >> "$GITHUB_OUTPUT"
       # Public; built for Python by tempest below.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: temperlang/kelpto
           ref: ${{ steps.kelpto.outputs.ref }}
@@ -76,7 +81,7 @@ jobs:
       # Mermaid diagrams are drawn by mermaid in headless Chromium, which
       # the pinned playwright-core installs: its own build, cached by the
       # lockfile.
-      - uses: actions/cache@v4
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ hashFiles('site/docs/mermaid/package-lock.json') }}
@@ -87,15 +92,15 @@ jobs:
           npx --no-install playwright-core install --with-deps --only-shell chromium
       - name: Docs site
         run: |
-          cargo build --release -p tempest
+          cargo build --locked --release -p tempest
           uv run site/docs/build.py --kelpto .kelpto --out "_site/$NONCE"
       - name: Keep crawlers out
         run: |
           printf 'User-agent: *\nDisallow: /\n' > _site/robots.txt
           touch _site/.nojekyll
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
         with:
           path: _site
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5

@@ -10,6 +10,9 @@ __pycache__/
 /site/playground/node_modules
 /site/docs/mermaid/node_modules
 
+# CI's pinned checkers (.github/ci-tools/), when installed locally
+/.github/ci-tools/node_modules
+
 # The VS Code extension's build output, npm packages, and the VS Code its
 # tests download
 /editors/vscode/out/

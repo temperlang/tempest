@@ -19,6 +19,11 @@ on:
   push:
     tags: ["v*"]
 
+# Read-only by default; only the jobs that publish (release, nightly)
+# may write, to make releases and move the nightly tag.
+permissions:
+  contents: read
+
 jobs:
   # Scheduled runs skip the rest when `nightly` already has main's commit.
   changed:
@@ -67,11 +72,11 @@ jobs:
             exe: tempest.exe
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.85.0
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@cfcaf53ba4c621917ec7f78a66bff7a8848ddad4 # 1.85.0 branch, 2026-10-16
         with:
           targets: ${{ matrix.target }}
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: ${{ matrix.target }}
       - name: clang for ring on Windows Arm64
@@ -79,7 +84,7 @@ jobs:
         shell: bash
         run: echo "C:\Program Files\LLVM\bin" >> "$GITHUB_PATH"
       - name: Build
-        run: cargo build --profile small --target ${{ matrix.target }} -p tempest
+        run: cargo build --locked --profile small --target ${{ matrix.target }} -p tempest
       - name: Package
         shell: bash
         run: |
@@ -91,7 +96,7 @@ jobs:
           else
             tar czf "$name.tar.gz" "$name"
           fi
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: tempest-${{ matrix.target }}
           path: tempest-${{ matrix.target }}.*
@@ -101,22 +106,22 @@ jobs:
     if: needs.changed.outputs.build == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.85.0
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@cfcaf53ba4c621917ec7f78a66bff7a8848ddad4 # 1.85.0 branch, 2026-10-16
         with:
           targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: wasm32-unknown-unknown
       - name: Build
-        run: cargo build --profile small --target wasm32-unknown-unknown -p temper-wasm
+        run: cargo build --locked --profile small --target wasm32-unknown-unknown -p temper-wasm
       - name: Package
         run: |
           name="temper-wasm"
           mkdir "$name"
           cp target/wasm32-unknown-unknown/small/temper_wasm.wasm COPYRIGHT LICENSE-APACHE LICENSE-MIT NOTICE "$name/"
           tar czf "$name.tar.gz" "$name"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: temper-wasm
           path: temper-wasm.tar.gz
@@ -129,12 +134,17 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        # uv itself, checked against its SHA-256 for Linux x64 (from
+        # setup-uv's known-checksums.json; docs/contributing/ci.md).
+        with:
+          version: "0.13.5"
+          checksum: f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: tempest-*
           path: dist
@@ -146,7 +156,7 @@ jobs:
           for f in dist/*.zip; do unzip -q "$f" -d bins; done
       - name: Package and test
         run: uv run editors/vscode/build.py --binaries bins --test
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: temper-vscode
           path: editors/vscode/out/*.vsix
@@ -158,10 +168,10 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           merge-multiple: true
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           files: |
             tempest-*
@@ -175,8 +185,8 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: dist
           merge-multiple: true

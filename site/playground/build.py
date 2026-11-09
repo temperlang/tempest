@@ -171,7 +171,7 @@ def main() -> int:
     args = parser.parse_args()
 
     if not args.skip_wasm:
-        run("cargo", "build", "--profile", "small", "--target", "wasm32-unknown-unknown",
+        run("cargo", "build", "--locked", "--profile", "small", "--target", "wasm32-unknown-unknown",
             "-p", "temper-wasm", cwd=ROOT)
     modules = install(args.deps)
     bin = modules / ".bin"

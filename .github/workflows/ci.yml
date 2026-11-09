@@ -1,7 +1,7 @@
 # Formatting, lints, tests (with and without default features, with
-# generated Python run and type checked by the latest mypy and pyright,
-# strict, generated Rust built, run, and linted by clippy, generated JS
-# run under Node and type checked by the latest TypeScript, strict,
+# generated Python run and type checked by mypy and pyright, strict,
+# generated Rust built, run, and linted by clippy, generated JS run under
+# Node and type checked by TypeScript, strict,
 # generated Java compiled by javac with every lint an error, and run, and
 # generated C# compiled by csc with nullable reference types and every
 # warning and .NET analyzer an error, and run, and generated C++ compiled
@@ -16,6 +16,9 @@
 # docs' examples on the release build, the docs site (built, its Mermaid
 # diagrams drawn, and its links checked), and `tempest test` on Chromarite and Ordable,
 # on the interpreter and on Python, JS, Lua, Java, and C#.
+# The checkers of generated code are at exact versions (.github/ci-tools/);
+# nightly.yml also tries each one's latest release. Every action is pinned
+# by commit SHA (docs/contributing/ci.md).
 # The checks against Kotlin Temper's own lexer and parser need a Kotlin
 # Temper install, so they run locally, not here.
 name: CI
@@ -25,21 +28,30 @@ on:
     branches: [main]
   pull_request:
 
+# Read-only token: nothing here writes to the repository.
+permissions:
+  contents: read
+
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.85.0
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@cfcaf53ba4c621917ec7f78a66bff7a8848ddad4 # 1.85.0 branch, 2026-10-16
         with:
           components: rustfmt, clippy
           targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - name: Formatting
         run: cargo fmt --check
       - name: Lints
-        run: cargo clippy --workspace --all-targets -- -D warnings
-      - uses: astral-sh/setup-uv@v6
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        # uv itself, checked against its SHA-256 for Linux x64 (from
+        # setup-uv's known-checksums.json; docs/contributing/ci.md).
+        with:
+          version: "0.13.5"
+          checksum: f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f
       # vendor/temper/ has every patch in vendor/temper-patches/, each
       # listed in its SOURCE.md. Locally, with a Temper checkout, this
       # also compares it file for file with its commit plus the patches.
@@ -49,13 +61,6 @@ jobs:
       # link to code links a file that defines the item it names.
       - name: Docs' links
         run: uv run compat/check_anchors.py
-      # The Python backend's tests check its output with both, at their
-      # latest versions, since they sometimes disagree.
-      - name: Type checkers for generated Python
-        run: |
-          uv tool install mypy
-          uv tool install pyright
-          echo "$(uv tool dir --bin)" >> "$GITHUB_PATH"
       # The Rust backend's tests build generated crates offline against
       # the vendored temper-core; this puts its one dependency, indexmap,
       # at the versions its Cargo.lock pins, in cargo's cache, and the
@@ -65,20 +70,25 @@ jobs:
         run: |
           cargo fetch --locked --manifest-path vendor/temper/be-rust/temper-core/Cargo.toml
           cargo fetch --locked --manifest-path compat/rust-std-deps/Cargo.toml
-      # The JS backend's tests run generated packages under Node and check
-      # them with TypeScript's `tsc --checkJs --strict`, at its latest
-      # version, and run tests with Mocha 11, as Kotlin's be-js declares.
-      - uses: actions/setup-node@v4
+      # The checkers of generated code, at exact versions
+      # (.github/ci-tools/install.py): the Python backend's tests check its
+      # output with both mypy and pyright, since they sometimes disagree;
+      # the JS backend's run generated packages under Node, check them with
+      # TypeScript's `tsc --checkJs --strict`, and run tests with Mocha 11;
+      # the Lua backend's check generated Lua with LuaLS's `--check`. npm's
+      # from a lockfile without install scripts, LuaLS against its SHA-256.
+      # nightly.yml tries each checker's latest release too.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
-      - name: Type checker for generated JS
-        run: npm install --global typescript mocha@^11.1.0
+      - name: Checkers for generated code, and Mocha
+        run: uv run .github/ci-tools/install.py
       # The Java backend's tests compile the vendored temper-core and
       # generated Java with javac (the runtime for Java 8, generated code
       # for Java 17, as Kotlin's packages have them) and run it, without
       # Maven; tests that run as tests use JUnit 5.9.2's jars, as
       # Kotlin's pom.xml names them, which Maven puts in its cache.
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
         with:
           distribution: temurin
           java-version: 21
@@ -93,7 +103,7 @@ jobs:
       # its one dependency, Microsoft.Extensions.Logging 8.0.0, in NuGet's
       # cache, where the tests read it, with MSTest.TestFramework 3.1.1,
       # which std's `testing` and generated tests use, as Kotlin's.
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
           dotnet-version: 6.0.x
       - name: Packages for generated C#
@@ -116,28 +126,21 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
       # The Lua backend's tests run generated Lua with the vendored
       # temper-core under Lua 5.4.6 (built from lua.org's source by the
-      # action, with luac), the version the tests use locally, and check it
-      # with LuaLS's `--check`, at a pinned release.
-      - uses: leafo/gh-actions-lua@v10
+      # action, with luac), the version the tests use locally.
+      - uses: leafo/gh-actions-lua@35bcb06abec04ec87df82e08caa84d545348536e # v10.0.0
         with:
           luaVersion: "5.4.6"
       # LuaRocks for that Lua, and LuaSocket, std `net`'s default client on
       # Lua, at the versions the tests use locally, so the `netresponse`
       # tests send their requests (without it, they give Kotlin's expected
       # failures). Plain HTTP only: no LuaSec.
-      - uses: leafo/gh-actions-luarocks@v4
+      - uses: leafo/gh-actions-luarocks@e65774a6386cb4f24e293dca7fc4ff89165b64c5 # v4.3.0
         with:
           luarocksVersion: "3.11.1"
       - name: LuaSocket
         run: luarocks install luasocket 3.1.0-1
-      - name: Type checker for generated Lua
-        run: |
-          mkdir -p "$RUNNER_TEMP/luals"
-          curl -fsSL https://github.com/LuaLS/lua-language-server/releases/download/3.19.2/lua-language-server-3.19.2-linux-x64.tar.gz \
-            | tar -xz -C "$RUNNER_TEMP/luals"
-          echo "$RUNNER_TEMP/luals/bin" >> "$GITHUB_PATH"
       - name: Tests
-        run: cargo test --workspace
+        run: cargo test --locked --workspace
         env:
           TEMPEST_REQUIRE_CHECKERS: "1"
       # The vendored Rust runtime's own unit tests, which the workspace
@@ -154,19 +157,19 @@ jobs:
           git -C "$RUNNER_TEMP/luajit-src" checkout -q 8ca76297
           make -C "$RUNNER_TEMP/luajit-src" -j4 -s PREFIX="$RUNNER_TEMP/luajit"
           make -C "$RUNNER_TEMP/luajit-src" -s install PREFIX="$RUNNER_TEMP/luajit"
-          LUA="$RUNNER_TEMP/luajit/bin/luajit" cargo test -p temper-be-lua --test functional runs
+          LUA="$RUNNER_TEMP/luajit/bin/luajit" cargo test --locked -p temper-be-lua --test functional runs
         env:
           TEMPEST_REQUIRE_CHECKERS: "1"
       # Without the `net` web client, and `tempest` and `temper-wasm`
       # without their backend features; the backend crates' own tests
       # still run.
       - name: Tests without default features
-        run: cargo test --workspace --no-default-features
+        run: cargo test --locked --workspace --no-default-features
         env:
           TEMPEST_REQUIRE_CHECKERS: "1"
       # With every backend, as released.
       - name: Wasm build
-        run: cargo build --profile small --target wasm32-unknown-unknown -p temper-wasm
+        run: cargo build --locked --profile small --target wasm32-unknown-unknown -p temper-wasm
       # The playground's TypeScript, type checked by its pinned tsc, and
       # bundled by esbuild, on the wasm just built.
       - name: Playground
@@ -178,7 +181,7 @@ jobs:
       # (the small profile, as released); that one's tests run in a real
       # VS Code (@vscode/test-electron), under xvfb, against its tempest.
       - name: Release build of tempest
-        run: cargo build --profile small -p tempest
+        run: cargo build --locked --profile small -p tempest
       - name: VS Code extension
         run: uv run editors/vscode/build.py --tempest target/small/tempest --test
       # Each marked ```temper block in docs/ runs on the release build as its
@@ -190,12 +193,12 @@ jobs:
       # playground are only listed.
       - id: kelpto
         run: echo "ref=$(tr -d '[:space:]' < site/docs/kelpto-ref)" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: temperlang/kelpto
           ref: ${{ steps.kelpto.outputs.ref }}
           path: .kelpto
-      - uses: actions/cache@v4
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ hashFiles('site/docs/mermaid/package-lock.json') }}

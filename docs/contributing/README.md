@@ -19,6 +19,7 @@ This repository is tempest, Temper's compiler in Rust. Start with:
   compiler](../../notes/kotlin-differences.md).
 - [Writing these docs](docs.md): their conventions, how their examples
   are checked, and the plan for rendering them.
+- [CI and supply chain](ci.md): what CI pins, and how to bump it.
 
 ### Principles
 
@@ -103,6 +104,8 @@ tests, all on Rust 1.85.0. A nightly job tests C++ on more compilers
 and under sanitizers, and runs real libraries' tests on every backend,
 from a list (`.github/nightly-libraries.json`;
 [test speed](../../notes/test-speed.md), "Real libraries, nightly").
+[CI and supply chain](ci.md) says what CI pins (actions, crates, and
+the checkers of generated code), why, and how to bump a pin.
 
 ## Sending changes
 

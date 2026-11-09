@@ -160,7 +160,7 @@ def main() -> int:
         SUITE = args.temper / "functional-test-suite/src/commonMain/resources"
         STD = args.temper / "frontend/src/commonMain/resources/std"
 
-    subprocess.run(["cargo", "build", "-q", "--release", "-p", "temper-frontend"], cwd=ROOT, check=True)
+    subprocess.run(["cargo", "build", "-q", "--locked", "--release", "-p", "temper-frontend"], cwd=ROOT, check=True)
     runner = ROOT / "target/release/run-temper"
     server = start_test_server()
     port = ["--test-server-port", str(server.server_address[1])]

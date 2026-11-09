@@ -1,0 +1,20 @@
+# Monthly pull requests bumping the GitHub Actions the workflows use,
+# which are pinned by commit SHA with a version comment that Dependabot
+# keeps in step. Only releases at least two weeks old (cooldown), as
+# docs/contributing/ci.md asks. Cargo and npm aren't here (yet): their
+# lockfiles are bumped by hand.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 14
+    groups:
+      actions:
+        patterns: ["*"]
+    ignore:
+      # Pinned to the commit of its 1.85.0 branch (the toolchain is the
+      # branch's name; no version tags), so bumped by hand.
+      - dependency-name: dtolnay/rust-toolchain

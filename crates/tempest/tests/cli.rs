@@ -785,12 +785,17 @@ fn logformat_json() {
              \"{dir}/a.temper\", \"left\": 51, \"right\": 57 }}, \"values\": [], \"message\": \
              \"tripel has not been declared\" }}"
         );
-        let (code, out, err) = tempest(&["build", "-w", dir, "-b", "js", "--logformat", "json"]);
-        assert_eq!((code, out.as_str()), (1, ""), "{err}");
-        assert_eq!(
-            err,
-            format!("{undeclared}\n{{ \"task\": \"Build\", \"ok\": false }}\n")
-        );
+        // A build needs a backend; one built without js (as CI's
+        // --no-default-features run) skips this part.
+        if built_in("js") {
+            let (code, out, err) =
+                tempest(&["build", "-w", dir, "-b", "js", "--logformat", "json"]);
+            assert_eq!((code, out.as_str()), (1, ""), "{err}");
+            assert_eq!(
+                err,
+                format!("{undeclared}\n{{ \"task\": \"Build\", \"ok\": false }}\n")
+            );
+        }
         let (code, out, err) = tempest(&["test", "-w", dir, "--logformat", "json"]);
         assert_eq!((code, out.as_str()), (1, ""), "{err}");
         let expected = [
@@ -1039,9 +1044,11 @@ fn test_flags() {
         ]);
         assert_eq!(code, 1);
         assert!(err.contains("No library named b under "), "{err}");
-        let (code, _, err) = tempest(&["build", "-w", dir, "-b", "js", "-ign", &list]);
-        assert_eq!(code, 0, "{err}");
-        assert!(!Path::new(dir).join("temper.out/js/b").exists());
+        if built_in("js") {
+            let (code, _, err) = tempest(&["build", "-w", dir, "-b", "js", "-ign", &list]);
+            assert_eq!(code, 0, "{err}");
+            assert!(!Path::new(dir).join("temper.out/js/b").exists());
+        }
         let _ = fs::remove_file(&list);
     });
 }
