@@ -2,8 +2,8 @@
 # it's run by hand from the Actions tab: the C++ backend's tests
 # (`cargo test -p temper-be-cpp`, as CI runs them, every warning an
 # error, with their own AddressSanitizer, UndefinedBehaviorSanitizer,
-# and ThreadSanitizer builds) under the oldest and newest g++ that
-# ubuntu-latest has, named by `CXX`, and once more with every build but
+# and ThreadSanitizer builds) under an older and a newer g++ (12 and
+# 14, installed from Ubuntu's archive), named by `CXX`, and once more with every build but
 # ThreadSanitizer's also under AddressSanitizer and
 # UndefinedBehaviorSanitizer, through `TEMPEST_CXXFLAGS`, so the plain
 # programs and the tests run sanitized too. Not clang++: the tests'
@@ -48,9 +48,16 @@ jobs:
       # As in CI, for ThreadSanitizer's shadow memory.
       - name: Address randomization for ThreadSanitizer
         run: sudo sysctl vm.mmap_rnd_bits=28
-      # As in CI: libcurl's headers, for std `net`'s default client.
-      - name: libcurl for C++'s std net
-        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
+      # As in CI: libcurl's headers, for std `net`'s default client. And
+      # the matrix's g++, which the runner image may not have installed:
+      # Ubuntu's package is named as the command (g++-12, g++-14).
+      - name: libcurl for C++'s std net, and the compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcurl4-openssl-dev
+          if [ "$CXX" != g++ ]; then sudo apt-get install -y "$CXX"; fi
+        env:
+          CXX: ${{ matrix.cxx }}
       - name: Tests
         run: |
           "$CXX" --version
