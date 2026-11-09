@@ -48,7 +48,10 @@ is the cue to fix the backend or the tests before bumping that pin.
 
 - **Actions:** Dependabot ([.github/dependabot.yml](../../.github/dependabot.yml))
   opens a monthly pull request updating the SHAs and their comments,
-  for releases at least two weeks old. By hand: resolve the release's
+  for releases at least two weeks old: one for every minor and patch
+  bump, and one per major bump. Read a major's release notes and check
+  the inputs we pass before merging, and after merging, run Nightly and
+  Binaries by hand, since only `ci.yml` runs on the pull request. By hand: resolve the release's
   tag to its commit (`git ls-remote <repo> refs/tags/<tag>`, taking the
   `^{}` line for an annotated tag), and update the SHA and the comment
   everywhere the action is used.

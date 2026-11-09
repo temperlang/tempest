@@ -1,7 +1,10 @@
 # Monthly pull requests bumping the GitHub Actions the workflows use,
 # which are pinned by commit SHA with a version comment that Dependabot
 # keeps in step. Only releases at least two weeks old (cooldown), as
-# docs/contributing/ci.md asks. Cargo and npm aren't here (yet): their
+# docs/contributing/ci.md asks. Minor and patch bumps come together in
+# one pull request; each major bump comes on its own, since majors can
+# change inputs, and some workflows (Pages, releases, nightly) only run
+# after merging. Cargo and npm aren't here (yet): their
 # lockfiles are bumped by hand.
 version: 2
 updates:
@@ -14,6 +17,7 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+        update-types: [minor, patch]
     ignore:
       # Pinned to the commit of its 1.85.0 branch (the toolchain is the
       # branch's name; no version tags), so bumped by hand.
