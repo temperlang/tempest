@@ -111,6 +111,41 @@ fn imports_across_modules() {
     });
 }
 
+/// An `@extension("isPal")` imported from another module keeps
+/// `s.isPal()` from being "No member" there; a module that doesn't import
+/// it gets the error (the audit's probe: once, any file's text mentioning
+/// `@extension` turned the check off for the whole library).
+#[test]
+fn imported_extensions_hide_no_member() {
+    with_stack(|| {
+        let mut library = Library::new();
+        let lib =
+            "@extension(\"isPal\")\nexport let stringIsPal(s: String): Boolean { s == \"aba\" }";
+        library.add_file("app/lib/lib.temper", lib, SourceKind::Standalone);
+        let main =
+            "let { stringIsPal } = import(\"./lib/\");\nlet f(s: String): Boolean { s.isPal() }";
+        library.add_file("app/main.temper", main, SourceKind::Standalone);
+        let other = "let g(s: String): Boolean { s.isPal() }";
+        library.add_file("app/other/other.temper", other, SourceKind::Standalone);
+        let settled = settle(library);
+        let errors: Vec<(String, String)> = (settled.library.diagnostics.iter())
+            .filter(|d| d.level == Level::Error)
+            .map(|d| {
+                let file = settled.library.locate(d.span.start).0;
+                let path = &settled.library.files[file.0 as usize].path;
+                (path.clone(), d.message.text())
+            })
+            .collect();
+        assert_eq!(
+            errors,
+            [(
+                "app/other/other.temper".to_string(),
+                "No member isPal in String".to_string()
+            )]
+        );
+    });
+}
+
 /// `std/…` imports, under `-std-`, and `...`, which imports every export
 /// not named otherwise.
 #[test]

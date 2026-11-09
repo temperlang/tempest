@@ -200,6 +200,26 @@ code, pre, kbd, samp {
 .doc img { max-width: 100%; height: auto; }
 .doc hr { border: 0; border-top: 1px solid var(--line); margin: 2em 0; }
 
+/* A `temper inert` block, Temper that isn't compiled: tinted, labeled. */
+.doc pre.inert {
+  position: relative;
+  background: linear-gradient(rgba(128, 128, 128, 0.08), rgba(128, 128, 128, 0.08)), var(--code-bg);
+}
+
+.doc .inert-label {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 0.72em;
+  line-height: 1.6;
+  color: var(--muted);
+  cursor: help;
+  user-select: none;
+}
+
 .doc :not(pre) > code {
   background: var(--code-bg);
   padding: 0.12em 0.35em;

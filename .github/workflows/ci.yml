@@ -169,7 +169,7 @@ jobs:
           TEMPEST_REQUIRE_CHECKERS: "1"
       # With every backend, as released.
       - name: Wasm build
-        run: cargo build --locked --profile small --target wasm32-unknown-unknown -p temper-wasm
+        run: cargo build --locked --profile small-wasm --target wasm32-unknown-unknown -p temper-wasm
       # The playground's TypeScript, type checked by its pinned tsc, and
       # bundled by esbuild, on the wasm just built.
       - name: Playground

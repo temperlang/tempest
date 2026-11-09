@@ -11,9 +11,8 @@
 use crate::build;
 use std::io::Write;
 use temper_frontend::interp;
-use temper_frontend::library::Level;
-use temper_frontend::library_tests::{libraries_to_test, problem, write_located_diagnostics};
-use temper_frontend::log::{LogFormat, write_json_diagnostics};
+use temper_frontend::library_tests::{Reported, libraries_to_test, problem};
+use temper_frontend::log::LogFormat;
 use temper_frontend::project::load_library;
 use temper_frontend::settle::settle;
 use temper_frontend::sources::Sources;
@@ -98,7 +97,7 @@ pub fn run(
 }
 
 /// Runs a library's top level on the interpreter, after its diagnostics,
-/// what it logs going to `out` once it's done.
+/// what it logs going to `out` as it's logged.
 fn run_interp(
     sources: &Sources,
     root: &str,
@@ -122,19 +121,14 @@ fn run_interp(
             return false;
         }
     };
-    let mut diagnostics = String::new();
-    match log {
-        LogFormat::Text => write_located_diagnostics(&settled, &mut diagnostics),
-        LogFormat::Json => write_json_diagnostics(&settled, &mut diagnostics),
-    }
+    // Each counted under the library it's in, as `build` counts them.
+    let mut reported = Reported::default();
+    let diagnostics = reported.new_diagnostics(&settled, found, &libraries, log);
     let _ = err.write_all(diagnostics.as_bytes());
-    let errors = (settled.library.diagnostics.iter())
-        .filter(|d| d.level == Level::Error)
-        .count();
-    let ran = interp::run(&settled, None);
-    for line in &ran.output {
+    // Each line as it's logged, so a long run's output isn't kept.
+    let ran = interp::run_streaming(&settled, None, &mut |line| {
         let _ = writeln!(out, "{line}");
-    }
+    });
     let _ = out.flush();
     if let Some(failure) = &ran.failure {
         let text = format!("{library}: {failure}");
@@ -146,8 +140,10 @@ fn run_interp(
             &[library.into(), failure.as_str().into()],
         );
     }
-    if errors > 0 && log == LogFormat::Text {
-        let _ = writeln!(err, "{library}: {}", build::error_count(errors));
+    if log == LogFormat::Text {
+        for (library, count) in &reported.errors {
+            let _ = writeln!(err, "{library}: {}", build::error_count(*count));
+        }
     }
-    ran.failure.is_none() && errors == 0
+    ran.failure.is_none() && reported.errors.is_empty()
 }

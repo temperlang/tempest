@@ -14,7 +14,7 @@ use crate::regex::{Found, Node, Regex, Special};
 use crate::settle::Settled;
 use std::rc::Rc;
 
-impl Interp {
+impl Interp<'_> {
     pub(super) fn regex_connected(
         &mut self,
         s: &Settled,

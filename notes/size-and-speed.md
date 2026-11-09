@@ -516,7 +516,12 @@ machines, beside an editor and an LSP, and in watch mode. Binary size
 matters too, most of all for wasm, where it's download time for a browser
 playground; natively it's mostly startup and install size.
 `compat/measure_size.py` measures both. Sizes use the `small` profile
-(optimize for size, LTO, `panic = "abort"`, stripped; see `Cargo.toml`).
+(optimize for size, LTO, stripped; see `Cargo.toml`). Native builds'
+panics unwind since 2026-11-09, so the language server and CLI can
+catch them; that added 835,584 bytes (11.6%) to the small `tempest`
+(7,211,544 to 8,047,128 bytes), a step in its row from then on. The
+wasm still aborts, built with its own profile, `small-wasm`, and is
+unchanged.
 Peak memory is the resident set of one `--bench 1` run: read all 815 Temper
 files (~700 KB) and lex and parse them all once.
 

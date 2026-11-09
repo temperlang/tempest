@@ -3,7 +3,7 @@
 //! or from a directory.
 
 use std::fs;
-use temper_frontend::library_tests::{parse_junit, test_dir};
+use temper_frontend::library_tests::{TestOptions, parse_junit, test_dir, test_libraries};
 use temper_frontend::project::{Config, LibrarySources, find_libraries, work_root};
 use temper_frontend::sources::Sources;
 use temper_frontend::stdlib;
@@ -64,7 +64,52 @@ fn test_in(
             let (mut out, mut err) = (Vec::new(), Vec::new());
             let passed = test_dir(&sources(), &dir, verbose, &mut out, &mut err);
             let text = |b: Vec<u8>| String::from_utf8(b).unwrap();
-            (passed, text(out), text(err))
+            (passed, without_steps(&text(out)), text(err))
+        })
+        .unwrap()
+        .join()
+        .unwrap()
+}
+
+/// Output without each passing test's steps, ` (123 steps)`, which
+/// [`runaway_tests_fail_alone`] checks, so the other tests needn't change
+/// when the interpreter's steps do.
+fn without_steps(out: &str) -> String {
+    let mut lines = Vec::new();
+    for line in out.split_inclusive('\n') {
+        let trimmed = line.trim_end_matches('\n');
+        let cut = (trimmed.strip_suffix(" steps)"))
+            .and_then(|rest| rest.rsplit_once(" ("))
+            .filter(|(_, n)| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()));
+        match cut {
+            Some((kept, _)) if trimmed.starts_with("  ok      ") => {
+                lines.push(format!("{kept}{}", &line[trimmed.len()..]))
+            }
+            _ => lines.push(line.to_string()),
+        }
+    }
+    lines.concat()
+}
+
+/// Tests the libraries under `dir` verbosely, with `fuel` steps for each
+/// test, giving whether all passed and what was written to `out`.
+fn test_with_fuel(dir: &str, fuel: u64) -> (bool, String) {
+    let dir = dir.to_string();
+    std::thread::Builder::new()
+        .stack_size(64 << 20)
+        .spawn(move || {
+            let options = TestOptions {
+                verbose: true,
+                fuel: Some(fuel),
+                ..TestOptions::default()
+            };
+            let (mut out, mut err) = (Vec::new(), Vec::new());
+            let sources = Sources::standard();
+            let (passed, tally) =
+                test_libraries(&sources, &dir, &options, &mut out, &mut err).unwrap();
+            let mut out = String::from_utf8(out).unwrap();
+            out.push_str(&format!("{}\n", tally.summary()));
+            (passed, out)
         })
         .unwrap()
         .join()
@@ -429,5 +474,75 @@ fn duplicate_names() {
     let root = &tree.root;
     let (passed, _, err) = test(root);
     assert_eq!(err, format!("Two libraries are named lib under {root}\n"));
+    assert!(!passed);
+}
+
+/// A test that loops forever runs out of its steps and fails alone; the
+/// tests before and after it run and pass, each with a budget of its own.
+#[test]
+fn runaway_tests_fail_alone() {
+    let tree = write_tree(
+        "runaway",
+        &[
+            ("src/config.temper.md", CONFIG),
+            (
+                "src/a.temper",
+                "test(\"before\") { assert(1 + 1 == 2) }\n\
+                 test(\"loops\") { var i = 0; while (i >= 0) { i = (i + 1) % 10 } }\n\
+                 test(\"after\") {\n  var i = 0;\n  while (i < 1000) { i += 1; }\n  assert(i == 1000);\n}\n",
+            ),
+        ],
+    );
+    let root = &tree.root;
+    let (passed, out) = test_with_fuel(root, 20_000);
+    let lines: Vec<&str> = out.lines().collect();
+    assert_eq!(lines[0], format!("Testing {root}/src"), "{out}");
+    let steps = |line: &str, name: &str| -> u64 {
+        let rest = line.strip_prefix(&format!("  ok      {name} ("));
+        let n = rest.and_then(|r| r.strip_suffix(" steps)"));
+        n.unwrap_or_else(|| panic!("{line}")).parse().unwrap()
+    };
+    assert!(steps(lines[1], "before") < 5_000, "{out}");
+    assert_eq!(
+        lines[2],
+        "  failed  loops - Panicked: ran out of steps (each test may take 20000)"
+    );
+    // The loop alone takes several thousand steps, which a budget shared
+    // with the test before wouldn't leave room for.
+    assert!((5_000..20_000).contains(&steps(lines[3], "after")), "{out}");
+    assert_eq!(lines[4..], ["Tests passed: 2 of 3"]);
+    assert!(!passed);
+}
+
+/// The audit's probe, a `for` loop missing its `i++` (control-flow/loops),
+/// at a library's top level: it logs until it runs out of steps, keeping
+/// only the first 64 KiB of what it logged, then a note, and fails.
+#[test]
+fn runaway_top_level_is_cut_short() {
+    let tree = write_tree(
+        "runaway-top",
+        &[
+            ("src/config.temper.md", CONFIG),
+            (
+                "src/a.temper",
+                "for (var i = 0; i < 5;) { console.log(i.toString()); }\n\
+                 test(\"never runs\") { assert(true) }\n",
+            ),
+        ],
+    );
+    let root = &tree.root;
+    let (passed, out) = test_with_fuel(root, 1_000_000);
+    assert!(out.len() < (64 << 10) + 1_000, "{} bytes", out.len());
+    let tail: Vec<&str> = out.lines().rev().take(3).collect();
+    assert!(
+        tail[2].starts_with("[output truncated: ")
+            && tail[2].ends_with(" more lines past 65536 bytes]"),
+        "{tail:?}"
+    );
+    assert_eq!(
+        tail[1],
+        "  Panicked: ran out of steps (the top-level code may take 1000000)"
+    );
+    assert_eq!(tail[0], "Tests passed: 0 of 1 (1 not run)");
     assert!(!passed);
 }

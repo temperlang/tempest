@@ -7,17 +7,61 @@ import { type Grammar, escapeHtml, highlight } from "./highlight";
 const unescapes: Record<string, string> = { "&lt;": "<", "&gt;": ">", "&quot;": '"', "&#39;": "'", "&amp;": "&" };
 const unescapeHtml = (html: string): string => html.replace(/&(?:lt|gt|quot|#39|amp);/g, (e) => unescapes[e]!);
 
+/** What an inert block's label says, in the editor and the preview. */
+export const INERT_TITLE = "Not compiled: shown for reading only";
+
+/** A fenced code block tagged `temper inert`, which the literate split
+ * doesn't compile: its opening and closing fence lines, from 0 (the
+ * closing one is the last line if it's never closed). */
+export interface InertBlock {
+  open: number;
+  close: number;
+}
+
+/** The `temper inert` blocks in a `.temper.md` source, as the literate
+ * split finds fences (crates/temper-syntax/src/literate.rs): a fence of
+ * three or more backticks or tildes, its info's first word `temper` and
+ * another `inert`, closed by a fence of the same character at least as
+ * long. Fences in other fences don't count. */
+export function inertBlocks(source: string): InertBlock[] {
+  const lines = source.split(/\r?\n/);
+  const found: InertBlock[] = [];
+  let open: { fence: string; line: number; inert: boolean } | undefined;
+  lines.forEach((line, i) => {
+    if (open) {
+      const m = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(line);
+      if (m && m[1]![0] === open.fence[0] && m[1]!.length >= open.fence.length) {
+        if (open.inert) found.push({ open: open.line, close: i });
+        open = undefined;
+      }
+      return;
+    }
+    const m = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+    if (!m || (m[1]![0] === "`" && m[2]!.includes("`"))) return;
+    const tags = m[2]!.trim().split(/\s+/);
+    open = { fence: m[1]!, line: i, inert: tags[0] === "temper" && tags.includes("inert") };
+  });
+  if (open?.inert) found.push({ open: open.line, close: lines.length - 1 });
+  return found;
+}
+
 /** Highlights the Temper code blocks in the Markdown engine's HTML:
  * indented blocks, and fenced ones untagged or tagged `temper`, as the
- * literate split reads them (`temper inert` too, being Temper). Other
- * languages keep the engine's own highlighting. */
-export function highlightCodeBlocks(html: string, grammar: Grammar): string {
-  return html.replace(/(<pre\b[^>]*>\s*<code\b([^>]*)>)([\s\S]*?)(<\/code>\s*<\/pre>)/g, (all, open: string, attrs: string, body: string, close: string) => {
+ * literate split reads them, `temper inert` too, being Temper. A block
+ * whose fence is on one of `inertLines` (its `data-line`) is marked
+ * `data-inert` and labeled "inert" in its corner. Other languages keep
+ * the engine's own highlighting. */
+export function highlightCodeBlocks(html: string, grammar: Grammar, inertLines: ReadonlySet<number> = new Set()): string {
+  return html.replace(/(<pre\b[^>]*>)(\s*)(<code\b([^>]*)>)([\s\S]*?)(<\/code>\s*<\/pre>)/g, (all, pre: string, space: string, code: string, attrs: string, body: string, close: string) => {
     const lang = /\bclass="[^"]*\blanguage-([^\s"]+)/.exec(attrs)?.[1];
     if (lang !== undefined && lang !== "temper") return all;
     // Already marked up (a plugin's highlighting) isn't plain code.
     if (body.includes("<")) return all;
-    return `${open.replace(/<code\b/, '<code data-temper=""')}${highlight(grammar, unescapeHtml(body))}${close}`;
+    const line = Number(/\bdata-line="(\d+)"/.exec(attrs)?.[1] ?? NaN);
+    const inert = inertLines.has(line);
+    const marks = inert ? 'data-temper="" data-inert=""' : 'data-temper=""';
+    const label = inert ? `<span class="inert-label" title="${INERT_TITLE}">inert</span>` : "";
+    return `${pre}${label}${space}${code.replace(/<code\b/, `<code ${marks}`)}${highlight(grammar, unescapeHtml(body))}${close}`;
   });
 }
 
@@ -110,9 +154,11 @@ export function page(p: PageParts): string {
 `;
 }
 
-/** The engine's HTML, highlighted, with an end mark at the document's
- * last line so the sync reaches the bottom. */
-export function body(rendered: string, grammar: Grammar | undefined, lineCount: number): string {
-  const html = grammar ? highlightCodeBlocks(rendered, grammar) : rendered;
+/** The engine's HTML, highlighted, `source`'s inert blocks marked, with
+ * an end mark at the document's last line so the sync reaches the
+ * bottom. */
+export function body(rendered: string, grammar: Grammar | undefined, lineCount: number, source = ""): string {
+  const inert = new Set(inertBlocks(source).map((b) => b.open));
+  const html = grammar ? highlightCodeBlocks(rendered, grammar, inert) : rendered;
   return `${html}<div class="code-line" data-line="${lineCount}"></div>`;
 }

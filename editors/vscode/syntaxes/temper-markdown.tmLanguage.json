@@ -2,8 +2,11 @@
   "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
   "name": "Temper Markdown",
   "scopeName": "text.html.markdown.temper",
-  "comment": "Literate Temper (.temper.md): Markdown prose, with Temper in code blocks as the frontend's literate split reads them (crates/temper-syntax/src/literate.rs): fenced blocks untagged or tagged temper, but not inert, and indented blocks; not in block quotes. Indented blocks are approximated line by line. Prose uses VS Code's Markdown grammar where it's there.",
+  "comment": "Literate Temper (.temper.md): Markdown prose, with Temper in code blocks as the frontend's literate split reads them (crates/temper-syntax/src/literate.rs): fenced blocks untagged or tagged temper, and indented blocks; not in block quotes. Blocks tagged temper inert, which aren't compiled, are highlighted as Temper too, scoped meta.embedded.block.temper.inert, with the word inert scoped on the fence line. Indented blocks are approximated line by line. Prose uses VS Code's Markdown grammar where it's there.",
   "patterns": [
+    {
+      "include": "#temper-inert-fence"
+    },
     {
       "include": "#temper-fence"
     },
@@ -18,9 +21,42 @@
     }
   ],
   "repository": {
+    "temper-inert-fence": {
+      "name": "markup.fenced_code.block.temper.inert",
+      "begin": "^( {0,3})(`{3,}|~{3,})[ \\t]*(temper)((?:[ \\t]+[^\\s`]+)*?)[ \\t]+(inert)((?:[ \\t]+[^\\s`]+)*)[ \\t]*$",
+      "end": "^ {0,3}(\\2)[`~]*[ \\t]*$",
+      "beginCaptures": {
+        "2": {
+          "name": "punctuation.definition.markdown"
+        },
+        "3": {
+          "name": "fenced_code.block.language.markdown"
+        },
+        "4": {
+          "name": "fenced_code.block.language.attributes.markdown"
+        },
+        "5": {
+          "name": "storage.modifier.inert.temper"
+        },
+        "6": {
+          "name": "fenced_code.block.language.attributes.markdown"
+        }
+      },
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.markdown"
+        }
+      },
+      "contentName": "meta.embedded.block.temper.inert",
+      "patterns": [
+        {
+          "include": "source.temper"
+        }
+      ]
+    },
     "temper-fence": {
       "name": "markup.fenced_code.block.temper",
-      "begin": "^( {0,3})(`{3,}|~{3,})[ \\t]*(temper(?:[ \\t]+(?!inert\\b)[^\\s`]+)*)?[ \\t]*$",
+      "begin": "^( {0,3})(`{3,}|~{3,})[ \\t]*(temper(?:[ \\t]+[^\\s`]+)*)?[ \\t]*$",
       "end": "^ {0,3}(\\2)[`~]*[ \\t]*$",
       "beginCaptures": {
         "2": {

@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { type Grammar, classOf, highlight, tokenize } from "./highlight";
-import { body, fragmentLine, highlightCodeBlocks, linkTarget, page } from "./page";
+import { INERT_TITLE, body, fragmentLine, highlightCodeBlocks, inertBlocks, linkTarget, page } from "./page";
 import { lineForTop, ordered, topForLine } from "./sync";
 
 const grammar = JSON.parse(readFileSync("syntaxes/temper.tmLanguage.json", "utf8")) as Grammar;
@@ -79,6 +79,47 @@ test("Temper code blocks are highlighted, others left", () => {
   assert.match(html, /<code data-line="14" class="code-line language-text" dir="auto">let w = 4;/);
   assert.equal((html.match(/data-temper/g) ?? []).length, 3);
   assert.match(body(rendered, grammar, 12), /<div class="code-line" data-line="12"><\/div>$/);
+});
+
+test("temper inert blocks are found as the literate split finds fences", () => {
+  const source = [
+    "# Notes", // 0
+    "```temper inert", // 1
+    "let a = 1;",
+    "```", // 3
+    "````markdown", // 4
+    "```temper inert", // 5: in another fence, not one
+    "```",
+    "````", // 7
+    "~~~ temper  other inert", // 8
+    "~~~~", // 9
+    "```temper", // 10: compiled
+    "```",
+    "```inert", // 12: not Temper
+    "```",
+    "```temper inert", // 14: never closed
+    "let b = 2;",
+  ].join("\n");
+  assert.deepEqual(inertBlocks(source), [
+    { open: 1, close: 3 },
+    { open: 8, close: 9 },
+    { open: 14, close: 15 },
+  ]);
+});
+
+test("inert blocks are highlighted, marked, and labeled", () => {
+  // VS Code's engine drops the info after `temper`, so the fence's line
+  // says which blocks are inert.
+  const rendered = [
+    '<pre><code data-line="1" class="code-line language-temper" dir="auto">let a = 1;\n</code></pre>',
+    '<pre><code data-line="5" class="code-line language-temper" dir="auto">let b = 2;\n</code></pre>',
+  ].join("\n");
+  const html = body(rendered, grammar, 8, "x\n```temper inert\nlet a = 1;\n```\n\n```temper\nlet b = 2;\n```");
+  assert.match(html, new RegExp(`^<pre><span class="inert-label" title="${INERT_TITLE}">inert</span><code data-temper="" data-inert="" data-line="1"`));
+  assert.match(html, /<span class="tm-variable">a<\/span>/);
+  assert.equal((html.match(/data-inert/g) ?? []).length, 1);
+  assert.equal((html.match(/inert-label/g) ?? []).length, 1);
+  assert.match(html, /<code data-temper="" data-line="5"/);
 });
 
 test("links: fragments, the web, and files", () => {

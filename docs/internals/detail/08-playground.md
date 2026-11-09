@@ -197,16 +197,19 @@ The library cache would fix both.
 
 **Chosen:** three guards, from the inside out.
 
-- **Fuel:** runs and tests stop after
+- **Fuel:** a run stops after
   [`FUEL`](../../../crates/temper-frontend/src/interp.rs), 50 million
-  steps, as that run's failure.
+  steps, as that run's failure; with tests, the top level and each test
+  get that many, and a test that runs out fails alone. What a run logs
+  is kept up to 64 KiB, then cut with a note.
 - **A stale timer:** if a compile is still busy `STALE_MS` (1.5 s) after
   a newer one started waiting, the page replaces the worker
   ([`sendNext`](../../../site/playground/src/main.ts),
   [`startWorker`](../../../site/playground/src/main.ts)). This covers
   what fuel doesn't: settling, which has no budget.
-- **A fresh instance:** a panic traps (the `small` profile aborts on
-  panic), which leaves the instance unusable; the worker drops it and
+- **A fresh instance:** a panic traps (the `small-wasm` profile aborts
+  on panic, as wasm32-unknown-unknown can't unwind), which leaves the
+  instance unusable; the worker drops it and
   makes a new one for the next request.
 
 **Plus a big stack:** [`build.rs`](../../../crates/temper-wasm/build.rs)
@@ -312,7 +315,7 @@ differ.
 ### One build script, published by Pages
 
 **Chosen:** [`build.py`](../../../site/playground/build.py) builds the
-wasm (`small` profile), installs the pinned npm packages with `npm ci`,
+wasm (`small-wasm` profile), installs the pinned npm packages with `npm ci`,
 type-checks the page and the workers with `tsc` separately, bundles and
 minifies with esbuild (examples as text, the JS runtime aliased in, the
 build's commit and wasm sizes defined in), writes the bundled packages'
@@ -492,7 +495,7 @@ with `--limit` on builds.
   `compile_into` with `RUN | TESTS` and every backend, as the page
   calls it, with no diagnostics, each backend's files, and the
   interpreter's output and tests' results pinned.
-- **The wasm build** in CI (`cargo build --profile small --target
+- **The wasm build** in CI (`cargo build --profile small-wasm --target
   wasm32-unknown-unknown`), and the page type-checked and bundled.
 - **The page in a browser:**
   [`smoke.mjs`](../../../site/playground/smoke.mjs) serves the build and

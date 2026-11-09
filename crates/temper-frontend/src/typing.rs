@@ -32,7 +32,7 @@
 use crate::builtins::{Builtin, Constant, Function};
 use crate::core::{self, ROLE_MASK, ROLE_TYPE_PARAM};
 use crate::library::{Level, Message};
-use crate::scope::{SymbolId, SymbolKind};
+use crate::scope::{ScopeId, SymbolId, SymbolKind};
 use crate::settle::{Fact, Settle};
 use crate::types::{
     ANY_VALUE, BOOLEAN, FLOAT64, INT32, INT64, NEVER, NULL, Param, STRING, TypeData, TypeId, Types,
@@ -858,20 +858,26 @@ impl Settle {
         }
         self.check_fields_first();
         // After the other checks, so an error there comes first.
-        for root in self.lib.files.iter().map(|f| f.root).collect::<Vec<_>>() {
-            self.check_members_exist(root);
+        for m in 0..self.lib.modules.len() {
+            let scope = self.modules[m];
+            let files = self.lib.modules[m].files.clone();
+            for f in files {
+                self.check_members_exist(self.lib.files[f.0 as usize].root, scope);
+            }
         }
         self.type_all_exprs();
     }
 
-    /// [`Settle::check_member_exists`] for every member read or call.
-    fn check_members_exist(&mut self, node: NodeId) {
+    /// [`Settle::check_member_exists`] for every member read or call, in
+    /// `scope` or the scope a node under it makes.
+    fn check_members_exist(&mut self, node: NodeId, scope: ScopeId) {
+        let scope = self.scopes.of_node(node).unwrap_or(scope);
         for i in 0..self.lib.tree.children(node).len() {
             let child = self.lib.tree.children(node)[i];
-            self.check_members_exist(child);
+            self.check_members_exist(child, scope);
         }
         if self.lib.tree.kind(node) == NodeKind::Call {
-            self.check_member_exists(node);
+            self.check_member_exists(node, scope);
         }
     }
 
@@ -1207,10 +1213,11 @@ impl Settle {
     /// not of an interface's value, as Kotlin lets `this.toString()` be
     /// in one, nor of a nullable value or a type parameter's (Kotlin's
     /// messages there are odd; kotlin-differences.md), nor a static
-    /// member, as `C.key`, nor a destructuring's, nor where `@extension`s
-    /// may add one (not yet supported), nor where an error is reported
-    /// already, as for a method inherited twice.
-    fn check_member_exists(&mut self, node: NodeId) {
+    /// member, as `C.key`, nor a destructuring's, nor where an
+    /// `@extension("key")` is visible, declared or imported (extensions
+    /// aren't supported yet), nor where an error is reported already, as
+    /// for a method inherited twice.
+    fn check_member_exists(&mut self, node: NodeId, scope: ScopeId) {
         /// Builtin types whose members core's table has in full.
         const FULL: [&str; 10] = [
             "Boolean",
@@ -1255,7 +1262,7 @@ impl Settle {
         };
         if !known
             || self.lib.diagnostics.iter().any(overlaps)
-            || (self.lib.files.iter()).any(|f| f.parsed.source().contains("@extension"))
+            || self.extension_visible(scope, name, node)
         {
             return;
         }

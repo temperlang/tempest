@@ -95,7 +95,7 @@ written, failing where it runs, and the exit status is 1.
 ## `test`
 
     temper test -b BACKEND... [-w DIR] [-ign FILE] [--library NAME] [--no-connected] [-v] [--logformat text|json]
-    tempest test [-b BACKEND|interp]... [-w DIR | DIR] [same] [--std DIR]
+    tempest test [-b BACKEND|interp]... [-w DIR | DIR] [same] [--fuel N|none] [--std DIR]
 
 Builds the libraries and runs their tests with each backend's own tools
 (Mocha, JUnit, `dotnet test`, `cargo test`, and so on), or on the
@@ -113,6 +113,20 @@ interpreter with `-b interp`. It prints the tests that failed, or with
 - **`DIR`**, tempest's, is where the work root's search starts, in
   place of the current directory; `-w DIR` names the work root itself.
   One or the other.
+- **`--fuel N`**, tempest's, is how many steps each test may take on
+  the interpreter, and the library's top-level code before them: 10
+  billion by default, 3 to 4 minutes of a tight loop. A test that
+  runs out fails alone, "ran out of steps (each test may take N)", and
+  the others still run, so a test that loops forever doesn't hang the
+  run. `--fuel none` lifts the limit; digits may be grouped with `_` or
+  `,` (`--fuel 5_000_000_000`). The slowest real library test takes
+  about 626 million steps (Kelpto's), a sixteenth of that; `-v` shows
+  each test's steps.
+  What the tests log is kept up to 64 KiB, then cut with a note, and
+  printed only for a library with a failure. `temper` has neither
+  limit.
+- **Errors in an imported library** are reported once, under it, not
+  again for each library importing it.
 
 ## `run`
 
@@ -128,7 +142,9 @@ files. Errors fail the run, as in `build`, but don't stop it.
 
 `temper` prints what the program printed after it finishes, on
 standard error, and on the interpreter, twice; tempest streams it to
-standard output, once.
+standard output, once, as it runs, on the interpreter too. On the
+interpreter, `run` has no step limit, as a program run any other way
+has none.
 
 ## `init`
 
@@ -216,6 +232,7 @@ says `BecauseNameUndeclared`). The tests' records are `temper`'s.
 | 1 | Failure: errors in the code, a test that failed or didn't run, a library that didn't build, or a backend this build of tempest was built without |
 | 2 | A usage error: an unknown command or option, a missing value, or a backend that doesn't exist |
 | 3 | Not in tempest yet: `watch`, `repl`, `doc`, a backend `temper` has, or `serve --port` |
+| 101 | A bug in tempest: it panicked, saying where on standard error. Please report it with what you ran |
 
 `temper` exits with 1 on failure and 127 on a usage error, which
 shells otherwise use for a command that wasn't found.

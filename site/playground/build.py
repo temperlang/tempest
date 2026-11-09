@@ -6,7 +6,7 @@
     uv run site/playground/build.py [--deps DIR] [--skip-wasm] [--out DIR]
                                     [--smoke [--chromium PATH]]
 
-1. Builds crates/temper-wasm with the `small` profile for wasm32 (set
+1. Builds crates/temper-wasm with the `small-wasm` profile for wasm32 (set
    RUSTUP_TOOLCHAIN to pick the toolchain), unless `--skip-wasm`.
 2. Installs the page's npm packages from package-lock.json with `npm ci`,
    into site/playground/node_modules, or with `--deps`, into that
@@ -44,7 +44,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
-WASM = ROOT / "target/wasm32-unknown-unknown/small/temper_wasm.wasm"
+WASM = ROOT / "target/wasm32-unknown-unknown/small-wasm/temper_wasm.wasm"
 CORE = ROOT / "vendor/temper/be-js/temper-core/index.js"
 LOGO = ROOT / "docs/images/temper-logo-text-auto.svg"
 MERMAID = ROOT / "site/docs/mermaid"
@@ -171,7 +171,7 @@ def main() -> int:
     args = parser.parse_args()
 
     if not args.skip_wasm:
-        run("cargo", "build", "--locked", "--profile", "small", "--target", "wasm32-unknown-unknown",
+        run("cargo", "build", "--locked", "--profile", "small-wasm", "--target", "wasm32-unknown-unknown",
             "-p", "temper-wasm", cwd=ROOT)
     modules = install(args.deps)
     bin = modules / ".bin"

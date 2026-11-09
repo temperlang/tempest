@@ -57,6 +57,28 @@
         }
       }
     ],
+    "colors": [
+      {
+        "id": "temper.inertBlockBackground",
+        "description": "Background of a temper inert block's lines in .temper.md: Temper shown for reading, not compiled.",
+        "defaults": {
+          "light": "#80808014",
+          "dark": "#8080801c",
+          "highContrast": null,
+          "highContrastLight": null
+        }
+      },
+      {
+        "id": "temper.inertLabelForeground",
+        "description": "The \"inert\" label after a temper inert block's opening fence.",
+        "defaults": {
+          "light": "descriptionForeground",
+          "dark": "descriptionForeground",
+          "highContrast": "descriptionForeground",
+          "highContrastLight": "descriptionForeground"
+        }
+      }
+    ],
     "configuration": {
       "title": "Temper",
       "properties": {

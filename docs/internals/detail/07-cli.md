@@ -157,12 +157,15 @@ error, kotlinx-cli's, which shells otherwise use for "command not
 found"; tempest keeps 2, as most Unix tools do
 ([notes/kotlin-differences.md](../../../notes/kotlin-differences.md)).
 
-**Cons:** a panic is also 1. [`main`](../../../crates/tempest/src/main.rs)
-runs the command on a thread with a 64 MiB stack and maps a panicked
-thread to `ExitCode::FAILURE`, so a compiler bug looks like a failing
-test to a script. And the released binaries are built with the `small`
-profile, which sets `panic = "abort"`, so they don't reach that line at
-all: a panic aborts the process.
+A panic, a bug in tempest, is 101, as Rust's own panics exit:
+[`main`](../../../crates/tempest/src/main.rs) runs the command on a
+thread with a 64 MiB stack, and a panicked thread, its message already
+printed by the panic hook, ends there with a line saying it's a bug to
+report. That needs unwinding: the `small` profile, which the released
+binaries and the VS Code packages are built with, unwinds as release
+does (since 2026-11-09; before, it aborted and the process died with
+SIGABRT). The wasm still aborts, built with a profile of its own,
+`small-wasm`, since wasm32-unknown-unknown can't unwind.
 
 **Status:** tempest's choice.
 
@@ -404,18 +407,20 @@ is cached, so nothing can be stale.
 
 **Cons:** the audit's top architecture finding. A library is settled
 again inside each library that imports it, so cost grows with import
-depth, and its errors are reported once per importer, under the
-importer's name (`program` prints and counts every diagnostic of the
-settled whole). The interpreter's tests drop imported libraries' tests
+depth, and its diagnostics are found again in each. A command reports
+each once, under the library whose file it's in
+([`Reported`](../../../crates/temper-frontend/src/library_tests.rs),
+by file, span, and message), and a library's `N errors` line counts
+only its own; before 2026-11-09 each importer printed and counted them
+again under its own name. The interpreter's tests drop imported libraries' tests
 by matching module directories to library roots
 ([`library_of`](../../../crates/temper-frontend/src/project.rs)), and
 `to_tmpl` works out which declarations belong to which library from
 paths too. Std's imported modules settle again in each library, the same
 way.
 
-**Planned:** first, report each diagnostic once, under its own library;
-then settle each library once (the library cache), which also lets the
-language server re-analyze less.
+**Planned:** settle each library once (the library cache), which also
+lets the language server re-analyze less.
 
 ### Kotlin's output layout
 
@@ -466,10 +471,13 @@ in process, writing no files; `-b interp` names it, as Kotlin's does.
 **Pros:** the edit-and-test loop takes milliseconds, not a package
 build.
 
-**Cons:** no step limit: the interpreter's tests run with no fuel
-(`test_library` passes `None`), and output collects in memory, so an
-infinite loop with output grows until killed (the audit's D1). The
-playground's wasm passes `FUEL`.
+**Cons:** the interpreter needs limits a language's own runner would
+not: each test gets a step budget, `--fuel N` (10 billion by default,
+[`TEST_FUEL`](../../../crates/temper-frontend/src/interp.rs); `none`
+for no limit), and fails alone when it runs out; what tests log is kept
+up to 64 KiB, then a note. Kotlin's `temper test` has neither; tempest
+adds them so a runaway test fails rather than filling memory
+([page 4's detail](04-interpreter.md#limits-fuel-call-depth-and-nesting)).
 
 ### Each language's own tools, without package managers where possible
 
@@ -581,10 +589,13 @@ finds libraries as `build` does, then for each,
 [`test_library`](../../../crates/temper-frontend/src/library_tests.rs)
 settles it, drops tests of imported libraries, and
 [`run_settled_tests`](../../../crates/temper-frontend/src/library_tests.rs)
-runs them, reading the JUnit report that std's `testing` writes back
+runs them, each with `--fuel` steps, reading the JUnit report that std's `testing` writes back
 with [`parse_junit`](../../../crates/temper-frontend/src/library_tests.rs)
 into a [`LibraryTests`](../../../crates/temper-frontend/src/library_tests.rs).
-Only failures print, unless `-v`, then Kotlin's summary,
+Diagnostics not yet reported print first
+([`Reported`](../../../crates/temper-frontend/src/library_tests.rs)).
+Only failures print, unless `-v`, which adds every test with the steps
+it took (`ok      name (1234 steps)`), then Kotlin's summary,
 `Tests passed: N of M`, with "not run" and "unexpected" counts
 ([`Tally::summary`](../../../crates/temper-frontend/src/library_tests.rs)).
 
@@ -608,7 +619,8 @@ module; Lua runs its `init.lua`; Rust (`cargo build`), C++ (CMake's
 `LIBRARY-main`), Java (`javac`), and C# (`dotnet build`) build quietly,
 then run the program. The program gets the command's own standard
 output and error. With `-b interp`, it settles the library and runs its
-top level on the interpreter, printing what it logged.
+top level on the interpreter, with no step limit, printing each line as
+it's logged ([`run_streaming`](../../../crates/temper-frontend/src/interp.rs)).
 
 ### init
 
@@ -717,267 +729,6 @@ What has to change first, found while writing this:
 `watch`, `repl`, and doc generation are switch-over milestone 6
 ([notes/switch-over.md](../../../notes/switch-over.md)).
 
-## Tests on the interpreter by default
-
-**Chosen:** `tempest test` without `-b` runs tests on the interpreter,
-in process, writing no files; `-b interp` names it, as Kotlin's does.
-
-**Kotlin:** `temper test` requires `-b`.
-
-**Pros:** the edit-and-test loop takes milliseconds, not a package
-build.
-
-**Cons:** no step limit: the interpreter's tests run with no fuel
-(`test_library` passes `None`), and output collects in memory, so an
-infinite loop with output grows until killed (the audit's D1). The
-playground's wasm passes `FUEL`.
-
-### Each language's own tools, without package managers where possible
-
-**Chosen:** `test -b BACKEND` builds as `build` does, then runs each
-library's tests with what that backend's `tools` module says
-([notes/test-speed.md](../../../notes/test-speed.md#tempest-test--b)):
-
-| Backend | Runs | Overridden by |
-|---|---|---|
-| C++ | CMake on the generated `CMakeLists.txt`, then the test program | `CMAKE`, `CXX` |
-| C# | `dotnet test --logger:junit`, then `build-server shutdown` | `DOTNET` |
-| Java | `javac` against JUnit 5's jars in `~/.m2`, and a small launcher runner | `JAVAC`, `JAVA` |
-| JS | Mocha with its xunit reporter, packages linked into `node_modules` (`prepare`) | `MOCHA` |
-| Lua | `tests/init-test.lua` with LuaUnit written beside (`prepare`) | `LUA` |
-| Python | `python3 -B -m temper_core.testing result.xml` | `PYTHON` |
-| Rust | `cargo test --offline`, one shared target directory | `CARGO` |
-
-Results come back as JUnit XML where the tool writes it
-([`junit_file`](../../../crates/temper-tmpl/src/tools.rs), [`junit`](../../../crates/temper-tmpl/src/tools.rs)),
-or from `cargo test`'s lines, into the same
-[`Tally`](../../../crates/temper-frontend/src/library_tests.rs) as the
-interpreter's, so both print alike.
-
-**Alternatives:** Kotlin's package path: Maven, `dotnet`, npm, pip, and
-cargo on each package.
-
-**Pros:** works offline; Java doesn't need Maven's network; failures
-read the same on every backend.
-
-**Cons:** it isn't what users' package managers do, so a broken package
-file can pass here (the plan keeps the package path in CI to catch that;
-not built yet). Java needs JUnit's jars already in `~/.m2`. No tool run
-has a timeout, so a generated test that hangs hangs the command. Only a
-tool's last 40 lines are kept for "no results". The functional tests in
-each backend crate mostly run their own commands, not these (audit F3).
-And the helpers (process running, JUnit) live in `temper-tmpl`, the IR
-crate, because every backend crate depends only on it; a small
-`temper-backend` crate would be tidier (audit B6). Kotlin's `be` mixes
-these too.
-
-**Status:** tempest's choice, from the test-speed proposal; the fast
-paths there (one process per backend, cached runtimes) aren't built.
-
-### JSON records in Kotlin's shape
-
-**Chosen:** `--logformat json` writes Kotlin's records
-([`log`](../../../crates/temper-frontend/src/log.rs)): `level`,
-`template`, `pos` (the file, and start and end in UTF-16 code units,
-as Kotlin's JVM strings count), and `values`, a line each, all on
-stderr, ending with `{ "task": "Build", "ok": false }`. The tests'
-records (`TestFailed`, `TestSummaryAllRun`, …) are Kotlin's, with its
-values. tempest adds `message`, the text it would print.
-
-**Cons:** a diagnostic's `template` is tempest's
-[`Message`](../../../crates/temper-frontend/src/library.rs) variant
-(`UndeclaredName`, where Kotlin says `BecauseNameUndeclared`), and its
-`values` are empty, since tempest keeps a diagnostic's text, not its
-arguments. Tools that key on Kotlin's template names need a table.
-
-### The crates' licenses, kept current by a test
-
-**Chosen:** `tempest licenses` prints
-[`licenses.txt`](../../../crates/tempest/src/licenses.txt), which
-[`licenses.rs`](../../../crates/tempest/tests/licenses.rs) makes
-from `cargo metadata`: every crate `tempest` reaches through normal
-dependencies on any platform, but not proc macros or build
-dependencies, each with its license and repository, and its copyright
-lines where it offers MIT or Apache-2.0 (whose texts `tempest license`
-prints), or its license files in full otherwise. The test fails when
-the file is stale; `UPDATE_SNAPSHOTS=1` rewrites it.
-
-**Alternatives:** a build script, which would need `cargo metadata` (or
-the registry's files) on every build, offline; Kotlin's Gradle task,
-which scans the jars of an installed build.
-
-**Cons:** the list is a union over platforms, marked "Some platforms
-only" where it is; and it adds about 32 KB to the binary, with the
-license texts another 50 KB.
-
-## The commands, step by step
-
-### build
-
-```mermaid
-flowchart TD
-  find["find_libraries under the work root"] --> dup{"duplicate names?"}
-  dup -->|yes| stop["say so, exit 1"]
-  dup -->|no| each["each library: load_library, settle, print diagnostics, checked"]
-  each --> order["dependency_order from tmpl uses"]
-  order --> std["std's program, if any library uses std"]
-  std --> per["each backend: std's files, then each library with its dependencies' interfaces"]
-  per --> runtime["each backend's runtime as temper-core"]
-  runtime --> report["failures, error counts, exit status"]
-```
-
-[`build`](../../../crates/temper-driver/src/build.rs) takes `Sources`,
-the work root, the backends, [`Options`](../../../crates/temper-driver/src/build.rs)
-(`verbose`, `no_connected`), and two writers, and gives a
-[`Built`](../../../crates/temper-driver/src/build.rs): each library's
-result per backend, each library's test count, and error counts.
-`Built::ok` is the exit status. A library's program also takes its
-config's version, its dependencies' versions, and its host files, with
-`--no-connected` choosing Temper implementations over host code.
-
-### test on the interpreter
-
-[`test_dir`](../../../crates/temper-frontend/src/library_tests.rs)
-finds libraries as `build` does, then for each,
-[`test_library`](../../../crates/temper-frontend/src/library_tests.rs)
-settles it, drops tests of imported libraries, and
-[`run_settled_tests`](../../../crates/temper-frontend/src/library_tests.rs)
-runs them, reading the JUnit report that std's `testing` writes back
-with [`parse_junit`](../../../crates/temper-frontend/src/library_tests.rs)
-into a [`LibraryTests`](../../../crates/temper-frontend/src/library_tests.rs).
-Only failures print, unless `-v`, then Kotlin's summary,
-`Tests passed: N of M`, with "not run" and "unexpected" counts
-([`Tally::summary`](../../../crates/temper-frontend/src/library_tests.rs)).
-
-### test -b BACKEND
-
-[`test_backend`](../../../crates/temper-driver/src/test_run.rs) builds for one backend,
-counts tests of libraries that didn't build as not run, and calls
-[`run`](../../../crates/temper-driver/src/test_run.rs) in `test_run`,
-which runs the backend's `prepare` once and its `test` per library with
-tests, as [`Tested`](../../../crates/temper-tmpl/src/backend.rs) values.
-A library whose tool gives no results fails, with the tool's output.
-
-### run
-
-[`run`](../../../crates/temper-driver/src/run.rs) in `run` builds every
-library for the backend, as `build` does, then the backend's `prepare`
-and its [`Tools`](../../../crates/temper-tmpl/src/backend.rs)' `run` on
-the library named: Python imports its package after
-`init_simple_logging()`, as Kotlin's `top.py` does; Node imports its
-module; Lua runs its `init.lua`; Rust (`cargo build`), C++ (CMake's
-`LIBRARY-main`), Java (`javac`), and C# (`dotnet build`) build quietly,
-then run the program. The program gets the command's own standard
-output and error. With `-b interp`, it settles the library and runs its
-top level on the interpreter, printing what it logged.
-
-### init
-
-[`init`](../../../crates/temper-driver/src/init.rs) writes Kotlin's two
-files, word for word: the library's name is the directory's, through
-Kotlin's `IdentStyle.Camel` to `Dash` conversion
-([`dash_case`](../../../crates/temper-tmpl/src/naming.rs)) and its
-`DashedIdentifier` rules
-([`dashed_from`](../../../crates/temper-frontend/src/project.rs)), and
-the titles come from that name
-([`dashed_title`](../../../crates/temper-tmpl/src/naming.rs)), so
-`a-b` is titled `AB`, as Kotlin's is. The message goes to stdout, where
-Kotlin's console writes it to stderr.
-
-### serve, or lsp
-
-[`serve`](../../../crates/tempest/src/main.rs) hands stdin and stdout to
-[`serve`](../../../crates/temper-lsp/src/lib.rs), with `--std DIR` if
-given; [page 9's detail](09-language-server.md) covers the rest.
-
-## Main types and functions
-
-| Item | Where | What |
-|---|---|---|
-| [`Registry`](../../../crates/temper-driver/src/lib.rs) | driver | The backends this run has: `built_in`, `all`, `get`, `defaults`, `lacks` |
-| [`KNOWN`](../../../crates/temper-driver/src/lib.rs) | driver | Every backend's name, alphabetically |
-| [`Backend`](../../../crates/temper-tmpl/src/backend.rs) | tmpl | A backend as tools see it |
-| [`Tools`](../../../crates/temper-tmpl/src/backend.rs), [`Prepare`](../../../crates/temper-tmpl/src/backend.rs), [`TestResults`](../../../crates/temper-tmpl/src/backend.rs) | tmpl | How a backend runs tests |
-| [`OutFile`](../../../crates/temper-tmpl/src/backend.rs) | tmpl | A generated file: path and text |
-| [`checked`](../../../crates/temper-driver/src/lib.rs), [`with_std`](../../../crates/temper-driver/src/lib.rs), [`translate`](../../../crates/temper-driver/src/lib.rs) | driver | The compile path |
-| [`build`](../../../crates/temper-driver/src/build.rs), [`Options`](../../../crates/temper-driver/src/build.rs), [`Built`](../../../crates/temper-driver/src/build.rs), [`error_count`](../../../crates/temper-driver/src/build.rs) | driver | `tempest build` |
-| [`test_backend`](../../../crates/temper-driver/src/test_run.rs), [`run`](../../../crates/temper-driver/src/test_run.rs) | driver | Tests with a backend's tools |
-| [`run`](../../../crates/temper-driver/src/run.rs) | driver | `tempest run` |
-| [`init`](../../../crates/temper-driver/src/init.rs), [`library_name`](../../../crates/temper-driver/src/init.rs) | driver | `tempest init` |
-| [`NOT_YET`](../../../crates/temper-driver/src/lib.rs) | driver | Kotlin's backends tempest lacks |
-| [`Flags`](../../../crates/tempest/src/main.rs), [`parse`](../../../crates/tempest/src/main.rs), [`COMMANDS`](../../../crates/tempest/src/help.rs) | tempest | Options, and the commands `help` lists |
-| [`LogFormat`](../../../crates/temper-frontend/src/log.rs), [`record`](../../../crates/temper-frontend/src/log.rs) | frontend | `--logformat` and JSON records |
-| [`tool`](../../../crates/temper-tmpl/src/tools.rs), [`output`](../../../crates/temper-tmpl/src/tools.rs), [`Case`](../../../crates/temper-tmpl/src/tools.rs) | tmpl | Finding and running tools, reading JUnit |
-| [`Sources`](../../../crates/temper-frontend/src/sources.rs), [`Entry`](../../../crates/temper-frontend/src/sources.rs) | frontend | Where every read goes |
-| [`LibrarySources`](../../../crates/temper-frontend/src/project.rs), [`Config`](../../../crates/temper-frontend/src/project.rs), [`CONFIG_FILE`](../../../crates/temper-frontend/src/project.rs) | frontend | A library found on disk |
-| [`test_libraries`](../../../crates/temper-frontend/src/library_tests.rs), [`TestOptions`](../../../crates/temper-frontend/src/library_tests.rs), [`Tally`](../../../crates/temper-frontend/src/library_tests.rs), [`write_located_diagnostics`](../../../crates/temper-frontend/src/library_tests.rs) | frontend | Tests on the interpreter, the summary, and `path:line:column` diagnostics |
-
-## Dynamic backends (planned)
-
-The registry is a list built at startup so that backends not built in
-can join it later. The plan: first as **external processes**, each given
-a library as tmpl in a versioned, serialized form and answering with its
-files (and running its tests), so a backend can live in its own
-repository and language; **DLLs** only if processes prove too slow; the
-**wasm** build keeps a fixed list. The user put this off on 2026-10-30
-([notes/tmpl/overview.md](../../../notes/tmpl/overview.md)); nothing is
-built.
-
-```mermaid
-sequenceDiagram
-  participant D as temper-driver
-  participant B as backend process
-  D->>B: hello: tmpl format and model versions it reads
-  B-->>D: its name, comment, default, whether it runs tests
-  D->>B: a library as tmpl, with host files and dependencies' names
-  B-->>D: files, or what isn't covered yet
-  D->>B: run tests in temper.out/NAME
-  B-->>D: each test's name and failure
-```
-
-**Why processes first:** a backend in any language, crash-isolated, with
-no ABI to keep stable; tmpl's text form already reads back exactly and
-starts with its versions (`tmpl 1 model 1`,
-[`FORMAT_VERSION`](../../../crates/temper-tmpl/src/text/mod.rs)).
-**Against:** start-up and serialization per library. **DLLs** would cut
-that, at the price of a C ABI, unsafety, and one build per platform.
-**Kotlin's** plugins are JVM classes on the class path, so they share its
-process and its language.
-
-What has to change first, found while writing this:
-
-- **Naming.** The driver names each dependency's declarations with the
-  backend's Rust [`NamingRules`](../../../crates/temper-tmpl/src/naming.rs)
-  ([`interface`](../../../crates/temper-driver/src/lib.rs)). An outside
-  backend must either name them itself, given its dependencies' tmpl,
-  or send its rules as data.
-- **What's not in tmpl's text.** A [`Program`](../../../crates/temper-tmpl/src/lib.rs)'s
-  `host` (host files and `--no-connected`) and `interfaces` aren't
-  written by tmpl's text form, so the protocol needs them beside it.
-- **The descriptor.** `Registry` holds `&'static Backend` with `fn`
-  pointers; a backend found at run time needs an owned descriptor and a
-  way to call it.
-- **Tools.** The `Tools` contract (results as names and failures) fits a
-  process well; it would be the `test` message.
-
-## Parity with Kotlin's temper
-
-| Kotlin | tempest | Gap |
-|---|---|---|
-| `build` | `build` | No `--ignorefile` or `--log-format`; ignore files read differently ([above](#finding-libraries-as-kotlin-does-ignore-files-as-git-does)) |
-| `test -b …` | `test [-b …] [DIR]` | One backend at a time; no `--library`; defaults to the interpreter; `DIR` where Kotlin takes `-w` |
-| `serve --port N` | `lsp` | stdio, not a TCP port the client opens; no semantic tokens ([page 9's detail](09-language-server.md#kotlins-language-server)) |
-| `watch` | none | Planned: a loop around `build` or `test` ([page 8's detail](08-playground.md#watch-planned)) |
-| `init` | none | Writes a new project's skeleton |
-| `repl` | none | Interactive, with stage dumps |
-| `run` | none | Loads a built library |
-| `doc` | none | Documentation for the libraries |
-| `version`, `license`, `licenses` | none | |
-| none | `py`, `rust`, `js`, `java`, `csharp`, `cpp`, `lua` | One backend's files for given source files |
-
-`init`, `watch`, `repl`, and doc generation are switch-over milestone 6
-([notes/switch-over.md](../../../notes/switch-over.md)).
-
 ## Tests
 
 - **The command line**, [`cli.rs`](../../../crates/tempest/tests/cli.rs):
@@ -987,7 +738,11 @@ What has to change first, found while writing this:
   `logformat_json`'s records; `init_writes_kotlins_skeleton`, against
   Kotlin's files; `run_a_library` on the interpreter and each backend
   whose tools are here; `test_flags` (`-w`, `--library`, several `-b`,
-  `--ignorefile`, and `.temperignore`); `build_writes_temper_out`,
+  `--ignorefile`, and `.temperignore`); `test_fuel` (the audit's
+  runaway loop failing at its budget, its output cut short; `--fuel`'s
+  values); `imported_errors_are_reported_once` (the audit's
+  scratch/deps: `test`, `test --library`, `run`, `build`, and JSON
+  report an imported library's error once, under it); `build_writes_temper_out`,
   `build_reads_host_code`, `build_needs_libraries_with_names_of_their_own`;
   `test_a_library` and `built_in_std`; tests through each backend's tools
   on a small library (`test_a_library_on_each_backend`, skipped where a
@@ -1008,25 +763,24 @@ What has to change first, found while writing this:
   passing and failing tests, quiet output, the work root and skipped
   directories, `.gitignore` files, not-run tests and errors, std built
   in or from a directory, a library in memory, library names, imports
-  between libraries, and duplicate names.
+  between libraries, duplicate names, and runaway code
+  (`runaway_tests_fail_alone`, `runaway_top_level_is_cut_short`).
 - **JUnit reading**: unit tests in [`tools.rs`](../../../crates/temper-tmpl/src/tools.rs).
 - **Real libraries**, nightly: each library in
   `.github/nightly-libraries.json` on the backends it passes on.
 
 Not covered: Windows paths (CI is Linux), a tool that hangs, a config
 that isn't plain lines, nested ignore files against Kotlin's reading,
-and diagnostics reported once per importer (which is current behavior,
-not pinned).
+and a panic's exit code (no input is known to panic).
 
 ## Known weaknesses and planned changes
 
-- **Imported libraries settle again in each importer**, and their
-  errors print once per importer. First fix: each diagnostic once, under
-  its own library; then the library cache.
-- **No step limit or output cap** for `test` on the interpreter; a
-  default budget and `--fuel` are planned.
-- **Panics** abort the released binary and exit 1 otherwise; a distinct
-  exit code and unwinding would let tools tell bugs from failures.
+- **Imported libraries settle again in each importer.** Their
+  diagnostics are reported once, but found again in each; a diagnostic
+  that reads differently in an importer's settle would print twice. The
+  library cache fixes both.
+- **Steps, not time:** `--fuel` bounds ops, not seconds, and backends'
+  tests have no budget at all (see the next item).
 - **No timeouts** on test tools.
 - **Test orchestration in three crates**: the interpreter's in the
   frontend, a backend's in the driver, and the loop over backends in

@@ -263,9 +263,30 @@ call, 2026-11-06 ([kotlin-differences.md](../../../notes/kotlin-differences.md),
 **Chosen:**
 
 - **Fuel:** optional; each op costs one step. `None` means no limit,
-  as any language's own runner has none.
+  as any language's own runner has none, and `tempest run` passes none.
+  With tests ([`run_tests`](../../../crates/temper-frontend/src/interp.rs)),
+  the top-level code gets the budget, then each test gets it afresh: it
+  runs alone, `runTestCases([test])`, and if it runs out, or ends
+  abruptly some other way, it fails alone with a report of its own
+  ("ran out of steps (each test may take N)") and the rest still run.
   [`FUEL`](../../../crates/temper-frontend/src/interp.rs), 50 million,
-  is the budget the playground passes.
+  about a second, is the budget the playground passes;
+  [`TEST_FUEL`](../../../crates/temper-frontend/src/interp.rs), 10
+  billion, `tempest test`'s default (`--fuel`), at least 10 times the
+  real libraries' slowest test so none comes near it: Kelpto's
+  pathological GFM inputs take 626 million steps, then Ordable's 83
+  million, Hrefine's 80 million, Wherewith's 51 million (just over
+  `FUEL`, which a first default of 50 million failed), and Chromarite's
+  4 million (2026-11-09). A runaway loop reaches it in 3 to 4 minutes in
+  a release build; it only has to end true runaways, as the output cap
+  bounds memory.
+- **Output:** what a run logs is kept up to
+  [`OUTPUT_LIMIT`](../../../crates/temper-frontend/src/interp.rs),
+  64 KiB, then only counted, with a note where it was cut
+  (`[output truncated: N more lines past 65536 bytes]`); tests' reports
+  don't count. [`run_streaming`](../../../crates/temper-frontend/src/interp.rs)
+  gives each line to a sink as it's logged instead, as `tempest run`
+  prints it. The real libraries' tests log at most 12 KB.
 - **Call depth:** [`MAX_DEPTH`](../../../crates/temper-frontend/src/interp.rs),
   2000 natively (calls take about 3 KB of stack in a release build, and
   the CLI and tests run on 64 MiB threads) and 500 in wasm, where the
@@ -279,13 +300,14 @@ Running out of any of these is a panic, which no `orelse` catches.
 calls in `temper test -b interp` (2026-11-06), and caps compile-time
 interpretation with a step counter (`ContinueCondition`).
 
-**Gap:** `tempest test` passes no fuel
-([`test_library`](../../../crates/temper-frontend/src/library_tests.rs)
-calls `run_settled_tests` with `None`), and output collects in memory
-([`Run`](../../../crates/temper-frontend/src/interp.rs)'s `output`). A
-test that loops forever while logging grows until something kills it
-(the audit saw 1.2 GB in about 8 s). See
-[Known weaknesses](#known-weaknesses-and-plans).
+**Rejected:** one budget for the whole run, as before (a slow test
+starves the ones after it, and one runaway fails them all as not run);
+streaming tests' output (`tempest test` prints a library's output only
+when one of its tests fails, after its name, so it must be kept). Before
+this, `tempest test` passed no fuel and kept all output, and a test that
+looped forever while logging grew until killed (the audit saw 1.2 GB in
+about 8 s); it now fails at its budget with memory flat (35 MB at 2
+billion steps, 40 s).
 
 ### Builtins and connected code
 
@@ -387,10 +409,12 @@ its own field of `Run` would be cleaner.
   [`run_tests`](../../../crates/temper-frontend/src/interp.rs), both
   through [`run_with`](../../../crates/temper-frontend/src/interp.rs),
   give a [`Run`](../../../crates/temper-frontend/src/interp.rs): output
-  lines and a failure, if any. Module declarations are globals, numbered
-  module by module.
+  lines, a failure, if any, and each test's steps. Module declarations
+  are globals, numbered module by module. [`run_streaming`](../../../crates/temper-frontend/src/interp.rs)
+  gives the output to a sink instead.
 - [`Interp`](../../../crates/temper-frontend/src/interp.rs): the run's
-  state: output, fuel, depth, globals, the [`Lowering`](../../../crates/temper-frontend/src/interp/lower.rs)
+  state: output ([`Output`](../../../crates/temper-frontend/src/interp.rs),
+  kept up to the limit or given to a sink), fuel, depth, globals, the [`Lowering`](../../../crates/temper-frontend/src/interp/lower.rs)
   caches, and the run queue.
 
 **Values:** [`Val`](../../../crates/temper-frontend/src/interp.rs);
@@ -481,10 +505,12 @@ binary.
 
 ## Known weaknesses and plans
 
-- **No step budget or output cap in `tempest test`.** A runaway test
-  hangs and grows memory. Plan: a default per-test budget with a
-  `--fuel` flag, "ran out of steps" as that test's failure, and output
-  streamed or capped with a note.
+- **Steps aren't time.** The budget counts ops, so a test spending its
+  time in builtins (a long string's search, a big sort) can run longer
+  than its steps suggest. Kelpto's slowest test, at 626 million steps,
+  is a sixteenth of the default budget, the closest any library comes;
+  a library run whose slowest test passes a tenth should be looked
+  into.
 - **Regex recursion.** The matcher can overflow the native stack on
   long inputs and abort the process, where the JVM throws a catchable
   error. Plan: an explicit backtracking stack or a depth guard first;

@@ -258,6 +258,14 @@ let notTemper = 1;
 let inert = 1;
 ```
 
+````temper  inert  other
+"after"
+````
+
+```temper other
+let notInert = 1;
+```
+
     let indented = "yes";
 
 ~~~
@@ -298,7 +306,17 @@ def check_scopes() -> None:
     expect(tokens, "fenced", "variable.other.declaration")
     expect(tokens, "let notTemper = 1;", "markup.raw.block")
     expect(tokens, "let notTemper = 1;", "meta.embedded.block.temper", present=False)
-    expect(tokens, "let inert = 1;", "meta.embedded.block.temper", present=False)
+    # Inert blocks aren't compiled, but are Temper: highlighted, scoped
+    # apart, with `inert` marked on the fence line.
+    expect(tokens, "inert", "storage.modifier.inert.temper")
+    expect(tokens, "let", "meta.embedded.block.temper.inert", nth=1)
+    expect(tokens, "let", "storage.type", nth=1)
+    expect(tokens, "inert", "variable.other.declaration", nth=1)
+    expect(tokens, "inert", "meta.embedded.block.temper.inert", nth=1)
+    expect(tokens, "after", "meta.embedded.block.temper.inert")
+    expect(tokens, "after", "string.quoted.double")
+    expect(tokens, "notInert", "meta.embedded.block.temper.inert", present=False)
+    expect(tokens, "notInert", "meta.embedded.block.temper")
     expect(tokens, "indented", "meta.embedded.block.temper")
     expect(tokens, "yes", "string.quoted.double")
     expect(tokens, "tilde", "meta.embedded.block.temper")

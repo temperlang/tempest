@@ -270,12 +270,130 @@ fn test_a_library() {
             assert_eq!(code, 1);
         }
         fs::remove_file(Path::new(dir).join("b.temper")).unwrap();
+        // Each with the steps it took on the interpreter.
         let (code, out, _) = tempest(&["test", "-v", "--std", &std_dir, dir]);
+        assert!(out.contains("  ok      a ("), "{out}");
+        assert!(out.ends_with(" steps)\nTests passed: 1 of 1\n"), "{out}");
+        assert_eq!(code, 0);
+    });
+}
+
+/// The audit's probe (scratch/deps): `b` imports `a`, which has an
+/// error. Each command reports it once, under `a`, the library it's in,
+/// though settling `b` finds it again; and still fails.
+#[test]
+fn imported_errors_are_reported_once() {
+    let dir = std::env::temp_dir().join(format!("tempest-cli-{}-deps", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    let files = [
+        ("a/config.temper.md", "export let name = \"a\";\n"),
+        (
+            "a/a.temper",
+            "export let one(): Int { 1 }\nlet bad: String = 5;\n",
+        ),
+        ("b/config.temper.md", "export let name = \"b\";\n"),
+        (
+            "b/b.temper",
+            "let { one } = import(\"a\");\nexport let two(): Int { one() + 1 }\n",
+        ),
+    ];
+    for (name, text) in files {
+        let path = dir.join(name);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, text).unwrap();
+    }
+    let root = dir.to_string_lossy().to_string();
+    let error = format!("{root}/a/a.temper:2:19: error: Cannot assign to String from Int32\n");
+    let error = error.as_str();
+    for args in [
+        &["test", "-w", &root][..],
+        &["test", "-w", &root, "--library", "b"],
+    ] {
+        let (code, out, err) = tempest(args);
+        assert_eq!((code, err.as_str()), (1, error), "{args:?}");
+        assert_eq!(out, "Tests passed: 0 of 0\n");
+    }
+    let (code, _, err) = tempest(&["run", "-w", &root, "--library", "b", "-b", "interp"]);
+    assert_eq!((code, err), (1, format!("{error}a: 1 error\n")));
+    if built_in("js") {
+        let out = format!("{root}-out");
+        let (code, _, err) = tempest(&["build", "-w", &root, "-b", "js", "-o", &out]);
+        assert_eq!((code, err), (1, format!("{error}a: 1 error\n")));
+        let json = [
+            "build",
+            "-w",
+            &root,
+            "-b",
+            "js",
+            "-o",
+            &out,
+            "--logformat",
+            "json",
+        ];
+        let (_, _, err) = tempest(&json);
+        assert_eq!(
+            err.matches("Cannot assign to String from Int32").count(),
+            1,
+            "{err}"
+        );
+        let _ = fs::remove_dir_all(&out);
+    }
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// `--fuel`: each test's steps on the interpreter. The audit's probe, a
+/// loop missing its `i++` at the top level, used to log until memory ran
+/// out; now it stops at its budget, its output cut short, and fails.
+#[test]
+fn test_fuel() {
+    let files = [(
+        "a.temper",
+        "for (var i = 0; i < 5;) { console.log(i.toString()); }\n\
+             test(\"a\") { assert(true) }\n",
+    )];
+    with_library("fuel", &files, |dir| {
+        let started = std::time::Instant::now();
+        let (code, out, err) = tempest(&["test", "--fuel", "1_000_000", dir]);
+        assert!(started.elapsed().as_secs() < 30);
+        assert_eq!(err, "");
+        assert!(out.len() < 70_000, "{} bytes", out.len());
         assert!(
-            out.ends_with("  ok      a\nTests passed: 1 of 1\n"),
+            out.ends_with(
+                " more lines past 65536 bytes]\n  \
+                 Panicked: ran out of steps (the top-level code may take 1000000)\n\
+                 Tests passed: 0 of 1 (1 not run)\n"
+            ),
+            "{}",
+            &out[out.len().saturating_sub(300)..]
+        );
+        assert_eq!(code, 1);
+        fs::write(
+            Path::new(dir).join("a.temper"),
+            "test(\"a\") {\n  var n = 0;\n  for (var i = 0; i < 100; i++) { n += i; }\n  assert(n == 4950);\n}\n",
+        )
+        .unwrap();
+        // A test that needs more steps than given fails; none lifts the
+        // limit.
+        let (code, out, _) = tempest(&["test", "--fuel", "100", dir]);
+        assert!(
+            out.contains("  failed  a - Panicked: ran out of steps (each test may take 100)\n"),
             "{out}"
         );
-        assert_eq!(code, 0);
+        assert_eq!(code, 1);
+        for fuel in ["none", "1,000,000"] {
+            let (code, out, _) = tempest(&["test", "--fuel", fuel, dir]);
+            assert_eq!((code, out.as_str()), (0, "Tests passed: 1 of 1\n"));
+        }
+        for fuel in ["0", "-5", "lots", ""] {
+            let (code, _, err) = tempest(&["test", &format!("--fuel={fuel}"), dir]);
+            assert_eq!(code, 2, "{fuel}");
+            assert!(
+                err.starts_with(&format!(
+                    "tempest test: --fuel is a number of steps above 0, or none, not {fuel}\n"
+                )),
+                "{err}"
+            );
+        }
     });
 }
 

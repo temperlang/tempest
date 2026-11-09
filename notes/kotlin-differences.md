@@ -914,6 +914,23 @@ Other differences we won't copy:
     (`tempest py FILE`) are gone, as Kotlin has nothing like them.
     Test: tempest/tests/cli.rs, `test_flags`, `version`, and
     `build_writes_each_backend_to_a_directory`.
+  - **A step budget for tests on the interpreter** (2026-11-09):
+    Kotlin's `temper test -b interp` has none, so a test that loops
+    forever hangs it.
+    Tempest gives each test 10 billion steps by default (`--fuel N`, or
+    `none`; the real libraries' slowest test takes 626 million), fails
+    a test that runs out alone ("ran out of steps"), keeps what tests
+    log up to 64 KiB with a note past it, and with `-v` shows each
+    test's steps. An obvious robustness improvement; nothing that passes
+    in Kotlin fails, short of a test 16 times slower than any we have.
+    Test: tempest/tests/cli.rs, `test_fuel`;
+    temper-frontend/tests/library_tests.rs, `runaway_tests_fail_alone`
+    and `runaway_top_level_is_cut_short`.
+  - **Panics exit with 101**, saying it's a bug in tempest, so a script
+    can tell one from a failure; Kotlin's internal errors print a stack
+    trace and fail as anything else does. The language server
+    survives one, as an "internal error" diagnostic or error response.
+    Test: temper-lsp/tests/lsp.rs, `panics_become_internal_errors`.
 
 - **Code with errors** (2026-11-05): where Kotlin's TmpL has garbage
   nodes, which each backend writes its own way (a comment in Java, a

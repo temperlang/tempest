@@ -129,6 +129,31 @@ pre {
   line-height: 1.4;
 }
 
+/* A `temper inert` block, which isn't compiled: tinted, with a small
+   "inert" label in its corner. */
+pre:has(> code[data-inert]) {
+  position: relative;
+  background: linear-gradient(var(--inert-tint), var(--inert-tint)), var(--vscode-textCodeBlock-background);
+}
+
+:root {
+  --inert-tint: rgba(128, 128, 128, 0.1);
+}
+
+.inert-label {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  padding: 0 5px;
+  border-radius: 3px;
+  font-size: 0.75em;
+  line-height: 1.5;
+  color: var(--vscode-descriptionForeground, #717171);
+  border: 1px solid var(--vscode-widget-border, rgba(128, 128, 128, 0.35));
+  cursor: help;
+  user-select: none;
+}
+
 /* Over the webview's own inline-code look. */
 pre code {
   display: block;

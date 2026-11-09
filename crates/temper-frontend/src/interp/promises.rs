@@ -61,7 +61,7 @@ impl Promise {
     }
 }
 
-impl Interp {
+impl Interp<'_> {
     /// `async { … }`: makes the block's generator, which runs only through
     /// its parameters, and queues it.
     pub(super) fn start_async(&mut self, s: &Settled, args: Vec<Val>) -> R {

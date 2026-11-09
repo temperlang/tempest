@@ -6,7 +6,7 @@
 //!     tempest build [-w DIR] [-ign FILE] [-o DIR] [-b BACKEND]... [--no-connected]
 //!                   [-v] [--logformat text|json] [--std DIR]
 //!     tempest test [-w DIR | DIR] [-ign FILE] [--library NAME] [-b interp|BACKEND]...
-//!                  [--no-connected] [-v] [--logformat text|json] [--std DIR]
+//!                  [--fuel N|none] [--no-connected] [-v] [--logformat text|json] [--std DIR]
 //!     tempest run --library NAME -b interp|BACKEND [-w DIR] [-ign FILE] [-o DIR]
 //!                 [--no-connected] [-v] [--logformat text|json] [--std DIR]
 //!     tempest init [-o DIR]
@@ -24,7 +24,9 @@
 //!   printing failures (or with `-v`, every result) and Kotlin's summary,
 //!   and with several backends, each one's summary and then the total.
 //!   DIR is where the work root's search starts, as `-w`'s default
-//!   starts from the current directory.
+//!   starts from the current directory. On the interpreter, each test
+//!   may take `--fuel` steps, [`temper_frontend::interp::TEST_FUEL`] by
+//!   default, so a runaway test fails alone ("ran out of steps").
 //! - `run` builds the work root for one backend, then runs a library's
 //!   top level with that language's tools, or on the interpreter
 //!   ([`temper_driver::run`]).
@@ -48,8 +50,9 @@
 //! Each backend is a cargo feature, all on by default ([`temper_driver`]);
 //! one left out says so and fails.
 //!
-//! **Exit codes:** 0 on success, 1 on failure, 2 on a usage error, and 3
-//! for what isn't in tempest yet (a command, a backend, or `--port`).
+//! **Exit codes:** 0 on success, 1 on failure, 2 on a usage error, 3
+//! for what isn't in tempest yet (a command, a backend, or `--port`), and
+//! 101 for a bug in tempest, a panic, as Rust's own panics exit.
 
 mod help;
 
@@ -59,6 +62,7 @@ use std::process::ExitCode;
 use std::sync::OnceLock;
 use temper_driver::{NOT_YET, Registry, build, init, run, test_run};
 use temper_frontend::ignore::IgnoreFile;
+use temper_frontend::interp::TEST_FUEL;
 use temper_frontend::library_tests::{Tally, TestOptions, test_libraries};
 use temper_frontend::log::{LogFormat, task};
 use temper_frontend::project::{ignore_file, work_root};
@@ -69,6 +73,8 @@ use temper_tmpl::Backend;
 const FAILED: u8 = 1;
 const USAGE: u8 = 2;
 const NOT_YET_CODE: u8 = 3;
+/// A panic, a bug in tempest, as Rust's own panics exit.
+const PANICKED: u8 = 101;
 
 fn main() -> ExitCode {
     // Calls and lowering recurse; give them room (see `interp`).
@@ -76,9 +82,23 @@ fn main() -> ExitCode {
         let args: Vec<String> = std::env::args().skip(1).collect();
         ExitCode::from(run_command(&args))
     });
-    thread
-        .and_then(|t| t.join().map_err(|_| io::Error::other("panicked")))
-        .unwrap_or(ExitCode::FAILURE)
+    // Native builds unwind (the workspace's Cargo.toml), so a panic ends
+    // the command's thread, its message printed by the panic hook, and
+    // ends here, rather than aborting the process.
+    match thread.map(|t| t.join()) {
+        Ok(Ok(code)) => code,
+        Ok(Err(_)) => {
+            eprintln!(
+                "tempest: internal error (a bug in tempest, not in your code): the panic \
+                 above stopped the command; please report it with what you ran."
+            );
+            ExitCode::from(PANICKED)
+        }
+        Err(why) => {
+            eprintln!("tempest: couldn't start: {why}");
+            ExitCode::FAILURE
+        }
+    }
 }
 
 /// Runs a command, `args` not including the program's name, and returns
@@ -152,12 +172,13 @@ struct Flags {
     log: LogFormat,
     port: Option<String>,
     tokens: Option<String>,
+    fuel: Option<String>,
     positional: Vec<String>,
 }
 
 /// Each option: its long name, its short one if any, and whether it
 /// takes a value.
-const OPTIONS: [(&str, Option<&str>, bool); 11] = [
+const OPTIONS: [(&str, Option<&str>, bool); 12] = [
     ("std", None, true),
     ("workroot", Some("w"), true),
     ("ignorefile", Some("ign"), true),
@@ -169,6 +190,7 @@ const OPTIONS: [(&str, Option<&str>, bool); 11] = [
     ("logformat", None, true),
     ("port", None, true),
     ("tokens", None, true),
+    ("fuel", None, true),
 ];
 
 /// Parses a command's arguments, allowing the options in `allowed` (by
@@ -225,6 +247,7 @@ fn parse(command: &str, args: &[String], allowed: &[&str], positional: usize) ->
             "library" => once(&mut flags.library)?,
             "port" => once(&mut flags.port)?,
             "tokens" => once(&mut flags.tokens)?,
+            "fuel" => once(&mut flags.fuel)?,
             "backend" => {
                 if !flags.backends.contains(&value) {
                     flags.backends.push(value);
@@ -382,10 +405,20 @@ fn test_command(args: &[String]) -> u8 {
         "no-connected",
         "verbose",
         "logformat",
+        "fuel",
     ];
     let flags = match parse("test", args, &allowed, 1) {
         Ok(flags) => flags,
         Err(code) => return code,
+    };
+    let fuel = match flags.fuel.as_deref().map(parse_fuel) {
+        None => Some(TEST_FUEL),
+        Some(Ok(fuel)) => fuel,
+        Some(Err(())) => {
+            let value = flags.fuel.as_deref().unwrap_or_default();
+            eprintln!("tempest test: --fuel is a number of steps above 0, or none, not {value}");
+            return USAGE;
+        }
     };
     if flags.workroot.is_some() && !flags.positional.is_empty() {
         eprintln!("tempest test: give -w or DIR, not both");
@@ -408,6 +441,7 @@ fn test_command(args: &[String]) -> u8 {
         library: flags.library.as_deref(),
         ignore: ignore.as_ref(),
         log: flags.log,
+        fuel,
     };
     let build_options = build::Options {
         verbose: false,
@@ -460,6 +494,21 @@ fn test_command(args: &[String]) -> u8 {
     }
     let _ = out.flush();
     finish(flags.log, "Test", all_ok)
+}
+
+/// `--fuel`'s value: a number of steps above 0, with `_` or `,` between
+/// digits allowed, or `none` for no limit.
+fn parse_fuel(value: &str) -> Result<Option<u64>, ()> {
+    if value == "none" {
+        return Ok(None);
+    }
+    let digits: String = value.chars().filter(|c| !matches!(c, '_' | ',')).collect();
+    match digits.parse::<u64>() {
+        Ok(steps) if steps > 0 && value.starts_with(|c: char| c.is_ascii_digit()) => {
+            Ok(Some(steps))
+        }
+        _ => Err(()),
+    }
 }
 
 /// `tempest run --library NAME -b BACKEND`.

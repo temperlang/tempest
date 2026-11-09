@@ -59,6 +59,34 @@ export async function run(): Promise<void> {
     await until("no errors", () => vscode.languages.getDiagnostics(uses).length === 0);
   });
 
+  test("only file: documents go to the server", async () => {
+    // An untitled document, as a diff's old side (git:) isn't on disk
+    // either: the server never sees it, so its error isn't reported. The
+    // test above shows the same error in a file is, within the debounce.
+    const untitled = await vscode.workspace.openTextDocument({
+      language: "temper",
+      content: "let s: String = 1;\n",
+    });
+    assert.equal(untitled.uri.scheme, "untitled");
+    await sleep(1_500);
+    assert.deepEqual(vscode.languages.getDiagnostics(untitled.uri), []);
+  });
+
+  test("temper inert blocks are marked, and follow edits", async () => {
+    const doc = await vscode.workspace.openTextDocument({
+      language: "temper-markdown",
+      content: "# Notes\n\n```temper inert\nlet a = 1;\n```\n\n```temper\nlet b = 2;\n```\n",
+    });
+    await vscode.window.showTextDocument(doc);
+    const lines = (): string => (api.inert(doc.uri) ?? []).map((r) => `${r.start.line}-${r.end.line}`).join(",");
+    await until("the inert block marked", () => lines() === "2-4");
+    // The compiled block made inert: both marked, after the pause.
+    const edit = new vscode.WorkspaceEdit();
+    edit.insert(doc.uri, new vscode.Position(6, 9), " inert");
+    assert.ok(await vscode.workspace.applyEdit(edit));
+    await until("both marked", () => lines() === "2-4,6-8");
+  });
+
   test("hover", async () => {
     const found = await vscode.commands.executeCommand<vscode.Hover[]>(
       "vscode.executeHoverProvider",

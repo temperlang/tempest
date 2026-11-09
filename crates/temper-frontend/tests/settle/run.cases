@@ -75,7 +75,7 @@ log 1500
 while (true) {}
 --- settled
 (Block (Loop (If true (Block) (Break @0))))
-Panicked: ran out of steps
+Panicked: ran out of steps (the top-level code may take 1000000)
 
 === reading a let before it's set
 do {

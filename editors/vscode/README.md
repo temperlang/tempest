@@ -12,6 +12,12 @@ and tempest's language server, `tempest lsp`, for:
 - find references and rename, across the library's files;
 - the outline (document symbols), and signature help in calls.
 
+Blocks tagged `temper inert`, Temper shown but not compiled, are
+highlighted too, with their lines tinted and an "inert" label after the
+fence (colors `temper.inertBlockBackground` and
+`temper.inertLabelForeground`), and the same tint and label in the
+preview. The language server doesn't analyze them.
+
 And a rendered preview of literate Temper, as VS Code's own Markdown
 preview does for `.md`: "Temper: Open Markdown Preview" (Ctrl+Shift+V,
 or Cmd+Shift+V on macOS) in place of the editor, "Temper: Open Markdown
@@ -53,7 +59,16 @@ cargo build --profile small -p tempest
 uv run editors/vscode/build.py --tempest target/small/tempest --test
 ```
 
-This writes `editors/vscode/out/temper-VERSION.vsix` and
+To build with a fresh release tempest and install the result in one
+step (`code --install-extension`, from WSL into the connected VS Code
+too; without `code`, it says how to install by hand), then run
+"Developer: Reload Window":
+
+```sh
+uv run editors/vscode/install.py [--no-build] [--profile small]
+```
+
+`build.py` writes `editors/vscode/out/temper-VERSION.vsix` and
 `out/temper-linux-x64-VERSION.vsix` (on Linux x64), and with `--test`,
 runs the tests in a real VS Code. `--binaries DIR` bundles each
 `DIR/tempest-RUST_TARGET/tempest[.exe]` in its platform's package.
@@ -72,8 +87,11 @@ runs the tests in a real VS Code. `--binaries DIR` bundles each
   `syntaxes/temper.tmLanguage.json`) and builds the page and its CSP;
   `webview/preview.ts` is its script, scrolling by the engine's
   `data-line` marks (`src/sync.ts`); `media/preview.css` its look.
+- `src/inert.ts`: the editor's marks on `temper inert` blocks, found by
+  `src/page.ts`'s `inertBlocks`, as the preview finds them.
   `src/page.test.ts` tests the pure parts under Node's test runner.
-- `test/suite.ts`: diagnostics (and an incremental edit), hover,
+- `test/suite.ts`: diagnostics (and an incremental edit), none for an
+  untitled document, inert blocks' marks following an edit, hover,
   definition, completion, rename, and the preview (rendered, updated,
   and scrolled both ways), in a real VS Code on a small library, run by `test/run.ts` with `@vscode/test-electron` against
   the platform package as built, with its tempest. On Linux without a

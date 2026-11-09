@@ -68,7 +68,7 @@ impl Frame {
     }
 }
 
-impl Interp {
+impl Interp<'_> {
     /// Runs a frame until its code returns or ends abruptly.
     pub(super) fn run_frame(&mut self, s: &Settled, frame: &mut Frame) -> R {
         let code = frame.code.clone();

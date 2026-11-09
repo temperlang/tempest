@@ -158,6 +158,7 @@ pub fn run(
                 results,
                 defined: library.tests,
                 output: Vec::new(),
+                steps: Vec::new(),
                 failure: None,
                 diagnostics: String::new(),
                 json_diagnostics: String::new(),

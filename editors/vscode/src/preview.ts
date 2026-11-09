@@ -198,7 +198,7 @@ export class Previews implements vscode.Disposable {
       const why = error instanceof Error ? error.message : String(error);
       return `<p class="code-line" data-line="0">The preview needs VS Code's built-in Markdown extension (Markdown Language Features), enabled: ${escape(why)}</p>`;
     }
-    return body(typeof html === "string" ? html : "", await this.loadGrammar(), document.lineCount);
+    return body(typeof html === "string" ? html : "", await this.loadGrammar(), document.lineCount, document.getText());
   }
 
   private loadGrammar(): Promise<Grammar | undefined> {

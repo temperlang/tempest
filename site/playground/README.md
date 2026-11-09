@@ -7,7 +7,7 @@ the right, updated as you type, with no server.
     uv run site/playground/build.py [--deps DIR] [--smoke [--chromium PATH]]
     python3 -m http.server -d site/_out/playground
 
-`build.py` builds `crates/temper-wasm` (`small` profile, wasm32; set
+`build.py` builds `crates/temper-wasm` (`small-wasm` profile, wasm32; set
 `RUSTUP_TOOLCHAIN=1.85.0` to match CI), installs the npm packages that
 `package-lock.json` pins (into `node_modules/`, or into `--deps DIR`,
 linked from there), type-checks the TypeScript with `tsc`, bundles and

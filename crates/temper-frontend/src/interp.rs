@@ -175,8 +175,13 @@ type R = Result<Val, Abrupt>;
 /// What running a library printed, and how it failed, if it did.
 #[derive(Debug, Default)]
 pub struct Run {
+    /// What it logged, up to [`OUTPUT_LIMIT`] bytes, then a note of how
+    /// many more lines it logged; then, for tests, their reports. Empty
+    /// when the output went to a sink ([`run_streaming`]).
     pub output: Vec<String>,
     pub failure: Option<String>,
+    /// Each test that ran, by name, with the steps it took.
+    pub test_steps: Vec<(String, u64)>,
 }
 
 /// Limits: calls in progress, and in lowering, expressions' nesting
@@ -193,27 +198,56 @@ const MAX_DEPTH: u32 = 2000;
 /// linear memory: V8's, under Node, at 1200 to 1400 calls (2026-11-06).
 #[cfg(target_arch = "wasm32")]
 const MAX_DEPTH: u32 = 500;
-/// A step budget for callers that must finish, such as tests and the web
-/// playground; compile-time evaluation will need one too.
+/// A step budget for callers that must finish quickly, such as the web
+/// playground and tests' own runs of small programs; compile-time
+/// evaluation will need one too. About a second in a release build.
 pub const FUEL: u64 = 50_000_000;
+/// `tempest test`'s default budget for each test, and for the top-level
+/// code before them (`--fuel` sets it). Wide on purpose: at least 10
+/// times the real libraries' slowest test, so none comes near it, as it
+/// only has to end true runaways (memory, the real hazard, is bounded by
+/// [`OUTPUT_LIMIT`]). Their slowest (2026-11-09): Kelpto's pathological
+/// GFM inputs, 626 million steps; Ordable's, 83 million; Hrefine's IDNA,
+/// 80 million; Wherewith's very long strings, 51 million (over the
+/// playground's [`FUEL`], which once failed it); Chromarite's, 4 million.
+/// A runaway loop reaches it in about 3 to 4 minutes in a release build.
+pub const TEST_FUEL: u64 = 10_000_000_000;
+/// How much console output a run keeps, in bytes, when it isn't streamed:
+/// past it, lines are only counted, so a runaway loop's logging can't
+/// fill memory, nor a failing test's report the screen. The real
+/// libraries' tests log at most 12 KB (2026-11-09).
+pub const OUTPUT_LIMIT: usize = 64 << 10;
 
 /// Runs a settled library's top-level code, stopping after `fuel`
 /// evaluation steps if given. Without fuel, a program runs until it ends,
 /// as any language's would.
 pub fn run(settled: &Settled, fuel: Option<u64>) -> Run {
-    run_with(settled, fuel, false)
+    run_with(settled, fuel, false, None)
+}
+
+/// Runs a library's top-level code as [`run`] does, giving each line it
+/// logs to `out` as it's logged rather than keeping it.
+pub fn run_streaming(settled: &Settled, fuel: Option<u64>, out: &mut dyn FnMut(&str)) -> Run {
+    run_with(settled, fuel, false, Some(out))
 }
 
 /// Runs a library as [`run`] does, then each module's tests, if it has
 /// any, adding their reports, JUnit XML from std's `runTestCases`, to the
-/// output.
+/// output. With `fuel`, the top-level code and each test get that many
+/// steps; a test that runs out, or ends abruptly otherwise, fails alone,
+/// with a report of its own, and the others still run.
 pub fn run_tests(settled: &Settled, fuel: Option<u64>) -> Run {
-    run_with(settled, fuel, true)
+    run_with(settled, fuel, true, None)
 }
 
-fn run_with(settled: &Settled, fuel: Option<u64>, tests: bool) -> Run {
+fn run_with(
+    settled: &Settled,
+    fuel: Option<u64>,
+    tests: bool,
+    sink: Option<&mut dyn FnMut(&str)>,
+) -> Run {
     // `u64::MAX` steps take centuries, so no fuel needs no check of its own.
-    let fuel = fuel.unwrap_or(u64::MAX);
+    let budget = fuel.unwrap_or(u64::MAX);
     // Modules' declarations are globals, each module's in order.
     let mut first_globals = HashMap::new();
     let mut globals = 0;
@@ -224,14 +258,19 @@ fn run_with(settled: &Settled, fuel: Option<u64>, tests: bool) -> Run {
     let lowering = Lowering::new(first_globals);
     let globals = vec![Val::Uninit; globals as usize];
     let mut interp = Interp {
-        output: Vec::new(),
-        fuel,
+        output: Output {
+            lines: Vec::new(),
+            bytes: 0,
+            dropped: 0,
+            note: 0,
+            sink,
+        },
+        fuel: budget,
         depth: 0,
         globals,
         lowering,
         ready: VecDeque::new(),
     };
-    let mut failure = None;
     let mut result = Ok(Val::Void);
     for module in &settled.modules {
         let code = interp
@@ -247,35 +286,146 @@ fn run_with(settled: &Settled, fuel: Option<u64>, tests: bool) -> Run {
             .filter(|_| tests && result.is_ok())
             .map(|t| (m.scope, t))
     });
+    let mut test_steps = Vec::new();
     for (scope, test_run) in runs.collect::<Vec<_>>() {
-        let code = interp.lowering.expression(settled, scope, test_run);
-        result = interp.run_top(settled, code);
-        match &result {
-            Ok(Val::Str(report)) => interp.output.extend(report.lines().map(String::from)),
-            Ok(_) => result = Err(fail("Tests gave no report")),
-            Err(_) => break,
+        // `r#([t#test, …])`: each test runs alone, `r#([t#test])`.
+        let [runner, list] = *settled.library.tree.children(test_run) else {
+            result = Err(fail("Tests gave no report"));
+            break;
+        };
+        let code = interp.lowering.expression(settled, scope, runner);
+        let runner = interp.run_top(settled, code);
+        let code = interp.lowering.expression(settled, scope, list);
+        let (runner, cases) = match (runner, interp.run_top(settled, code)) {
+            (Ok(runner), Ok(Val::List(cases))) => (runner, cases),
+            (Err(abrupt), _) | (_, Err(abrupt)) => {
+                result = Err(abrupt);
+                break;
+            }
+            _ => {
+                result = Err(fail("Tests gave no report"));
+                break;
+            }
+        };
+        for case in cases.iter() {
+            let name = match case {
+                Val::Pair(pair) => to_string(&pair.0),
+                _ => String::new(),
+            };
+            interp.fuel = budget;
+            interp.depth = 0;
+            let ran = interp.apply(
+                settled,
+                runner.clone(),
+                vec![Val::List(Rc::from([case.clone()]))],
+            );
+            let tasks = interp.run_tasks(settled);
+            test_steps.push((name.clone(), budget - interp.fuel));
+            let lines = match ran.and_then(|report| tasks.map(|()| report)) {
+                Ok(Val::Str(report)) => report.lines().map(String::from).collect(),
+                Ok(_) => junit_failure(&name, "Tests gave no report"),
+                Err(abrupt) => {
+                    let mut why = describe(abrupt);
+                    if why == OUT_OF_STEPS {
+                        why = format!("{why} (each test may take {budget})");
+                    }
+                    junit_failure(&name, &why)
+                }
+            };
+            interp.output.lines.extend(lines);
         }
     }
-    if let Err(abrupt) = result {
-        failure = Some(match abrupt {
-            Abrupt::Fail(None) => "Failed".to_string(),
-            Abrupt::Fail(Some(message)) => format!("Failed: {message}"),
-            Abrupt::Panic(message) => format!("Panicked: {message}"),
-            Abrupt::Return(..)
-            | Abrupt::Break(_)
-            | Abrupt::Continue(_)
-            | Abrupt::Yield(_)
-            | Abrupt::Await(_) => "Jumped out of the module".to_string(),
-        });
-    }
+    let failure = result.err().map(|abrupt| match describe(abrupt) {
+        why if why == OUT_OF_STEPS => format!("{why} (the top-level code may take {budget})"),
+        why => why,
+    });
     Run {
-        output: interp.output,
+        output: interp.output.finish(),
         failure,
+        test_steps,
     }
 }
 
-struct Interp {
-    output: Vec<String>,
+/// How a run that ended abruptly failed, for people.
+fn describe(abrupt: Abrupt) -> String {
+    match abrupt {
+        Abrupt::Fail(None) => "Failed".to_string(),
+        Abrupt::Fail(Some(message)) => format!("Failed: {message}"),
+        Abrupt::Panic(message) => format!("Panicked: {message}"),
+        Abrupt::Return(..)
+        | Abrupt::Break(_)
+        | Abrupt::Continue(_)
+        | Abrupt::Yield(_)
+        | Abrupt::Await(_) => "Jumped out of the module".to_string(),
+    }
+}
+
+/// What a run that ran out of steps says, before any budget.
+const OUT_OF_STEPS: &str = "Panicked: ran out of steps";
+
+/// A JUnit report, as std's `reportTestResults` writes it, of one test
+/// that failed without a report of its own.
+fn junit_failure(name: &str, why: &str) -> Vec<String> {
+    let escape = |text: &str| {
+        text.replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;")
+            .replace('\'', "&#39;")
+            .replace('"', "&#34;")
+    };
+    let name = escape(name);
+    vec![
+        "<testsuites>".into(),
+        "  <testsuite name='suite' tests='1' failures='1' time='0.0'>".into(),
+        format!("    <testcase name='{name}' classname='{name}' time='0.0'>"),
+        format!("      <failure message='{}' />", escape(why)),
+        "    </testcase>".into(),
+        "  </testsuite>".into(),
+        "</testsuites>".into(),
+    ]
+}
+
+/// Where console output goes: to a sink, as it's logged, or kept, up to
+/// [`OUTPUT_LIMIT`] bytes, then a note where it was cut, saying how many
+/// lines were dropped. Tests' reports are kept apart from the limit.
+struct Output<'a> {
+    lines: Vec<String>,
+    bytes: usize,
+    /// Lines past the limit, only counted, and where the note goes.
+    dropped: usize,
+    note: usize,
+    sink: Option<&'a mut dyn FnMut(&str)>,
+}
+
+impl Output<'_> {
+    fn log(&mut self, line: String) {
+        if let Some(sink) = &mut self.sink {
+            sink(&line);
+        } else if self.dropped > 0 || self.bytes + line.len() > OUTPUT_LIMIT {
+            if self.dropped == 0 {
+                self.note = self.lines.len();
+                self.lines.push(String::new());
+            }
+            self.dropped += 1;
+        } else {
+            self.bytes += line.len() + 1;
+            self.lines.push(line);
+        }
+    }
+
+    fn finish(mut self) -> Vec<String> {
+        if self.dropped > 0 {
+            self.lines[self.note] = format!(
+                "[output truncated: {} more lines past {OUTPUT_LIMIT} bytes]",
+                self.dropped
+            );
+        }
+        self.lines
+    }
+}
+
+struct Interp<'a> {
+    output: Output<'a>,
     fuel: u64,
     /// Calls in progress.
     depth: u32,
@@ -289,7 +439,7 @@ fn fail(message: impl Into<String>) -> Abrupt {
     Abrupt::Fail(Some(message.into()))
 }
 
-impl Interp {
+impl Interp<'_> {
     /// Runs top-level code, then the `async` blocks it started, even if it
     /// failed, as Kotlin Temper does. The first failure is the result.
     fn run_top(&mut self, s: &Settled, code: Rc<Code>) -> R {
@@ -668,7 +818,7 @@ impl Interp {
     fn method(&mut self, object: &Val, name: &str, args: Vec<Val>) -> R {
         match (object, name, args.as_slice()) {
             (Val::Console, "log", [message]) => {
-                self.output.push(to_string(message));
+                self.output.log(to_string(message));
                 Ok(Val::Void)
             }
             (Val::StringBuilder(builder), _, _) => strings::builder_method(builder, name, &args)
@@ -742,7 +892,7 @@ impl Interp {
     }
 }
 
-impl Interp {
+impl Interp<'_> {
     /// An operator whose first operand is an object: a call of its method
     /// marked `@operator`, `==`'s or `<=>`'s, if it has one, as Kotlin
     /// Temper's typer picks it (the `eq` that `@auto("==")` makes among
@@ -876,7 +1026,7 @@ fn no_method(object: &Val, name: &str) -> R {
     Err(fail(format!("No method {name} for {}", type_name(object))))
 }
 
-impl Interp {
+impl Interp<'_> {
     /// `List` and `ListBuilder` methods, which may call back. Callbacks
     /// get a snapshot of a builder's items, so they may change it.
     fn list_method(&mut self, s: &Settled, this: &Val, name: &str, args: Vec<Val>) -> R {

@@ -95,6 +95,38 @@ SCOPE_CLASSES = [
 GRAMMARS = {"temper": "source.temper", "tempermd": "text.html.markdown.temper"}
 
 
+# Inert blocks
+
+# A fence tagged `temper inert` is Temper that isn't compiled. GFM keeps
+# only an info string's first word, so such a fence's info becomes this one
+# word before rendering; its block is highlighted as Temper, tinted, and
+# labeled "inert", as the VS Code extension shows it.
+INERT_LANG = "temper-inert"
+INERT_TITLE = "Not compiled: shown for reading only"
+FENCE = re.compile(r"^([ \t]*)(`{3,}|~{3,})(.*)$")
+
+
+def mark_inert(text: str) -> str:
+    """`text` with each `temper inert` fence's info as INERT_LANG, finding
+    fences as the literate split does; fences inside other fences, as in
+    docs showing Markdown, are left alone."""
+    lines = text.split("\n")
+    fence = None
+    for i, line in enumerate(lines):
+        m = FENCE.match(line)
+        if fence:
+            if m and m.group(2)[0] == fence[0] and len(m.group(2)) >= len(fence) and not m.group(3).strip():
+                fence = None
+            continue
+        if not m or (m.group(2)[0] == "`" and "`" in m.group(3)):
+            continue
+        fence = m.group(2)
+        tags = m.group(3).split()
+        if tags and tags[0] == "temper" and "inert" in tags:
+            lines[i] = f"{m.group(1)}{m.group(2)}{INERT_LANG}"
+    return "\n".join(lines)
+
+
 # Building Kelpto
 
 
@@ -453,6 +485,10 @@ class Site:
                     '<figure class="diagram"><figcaption>Diagram, as Mermaid source</figcaption>'
                     f"<pre><code>{code}</code></pre></figure>"
                 )
+            if lang == INERT_LANG:
+                lit = self.highlighter.highlight("temper", html.unescape(code))
+                label = f'<span class="inert-label" title="{INERT_TITLE}">inert</span>'
+                return f'<pre class="inert">{label}<code class="language-temper">{lit if lit is not None else code}</code></pre>'
             lit = self.highlighter.highlight(lang, html.unescape(code))
             cls = f' class="language-{lang}"' if lang else ""
             return f"<pre><code{cls}>{lit if lit is not None else code}</code></pre>"
@@ -598,7 +634,7 @@ Rendered by <a href="https://github.com/temperlang/kelpto">Kelpto</a>, a Temper 
     def build(self) -> int:
         bodies = {}
         for src in self.sources:
-            body, removed = self.kelpto.render((ROOT / src).read_text())
+            body, removed = self.kelpto.render(mark_inert((ROOT / src).read_text()))
             self.removed += [f"{src}: {r}" for r in removed]
             bodies[src] = body
         if self.diagrams:

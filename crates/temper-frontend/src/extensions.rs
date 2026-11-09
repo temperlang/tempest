@@ -4,7 +4,10 @@
 //! (std's `Int.jsonAdapter()` is `int32JsonAdapter()`). A call
 //! `T.name(…)`, where `T` names a type, becomes a call of the visible
 //! extension, unless `T` is a class with a static member of that name.
-//! Instance extensions, `@extension("name")`, aren't supported yet.
+//! Instance extensions, `@extension("name")`, aren't supported yet;
+//! they're only recorded, declared or imported like static ones, so that
+//! `x.name` isn't reported as "No member" where one named `name` is
+//! visible ([`Settle::extension_visible`]).
 
 use crate::builtins::Builtin;
 use crate::core::{self, MEMBER_STATIC};
@@ -46,14 +49,34 @@ impl Settle {
         Some((ty, name))
     }
 
-    /// Records a declared symbol that's a static extension: marked as one,
-    /// or a `let` of another one's name, as an import makes.
-    pub(crate) fn note_static_extension(
-        &mut self,
-        let_node: NodeId,
-        symbol: SymbolId,
-        scope: ScopeId,
-    ) {
+    /// The name in `@extension("name")`, if `decorator` is one.
+    pub(crate) fn extension_of(&self, decorator: NodeId) -> Option<NameId> {
+        let tree = &self.lib.tree;
+        let [callee, name] = *tree.children(decorator) else {
+            return None;
+        };
+        if tree.kind(decorator) != NodeKind::Call
+            || self
+                .lib
+                .name(callee)
+                .is_none_or(|n| self.lib.names.get(n) != "extension")
+        {
+            return None;
+        }
+        let Some(temper_syntax::ast::Value::String(name)) = self.lib.value(name) else {
+            return None;
+        };
+        // A name never used as a member can't hide a "No member".
+        self.lib.names.find(name)
+    }
+
+    /// Records a declared symbol that's an extension, static or not:
+    /// marked as one, or a `let` of another one's name, as an import
+    /// makes.
+    pub(crate) fn note_extension(&mut self, let_node: NodeId, symbol: SymbolId, scope: ScopeId) {
+        if let Some(name) = self.extension_marks.remove(&let_node) {
+            self.extensions.push((symbol, name));
+        }
         if let Some((ty, name)) = self.static_extension_marks.remove(&let_node) {
             self.static_extensions.push(StaticExtension {
                 symbol,
@@ -63,7 +86,8 @@ impl Settle {
             });
             return;
         }
-        if self.static_extensions.is_empty() || self.lib.tree.kind(let_node) != NodeKind::Let {
+        let none = self.static_extensions.is_empty() && self.extensions.is_empty();
+        if none || self.lib.tree.kind(let_node) != NodeKind::Let {
             return;
         }
         let init = core::let_parts(&self.lib.tree, let_node).2;
@@ -76,6 +100,28 @@ impl Settle {
         if let Some(&e) = self.static_extensions.iter().find(|e| e.symbol == of) {
             self.static_extensions.push(StaticExtension { symbol, ..e });
         }
+        if let Some(&(_, name)) = self.extensions.iter().find(|e| e.0 == of) {
+            self.extensions.push((symbol, name));
+        }
+    }
+
+    /// Whether an instance extension named `name` is visible at `node`,
+    /// in `scope`, under the name it has: declared there or outside, or
+    /// imported.
+    pub(crate) fn extension_visible(&self, scope: ScopeId, name: NameId, node: NodeId) -> bool {
+        let pos = self.lib.tree.span(node).start;
+        self.extensions.iter().any(|&(symbol, n)| {
+            n == name
+                && match self
+                    .scopes
+                    .lookup(scope, self.scopes.symbol(symbol).name, false, pos)
+                {
+                    Lookup::Found(b) => b == symbol,
+                    // Can't tell, after settling stopped early.
+                    Lookup::Wait(_) => true,
+                    Lookup::Missing => false,
+                }
+        })
     }
 
     /// For a call `T.name(…)` of a visible static extension of type `T`,

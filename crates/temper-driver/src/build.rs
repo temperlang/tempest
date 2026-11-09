@@ -48,9 +48,8 @@ use crate::{checked, interface, sources_prefix, translate, uses_std};
 use std::io::Write;
 use std::path::Path;
 use temper_frontend::ignore::IgnoreFile;
-use temper_frontend::library::Level;
-use temper_frontend::library_tests::{libraries_to_test, problem, write_located_diagnostics};
-use temper_frontend::log::{LogFormat, write_json_diagnostics};
+use temper_frontend::library_tests::{Reported, libraries_to_test, problem};
+use temper_frontend::log::LogFormat;
 use temper_frontend::project::{LibrarySources, library_of, load_library};
 use temper_frontend::settle::settle;
 use temper_frontend::sources::Sources;
@@ -94,7 +93,8 @@ pub struct Built {
     /// Each library, with how many tests it has: those that didn't reach
     /// tmpl too, which count as not run, as long as it settled.
     pub tests: Vec<(String, usize)>,
-    /// Each library with errors, and how many, whether or not it built.
+    /// Each library with errors in its own files, and how many, whether
+    /// or not it built.
     pub errors: Vec<(String, usize)>,
 }
 
@@ -122,10 +122,10 @@ pub fn build(
     let mut results = Vec::new();
     let mut programs = Vec::new();
     let mut tests = Vec::new();
-    let mut errors = Vec::new();
+    let mut reported = Reported::default();
     for library in &libraries {
         let name = &library.config.name;
-        match program(sources, library, &libraries, options, &mut errors, err) {
+        match program(sources, library, &libraries, options, &mut reported, err) {
             Ok(program) => {
                 let count = program.modules.iter().map(|m| m.tests.len()).sum();
                 tests.push((name.clone(), count));
@@ -220,6 +220,7 @@ pub fn build(
             problem(options.log, err, "NotBuilt", &text, &values);
         }
     }
+    let errors = reported.errors;
     // Each error has a record of its own in JSON.
     if options.log == LogFormat::Text {
         for (library, count) in &errors {
@@ -270,31 +271,22 @@ fn dependency_order(programs: &[(&LibrarySources, Program)]) -> Vec<usize> {
 
 /// A library's program in tmpl, with its config's version, or why there
 /// isn't one: what tmpl doesn't cover yet. Its diagnostics go to `err`,
-/// and a count of its errors, if any, to `errors`; its errors become
-/// tmpl's `Error`s, which fail where they run.
+/// those not yet reported, as those of a library it imports may have
+/// been, counted in `reported` under the library they're in; its errors
+/// become tmpl's `Error`s, which fail where they run.
 fn program(
     sources: &Sources,
     library: &LibrarySources,
     all: &[LibrarySources],
     options: Options,
-    errors: &mut Vec<(String, usize)>,
+    reported: &mut Reported,
     err: &mut dyn Write,
 ) -> Result<Program, (String, usize)> {
     let settled = settle(load_library(sources, library, all).map_err(|e| (e, 0))?);
     // Its tests, which count where it fails, as not run.
     let count = settled.modules.iter().map(|m| m.test_cases.len()).sum();
-    let mut diagnostics = String::new();
-    match options.log {
-        LogFormat::Text => write_located_diagnostics(&settled, &mut diagnostics),
-        LogFormat::Json => write_json_diagnostics(&settled, &mut diagnostics),
-    }
+    let diagnostics = reported.new_diagnostics(&settled, library, all, options.log);
     let _ = err.write_all(diagnostics.as_bytes());
-    let count_errors = (settled.library.diagnostics.iter())
-        .filter(|d| d.level == Level::Error)
-        .count();
-    if count_errors > 0 {
-        errors.push((library.config.name.clone(), count_errors));
-    }
     // The libraries it imports, named when it fails, which may be why.
     let used: Vec<&str> = (settled.library.modules.iter())
         .filter_map(|m| library_of(all, &m.dir))

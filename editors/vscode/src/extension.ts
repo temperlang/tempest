@@ -1,10 +1,12 @@
 // The Temper extension: starts `tempest lsp` and connects VS Code to it
 // with vscode-languageclient, which syncs documents (incrementally, as
 // the server asks), shows its diagnostics, and maps VS Code's providers
-// to LSP's requests; and the preview of literate Temper (preview.ts).
+// to LSP's requests; the preview of literate Temper (preview.ts); and
+// the marks on its `temper inert` blocks (inert.ts).
 
 import * as vscode from "vscode";
 import { LanguageClient, type LanguageClientOptions, type ServerOptions } from "vscode-languageclient/node";
+import { registerInert } from "./inert";
 import { type PreviewHook, registerPreview } from "./preview";
 import { type Found, notFound, notStarted, search } from "./server";
 
@@ -22,6 +24,8 @@ export interface Api {
   error(): string | undefined;
   /** For tests: the open preview of a `.temper.md`, if there is one. */
   preview(uri: vscode.Uri): PreviewHook | undefined;
+  /** For tests: a document's `temper inert` blocks as last marked. */
+  inert(uri: vscode.Uri): vscode.Range[] | undefined;
 }
 
 const OPEN_SETTING = "Open Setting";
@@ -55,7 +59,13 @@ async function start(context: vscode.ExtensionContext, output: vscode.LogOutputC
     options: folder ? { cwd: folder.uri.fsPath } : {},
   };
   const clientOptions: LanguageClientOptions = {
-    documentSelector: [{ language: "temper" }, { language: "temper-markdown" }],
+    // Files on disk only: a diff's old side (git:), a merge view, or a
+    // file from another provider isn't part of a library on disk, so the
+    // server can't analyze it and would mark the whole text as errors.
+    documentSelector: [
+      { scheme: "file", language: "temper" },
+      { scheme: "file", language: "temper-markdown" },
+    ],
     outputChannel: output,
   };
   const starting = new LanguageClient("temper", "Temper", serverOptions, clientOptions);
@@ -90,8 +100,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<Api> {
     }),
   );
   const previews = registerPreview(context);
+  const inert = registerInert(context);
   await start(context, output);
-  return { server: () => server, client: () => client, error: () => lastError, preview: (uri) => previews.get(uri) };
+  return { server: () => server, client: () => client, error: () => lastError, preview: (uri) => previews.get(uri), inert };
 }
 
 export async function deactivate(): Promise<void> {

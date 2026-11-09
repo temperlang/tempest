@@ -96,7 +96,7 @@ fn pair(k: &Val, v: &Val) -> Val {
     Val::Pair(Rc::new((k.clone(), v.clone())))
 }
 
-impl Interp {
+impl Interp<'_> {
     /// A method of a `Map` or `MapBuilder`. Callbacks see a copy of a
     /// builder's entries, so they may change it.
     pub(super) fn map_method(&mut self, s: &Settled, this: &Val, name: &str, args: Vec<Val>) -> R {

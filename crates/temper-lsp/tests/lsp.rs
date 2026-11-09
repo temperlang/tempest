@@ -23,13 +23,20 @@ impl Client {
     /// The server on a thread, with as much stack as `tempest` gives
     /// it, over a loopback socket, as an editor's pipes.
     fn start() -> Client {
+        Client::start_with_hook(None)
+    }
+
+    /// [`Client::start`], with the server's hidden panic hook
+    /// ([`temper_lsp::serve_with_hook`]).
+    fn start_with_hook(panic_on: Option<&str>) -> Client {
+        let panic_on = panic_on.map(String::from);
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let input = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
         let (stream, _) = listener.accept().unwrap();
         let reader = stream.try_clone().unwrap();
         let server = std::thread::Builder::new()
             .stack_size(64 << 20)
-            .spawn(move || temper_lsp::serve(reader, stream, None))
+            .spawn(move || temper_lsp::serve_with_hook(reader, stream, None, panic_on))
             .unwrap();
         let output = BufReader::new(input.try_clone().unwrap());
         Client {
@@ -52,6 +59,14 @@ impl Client {
     /// Sends a request and gives its response's `result`, or panics with
     /// its error.
     fn request(&mut self, method: &str, params: Json) -> Json {
+        match self.respond(method, params) {
+            Ok(result) => result,
+            Err(error) => panic!("{method}: {error}"),
+        }
+    }
+
+    /// Sends a request and gives its response's `result` or `error`.
+    fn respond(&mut self, method: &str, params: Json) -> Result<Json, Json> {
         let id = self.next;
         self.next += 1;
         self.send(json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params}));
@@ -59,9 +74,9 @@ impl Client {
             let message = self.receive();
             if message.get("id") == Some(&json!(id)) {
                 if let Some(error) = message.get("error") {
-                    panic!("{method}: {error}");
+                    return Err(error.clone());
                 }
-                return message.get("result").cloned().unwrap_or(Json::Null);
+                return Ok(message.get("result").cloned().unwrap_or(Json::Null));
             }
             self.notes.push(message);
         }
@@ -340,6 +355,55 @@ fn utf16_positions_and_a_lone_file() {
     let def = client.request("textDocument/definition", at(&file, 0, 22));
     assert_eq!(num_at(&def, &["range", "start", "character"]), 4);
     assert_eq!(client.diagnostics(&file), Vec::<Json>::new());
+    assert_eq!(client.finish(), 0);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A panic, a bug in tempest, doesn't end the server: one in an analysis
+/// becomes an "internal error" diagnostic, one in a request an error
+/// response, and the next request is answered. The server's hidden hook
+/// makes the panics.
+#[test]
+fn panics_become_internal_errors() {
+    let dir = library("panics", &[("shapes.temper", SHAPES)]);
+    let shapes = uri(&dir, "shapes.temper");
+    let mut client = Client::start_with_hook(Some("BOOM"));
+    client.request("initialize", json!({"capabilities": {}}));
+    open(&mut client, &shapes, SHAPES);
+    assert_eq!(client.diagnostics(&shapes), Vec::<Json>::new());
+    // An analysis that panics: a hover, which analyzes the changed text
+    // first, finds nothing, and the panic is an error on the document.
+    change(&mut client, &shapes, 2, &format!("{SHAPES}// BOOM\n"));
+    assert_eq!(
+        client.request("textDocument/hover", at(&shapes, 1, 12)),
+        Json::Null
+    );
+    let diagnostics = client.diagnostics(&shapes);
+    assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
+    let message = str_at(&diagnostics[0], &["message"]);
+    assert!(
+        message.starts_with("internal error (a bug in tempest) analyzing "),
+        "{message}"
+    );
+    assert!(
+        message.ends_with(": test hook: a document contains BOOM"),
+        "{message}"
+    );
+    assert_eq!(num_at(&diagnostics[0], &["severity"]), 1);
+    // A request that panics gets an internal error.
+    let error = client.respond("tempest/testPanic", Json::Null).unwrap_err();
+    assert_eq!(error.get("code"), Some(&json!(-32603)));
+    let message = str_at(&error, &["message"]);
+    assert_eq!(
+        message,
+        "internal error (a bug in tempest) in tempest/testPanic: test hook: tempest/testPanic"
+    );
+    // And the server goes on: the text fixed, a hover answers.
+    change(&mut client, &shapes, 3, SHAPES);
+    let hover = client.request("textDocument/hover", at(&shapes, 1, 12));
+    let value = str_at(&hover, &["contents", "value"]);
+    assert!(value.contains("area"), "{value}");
+    assert_eq!(client.diagnostics(&shapes), Vec::<Json>::new());
     assert_eq!(client.finish(), 0);
     let _ = std::fs::remove_dir_all(&dir);
 }

@@ -4,7 +4,8 @@
 """Measures tempest binary size and peak memory, with Kotlin for reference.
 
 Sizes are for the `small` profile (size-optimized, LTO, stripped) and the
-plain release profile, plus `temper-wasm` built for wasm32, raw and gzipped. Peak memory is the maximum resident set size of one
+plain release profile, plus `temper-wasm` built for wasm32 (`small-wasm`, the
+same but aborting on panic), raw and gzipped. Peak memory is the maximum resident set size of one
 `--bench 1` run over all Temper files (read everything, then lex and parse it
 all once, and also build grammar trees for it all, and also settle each
 file as a library), for our binaries and for Kotlin's oracles on the JVM.
@@ -50,7 +51,7 @@ BINARIES = ["lex-tokens", "parse-tree", "ast-tree", "run-temper", "tempest"]
 NET = {"run-temper", "tempest"}
 CSV = ROOT / "notes/size-and-speed.csv"
 BACKENDS = ["py", "rust", "js", "java", "csharp", "cpp", "lua"]
-WASM = ROOT / "target/wasm32-unknown-unknown/small/temper_wasm.wasm"
+WASM = ROOT / "target/wasm32-unknown-unknown/small-wasm/temper_wasm.wasm"
 
 
 def main() -> int:
@@ -79,11 +80,11 @@ def main() -> int:
         rows += [(f"{name}-small", str(small), "bytes", features), (f"{name}-release", str(release), "bytes", features)]
 
     subprocess.run(
-        ["cargo", "build", "-q", "--profile", "small", "--target", "wasm32-unknown-unknown", "-p", "temper-wasm"],
+        ["cargo", "build", "-q", "--profile", "small-wasm", "--target", "wasm32-unknown-unknown", "-p", "temper-wasm"],
         cwd=ROOT,
         check=True,
     )
-    wasm = (ROOT / "target/wasm32-unknown-unknown/small/temper_wasm.wasm").read_bytes()
+    wasm = WASM.read_bytes()
     gzipped = len(gzip.compress(wasm, 9))
     print(f"temper-wasm: {kib(len(wasm))}, {kib(gzipped)} gzipped")
     rows += [("wasm-small", str(len(wasm)), "bytes", ""), ("wasm-small-gzip", str(gzipped), "bytes", "")]
@@ -134,7 +135,7 @@ def small_sizes(features: list[str]) -> tuple[int, int, int]:
         check=True,
     )
     native = (ROOT / "target/small/tempest").stat().st_size
-    command = ["cargo", "build", "-q", "--profile", "small", "--target", "wasm32-unknown-unknown",
+    command = ["cargo", "build", "-q", "--profile", "small-wasm", "--target", "wasm32-unknown-unknown",
                "-p", "temper-wasm", "--no-default-features"]
     if features:
         command += ["--features", ",".join(features)]

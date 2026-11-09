@@ -24,7 +24,7 @@
 //!
 //! A command ends with Kotlin's `{ "task": "Build", "ok": true }`.
 
-use crate::library::{Level, Message};
+use crate::library::{Diagnostic, Level, Message};
 use crate::settle::Settled;
 
 /// How a command reports.
@@ -166,33 +166,39 @@ pub fn template(message: &Message) -> String {
 /// A settled library's diagnostics as JSON records, a line each.
 pub fn write_json_diagnostics(s: &Settled, out: &mut String) {
     for d in &s.library.diagnostics {
-        let (file, start) = s.library.locate(d.span.start);
-        let (_, end) = s.library.locate(d.span.end.max(d.span.start));
-        let file = &s.library.files[file.0 as usize];
-        let source = file.parsed.source();
-        let units = |offset: u32| {
-            let offset = (offset as usize).min(source.len());
-            // A boundary at or before the offset, should one be mid-character.
-            let offset = (0..=offset)
-                .rev()
-                .find(|&i| source.is_char_boundary(i))
-                .unwrap_or(0);
-            source[..offset].encode_utf16().count()
-        };
-        let pos = Pos {
-            loc: file.path.clone(),
-            left: units(start),
-            right: units(end.max(start)),
-        };
-        out.push_str(&record(
-            level_name(d.level),
-            &template(&d.message),
-            Some(&pos),
-            &[],
-            &d.message.text(),
-        ));
-        out.push('\n');
+        write_json_diagnostic(s, d, out);
     }
+}
+
+/// One diagnostic of a settled library's as a JSON record, as
+/// [`write_json_diagnostics`] writes each.
+pub fn write_json_diagnostic(s: &Settled, d: &Diagnostic, out: &mut String) {
+    let (file, start) = s.library.locate(d.span.start);
+    let (_, end) = s.library.locate(d.span.end.max(d.span.start));
+    let file = &s.library.files[file.0 as usize];
+    let source = file.parsed.source();
+    let units = |offset: u32| {
+        let offset = (offset as usize).min(source.len());
+        // A boundary at or before the offset, should one be mid-character.
+        let offset = (0..=offset)
+            .rev()
+            .find(|&i| source.is_char_boundary(i))
+            .unwrap_or(0);
+        source[..offset].encode_utf16().count()
+    };
+    let pos = Pos {
+        loc: file.path.clone(),
+        left: units(start),
+        right: units(end.max(start)),
+    };
+    out.push_str(&record(
+        level_name(d.level),
+        &template(&d.message),
+        Some(&pos),
+        &[],
+        &d.message.text(),
+    ));
+    out.push('\n');
 }
 
 #[cfg(test)]

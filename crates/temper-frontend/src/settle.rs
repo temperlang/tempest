@@ -137,6 +137,8 @@ pub fn settle(library: Library) -> Settled {
         json_decorated: HashSet::new(),
         static_extension_marks: HashMap::new(),
         static_extensions: Vec::new(),
+        extension_marks: HashMap::new(),
+        extensions: Vec::new(),
         imports: Vec::new(),
         overloads: HashMap::new(),
         tests: Vec::new(),
@@ -242,6 +244,13 @@ pub(crate) struct Settle {
     /// declared: `T` and the name.
     pub(crate) static_extension_marks: HashMap<NodeId, (NodeId, NameId)>,
     pub(crate) static_extensions: Vec<StaticExtension>,
+    /// Declarations marked `@extension("name")`, until they're declared,
+    /// with the name; then each such function or a name for it, such as
+    /// an import's, with the name. Instance extensions aren't supported
+    /// yet; these only keep "No member" from being reported where one may
+    /// apply ([`Settle::extension_visible`]).
+    pub(crate) extension_marks: HashMap<NodeId, NameId>,
+    pub(crate) extensions: Vec<(SymbolId, NameId)>,
     /// Methods marked `@overload("name")`, with each such name: a call
     /// `c.name(…)`, where `c`'s class has no member `name`, calls the one
     /// that fits its arguments best ([`Settle::resolve_overload`]).
@@ -524,7 +533,7 @@ impl Settle {
         let b = self
             .scopes
             .declare(scope, name, kind, Some(let_node), mutable);
-        self.note_static_extension(let_node, b, scope);
+        self.note_extension(let_node, b, scope);
         // As in Kotlin Temper, a block's local is visible only after its
         // declaration, so `var x = x` reads an outer `x`; functions and
         // classes are visible all through the block, for mutual recursion.

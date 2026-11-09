@@ -93,7 +93,9 @@ flowchart TD
 ```
 
 - **On the interpreter** (the default), each library settles and runs
-  its tests in-process. That's fast: no files are written.
+  its tests in-process. That's fast: no files are written. Each test
+  gets a step budget (`--fuel`, 10 billion by default), so one that loops
+  forever fails alone, and what tests log is kept up to 64 KiB.
 - **With `-b BACKEND`**, each library is built as `build` does
   ([`test_backend`](../../crates/temper-driver/src/test_run.rs)), then
   its tests run with the language's own tools: Python's
@@ -113,6 +115,8 @@ flowchart TD
 - **Errors never stop either command.** Every error is reported, the
   code is still written, and the tests still run; a test fails only if
   it reaches an error. The exit status is 1 whenever there were errors.
+  Each is reported once, under the library it's in, even when other
+  libraries import that one.
 
 Each command step by step, the tools each backend runs, and why
 imported libraries are settled again in each importer:

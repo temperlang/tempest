@@ -2570,3 +2570,52 @@ error 449..456: No member size in List<Int32>
 error 483..492: No member lengthy in String
 log -1
 Failed: No method lengthy for String
+
+=== a comment mentioning @extension doesn't hide a missing member
+// Only an `@extension("y")` visible where `p.y` is read would.
+// see @extension docs
+class P(public x: Int) {}
+let p = new P(1);
+console.log(p.y.toString());
+--- settled
+(Block
+  (Class ^P:0 (Param ^x:3 Int))
+  (Let ^p:1 (Call new P:0 1))
+  (Call (Call . console \log) (Call (Call . (Call . p:1 \y) \toString)))
+  #void)
+error 143..146: No member y in P
+Failed: No member y in P
+
+=== a visible @extension keeps its name from being a missing member
+// Instance extensions aren't supported yet, but `s.isPal()` isn't "No
+// member" where `@extension("isPal")` is visible; `s.isPalindrome()`
+// still is, as is `isOdd` where the extension, local to `f`, isn't.
+@extension("isPal")
+let stringIsPal(s: String): Boolean { s == "aba" }
+let f(s: String): Boolean {
+  @extension("isOdd") let stringIsOdd(t: String): Boolean { true }
+  s.isOdd() && s.isPal() && s.isPalindrome()
+}
+let g(s: String): Boolean { s.isOdd() }
+--- settled
+(Block
+  (Let
+    ^stringIsPal:0
+    (Fn (Let ^s:3 String) Boolean (Block (Call == s:3 "aba"))))
+  (Let
+    ^f:1
+    (Fn
+      (Let ^s:4 String)
+      Boolean
+      (Block
+        (Let ^stringIsOdd:5 (Fn (Let ^t:6 String) Boolean (Block true)))
+        (If
+          (Call (Call . s:4 \isOdd))
+          (If
+            (Call (Call . s:4 \isPal))
+            (Call (Call . s:4 \isPalindrome))
+            #false)
+          #false))))
+  (Let ^g:2 (Fn (Let ^s:7 String) Boolean (Block (Call (Call . s:7 \isOdd))))))
+error 404..418: No member isPalindrome in String
+error 451..458: No member isOdd in String

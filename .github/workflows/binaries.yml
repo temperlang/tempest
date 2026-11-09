@@ -114,12 +114,12 @@ jobs:
         with:
           key: wasm32-unknown-unknown
       - name: Build
-        run: cargo build --locked --profile small --target wasm32-unknown-unknown -p temper-wasm
+        run: cargo build --locked --profile small-wasm --target wasm32-unknown-unknown -p temper-wasm
       - name: Package
         run: |
           name="temper-wasm"
           mkdir "$name"
-          cp target/wasm32-unknown-unknown/small/temper_wasm.wasm COPYRIGHT LICENSE-APACHE LICENSE-MIT NOTICE "$name/"
+          cp target/wasm32-unknown-unknown/small-wasm/temper_wasm.wasm COPYRIGHT LICENSE-APACHE LICENSE-MIT NOTICE "$name/"
           tar czf "$name.tar.gz" "$name"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:

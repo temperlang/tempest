@@ -116,6 +116,8 @@ const STD: &str = "    --std DIR
             Read std from DIR instead of the copy built in.
 ";
 
+use temper_frontend::interp::TEST_FUEL;
+
 /// A command's help, or `None` for a command there isn't.
 pub fn command(name: &str) -> Option<String> {
     let text = match name {
@@ -147,6 +149,10 @@ pub fn command(name: &str) -> Option<String> {
              \x20   -b, --backend BACKEND\n\
              \x20           A backend, or interp for the interpreter; may be given\n\
              \x20           more than once. Defaults to interp.\n\
+             \x20   --fuel N|none\n\
+             \x20           On the interpreter, the steps each test may take, and the\n\
+             \x20           top-level code before them (default {TEST_FUEL}); a test\n\
+             \x20           that runs out fails alone. none for no limit.\n\
              {NO_CONNECTED}{VERBOSE}{LOGFORMAT}{STD}"
         ),
         "run" => format!(

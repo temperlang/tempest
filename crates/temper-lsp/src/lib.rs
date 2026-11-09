@@ -22,6 +22,12 @@
 //! - **std:** going to a definition in std writes std's sources, once,
 //!   to a directory in the system's temporary directory, for the editor
 //!   to open, as built-in std has no files of its own.
+//! - **Panics,** bugs in tempest, don't end the server: each request and
+//!   each analysis runs under `catch_unwind`. A request that panics gets
+//!   an error response, an analysis that panics an "internal error"
+//!   diagnostic on its document, and the panic's message goes to stderr,
+//!   which editors keep in the server's log. This needs unwinding, so
+//!   native builds don't abort on panic (the workspace's Cargo.toml).
 
 use lsp_types as lsp;
 use serde::Serialize;
@@ -29,6 +35,7 @@ use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
 use std::io::{self, BufRead, BufReader, Read, Write};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::PathBuf;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
@@ -83,6 +90,19 @@ pub fn write_message(out: &mut impl Write, body: &Value) -> io::Result<()> {
 /// returning the exit code: 0 after a `shutdown`, else 1. `std_dir`
 /// reads std from a directory rather than the built-in copy.
 pub fn serve(input: impl Read + Send + 'static, output: impl Write, std_dir: Option<String>) -> u8 {
+    serve_with_hook(input, output, std_dir, None)
+}
+
+/// [`serve`], for tests, with a hook that makes a panic: an analysis of
+/// a unit whose open documents contain `panic_on` panics, as does the
+/// request `tempest/testPanic`.
+#[doc(hidden)]
+pub fn serve_with_hook(
+    input: impl Read + Send + 'static,
+    output: impl Write,
+    std_dir: Option<String>,
+    panic_on: Option<String>,
+) -> u8 {
     let (send, receive) = mpsc::channel();
     // Messages are read on a thread of their own, so the server can wait
     // for one or for the debounce, whichever comes first.
@@ -109,6 +129,7 @@ pub fn serve(input: impl Read + Send + 'static, output: impl Write, std_dir: Opt
         initialized: false,
         shut_down: false,
         std_copy: None,
+        panic_on,
     };
     loop {
         let message = match server.deadline {
@@ -171,6 +192,25 @@ struct Server<W: Write> {
     shut_down: bool,
     /// Where std's sources were written for the editor, once they were.
     std_copy: Option<PathBuf>,
+    /// The test hook's text ([`serve_with_hook`]).
+    panic_on: Option<String>,
+}
+
+/// A panic's message, from its payload.
+fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
+    match (
+        payload.downcast_ref::<&str>(),
+        payload.downcast_ref::<String>(),
+    ) {
+        (Some(text), _) => text.to_string(),
+        (_, Some(text)) => text.clone(),
+        _ => "a panic without a message".to_string(),
+    }
+}
+
+/// What an editor is told about a panic, a bug in tempest.
+fn internal_error(what: &str, message: &str) -> String {
+    format!("internal error (a bug in tempest) {what}: {message}")
 }
 
 /// A request's failure: a JSON-RPC error code and message.
@@ -214,7 +254,14 @@ impl<W: Write> Server<W> {
                 self.shut_down = true;
                 Ok(Value::Null)
             }
-            (true, method) => self.request(method, params),
+            (true, method) => {
+                let request = catch_unwind(AssertUnwindSafe(|| self.request(method, params)));
+                request.unwrap_or_else(|payload| {
+                    let why = internal_error(&format!("in {method}"), &panic_message(&*payload));
+                    eprintln!("tempest lsp: {why}");
+                    Err((-32603, why))
+                })
+            }
         };
         let response = match result {
             Ok(result) => json!({"jsonrpc": "2.0", "id": id, "result": result}),
@@ -323,46 +370,57 @@ impl<W: Write> Server<W> {
         let dir = parent(path);
         let root = work_root(&sources, &dir);
         let libraries = find_libraries(&sources, &root);
-        let (key, files, library) = match library_of(&libraries, &dir) {
+        let (key, files, lib) = match library_of(&libraries, &dir) {
             Some(lib) if lib.files.iter().any(|f| f == path) => {
-                let library = load_library(&sources, lib, &libraries).ok()?;
-                (lib.root.clone(), lib.files.clone(), library)
+                (lib.root.clone(), lib.files.clone(), Some(lib))
             }
-            _ => {
-                let text = sources.read(path).ok()?.into_owned();
-                let mut library = Library::new();
-                library.add_file(path, &text, temper_frontend::project::source_kind(path));
-                load_imports(&sources, &mut library);
-                (path.to_string(), vec![path.to_string()], library)
-            }
+            _ => (path.to_string(), vec![path.to_string()], None),
         };
-        let analysis = Analysis::new(settle(library));
+        // Reading parses, so it's under `catch_unwind` with the rest.
+        let load = || -> Option<Library> {
+            if let Some(lib) = lib {
+                return load_library(&sources, lib, &libraries).ok();
+            }
+            let text = sources.read(path).ok()?.into_owned();
+            let mut library = Library::new();
+            library.add_file(path, &text, temper_frontend::project::source_kind(path));
+            load_imports(&sources, &mut library);
+            Some(library)
+        };
         for file in &files {
             self.stale.remove(file);
         }
-        // What's published now, per file, as LSP diagnostics.
-        let mut by_file: Vec<(String, Vec<lsp::Diagnostic>)> =
-            files.iter().map(|f| (f.clone(), Vec::new())).collect();
-        for problem in analysis.diagnostics() {
-            let Some(file) = analysis.settled.library.files.get(problem.file.0 as usize) else {
-                continue;
-            };
-            let Some(entry) = by_file.iter_mut().find(|(f, _)| *f == file.path) else {
-                continue;
-            };
-            let source = file.parsed.source();
-            entry.1.push(lsp::Diagnostic {
-                range: range(source, problem.span.start, problem.span.end),
-                severity: Some(match problem.level {
-                    Level::Error => lsp::DiagnosticSeverity::ERROR,
-                    Level::Warn => lsp::DiagnosticSeverity::WARNING,
-                    Level::Info => lsp::DiagnosticSeverity::INFORMATION,
-                }),
-                source: Some("tempest".to_string()),
-                message: problem.message,
-                ..Default::default()
-            });
-        }
+        let hooked = (self.panic_on.as_deref()).filter(|marker| {
+            (self.docs.iter()).any(|d| files.contains(&d.path) && d.text.contains(marker))
+        });
+        let analyzed = catch_unwind(AssertUnwindSafe(|| {
+            if let Some(marker) = hooked {
+                panic!("test hook: a document contains {marker}");
+            }
+            let analysis = Analysis::new(settle(load()?));
+            let by_file = diagnostics_by_file(&analysis, &files);
+            Some((analysis, by_file))
+        }));
+        let (analysis, by_file) = match analyzed {
+            Ok(analyzed) => analyzed?,
+            Err(payload) => {
+                // The unit's analysis, if any, no longer fits the text;
+                // the next question about it analyzes it again.
+                let why = internal_error(&format!("analyzing {key}"), &panic_message(&*payload));
+                eprintln!("tempest lsp: {why}");
+                self.units
+                    .retain(|u| !u.files.iter().any(|f| files.contains(f)));
+                let diagnostic = lsp::Diagnostic {
+                    range: lsp::Range::default(),
+                    severity: Some(lsp::DiagnosticSeverity::ERROR),
+                    source: Some("tempest".to_string()),
+                    message: why,
+                    ..Default::default()
+                };
+                self.publish(path, vec![diagnostic]);
+                return None;
+            }
+        };
         let old = match self.units.iter().position(|u| u.key == key) {
             Some(i) => self.units.remove(i).published,
             None => Vec::new(),
@@ -566,6 +624,7 @@ impl<W: Write> Server<W> {
                 });
                 answer(found.flatten())
             }
+            "tempest/testPanic" if self.panic_on.is_some() => panic!("test hook: {method}"),
             _ => Err((-32601, format!("no method {method}"))),
         }
     }
@@ -598,6 +657,37 @@ impl<W: Write> Server<W> {
         let dir = self.std_copy.get_or_insert_with(write_std);
         path_to_uri(&dir.join(rest).to_string_lossy().replace('\\', "/"))
     }
+}
+
+/// An analysis's diagnostics in each of `files`, as LSP's, for each
+/// file, even with none.
+fn diagnostics_by_file(
+    analysis: &Analysis,
+    files: &[String],
+) -> Vec<(String, Vec<lsp::Diagnostic>)> {
+    let mut by_file: Vec<(String, Vec<lsp::Diagnostic>)> =
+        files.iter().map(|f| (f.clone(), Vec::new())).collect();
+    for problem in analysis.diagnostics() {
+        let Some(file) = analysis.settled.library.files.get(problem.file.0 as usize) else {
+            continue;
+        };
+        let Some(entry) = by_file.iter_mut().find(|(f, _)| *f == file.path) else {
+            continue;
+        };
+        let source = file.parsed.source();
+        entry.1.push(lsp::Diagnostic {
+            range: range(source, problem.span.start, problem.span.end),
+            severity: Some(match problem.level {
+                Level::Error => lsp::DiagnosticSeverity::ERROR,
+                Level::Warn => lsp::DiagnosticSeverity::WARNING,
+                Level::Info => lsp::DiagnosticSeverity::INFORMATION,
+            }),
+            source: Some("tempest".to_string()),
+            message: problem.message,
+            ..Default::default()
+        });
+    }
+    by_file
 }
 
 /// A document's path and a position in it.

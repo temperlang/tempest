@@ -13,14 +13,16 @@
 //! sum several backends' tallies.
 
 use crate::ignore::IgnoreFile;
-use crate::interp::run_tests;
+use crate::interp::{TEST_FUEL, run_tests};
+use crate::library::Diagnostic;
 use crate::library::Level;
-use crate::log::{LogFormat, Value, record, write_json_diagnostics};
+use crate::log::{LogFormat, Value, record, write_json_diagnostic, write_json_diagnostics};
 use crate::project::{
     LibrarySources, duplicate_names, find_libraries_ignoring, library_of, load_library, work_root,
 };
 use crate::settle::{Settled, settle};
 use crate::sources::Sources;
+use std::collections::HashSet;
 use std::io::Write;
 
 /// Tests the libraries under `dir`'s work root, writing the failures (or
@@ -37,6 +39,7 @@ pub fn test_dir(
     let root = work_root(sources, dir);
     let options = TestOptions {
         verbose,
+        fuel: Some(TEST_FUEL),
         ..TestOptions::default()
     };
     let Some((ok, tally)) = test_libraries(sources, &root, &options, out, err) else {
@@ -58,6 +61,10 @@ pub struct TestOptions<'a> {
     pub ignore: Option<&'a IgnoreFile>,
     /// Text, or JSON records, all to `err`, as Kotlin's `--logformat`.
     pub log: LogFormat,
+    /// The steps each test may take on the interpreter (`--fuel`), and
+    /// its top-level code before them; `None` for no limit. The CLI's
+    /// default is [`TEST_FUEL`].
+    pub fuel: Option<u64>,
 }
 
 /// Tests the libraries under a work root on the interpreter, as
@@ -84,6 +91,7 @@ pub fn test_libraries(
         err,
     )?;
     let mut ok = true;
+    let mut reported = Reported::default();
     for library in &libraries {
         if options
             .library
@@ -91,19 +99,16 @@ pub fn test_libraries(
         {
             continue;
         }
-        let tests = match test_library(sources, library, &libraries) {
-            Ok(tests) => tests,
+        let (tests, settled) = match test_library(sources, library, &libraries, options.fuel) {
+            Ok(tested) => tested,
             Err(message) => {
                 problem(options.log, err, "LibraryUnreadable", &message, &[]);
                 ok = false;
                 continue;
             }
         };
-        let _ = err.write_all(match json {
-            true => tests.json_diagnostics.as_bytes(),
-            false => tests.diagnostics.as_bytes(),
-        });
-        ok &= tests.errors == 0;
+        let diagnostics = reported.new_diagnostics(&settled, library, &libraries, options.log);
+        let _ = err.write_all(diagnostics.as_bytes());
         let failed = tests.failure.is_some() || tests.results.iter().any(|(_, f)| f.is_some());
         if json {
             let name = &library.config.name;
@@ -150,7 +155,10 @@ pub fn test_libraries(
         }
         for (name, failure) in &tests.results {
             let _ = match failure {
-                None if options.verbose => writeln!(out, "  ok      {name}"),
+                None if options.verbose => match tests.steps_of(name) {
+                    Some(steps) => writeln!(out, "  ok      {name} ({steps} steps)"),
+                    None => writeln!(out, "  ok      {name}"),
+                },
                 None => Ok(()),
                 Some(cause) => writeln!(out, "  failed  {name} - {cause}"),
             };
@@ -160,6 +168,8 @@ pub fn test_libraries(
         }
         tally.add(&tests);
     }
+    // Errors anywhere fail the run, whichever libraries were tested.
+    ok &= reported.errors.is_empty();
     Some((ok && tally.all_passed(), tally))
 }
 
@@ -235,8 +245,11 @@ pub struct LibraryTests {
     pub results: Vec<(String, Option<String>)>,
     /// How many tests the library declares.
     pub defined: usize,
-    /// What the library logged.
+    /// What the library logged, as [`crate::interp::Run::output`] keeps it.
     pub output: Vec<String>,
+    /// Each test that ran on the interpreter, by name, with the steps it
+    /// took.
+    pub steps: Vec<(String, u64)>,
     /// How the run failed, if it stopped before the tests finished.
     pub failure: Option<String>,
     /// The library's diagnostics, a line each, with file, line and column.
@@ -248,12 +261,15 @@ pub struct LibraryTests {
 }
 
 /// Settles a library, with the modules it imports from the libraries in
-/// `all`, and runs its tests. The error names a file that can't be read.
+/// `all`, and runs its tests, each with `fuel` steps if given, giving
+/// them and the settled library. The error names a file that can't be
+/// read.
 pub fn test_library(
     sources: &Sources,
     library: &LibrarySources,
     all: &[LibrarySources],
-) -> Result<LibraryTests, String> {
+    fuel: Option<u64>,
+) -> Result<(LibraryTests, Settled), String> {
     let mut settled = settle(load_library(sources, library, all)?);
     // Only the library's own tests, not those of libraries it imports.
     for module in &mut settled.modules {
@@ -262,12 +278,13 @@ pub fn test_library(
             module.tests = None;
         }
     }
-    Ok(run_settled_tests(&settled, None))
+    Ok((run_settled_tests(&settled, fuel), settled))
 }
 
 /// Runs a settled library's tests, those of its modules that still have
-/// them, stopping after `fuel` evaluation steps if given, as
-/// [`test_library`] and the web playground do.
+/// them, as [`test_library`] and the web playground do. With `fuel`, the
+/// top-level code and each test may take that many evaluation steps; a
+/// test that runs out fails alone.
 pub fn run_settled_tests(settled: &Settled, fuel: Option<u64>) -> LibraryTests {
     let mut diagnostics = String::new();
     write_located_diagnostics(settled, &mut diagnostics);
@@ -302,10 +319,20 @@ pub fn run_settled_tests(settled: &Settled, fuel: Option<u64>) -> LibraryTests {
         results: parse_junit(&report),
         defined,
         output,
+        steps: run.test_steps,
         failure: run.failure,
         diagnostics,
         json_diagnostics,
         errors,
+    }
+}
+
+impl LibraryTests {
+    /// The steps a test took, by its name, if it ran on the interpreter.
+    pub fn steps_of(&self, test: &str) -> Option<u64> {
+        (self.steps.iter())
+            .find(|(name, _)| name == test)
+            .map(|s| s.1)
     }
 }
 
@@ -343,17 +370,85 @@ fn attribute(tag: &str, name: &str) -> Option<String> {
 /// Diagnostics as `path:line:column: level: message`, a line each, with
 /// the column in characters, both from 1.
 pub fn write_located_diagnostics(s: &Settled, out: &mut String) {
-    use std::fmt::Write;
     for d in &s.library.diagnostics {
-        let level = format!("{:?}", d.level).to_lowercase();
-        let (file, offset) = s.library.locate(d.span.start);
-        let file = &s.library.files[file.0 as usize];
-        let source = file.parsed.source();
-        let before = source.get(..offset as usize).unwrap_or(source);
-        let line = before.matches('\n').count() + 1;
-        let column = before.rsplit('\n').next().unwrap_or("").chars().count() + 1;
-        let path = &file.path;
-        let _ = writeln!(out, "{path}:{line}:{column}: {level}: {}", d.message.text());
+        write_located_diagnostic(s, d, out);
+    }
+}
+
+/// One diagnostic as [`write_located_diagnostics`] writes each.
+pub fn write_located_diagnostic(s: &Settled, d: &Diagnostic, out: &mut String) {
+    use std::fmt::Write;
+    let level = format!("{:?}", d.level).to_lowercase();
+    let (file, offset) = s.library.locate(d.span.start);
+    let file = &s.library.files[file.0 as usize];
+    let source = file.parsed.source();
+    let before = source.get(..offset as usize).unwrap_or(source);
+    let line = before.matches('\n').count() + 1;
+    let column = before.rsplit('\n').next().unwrap_or("").chars().count() + 1;
+    let path = &file.path;
+    let _ = writeln!(out, "{path}:{line}:{column}: {level}: {}", d.message.text());
+}
+
+/// The diagnostics a command has reported, across the libraries it
+/// settles. A library is settled with the modules it imports from other
+/// libraries, and their diagnostics, so each is reported once, by the
+/// first settle that finds it, and counted under the library whose file
+/// it's in, not under each library importing it. (Settling each library
+/// once, giving importers its interface, would avoid finding them again;
+/// notes/library-cache.md.)
+#[derive(Default)]
+pub struct Reported {
+    /// Each reported: its file, span in the file, and message.
+    seen: HashSet<(String, u32, u32, String)>,
+    /// Each library with errors, by name, and how many, in the order
+    /// first reported.
+    pub errors: Vec<(String, usize)>,
+}
+
+impl Reported {
+    /// `settled`'s diagnostics that aren't reported yet, as text or JSON
+    /// records, a line each, counting their errors under the libraries
+    /// among `all` that hold their files, or else under `library`, the
+    /// one settled.
+    pub fn new_diagnostics(
+        &mut self,
+        settled: &Settled,
+        library: &LibrarySources,
+        all: &[LibrarySources],
+        log: LogFormat,
+    ) -> String {
+        let mut text = String::new();
+        let lib = &settled.library;
+        for d in &lib.diagnostics {
+            let (file, start) = lib.locate(d.span.start);
+            let (_, end) = lib.locate(d.span.end.max(d.span.start));
+            let file = &lib.files[file.0 as usize];
+            let key = (file.path.clone(), start, end, d.message.text());
+            if !self.seen.insert(key) {
+                continue;
+            }
+            match log {
+                LogFormat::Text => write_located_diagnostic(settled, d, &mut text),
+                LogFormat::Json => write_json_diagnostic(settled, d, &mut text),
+            }
+            if d.level != Level::Error {
+                continue;
+            }
+            let dir = &lib.modules[file.module.0 as usize].dir;
+            let owner = &library_of(all, dir).unwrap_or(library).config.name;
+            match self.errors.iter_mut().find(|(name, _)| name == owner) {
+                Some((_, count)) => *count += 1,
+                None => self.errors.push((owner.clone(), 1)),
+            }
+        }
+        text
+    }
+
+    /// The errors reported in a library's own files.
+    pub fn errors_in(&self, library: &str) -> usize {
+        (self.errors.iter())
+            .find(|(name, _)| name == library)
+            .map_or(0, |(_, count)| *count)
     }
 }
 

@@ -1680,6 +1680,9 @@ impl Settle {
         if let Some(extension) = self.static_extension_of(decorator) {
             self.static_extension_marks.insert(call, extension);
         }
+        if let Some(name) = self.extension_of(decorator) {
+            self.extension_marks.insert(call, name);
+        }
         let var = self
             .lib
             .name(decorator)

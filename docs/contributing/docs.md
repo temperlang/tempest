@@ -47,7 +47,8 @@ styles:
 - **Temper examples** are ```` ```temper ```` blocks, and each ends
   with a marker comment saying what it does, as below. Literate Temper
   files are ```` ```tempermd ````, interactive sessions ```` ```console ````,
-  and Temper that's only shown, never compiled, ```` ```temper inert ````.
+  and Temper that's only shown, never compiled, ```` ```temper inert ````,
+  which the site highlights, tints, and labels "inert".
 - Links are relative, to files in this repository, and never carry line
   numbers; link a file, and name what's in it.
 - Write "Temper" for the language and its tools, and "tempest" only for

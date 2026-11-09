@@ -30,7 +30,7 @@ functions, the tests that pin them, and what's weak or planned.
   - [The whole library settled again on each pause](#the-whole-library-settled-again-on-each-pause)
   - [std written to a temporary directory](#std-written-to-a-temporary-directory)
   - [URIs converted by hand](#uris-converted-by-hand)
-  - [No catch for panics](#no-catch-for-panics)
+  - [Panics caught per request and analysis](#panics-caught-per-request-and-analysis)
   - [Messages and capabilities](#messages-and-capabilities)
   - [Kotlin's language server](#kotlins-language-server)
 - [The VS Code extension](#the-vs-code-extension)
@@ -364,17 +364,41 @@ URI is kept as the editor sent it, for replies.
 **Cons:** untested for UNC paths, lowercase or escaped drive letters
 from other clients, and symlinks; a URI that isn't `file:` (an untitled
 buffer) passes through as a "path", whose directory is `.`, so the
-server looks for libraries from its working directory. Tests before
-claiming Windows support (audit D5).
+server looks for libraries from its working directory. The VS Code
+extension sends only `file:` documents, so a diff's old side (`git:`)
+or an untitled buffer isn't analyzed and flagged; other clients may
+send them. Tests before claiming Windows support (audit D5).
 
-### No catch for panics
+### Panics caught per request and analysis
 
-Nothing catches a panic. In development builds, a panic ends the
-server's thread and `tempest` exits 1; in the released binaries, built
-with the `small` profile's `panic = "abort"`, the process aborts.
-Either way the editor loses the server until it restarts it. The audit's
-proposed fix, `catch_unwind` around each analysis and request with an
-"internal error" diagnostic, needs the shipped binary to unwind first.
+**Chosen:** each request ([`handle`](../../../crates/temper-lsp/src/lib.rs))
+and each analysis ([`analyze`](../../../crates/temper-lsp/src/lib.rs):
+reading the library, settling it, and its diagnostics) runs under
+`catch_unwind`. A request that panics gets an error response (-32603,
+"internal error (a bug in tempest) in METHOD: MESSAGE"); an analysis
+that panics publishes that as an error on the document at its start,
+drops the unit's analysis, which no longer fits the text, and returns
+nothing, so a question about the document answers null and the next
+one tries again. The panic hook's message, with where it happened, and
+a `tempest lsp:` line go to stderr, the server's log in an editor. The
+server goes on serving.
+
+This needs unwinding: the `small` profile, which the released binaries
+and VS Code packages use, aborted on panic until 2026-11-09 and now
+unwinds, as release always did. It made the small binary 11.6% bigger
+(7,211,544 to 8,047,128 bytes on Linux x64, 3,154,295 to 3,562,419
+gzipped). The playground's wasm, which can't unwind, keeps aborting
+under a profile of its own, `small-wasm`, and is unchanged.
+
+**Rejected:** analysis in a child process, which survives anything,
+aborts and stack overflows too, but costs a process and a copy of the
+sources per pause; keeping `abort` and letting the editor restart the
+server, which loses every open document's state and shows nothing about
+why. A stack overflow still aborts: Rust can't catch one.
+
+**Test hook:** [`serve_with_hook`](../../../crates/temper-lsp/src/lib.rs),
+hidden from the docs, makes analyses of units whose open documents
+contain a marker panic, and the request `tempest/testPanic` too.
 
 ### Messages and capabilities
 
@@ -478,10 +502,19 @@ in one minute share one; a Marketplace release will want real versions.
 
 **Chosen:** `syntaxes/temper.tmLanguage.json` for `.temper`, and
 `syntaxes/temper-markdown.tmLanguage.json` for literate `.temper.md`,
-which embeds Temper in fenced blocks (untagged or tagged `temper`, not
-`inert`) and indented blocks, as the
+which embeds Temper in fenced blocks (untagged or tagged `temper`) and
+indented blocks, as the
 [literate split](../../../crates/temper-syntax/src/literate.rs) reads
-them, and uses VS Code's Markdown grammar for the prose. Nothing can run
+them, and uses VS Code's Markdown grammar for the prose. Blocks tagged
+`temper inert`, which aren't compiled, are Temper too, scoped
+`meta.embedded.block.temper.inert`, with `inert` on the fence scoped
+`storage.modifier.inert.temper`; the extension
+([`inert.ts`](../../../editors/vscode/src/inert.ts)) tints their lines
+and labels the fence "inert", with a hover, "Not compiled: shown for
+reading only", from the same fence scan the preview uses
+([`inertBlocks`](../../../editors/vscode/src/page.ts)); the theme colors
+are `temper.inertBlockBackground` and `temper.inertLabelForeground`. The
+language server doesn't analyze them, as the compiler doesn't. Nothing can run
 VS Code's TextMate engine offline, so [`check_grammar.py`](../../../editors/vscode/check_grammar.py)
 checks structure, scopes samples with a small TextMate tokenizer of its
 own, and checks that the keywords match the playground's and
@@ -521,9 +554,11 @@ Markdown library of our own.
 **Pros:** the same rendering as VS Code's preview, with no Markdown
 dependency; the preview is safe for untrusted documents.
 
-**Cons:** needs VS Code's built-in Markdown extension enabled; the
-preview highlights `temper inert` blocks, which the editor's grammar
-leaves as prose, a deliberate difference.
+**Cons:** needs VS Code's built-in Markdown extension enabled. The
+engine keeps only a fence's first word (`temper`), so `inert` blocks
+are found in the source by their fence's line (`data-line`) and marked
+there: tinted, with an "inert" label in the corner, as in the editor and
+on the docs site.
 
 ### Scrolling in step
 
@@ -577,14 +612,17 @@ line in view. The messages are typed in
   (`a_session`: capabilities, unsaved errors, incremental edits, hover,
   definition, completion, references, rename and its refusals, outlines,
   signature help, unknown requests); UTF-16 positions in a lone file;
-  `exit` without `shutdown`; definition into std. Unit tests in
+  `exit` without `shutdown`; definition into std; panics in an analysis
+  and a request becoming internal errors, with the server answering
+  after them (`panics_become_internal_errors`). Unit tests in
   [`lib.rs`](../../../crates/temper-lsp/src/lib.rs): UTF-16 positions,
   URIs, incremental changes, and framing.
 - **The extension**, in a real VS Code ([`suite.ts`](../../../editors/vscode/test/suite.ts),
   run by [`run.ts`](../../../editors/vscode/test/run.ts) with
   `@vscode/test-electron`, VS Code pinned, against the platform package
   as built): it uses the bundled tempest; diagnostics for unsaved text
-  and an incremental edit; hover; definition in the other file;
+  and an incremental edit; none for an untitled document, as only
+  `file:` documents go to the server; hover; definition in the other file;
   completion; rename across both files; and the preview's headings,
   highlighted Temper, a relative image, a live update, and scrolling
   both ways. CI runs it under xvfb.
@@ -595,15 +633,19 @@ line in view. The messages are typed in
   scroll mapping), under Node's test runner; and
   [`check_grammar.py`](../../../editors/vscode/check_grammar.py).
 
-Not covered: a panic during analysis; cross-library staleness; disk
+Not covered: a real panic (the hook stands in for one); cross-library staleness; disk
 changes to closed files; non-`file:` URIs; Windows paths; latency on a
 large library; and references, outlines, and signature help through VS
 Code itself (they're covered at the protocol level).
 
 ## Known weaknesses and planned changes
 
-- **A panic ends the server**, and released builds abort; unwinding plus
-  a catch per request or analysis, with an "internal error" diagnostic.
+- **A stack overflow ends the server**, as Rust aborts on one; deep
+  input is bounded where it's known to recurse (the parser's and the
+  interpreter's limits), but not everywhere.
+- **State after a caught panic** isn't checked: a panic in the middle of
+  a request may leave the server's tables half-updated
+  (`AssertUnwindSafe`); a unit stale or missing is analyzed again.
 - **Library discovery on every pause**; cache it per work root, and
   invalidate on file events.
 - **Importers don't go stale** when an imported library's open file

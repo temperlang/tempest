@@ -34,6 +34,12 @@ playground itself, doesn't carry it or those crates. What this costs
 (no cancellation, one request at a time) and the alternatives:
 [one synchronous loop, in detail](detail/09-language-server.md#one-synchronous-loop).
 
+A panic, a bug in tempest, doesn't end the server: each request and
+each analysis is caught, the request answered with an error and the
+analysis's document given an "internal error" diagnostic, and the
+server goes on
+([in detail](detail/09-language-server.md#panics-caught-per-request-and-analysis)).
+
 ## What gets analyzed
 
 - **Open documents** live in memory, kept current by incremental sync:

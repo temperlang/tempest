@@ -38,8 +38,10 @@ flowchart LR
   `async` block is a generator too, run from a queue, which also pauses
   at an `await` of a promise that isn't resolved yet.
 - **Bounded.** Optional fuel stops a run after a number of steps (the
-  playground sets it; `tempest test` doesn't yet), and calls nest at most 2000 deep (500 in
-  the browser), so runaway code can't hang a test run or crash a tab
+  playground sets it, and `tempest test` gives each test its own, so a
+  runaway test fails alone), output kept for tests is capped at 64 KiB,
+  and calls nest at most 2000 deep (500 in the browser), so runaway code
+  can't hang a test run, fill memory, or crash a tab
   ([limits, in detail](detail/04-interpreter.md#limits-fuel-call-depth-and-nesting)).
 
 Why each of these, and what else was considered:

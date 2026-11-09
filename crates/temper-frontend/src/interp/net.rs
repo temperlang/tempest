@@ -15,7 +15,7 @@ pub struct NetResponse {
     body: Rc<Promise>,
 }
 
-impl Interp {
+impl Interp<'_> {
     /// `sendRequest(url, method, bodyContent, bodyMimeType)`: a promise
     /// of a `NetResponse`. As in Kotlin Temper's Rust backend, the request
     /// is sent, and waited for, when the run queue reaches it. No response

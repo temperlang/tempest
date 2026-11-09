@@ -296,12 +296,17 @@ twice at one place ([`check_not_void`](../../../crates/temper-frontend/src/typin
 [`check_member_exists`](../../../crates/temper-frontend/src/typing.rs)),
 which is quadratic in errors.
 
-**A known hack:** [`check_member_exists`](../../../crates/temper-frontend/src/typing.rs)
-skips the whole library if any file's source contains the text
-`@extension`, comment or not, since extensions aren't supported yet. It
-should skip only where an extension of that name is declared or
-imported. The same function lists the builtin types whose members are
-known in full by name.
+**Extensions:** instance extensions, `@extension("name")`, aren't
+supported yet, but one may supply a member, so
+[`check_member_exists`](../../../crates/temper-frontend/src/typing.rs)
+doesn't report `x.name` where an extension of that name is visible, as
+a name is looked up: declared there or in an enclosing scope, or
+imported ([`extension_visible`](../../../crates/temper-frontend/src/extensions.rs);
+declarations and the imports of them are recorded as static extensions
+are). Until 2026-11-09 it skipped the whole library if any file's text
+contained `@extension`, a comment included (the audit's C1). The same
+function still lists the builtin types whose members are known in full
+by name.
 
 ### Resolutions recorded for later stages
 
@@ -419,8 +424,8 @@ it testable on its own.
 |---|---|---|
 | Types | unit tests in [`types.rs`](../../../crates/temper-frontend/src/types.rs) | Subtyping, function types, builtin supertypes against core, generic subtypes, users' generic supertypes |
 | Core's members | unit tests in [`core_members.rs`](../../../crates/temper-frontend/src/typing/core_members.rs) | Signatures read from core, generic ones, the list editors complete from |
-| Typing cases | [`types.cases`](../../../crates/temper-frontend/tests/settle/types.cases) (31), [`class-types.cases`](../../../crates/temper-frontend/tests/settle/class-types.cases) (17), [`flow.cases`](../../../crates/temper-frontend/tests/settle/flow.cases) (7), [`fields-first.cases`](../../../crates/temper-frontend/tests/settle/fields-first.cases) (11) | Each slice's types and errors as snapshots, many named "as Kotlin Temper reports them"; each language change has a case named in notes/kotlin-differences.md |
-| Integration | [`settle.rs`](../../../crates/temper-frontend/tests/settle.rs): `every_expression_is_typed`, `calls_resolve_to_what_they_call`, `fun_values_take_their_interface` | No expression left untyped or call unresolved in a program using most of what's typed; resolutions by kind |
+| Typing cases | [`types.cases`](../../../crates/temper-frontend/tests/settle/types.cases) (33), [`class-types.cases`](../../../crates/temper-frontend/tests/settle/class-types.cases) (17), [`flow.cases`](../../../crates/temper-frontend/tests/settle/flow.cases) (7), [`fields-first.cases`](../../../crates/temper-frontend/tests/settle/fields-first.cases) (11) | Each slice's types and errors as snapshots, many named "as Kotlin Temper reports them"; each language change has a case named in notes/kotlin-differences.md |
+| Integration | [`settle.rs`](../../../crates/temper-frontend/tests/settle.rs): `every_expression_is_typed`, `calls_resolve_to_what_they_call`, `fun_values_take_their_interface`, `imported_extensions_hide_no_member` | No expression left untyped or call unresolved in a program using most of what's typed; resolutions by kind; an imported `@extension` hiding "No member" only where it's imported |
 | Coverage | `compat/count_untyped.py` over the functional tests, std, and real libraries | What's still unknown, unresolved, or relying on identity, per file |
 | Downstream | tmpl goldens in `crates/temper-frontend/tests/to_tmpl/`, the functional tests on every backend under strict checkers (pyright, mypy, `tsc --strict`, clippy) | Types that reach generated code: a wrong type shows up as a type error in a statically typed backend |
 | Property fuzzer | `mutated_inputs_settle` | Typing runs in it, so no panics or nondeterminism on edited input |
@@ -430,8 +435,6 @@ it testable on its own.
 - No script compares type errors with Kotlin's automatically, as the
   syntax has. The cases were checked against Kotlin by hand when
   written, so a later change in either compiler goes unnoticed.
-- The `@extension` skip has no test, so removing it, or a comment that
-  trips it, isn't caught.
 - Unknown types pass silently; only the coverage count shows them, and
   nothing fails when it grows.
 - Error-heavy input is fuzzed only for panics, not for whether its
@@ -439,11 +442,9 @@ it testable on its own.
 
 ## Known weaknesses and planned changes
 
-- **The `@extension` hack** in [`check_member_exists`](../../../crates/temper-frontend/src/typing.rs)
-  ([above](#checks-after-inference-deeper-errors-first-in-kotlins-words)):
-  a comment mentioning `@extension` turns off member checks for the
-  whole library. Fix: skip only where an extension of that name is
-  declared or imported, with a test.
+- **Instance extensions** (`@extension("name")`) are recorded only to
+  keep "No member" from being reported where one is visible; a call of
+  one still fails in translation ("a call typing didn't resolve").
 - **`Never` without its `T`:** a backend can't get the fallback type, and
   a `Never<A>` used as an unrelated `B` isn't reported. Planned before
   more of code generation relies on it.
