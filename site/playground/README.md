@@ -4,7 +4,7 @@ The whole compiler, as wasm, in the browser: type Temper on the left,
 and see every backend's output, the errors, and the tests' results on
 the right, updated as you type, with no server.
 
-    uv run site/playground/build.py [--deps DIR]
+    uv run site/playground/build.py [--deps DIR] [--smoke [--chromium PATH]]
     python3 -m http.server -d site/_out/playground
 
 `build.py` builds `crates/temper-wasm` (`small` profile, wasm32; set
@@ -13,7 +13,9 @@ the right, updated as you type, with no server.
 linked from there), type-checks the TypeScript with `tsc`, bundles and
 minifies it with esbuild, and prints each file's size. CI runs it with
 `--skip-wasm` after its wasm build; the Pages workflow publishes it,
-with the docs site around it ([site/docs](../docs/build.py)).
+with the docs site around it ([site/docs](../docs/build.py)), at
+`playground/` under it, so the top bar's Temper logo links to the site's
+home (`../`); served alone, that link just leads back to the playground.
 
 ## How it fits together
 
@@ -68,3 +70,22 @@ The worker keeps the source it last settled, and the wasm's `hover`,
 `definition`, `completions`, `references`, `rename`, and
 `signature_help` answer from it, at UTF-16 offsets
 ([docs/internals/08-playground.md](../../docs/internals/08-playground.md#editor-queries)).
+
+## Tests
+
+- **Every example works:** `crates/temper-wasm/tests/examples.rs`
+  compiles each file in `examples/` as the page does, with no
+  diagnostics, every backend's files, and the interpreter's output and
+  tests' results pinned. A new example needs its line there.
+- **A smoke test in a browser:** `smoke.mjs` serves the build with a
+  tiny static server and drives headless Chromium through it, with
+  `site/docs/mermaid`'s playwright-core: each example fills every
+  backend's tab, has no errors, and runs, with both runs agreeing; then
+  a hover, a permalink across a reload, and the Temper link. Console
+  errors and failed requests fail it. It takes 8 to 13 s.
+
+      node site/playground/smoke.mjs [DIR] [--chromium PATH]
+
+  or `build.py --smoke`. Chromium is `--chromium`, else
+  `$TEMPEST_CHROMIUM`, else Playwright's (`npx playwright-core install
+  --only-shell chromium` in `site/docs/mermaid`). CI runs both.

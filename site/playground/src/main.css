@@ -24,6 +24,7 @@
   --tok-meta: #a8326e;
   --mono: ui-monospace, "Cascadia Code", "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --logo-ink: #2b3a55;
   color-scheme: light;
 }
 
@@ -51,6 +52,7 @@
     --tok-function: #9db5ff;
     --tok-atom: #ffb370;
     --tok-meta: #f78fc0;
+    --logo-ink: #ffffff;
     color-scheme: dark;
   }
 }
@@ -78,6 +80,7 @@
   --tok-function: #9db5ff;
   --tok-atom: #ffb370;
   --tok-meta: #f78fc0;
+  --logo-ink: #ffffff;
   color-scheme: dark;
 }
 
@@ -118,8 +121,17 @@ button:hover, select:hover { border-color: var(--accent); }
   border-bottom: 1px solid var(--border);
 }
 
-h1 { margin: 0; font-size: 1.3rem; font-weight: 700; letter-spacing: -0.01em; }
-h1 span { font-weight: 400; color: var(--muted); }
+/* The top bar's "Temper" home link: the logo, as the docs site's header
+   has it, leading back to the site (../), with "playground" beside it. */
+header.bar { background: var(--surface); }
+.brand { display: flex; align-items: center; gap: 0.6rem; margin: 0; font-size: 1.3rem; font-weight: 400; }
+.brand a { display: flex; border-radius: 4px; }
+.brand span { color: var(--muted); }
+.logo { display: block; height: 30px; width: auto; }
+.logo-1 { fill: #e8c4c4; }
+.logo-3 { fill: #ce7777; }
+.logo-4 { fill: var(--logo-ink); }
+.logo-5 { opacity: 0.5; }
 
 .field { display: flex; align-items: center; gap: 0.5rem; color: var(--muted); }
 .actions { display: flex; gap: 0.5rem; margin-left: auto; }
@@ -233,4 +245,6 @@ pre { margin: 0; font: 0.95rem/1.5 var(--mono); white-space: pre-wrap; overflow-
   body { height: auto; min-height: 100%; }
   .editor { font-size: 14px; }
   .tabs { flex-wrap: wrap; }
+  .brand { font-size: 1.15rem; }
+  .logo { height: 26px; }
 }

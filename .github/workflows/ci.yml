@@ -8,9 +8,10 @@
 # by g++ with every warning an error, and run, also under AddressSanitizer,
 # UndefinedBehaviorSanitizer, and ThreadSanitizer, and generated Lua run
 # by Lua 5.4.6, parsed by luac, and type checked by LuaLS),
-# the wasm build and the playground (type checked and bundled), the VS
-# Code extension (type checked, bundled, packaged, and tested in a real
-# VS Code against the release build), Temper's functional tests (copied
+# the wasm build and the playground (type checked, bundled, and smoke
+# tested in headless Chromium), the VS Code extension (type checked,
+# bundled, packaged, and tested in a real VS Code against the release
+# build), Temper's functional tests (copied
 # into vendor/temper/, which has its patches) on tempest's interpreter, the
 # docs' examples on the release build, the docs site (built, its Mermaid
 # diagrams drawn, and its links checked), and `tempest test` on Chromarite and Ordable,
@@ -203,6 +204,12 @@ jobs:
         run: |
           npm ci --ignore-scripts --no-audit --no-fund
           npx --no-install playwright-core install --with-deps --only-shell chromium
+      # The playground in headless Chromium (site/playground/smoke.mjs),
+      # with the diagram renderer's playwright-core and Chromium: each
+      # example compiles, fills every backend's tab without errors, and
+      # runs, and a hover, a permalink, and the Temper link work.
+      - name: Playground smoke test
+        run: node site/playground/smoke.mjs
       - name: Docs site
         run: uv run site/docs/build.py --kelpto .kelpto --tempest target/small/tempest --out "$RUNNER_TEMP/site"
       - name: Functional tests

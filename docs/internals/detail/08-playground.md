@@ -487,13 +487,25 @@ with `--limit` on builds.
 - **The queries** themselves:
   [`analysis.rs`](../../../crates/temper-analysis/tests/analysis.rs)
   ([page 9's detail](09-language-server.md#tests)).
+- **Every bundled example**, in
+  [`examples.rs`](../../../crates/temper-wasm/tests/examples.rs):
+  `compile_into` with `RUN | TESTS` and every backend, as the page
+  calls it, with no diagnostics, each backend's files, and the
+  interpreter's output and tests' results pinned.
 - **The wasm build** in CI (`cargo build --profile small --target
   wasm32-unknown-unknown`), and the page type-checked and bundled.
+- **The page in a browser:**
+  [`smoke.mjs`](../../../site/playground/smoke.mjs) serves the build and
+  drives headless Chromium (the docs site's playwright-core): each
+  example fills all seven backends' tabs, has no error diagnostics, and
+  runs, with the interpreter's and the JavaScript's runs agreeing; a
+  hover shows a type; an edit survives a reload through the permalink;
+  and the Temper link leads to `../`. Console errors and failed requests
+  fail it. CI runs it after the docs' Chromium is installed.
 
-Not covered: the TypeScript has no tests beyond `tsc`'s strict checks,
-and nothing loads the page in a browser in CI. Worker replacement,
-permalinks, query waiting, and the JavaScript run are tested only by
-hand.
+Not covered: worker replacement, query waiting, and the other editor
+features (completion, rename, go to definition) are tested in the
+browser only by hand, though the wasm tests cover their answers.
 
 ## Known weaknesses and planned changes
 
@@ -504,7 +516,7 @@ hand.
 - **No budget for settling**; the stale timer is the only guard.
 - **Two backend numberings** in the API.
 - **Hand-written JSON** on both sides, kept in step by hand.
-- **No browser tests**; a headless smoke test of the published page
-  would catch a broken bundle before people do.
+- **The smoke test runs on CI's build, not the published page**; one
+  after each Pages deploy would catch a broken deploy too.
 - **Permalinks name no compiler version.**
 - **`watch`** is planned, as a loop first.

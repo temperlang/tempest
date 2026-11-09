@@ -69,6 +69,10 @@ two very different ways of running a program agree.
   generated JavaScript, with the runtime from `vendor/temper/be-js/`.
 - [`build.py`](../../site/playground/build.py): builds the wasm and bundles
   the page. GitHub Pages publishes it from `main`.
+- [`smoke.mjs`](../../site/playground/smoke.mjs): CI's smoke test of the
+  built page in headless Chromium, every example, and
+  [`examples.rs`](../../crates/temper-wasm/tests/examples.rs): each
+  example's output, pinned, through the wasm's API.
 
 The messages between the page and its workers, the limits on runaway
 code, CodeMirror's part, and permalinks are in

@@ -32,5 +32,6 @@ temper-tmpl = { path = "../temper-tmpl" }
 temper-driver = { path = "../temper-driver", default-features = false }
 
 [dev-dependencies]
+serde_json = "1"
 temper-be-testkit = { path = "../temper-be-testkit" }
 temper-funtests = { path = "../temper-funtests" }

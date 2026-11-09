@@ -4,6 +4,7 @@
 """Builds the playground into site/_out/playground/.
 
     uv run site/playground/build.py [--deps DIR] [--skip-wasm] [--out DIR]
+                                    [--smoke [--chromium PATH]]
 
 1. Builds crates/temper-wasm with the `small` profile for wasm32 (set
    RUSTUP_TOOLCHAIN to pick the toolchain), unless `--skip-wasm`.
@@ -14,12 +15,17 @@
 4. Bundles and minifies it with esbuild, with the examples as text and
    the JavaScript backend's runtime from vendor/temper/be-js, and writes
    the bundled packages' licenses beside it.
-5. Copies in index.html and the wasm, and prints each file's size, raw
-   and gzipped.
+5. Copies in index.html, with the Temper logo inlined (from
+   docs/images/, its colors from main.css, so the theme toggle reaches
+   it), and the wasm, and prints each file's size, raw and gzipped.
 6. Busts caches: every URL the page loads (main.js and main.css from
    index.html; the workers and the wasm from main.js) gets `?v=HASH`, a
    hash of the built files, so a normal reload picks up a new build. The
    bundles import nothing else, so no other URLs need it.
+
+7. With `--smoke`, runs smoke.mjs on the output: each example in
+   headless Chromium (`--chromium PATH`, else $TEMPEST_CHROMIUM, else
+   Playwright's), with site/docs/mermaid's playwright-core.
 
 Serve the output with `python3 -m http.server -d site/_out/playground`.
 """
@@ -30,6 +36,7 @@ import gzip
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -39,6 +46,8 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 WASM = ROOT / "target/wasm32-unknown-unknown/small/temper_wasm.wasm"
 CORE = ROOT / "vendor/temper/be-js/temper-core/index.js"
+LOGO = ROOT / "docs/images/temper-logo-text-auto.svg"
+MERMAID = ROOT / "site/docs/mermaid"
 ENTRIES = ["src/main.ts", "src/compiler-worker.ts", "src/js-worker.ts", "src/main.css"]
 
 
@@ -104,6 +113,20 @@ def licenses(meta: dict, modules: Path, out: Path) -> None:
     (out / "THIRD-PARTY-NOTICES.txt").write_text("\n".join(notes))
 
 
+def logo() -> str:
+    """The docs site's logo, inline, without Inkscape's metadata and ids,
+    its classes renamed `logo-N` for main.css to color."""
+    svg = LOGO.read_text()
+    body = svg[svg.index("<g", svg.index("</defs>")) : svg.rindex("</svg>")]
+    body = re.sub(r'\s+id="[^"]*"', "", body)
+    body = re.sub(r'class="cls-(\d+)"', r'class="logo-\1"', body)
+    body = re.sub(r"\s+", " ", body).replace(" />", "/>").replace("> <", "><").strip()
+    view = re.search(r'viewBox="([^"]+)"', svg)
+    if not view:
+        raise SystemExit(f"build.py: no viewBox in {LOGO}")
+    return f'<svg class="logo" viewBox="{view.group(1)}" role="img" aria-label="Temper">{body}</svg>'
+
+
 VERSION_SLOT = "@@BUILD_VERSION@@"
 
 
@@ -143,6 +166,8 @@ def main() -> int:
     parser.add_argument("--deps", type=Path, help="install npm packages here, linked from node_modules")
     parser.add_argument("--skip-wasm", action="store_true", help="use the wasm already built")
     parser.add_argument("--out", type=Path, default=ROOT / "site/_out/playground")
+    parser.add_argument("--smoke", action="store_true", help="then run smoke.mjs on it in headless Chromium")
+    parser.add_argument("--chromium", help="Chromium for --smoke (default $TEMPEST_CHROMIUM, else Playwright's)")
     args = parser.parse_args()
 
     if not args.skip_wasm:
@@ -167,11 +192,29 @@ def main() -> int:
         f"--metafile={meta}", f"--outdir={out}", "--log-level=warning")
     licenses(json.loads(meta.read_text()), modules, out)
     meta.unlink()
-    shutil.copyfile(HERE / "index.html", out / "index.html")
+    page = (HERE / "index.html").read_text()
+    if "@@LOGO@@" not in page:
+        raise SystemExit("build.py: no @@LOGO@@ in index.html")
+    (out / "index.html").write_text(page.replace("@@LOGO@@", logo()))
     shutil.copyfile(WASM, out / "temper_wasm.wasm")
     print(f"build version {bust_caches(out)}")
     sizes(out)
+    if args.smoke:
+        return smoke(out, args.chromium)
     return 0
+
+
+def smoke(out: Path, chromium: str | None) -> int:
+    """Runs smoke.mjs on the built page, with site/docs/mermaid's
+    playwright-core, installing it first if its lockfile changed."""
+    installed = MERMAID / "node_modules/.package-lock.json"
+    if not (installed.exists() and lock_matches(MERMAID / "package-lock.json", installed)):
+        run("npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund", cwd=MERMAID)
+    command: list[str | Path] = ["node", HERE / "smoke.mjs", out]
+    if chromium:
+        command += ["--chromium", chromium]
+    print("+", " ".join(str(c) for c in command), flush=True)
+    return subprocess.run([str(c) for c in command]).returncode
 
 
 if __name__ == "__main__":
