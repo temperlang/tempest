@@ -25,6 +25,8 @@
   --mono: ui-monospace, "Cascadia Code", "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --logo-ink: #2b3a55;
+  --inset: 1rem;
+  --logo-h: 30px;
   color-scheme: light;
 }
 
@@ -108,6 +110,8 @@ button, select {
   cursor: pointer;
 }
 
+.bar :is(button, select) { height: 2.125rem; padding-block: 0; }
+
 button:hover, select:hover { border-color: var(--accent); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
@@ -116,24 +120,31 @@ button:hover, select:hover { border-color: var(--accent); }
   flex-wrap: wrap;
   align-items: center;
   gap: 0.6rem 1rem;
-  padding: 0.6rem 1rem;
+  padding: 0.6rem var(--inset);
   background: var(--panel);
   border-bottom: 1px solid var(--border);
 }
 
 /* The top bar's "Temper" home link: the logo, as the docs site's header
-   has it, leading back to the site (../), with "playground" beside it. */
+   has it, leading back to the site (../), with "playground" beside it as
+   a suffix to the wordmark: about its x-height, on its baseline, one word
+   space (index.html's) after it. The numbers are the logo's, in viewBox
+   units out of its height of 285: the wordmark's baseline is at 183.54
+   (101.46 up from the bottom), and the mark's ink starts at x = 5.
+   Inline layout puts the logo's bottom on the text baseline, so the
+   vertical-align lowers it by the rest, and the margin pulls the ink
+   onto the inset that the pane headers and line numbers share. */
 header.bar { background: var(--surface); }
-.brand { display: flex; align-items: center; gap: 0.6rem; margin: 0; font-size: 1.3rem; font-weight: 400; }
-.brand a { display: flex; border-radius: 4px; }
+.brand { margin: 0; font-size: calc(var(--logo-h) * 0.58); font-weight: 500; line-height: 1; white-space: nowrap; }
+.brand a { display: inline-block; vertical-align: calc(var(--logo-h) * -101.46 / 285); margin-left: calc(var(--logo-h) * -5 / 285); border-radius: 4px; }
 .brand span { color: var(--muted); }
-.logo { display: block; height: 30px; width: auto; }
+.logo { display: block; height: var(--logo-h); width: auto; }
 .logo-1 { fill: #e8c4c4; }
 .logo-3 { fill: #ce7777; }
 .logo-4 { fill: var(--logo-ink); }
 .logo-5 { opacity: 0.5; }
 
-.field { display: flex; align-items: center; gap: 0.5rem; color: var(--muted); }
+.field { display: flex; align-items: baseline; gap: 0.5rem; color: var(--muted); }
 .actions { display: flex; gap: 0.5rem; margin-left: auto; }
 
 main {
@@ -151,7 +162,7 @@ main {
   align-items: center;
   gap: 0.5rem;
   min-height: 2.6rem;
-  padding: 0.3rem 0.8rem;
+  padding: 0.3rem var(--inset);
   border-bottom: 1px solid var(--border);
   color: var(--muted);
   font: 0.95rem var(--mono);
@@ -161,6 +172,8 @@ main {
 
 .editor { flex: 1; min-height: 0; font-size: 16px; }
 .editor .cm-editor { height: 100%; }
+/* Widest line number starts at the inset, under the pane's header. */
+.side .editor .cm-lineNumbers .cm-gutterElement { padding-left: var(--inset); }
 
 .tabs {
   display: flex;
@@ -245,6 +258,5 @@ pre { margin: 0; font: 0.95rem/1.5 var(--mono); white-space: pre-wrap; overflow-
   body { height: auto; min-height: 100%; }
   .editor { font-size: 14px; }
   .tabs { flex-wrap: wrap; }
-  .brand { font-size: 1.15rem; }
-  .logo { height: 26px; }
+  :root { --logo-h: 26px; }
 }
