@@ -338,10 +338,11 @@ pub extern "C" fn hover(at: u32) {
 }
 
 /// Where the name at UTF-16 offset `at` of the kept source is declared,
-/// as `{"from": 4, "to": 9}` in the same source, or in std, also with
-/// the file's path from std's root and its text, `{"file":
-/// "std/regex/regex.temper.md", "text": "…", "from": …, "to": …}`, or
-/// `null` for a builtin.
+/// as `{"from": 4, "to": 9}` in the same source, or in std or core, also
+/// with the file's path and its text, `{"file":
+/// "std/regex/regex.temper.md", "text": "…", "from": …, "to": …}` or
+/// `{"file": "core/core.temper", …}` for a builtin, or `null` for a
+/// builtin core doesn't declare.
 #[unsafe(no_mangle)]
 pub extern "C" fn definition(at: u32) {
     query(|kept, out| {
@@ -364,7 +365,19 @@ pub extern "C" fn definition(at: u32) {
                     json_string(text)
                 );
             }
-            _ => out.push_str("null"),
+            Some(_) => out.push_str("null"),
+            None => match kept.analysis.core_definition(FileId(0), offset) {
+                Some(core) => {
+                    let (from, to) = utf16_span(core.source, core.span);
+                    let _ = write!(
+                        out,
+                        "{{\"file\":{},\"text\":{},\"from\":{from},\"to\":{to}}}",
+                        json_string(&format!("core/{}", core.path)),
+                        json_string(core.source)
+                    );
+                }
+                None => out.push_str("null"),
+            },
         }
     });
 }
@@ -926,6 +939,7 @@ mod tests {
             Position::of(SOURCE, byte).utf16 as u32
         };
         let (ete, regex) = (utf16("\u{e9}t\u{e9} +"), utf16("Regex? "));
+        let int = utf16("Int, b");
         let end = SOURCE.encode_utf16().count() as u32;
         let answers = std::thread::Builder::new()
             .stack_size(64 << 20)
@@ -945,6 +959,8 @@ mod tests {
                 signature_help(end);
                 answers.push(OUTPUT.with_borrow(|out| out.clone()));
                 definition(regex + 1);
+                answers.push(OUTPUT.with_borrow(|out| out.clone()));
+                definition(int + 1);
                 answers.push(OUTPUT.with_borrow(|out| out.clone()));
                 answers
             })
@@ -985,6 +1001,17 @@ mod tests {
             "{}",
             &answers[4][..80]
         );
+        // A builtin, `Int`, in core.
+        let core = temper_frontend::corelib::TEXT;
+        let int = temper_frontend::typing::core_declaration("Int").unwrap();
+        let from = Position::of(core, int).utf16;
+        assert!(
+            answers[5].starts_with("{\"file\":\"core/core.temper\",\"text\":"),
+            "{}",
+            &answers[5][..80]
+        );
+        let span = format!(",\"from\":{from},\"to\":{}}}", from + 3);
+        assert!(answers[5].ends_with(&span), "{span}");
     }
 
     /// One compile runs the tests and generates each backend asked for.

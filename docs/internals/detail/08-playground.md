@@ -175,8 +175,8 @@ language server share every query
 ([page 9's detail](09-language-server.md#temper-analysis)).
 
 **Cons:** one source, one file: answers for other files (std's) are
-filtered out, except a definition in std, which comes with std's file
-text so the page can show it. A second copy of the edge conversions
+filtered out, except a definition in std or core, which comes with
+that file's text so the page can show it. A second copy of the edge conversions
 lives in the language server.
 
 ### std's tmpl kept, its imported modules settled again

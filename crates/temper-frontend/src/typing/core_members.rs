@@ -21,7 +21,7 @@ use temper_syntax::lex::SourceKind;
 use temper_syntax::parse::parse;
 use temper_syntax::tree::{NodeId, NodeKind};
 
-const CORE: &str = include_str!("../../../../vendor/temper/core/core.temper");
+use crate::corelib::TEXT as CORE;
 
 /// The builtin types whose members are read: first the final ones, which
 /// no other type extends, then the generic ones, then the rest whose
@@ -98,6 +98,8 @@ pub(super) struct CoreMember {
     pub operator: Option<String>,
     /// A method's parameters' names, `_` where not read.
     pub param_names: Vec<String>,
+    /// Where its name is in core's text.
+    pub at: usize,
 }
 
 /// A builtin type's declaration: how many type parameters it has, and its
@@ -126,31 +128,37 @@ pub(super) fn core_class(type_name: &str) -> &'static CoreClass {
     }
 }
 
-/// Reads one type's declaration, from the line `export class Name` or
-/// `export sealed interface Name<…>` to the `}` that ends a line on its
-/// own, or that line alone if it ends with `{}`, parsed alone.
-fn read_class(name: &str) -> CoreClass {
-    let declares = |line: &str| {
-        let rest = line.strip_prefix("export ").unwrap_or("");
+/// Where core declares an exported name at the start of a line, as
+/// `export class Name`, `export sealed interface Name<…>`, or `export let
+/// name(…)`: the line's offset in core, the line, and the name's offset.
+fn declaration(name: &str, lets: bool) -> Option<(usize, &'static str, usize)> {
+    let declared = |line: &'static str| {
+        let rest = line.strip_prefix("export ")?;
         let rest = (rest.strip_prefix("sealed "))
             .or_else(|| rest.strip_prefix("/*sealed*/ "))
             .unwrap_or(rest);
         let rest = (rest.strip_prefix("class "))
             .or_else(|| rest.strip_prefix("interface "))
-            .unwrap_or("");
-        rest.strip_prefix(name)
-            .is_some_and(|r| r.starts_with([' ', '<']))
+            .or_else(|| rest.strip_prefix("let ").filter(|_| lets))?;
+        let after = rest.strip_prefix(name)?;
+        let ends = [' ', '<', '(', ':', ';', '\n'];
+        after.starts_with(ends).then(|| line.len() - rest.len())
     };
     let mut offset = 0;
-    let mut found = None;
     for line in CORE.split_inclusive('\n') {
-        if declares(line) {
-            found = Some((offset, line));
-            break;
+        if let Some(at) = declared(line) {
+            return Some((offset, line, offset + at));
         }
         offset += line.len();
     }
-    let Some((start, line)) = found else {
+    None
+}
+
+/// Reads one type's declaration, from the line `export class Name` or
+/// `export sealed interface Name<…>` to the `}` that ends a line on its
+/// own, or that line alone if it ends with `{}`, parsed alone.
+fn read_class(name: &str) -> CoreClass {
+    let Some((start, line, _)) = declaration(name, false) else {
         return CoreClass::default();
     };
     let end = match line.trim_end().ends_with("{}") {
@@ -160,6 +168,7 @@ fn read_class(name: &str) -> CoreClass {
     let ast = build(&parse(&CORE[start..end], SourceKind::Standalone));
     let mut reader = Reader {
         ast: &ast,
+        base: start,
         type_params: Vec::new(),
         own_params: Vec::new(),
     };
@@ -174,6 +183,57 @@ fn read_class(name: &str) -> CoreClass {
         type_param_names: reader.type_params,
         members,
     }
+}
+
+/// Where core declares a builtin by name, as a byte offset of its name
+/// in [`crate::corelib::TEXT`]: a type (`String`, `Listed`, `Console`)
+/// or a function or value (`ignore`, `console`, `Int`). None for a
+/// builtin core doesn't declare, as `if` or `panic`.
+pub fn core_declaration(name: &str) -> Option<usize> {
+    declaration(name, true).map(|(_, _, at)| at)
+}
+
+/// Where core declares a builtin type's member, as byte offsets of its
+/// name in [`crate::corelib::TEXT`]: in the type's own declaration, then
+/// in the builtin types it extends (`Listed` for a `List`'s `isEmpty`),
+/// nearest first, so an override comes before what it overrides. Covers
+/// any type core declares, as `Console`'s `log`, not only those typing
+/// reads.
+pub fn core_member_declarations(type_name: &str, member: &str) -> Vec<usize> {
+    let mut out = Vec::new();
+    let mut name = Some(type_name);
+    while let Some(ty) = name {
+        let class = match READ_TYPES.contains(&ty) {
+            true => Some(core_class(ty)),
+            false => other_class(ty),
+        };
+        let Some(class) = class else {
+            break;
+        };
+        out.extend(
+            (class.members.iter())
+                .filter(|m| m.name == member)
+                .map(|m| m.at),
+        );
+        name = crate::types::builtin_supertype(ty);
+    }
+    out
+}
+
+/// A type core declares that typing doesn't read, as `Console`, read the
+/// first time an editor wants one.
+fn other_class(name: &str) -> Option<&'static CoreClass> {
+    static OTHERS: std::sync::Mutex<Vec<(String, &'static CoreClass)>> =
+        std::sync::Mutex::new(Vec::new());
+    let mut others = OTHERS.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((_, class)) = others.iter().find(|(n, _)| n == name) {
+        return Some(class);
+    }
+    declaration(name, false)?;
+    // A handful at most, kept for the process's life.
+    let class: &'static CoreClass = Box::leak(Box::new(read_class(name)));
+    others.push((name.to_string(), class));
+    Some(class)
 }
 
 /// A builtin type's public member, as editors show it.
@@ -289,6 +349,8 @@ fn show_core(t: &CoreType, args: &[String], own: &[String]) -> String {
 
 struct Reader<'a> {
     ast: &'a Ast,
+    /// Where the declaration being read starts in core.
+    base: usize,
     /// The type's own type parameters' names, in order.
     type_params: Vec<String>,
     /// The type parameters of the method being read, in order, and
@@ -469,13 +531,17 @@ impl<'a> Reader<'a> {
     }
 
     fn push(&self, name: NodeId, is_static: bool, kind: CoreMemberKind, out: &mut Vec<CoreMember>) {
-        if let Some(name) = self.text(name) {
+        if let Some(text) = self.text(name) {
+            // A name's node may span more than the name, as its type.
+            let start = self.base + self.ast.tree().span(name).start as usize;
+            let at = start + (CORE[start..].find(text)).filter(|&i| i < 256).unwrap_or(0);
             out.push(CoreMember {
-                name: name.to_string(),
+                name: text.to_string(),
                 is_static,
                 kind,
                 operator: None,
                 param_names: Vec::new(),
+                at,
             });
         }
     }
@@ -723,5 +789,40 @@ mod tests {
             panic!("a method");
         };
         assert_eq!(params[..], [(t, false), (int, true)]);
+    }
+
+    #[test]
+    fn members_and_builtins_are_located() {
+        // Each member's place is its name, in its type's declaration.
+        for ty in READ_TYPES {
+            let decl = declaration(ty, false).expect(ty).0;
+            for m in &core_class(ty).members {
+                assert!(m.at > decl, "{ty}.{}", m.name);
+                assert!(
+                    CORE[m.at..].starts_with(&m.name),
+                    "{ty}.{} at {}",
+                    m.name,
+                    m.at
+                );
+            }
+        }
+        let line = |at: usize| CORE[..at].lines().count();
+        let named = |at: usize, name: &str| CORE[at..].starts_with(name);
+        // Through supertypes, nearest first, and a type typing doesn't read.
+        let length = core_member_declarations("List", "length");
+        assert_eq!(length.len(), 2);
+        assert!(named(length[0], "length") && line(length[0]) > line(length[1]));
+        let log = core_member_declarations("Console", "log");
+        assert!(log.len() == 1 && named(log[0], "log(message"), "{log:?}");
+        assert!(core_member_declarations("Console", "nope").is_empty());
+        assert!(core_member_declarations("Nope", "log").is_empty());
+        for name in [
+            "String", "Listed", "Console", "ignore", "console", "Int", "MapKey",
+        ] {
+            let at = core_declaration(name).expect(name);
+            assert!(named(at, name), "{name}");
+        }
+        assert_eq!(core_declaration("panic"), None);
+        assert_eq!(core_declaration("Str"), None);
     }
 }

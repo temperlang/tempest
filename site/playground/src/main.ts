@@ -845,7 +845,7 @@ async function goToDefinition(at: number): Promise<void> {
   editor.focus();
 }
 
-/** Shows a std file read-only in the output viewer, at a declaration. */
+/** Shows a std or core file read-only in the output viewer, at a declaration. */
 function showStd(file: string, text: string, span: { from: number; to: number }): void {
   selected = STD_VIEW;
   for (const tab of tabs.querySelectorAll<HTMLButtonElement>(".tab")) tab.setAttribute("aria-selected", "false");

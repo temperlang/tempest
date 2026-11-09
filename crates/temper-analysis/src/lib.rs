@@ -16,11 +16,13 @@
 //! diagnostics, and naming hints) may come later, lazily computed, behind
 //! an optional cargo feature.
 
+mod builtins;
 mod members;
 mod references;
 mod signatures;
 mod symbols;
 
+pub use builtins::CoreLocation;
 pub use references::{Edit, KEYWORDS};
 pub use signatures::SignatureHelp;
 pub use symbols::DocSymbol;
@@ -291,17 +293,25 @@ impl Analysis {
                 }
             }
         };
+        let doc = match decl {
+            Some(d) => self.doc(d),
+            // A builtin's, from core: an override's, or else what it
+            // overrides'.
+            None => (self.core_target(target))
+                .and_then(|(ats, _)| ats.into_iter().find_map(builtins::core_doc)),
+        };
         Some(Hover {
             span,
             name: Some(name),
             kind: Some(kind),
             ty,
-            doc: decl.and_then(|d| self.doc(d)),
+            doc,
         })
     }
 
     /// Where the name at byte `offset` of `file` is declared: its
-    /// declaration's name, in whichever file that is. None for builtins.
+    /// declaration's name, in whichever file that is. None for builtins,
+    /// which [`Analysis::core_definition`] finds in core.
     pub fn definition(&self, file: FileId, offset: u32) -> Option<Location> {
         let decl = match self.target(file, offset)?.1? {
             Target::Symbol(symbol) => self.imported(self.settled.scopes.symbol(symbol).decl?),
@@ -770,12 +780,7 @@ impl Analysis {
         if !text.starts_with("/**") || between.contains(|c| ";{}()=,/".contains(c)) {
             return None;
         }
-        let body = text.trim_start_matches("/**").trim_end_matches("*/");
-        let lines: Vec<&str> = (body.lines())
-            .map(|l| l.trim().trim_start_matches('*').trim())
-            .collect();
-        let doc = lines.join("\n").trim().to_string();
-        (!doc.is_empty()).then_some(doc)
+        doc_text(text)
     }
 
     fn show(&self, t: TypeId) -> String {
@@ -812,6 +817,17 @@ impl Analysis {
 /// How well a node fits a position: whether the position is inside it
 /// (not at its end), whether it's a name, and how small it is.
 type Rank = (bool, bool, u32);
+
+/// A doc comment's text, `/** … */`, without its markers or each line's
+/// leading `*`; None for another comment or an empty one.
+pub(crate) fn doc_text(comment: &str) -> Option<String> {
+    let body = comment.strip_prefix("/**")?.trim_end_matches("*/");
+    let lines: Vec<&str> = (body.lines())
+        .map(|l| l.trim().trim_start_matches('*').trim())
+        .collect();
+    let doc = lines.join("\n").trim().to_string();
+    (!doc.is_empty()).then_some(doc)
+}
 
 /// What a name at a position names.
 #[derive(Clone, Copy, Debug)]

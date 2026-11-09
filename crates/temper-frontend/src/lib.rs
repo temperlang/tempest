@@ -31,6 +31,7 @@
 pub mod builtins;
 mod classes;
 pub mod core;
+pub mod corelib;
 mod dead_branches;
 pub mod engine;
 mod extensions;

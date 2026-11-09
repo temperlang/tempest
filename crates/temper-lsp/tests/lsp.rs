@@ -441,3 +441,83 @@ fn definition_into_std() {
     assert_eq!(client.finish(), 0);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn definition_and_hover_into_core() {
+    let dir = std::env::temp_dir().join(format!("tempest-lsp-{}-core", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = uri(&dir, "uses-core.temper");
+    let mut client = Client::start();
+    client.request("initialize", json!({"capabilities": {}}));
+    let text = [
+        "let names: ListBuilder<String> = new ListBuilder<String>();",
+        "names.add(\"a\");",
+        "let frozen: List<String> = names.toList();",
+        "let blank = \"\".isEmpty;",
+        "ignore(frozen.length);",
+        "console.log(\"hi\");",
+        "",
+    ];
+    open(&mut client, &file, &text.join("\n"));
+    // Each name's place in core, as the line there, and its hover.
+    let mut core_line = |line: u32, character: u32| {
+        let def = client.request("textDocument/definition", at(&file, line, character));
+        let target = str_at(&def, &["uri"]).to_string();
+        assert!(target.contains("tempest-std-"), "{def}");
+        assert!(target.ends_with("/core/core.temper"), "{def}");
+        let path = temper_lsp::uri_to_path(&target);
+        let readonly = std::fs::metadata(&path).unwrap().permissions().readonly();
+        assert!(readonly, "{path}");
+        let core = std::fs::read_to_string(&path).unwrap();
+        let start = num_at(&def, &["range", "start", "character"]) as usize;
+        let line = num_at(&def, &["range", "start", "line"]) as usize;
+        let shown = core.lines().nth(line).unwrap();
+        (shown.trim().to_string(), shown[start..].to_string())
+    };
+    // `String`, a builtin type.
+    let (line, name) = core_line(0, 24);
+    assert!(line.starts_with("export class String "), "{line}");
+    assert!(name.starts_with("String "), "{name}");
+    // `add` on a `ListBuilder<String>`.
+    let (line, _) = core_line(1, 7);
+    assert!(line.starts_with("public add(newValue: T"), "{line}");
+    // `isEmpty` on a string, `ignore`, `length` on a `List<String>`, and
+    // `console.log`.
+    let (line, _) = core_line(3, 17);
+    assert!(
+        line.starts_with("public get isEmpty(): builtins.Boolean { content"),
+        "{line}"
+    );
+    let (line, _) = core_line(4, 2);
+    assert!(line.starts_with("export let ignore("), "{line}");
+    let (line, _) = core_line(4, 16);
+    assert_eq!(line, "public get length(): builtins.Int;");
+    let (line, _) = core_line(5, 9);
+    assert_eq!(line, "public log(message: String): Void;");
+    // Hover shows core's doc comment after the signature.
+    let hover = client.request("textDocument/hover", at(&file, 1, 7));
+    let value = str_at(&hover, &["contents", "value"]);
+    assert_eq!(
+        value,
+        "```temper\nmethod add(newValue: String, at?: Int32): Void\n```\n\n\
+         Panics for `at` less than 0 or greater than `length`."
+    );
+    let hover = client.request("textDocument/hover", at(&file, 4, 16));
+    let value = str_at(&hover, &["contents", "value"]);
+    assert!(value.contains("\n\nThe *length* of a listed"), "{value}");
+    let hover = client.request("textDocument/hover", at(&file, 2, 13));
+    let value = str_at(&hover, &["contents", "value"]);
+    assert!(
+        value.contains("The *List* type is a random-access"),
+        "{value}"
+    );
+    // Nothing for a local.
+    let def = client.request("textDocument/definition", at(&file, 4, 9));
+    assert!(
+        str_at(&def, &["uri"]).ends_with("uses-core.temper"),
+        "{def}"
+    );
+    assert_eq!(client.finish(), 0);
+    let _ = std::fs::remove_dir_all(&dir);
+}

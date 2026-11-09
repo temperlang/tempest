@@ -44,7 +44,7 @@ use temper_frontend::library::{FileId, Level, Library};
 use temper_frontend::project::{find_libraries, library_of, load_imports, load_library, work_root};
 use temper_frontend::settle::settle;
 use temper_frontend::sources::{Source, Sources};
-use temper_frontend::stdlib;
+use temper_frontend::{corelib, stdlib};
 
 /// How long typing must pause before stale documents are analyzed again.
 const DEBOUNCE: Duration = Duration::from_millis(250);
@@ -495,7 +495,12 @@ impl<W: Write> Server<W> {
                 let p: lsp::GotoDefinitionParams = params(p)?;
                 let (path, at) = position_of(&p.text_document_position_params);
                 let found = self.query(&path, at, |_, a, file, offset| {
-                    let target = a.definition(file, offset)?;
+                    let Some(target) = a.definition(file, offset) else {
+                        // A builtin, in core's files.
+                        let core = a.core_definition(file, offset)?;
+                        let path = format!("{}/{}", corelib::DIR, core.path);
+                        return Some((path, range(core.source, core.span.start, core.span.end)));
+                    };
                     place(a, target.file, target.span)
                 });
                 let location = found.flatten().and_then(|(path, range)| {
@@ -646,8 +651,14 @@ impl<W: Write> Server<W> {
         Some(f(source, &unit.analysis, FileId(file as u32), offset))
     }
 
-    /// A URI for a definition's file: std's, written out for the editor.
+    /// A URI for a definition's file: std's or core's, written out for
+    /// the editor.
     fn location_uri(&mut self, path: &str) -> String {
+        if let Some(rest) = path.strip_prefix(&format!("{}/", corelib::DIR)) {
+            let dir = self.std_copy.get_or_insert_with(write_std);
+            let file = dir.join(CORE_SUBDIR).join(rest);
+            return path_to_uri(&file.to_string_lossy().replace('\\', "/"));
+        }
         let Some(rest) = path.strip_prefix(&format!("{}/", stdlib::DIR)) else {
             return self.uri_of(path);
         };
@@ -712,18 +723,30 @@ pub fn apply_change(text: &mut String, change: lsp::TextDocumentContentChangeEve
     }
 }
 
-/// Writes built-in std's sources to a directory named by their hash in
-/// the system's temporary directory, once, read-only, giving it.
+/// Where core's files go in the directory [`write_std`] writes, beside
+/// std's modules, none of which is named so.
+const CORE_SUBDIR: &str = "core";
+
+/// Writes built-in std's sources, and core's in [`CORE_SUBDIR`], to a
+/// directory named by their hash in the system's temporary directory,
+/// once, read-only, giving it.
 fn write_std() -> PathBuf {
+    let core = corelib::FILES
+        .iter()
+        .map(|(p, t)| (format!("{CORE_SUBDIR}/{p}"), *t));
+    let files: Vec<(String, &str)> = (stdlib::FILES.iter())
+        .map(|(p, t)| (p.to_string(), *t))
+        .chain(core)
+        .collect();
     // FNV-1a over every path and text.
     let mut hash: u64 = 0xcbf29ce484222325;
-    for (path, text) in stdlib::FILES {
+    for (path, text) in &files {
         for b in path.bytes().chain([0]).chain(text.bytes()) {
             hash = (hash ^ b as u64).wrapping_mul(0x100000001b3);
         }
     }
     let dir = std::env::temp_dir().join(format!("tempest-std-{hash:016x}"));
-    for (path, text) in stdlib::FILES {
+    for (path, text) in &files {
         let file = dir.join(path);
         if file.exists() {
             continue;

@@ -53,9 +53,11 @@ home (`../`); served alone, that link just leads back to the playground.
 - **Errors** are underlined as you type, all at once, through
   `@codemirror/lint`, and listed in the Errors tab.
 - **Hover** over a name for its kind, type (a function's signature),
-  and doc comment, or over other code for its type.
+  and doc comment (a builtin's from core), or over other code for its
+  type.
 - **Go to definition:** F12, or Ctrl or Cmd and click. A declaration
-  in std opens std's file, read-only, on the right; pick a tab to go
+  in std, or a builtin in core (`String`, `ignore`, a `ListBuilder`'s
+  `add`), opens that file, read-only, on the right; pick a tab to go
   back.
 - **Completion:** names in scope as you type, or Ctrl-Space; after
   `x.`, the members of whatever `x` is (builtin types' too, and a

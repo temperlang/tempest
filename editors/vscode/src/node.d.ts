@@ -32,7 +32,7 @@ declare const crypto: {
 
 declare module "fs" {
   export function existsSync(path: string): boolean;
-  export function statSync(path: string): { isFile(): boolean };
+  export function statSync(path: string): { isFile(): boolean; mode: number };
   export function mkdtempSync(prefix: string): string;
   export function mkdirSync(path: string, options?: { recursive?: boolean }): void;
   export function writeFileSync(path: string, text: string): void;

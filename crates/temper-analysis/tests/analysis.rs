@@ -524,3 +524,105 @@ fn object_literal_keys_complete() {
     let value = names(&format!("{class}let p: Person = {{ name: | }};\n"));
     assert!(value.contains(&"console".to_string()), "{value:?}");
 }
+
+const BUILTINS: &str = r#"
+let names: ListBuilder<String> = new ListBuilder<String>();
+names.add("a");
+let frozen: List<String> = names.toList();
+let empty = frozen.isEmpty;
+let count = frozen.length;
+let blank = "".isEmpty;
+let letter = String.fromCodePoint(97);
+ignore(count);
+console.log("hi");
+if (blank) { panic(); }
+"#;
+
+/// Where core declares a builtin at the `nth` `needle` in [`BUILTINS`],
+/// `ahead` bytes in, as the line in core and the name there.
+fn core_at(a: &Analysis, needle: &str, nth: usize, ahead: u32) -> Option<(String, String)> {
+    let d = a.core_definition(MAIN, at(BUILTINS, needle, nth, ahead))?;
+    assert_eq!(d.path, "core.temper");
+    let name = &d.source[d.span.start as usize..d.span.end as usize];
+    let line_start = d.source[..d.span.start as usize]
+        .rfind('\n')
+        .map_or(0, |i| i + 1);
+    let line_end = d.source[line_start..]
+        .find('\n')
+        .map_or(d.source.len(), |i| line_start + i);
+    Some((
+        d.source[line_start..line_end].trim().to_string(),
+        name.to_string(),
+    ))
+}
+
+#[test]
+fn definition_into_core() {
+    let a = analyze(BUILTINS);
+    let found = |needle, nth, ahead| core_at(&a, needle, nth, ahead).unwrap();
+    // A builtin type.
+    let (line, name) = found("ListBuilder<String>", 0, 1);
+    assert_eq!(name, "ListBuilder");
+    assert!(line.starts_with("export class ListBuilder<T>"), "{line}");
+    // A method, through a generic receiver.
+    let (line, name) = found("add(\"a\")", 0, 0);
+    assert_eq!(name, "add");
+    assert!(line.starts_with("public add(newValue: T"), "{line}");
+    // A getter on List<String>, its own, and one its supertype declares.
+    let (line, _) = found("length;", 0, 0);
+    assert_eq!(line, "public get length(): builtins.Int;");
+    let isempty_list = core_at(&a, "isEmpty;", 0, 0).unwrap().0;
+    assert_eq!(
+        isempty_list,
+        "public get isEmpty(): builtins.Boolean { length == 0 }"
+    );
+    // String's own, and a static after the type's name.
+    let (line, _) = found("isEmpty;", 1, 0);
+    assert!(
+        line.starts_with("public get isEmpty(): builtins.Boolean { content"),
+        "{line}"
+    );
+    let (line, _) = found("fromCodePoint", 0, 0);
+    assert!(line.starts_with("public static fromCodePoint("), "{line}");
+    // Builtin functions and values, and a member of `console`.
+    let (line, _) = found("ignore(", 0, 0);
+    assert!(
+        line.starts_with("export let ignore(value: AnyValue)"),
+        "{line}"
+    );
+    let (line, _) = found("log(", 0, 0);
+    assert_eq!(line, "public log(message: String): Void;");
+    let (line, _) = found("console.", 0, 0);
+    assert!(line.starts_with("export let console: Console"), "{line}");
+    // Nothing for what core doesn't declare, or what's not a builtin.
+    assert_eq!(core_at(&a, "panic", 0, 0), None);
+    assert_eq!(core_at(&a, "count);", 0, 0), None);
+    assert_eq!(a.definition(MAIN, at(BUILTINS, "add(\"a\")", 0, 0)), None);
+}
+
+#[test]
+fn hover_core_docs() {
+    let a = analyze(BUILTINS);
+    let doc = |needle, nth, ahead| a.hover(MAIN, at(BUILTINS, needle, nth, ahead)).unwrap().doc;
+    let length = doc("length;", 0, 0).unwrap();
+    assert!(length.starts_with("The *length* of a listed"), "{length}");
+    assert_eq!(
+        doc("add(\"a\")", 0, 0).as_deref(),
+        Some("Panics for `at` less than 0 or greater than `length`.")
+    );
+    let list = doc("List<String>", 0, 0).unwrap();
+    assert!(list.contains("immutable"), "{list}");
+    assert_eq!(
+        doc("log(", 0, 0).as_deref(),
+        Some("Log a message at default informational level to this console.")
+    );
+    assert!(doc("ignore(", 0, 0).is_some());
+    assert!(doc("fromCodePoint", 0, 0).is_some());
+    // Doc lines lose their leading `*`, as user declarations' do.
+    let console = doc("console.", 0, 0).unwrap();
+    assert!(
+        console.starts_with("The global default `Console` instance."),
+        "{console}"
+    );
+    assert!(!console.contains("\n*"), "{console}");
+}

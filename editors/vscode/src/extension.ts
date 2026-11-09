@@ -1,13 +1,15 @@
 // The Temper extension: starts `tempest lsp` and connects VS Code to it
 // with vscode-languageclient, which syncs documents (incrementally, as
 // the server asks), shows its diagnostics, and maps VS Code's providers
-// to LSP's requests; the preview of literate Temper (preview.ts); and
-// the marks on its `temper inert` blocks (inert.ts).
+// to LSP's requests; the preview of literate Temper (preview.ts); the
+// marks on its `temper inert` blocks (inert.ts); and std's and core's
+// copies opened read-only (readonly.ts).
 
 import * as vscode from "vscode";
 import { LanguageClient, type LanguageClientOptions, type ServerOptions } from "vscode-languageclient/node";
 import { registerInert } from "./inert";
 import { type PreviewHook, registerPreview } from "./preview";
+import { registerReadonly } from "./readonly";
 import { type Found, notFound, notStarted, search } from "./server";
 
 let client: LanguageClient | undefined;
@@ -101,6 +103,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Api> {
   );
   const previews = registerPreview(context);
   const inert = registerInert(context);
+  registerReadonly(context);
   await start(context, output);
   return { server: () => server, client: () => client, error: () => lastError, preview: (uri) => previews.get(uri), inert };
 }

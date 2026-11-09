@@ -6,7 +6,7 @@ gzipped), and runs in a browser with no server. The
 left, and see errors, the program's output, its tests' results, and all
 seven backends' code on the right, updated as you type. The editor also
 underlines errors, shows types on hover, goes to definitions (into
-std's sources too), completes names and members, finds references,
+std's and core's sources too), completes names and members, finds references,
 renames, and shows a call's signature as you type its arguments.
 
 ```mermaid
@@ -102,7 +102,8 @@ settled again:
 - [`definition`](../../crates/temper-analysis/src/lib.rs): where a
   name, or a member after `.`, is declared, through imports to what
   they import. In the playground, F12, or Ctrl or Cmd and click; a
-  declaration in std opens std's file, read-only, on the right.
+  declaration in std, or a builtin in core, opens that file, read-only,
+  on the right.
 - [`completions`](../../crates/temper-analysis/src/lib.rs): the
   names in scope, innermost first; after `x.`, the members of whatever
   `x` is, with a generic class's type arguments filled in, and builtin

@@ -5,6 +5,7 @@
 // these talk to its bundled tempest.
 
 import assert from "node:assert/strict";
+import { statSync } from "node:fs";
 import * as vscode from "vscode";
 import type { Api } from "../src/extension";
 import type { FromPreview } from "../src/messages";
@@ -110,6 +111,38 @@ export async function run(): Promise<void> {
     assert.equal(uri?.toString(), shapes.toString());
     assert.equal(range?.start.line, 1);
     assert.equal(range?.start.character, 11);
+  });
+
+  test("definition of a builtin, in core, read-only", async () => {
+    // `Int` in `let b: Int = a;`, as the first test left it.
+    const found = await vscode.commands.executeCommand<(vscode.Location | vscode.LocationLink)[]>(
+      "vscode.executeDefinitionProvider",
+      uses,
+      new vscode.Position(1, 8),
+    );
+    assert.equal(found.length, 1);
+    const [first] = found;
+    const [uri, range] = first && "uri" in first ? [first.uri, first.range] : [first?.targetUri, first?.targetSelectionRange ?? first?.targetRange];
+    assert.ok(uri && range, "a location");
+    assert.match(uri.path, /\/tempest-std-[0-9a-f]+\/core\/core\.temper$/);
+    // Read-only on disk, and to VS Code, as the extension marks it
+    // (readonly.ts).
+    assert.equal((statSync(uri.fsPath).mode & 0o222), 0, "no write permission");
+    const editor = await vscode.window.showTextDocument(uri, { selection: range });
+    const core = editor.document;
+    assert.equal(core.languageId, "temper");
+    assert.match(core.lineAt(range.start.line).text, /^export let Int = Int32;/);
+    assert.equal(core.getText(range), "Int");
+    assert.equal(editor.selection.start.line, range.start.line);
+    // A read-only editor drops edits made in it (though `edit` still
+    // says true), once marked.
+    const before = core.getText();
+    await sleep(200);
+    await editor.edit((e) => e.insert(new vscode.Position(0, 0), "x"));
+    assert.equal(core.getText(), before, "an edit to core is dropped");
+    assert.equal(core.isDirty, false);
+    await vscode.commands.executeCommand("workbench.action.closeActiveEditor");
+    await vscode.window.showTextDocument(document);
   });
 
   test("completion", async () => {

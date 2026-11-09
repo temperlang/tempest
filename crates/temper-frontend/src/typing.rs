@@ -61,7 +61,9 @@ mod signatures;
 mod targets;
 
 pub(crate) use bubbles::{fold_float, fold_int};
-pub use core_members::{BuiltinMember, builtin_members};
+pub use core_members::{
+    BuiltinMember, builtin_members, core_declaration, core_member_declarations,
+};
 pub use exprs::{FileCoverage, coverage};
 pub use resolve::Resolved;
 

@@ -139,11 +139,23 @@ a declaration's name, or a member after `.`. Then:
 - [`hover`](../../../crates/temper-analysis/src/lib.rs) shows a name's
   [`DeclKind`](../../../crates/temper-analysis/src/lib.rs), its type
   or signature with parameter names (a generic class's type arguments
-  filled in), and its doc comment; for other code, the smallest typed
-  expression's type.
+  filled in), and its doc comment, a builtin's from core; for other
+  code, the smallest typed expression's type.
 - [`definition`](../../../crates/temper-analysis/src/lib.rs) follows a
   name to its declaration, and through imports to what they import
   (`imported`, at most eight hops), into std's files too.
+  [`core_definition`](../../../crates/temper-analysis/src/builtins.rs)
+  finds a builtin's declaration in core, which isn't one of the
+  library's files: a builtin type, function, or value by its `export`
+  line ([`core_declaration`](../../../crates/temper-frontend/src/typing/core_members.rs)),
+  and a member by the type that has it (the receiver's type, through
+  generic arguments, `?`, and bounds; the type named, for a static; or
+  `Console`, for `console`), then the builtin types it extends, nearest
+  first ([`core_member_declarations`](../../../crates/temper-frontend/src/typing/core_members.rs),
+  from the spans `core_members` already parses). Hover takes the
+  nearest of these with a `/** … */` right before it, past decorators'
+  lines, so `List`'s undocumented `length` shows `Listed`'s doc. A
+  builtin core doesn't declare, as `panic`, has no location.
 - [`completions`](../../../crates/temper-analysis/src/lib.rs) lists
   names in scope at the position, innermost first, builtins last; after
   `.`, the members of the expression's type
@@ -335,12 +347,18 @@ open.
 
 ### std written to a temporary directory
 
-**Chosen:** std is built into the binary, so it has no files an editor
-can open. A definition into std writes std's sources, once, read-only,
-to `tempest-std-HASH` in the system's temporary directory (an FNV hash
-of every path and text, so each std version gets its own), and points
-there (`write_std`, `location_uri`). With `--std DIR`, it points into
-`DIR`.
+**Chosen:** std and core are built into the binary, so they have no
+files an editor can open. A definition into std or core writes std's
+sources and core's ([`corelib::FILES`](../../../crates/temper-frontend/src/corelib.rs),
+under `core/`), once, read-only (0444 under the usual umask), to
+`tempest-std-HASH` in the system's temporary directory (an FNV hash of
+every path and text, so each std and core version gets its own), and
+points there (`write_std`, `location_uri`). With `--std DIR`, std's
+point into `DIR`; core's still go to the temporary copy. VS Code
+ignores file permissions unless `files.readonlyFromPermissions` is set,
+and `files.readonlyInclude` globs match only inside a workspace, so the
+extension marks these editors read-only for the session as they become
+active ([`readonly.ts`](../../../editors/vscode/src/readonly.ts)).
 
 **Alternatives:** a custom URI scheme, served by the extension as a
 virtual document.
@@ -408,7 +426,7 @@ contain a marker panic, and the request `tempest/testPanic` too.
 | `initialized` and unknown notifications | Nothing |
 | `textDocument/didOpen`, `didChange`, `didClose` | Keep documents; mark units stale |
 | `textDocument/hover` | A Markdown block, `kind name: type`, then the doc comment |
-| `textDocument/definition` | One location, std's in the temporary copy |
+| `textDocument/definition` | One location, std's and core's in the temporary copy |
 | `textDocument/completion` | Items with kinds and types; triggered by `.` |
 | `textDocument/references` | Locations across the unit |
 | `textDocument/prepareRename`, `rename` | A range and placeholder, then a workspace edit; refusals fail with -32803 |
@@ -602,7 +620,9 @@ line in view. The messages are typed in
 
 - **The queries**, [`analysis.rs`](../../../crates/temper-analysis/tests/analysis.rs):
   hover on locals, declarations, parameters, members, and calls;
-  definitions, also into std; completions, of builtin types' members,
+  definitions, also into std and core (builtin types, functions, and
+  values; members through generic receivers, supertypes, statics, and
+  `console`); builtins' doc comments on hover; completions, of builtin types' members,
   after any expression, and of object literals' keys; diagnostics tight
   and all there, also past a broken bracket; UTF-16 at the boundary;
   "no member" spanning just the name; references within and across
@@ -612,7 +632,8 @@ line in view. The messages are typed in
   (`a_session`: capabilities, unsaved errors, incremental edits, hover,
   definition, completion, references, rename and its refusals, outlines,
   signature help, unknown requests); UTF-16 positions in a lone file;
-  `exit` without `shutdown`; definition into std; panics in an analysis
+  `exit` without `shutdown`; definition into std; definition and hover
+  into core, its file read-only; panics in an analysis
   and a request becoming internal errors, with the server answering
   after them (`panics_become_internal_errors`). Unit tests in
   [`lib.rs`](../../../crates/temper-lsp/src/lib.rs): UTF-16 positions,
@@ -623,7 +644,8 @@ line in view. The messages are typed in
   as built): it uses the bundled tempest; diagnostics for unsaved text
   and an incremental edit; none for an untitled document, as only
   `file:` documents go to the server; hover; definition in the other file;
-  completion; rename across both files; and the preview's headings,
+  definition of a builtin (`Int`), opening core's read-only file at its
+  line; completion; rename across both files; and the preview's headings,
   highlighted Temper, a relative image, a live update, and scrolling
   both ways. CI runs it under xvfb.
 - **Without VS Code:** [`server.test.ts`](../../../editors/vscode/src/server.test.ts)

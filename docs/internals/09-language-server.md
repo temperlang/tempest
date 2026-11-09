@@ -61,9 +61,12 @@ server goes on
   edge ([`offset_at`](../../crates/temper-lsp/src/lib.rs),
   [`position`](../../crates/temper-lsp/src/lib.rs)); everything inside
   counts bytes in a file.
-- **std** is built into the binary, so it has no files to open. Go to
-  definition into std writes std's sources once, read-only, to a
-  directory in the system's temporary directory, and points there.
+- **std and core** are built into the binary, so they have no files to
+  open. Go to definition into std, or to a builtin (`String`, `ignore`,
+  a `ListBuilder`'s `add`), writes std's sources and core's once,
+  read-only, to a directory in the system's temporary directory, and
+  points there; core's are under `core/`. Hover on a builtin shows its
+  doc comment from core.
 
 What makes a unit stale, and the costs of settling it whole each time:
 [units and staying current](detail/09-language-server.md#units-and-staying-current)

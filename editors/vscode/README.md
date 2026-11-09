@@ -5,8 +5,10 @@ and tempest's language server, `tempest lsp`, for:
 
 - errors and warnings as you type, for the whole library around a file
   (its `config.temper.md` and every file in it), unsaved edits included;
-- hover: what a name is, its type or signature, and its doc comment;
-- go to definition, into std's sources too (read-only copies);
+- hover: what a name is, its type or signature, and its doc comment
+  (builtins' too, from core);
+- go to definition, into std's sources and core's builtins too
+  (`String`, `ignore`, a `ListBuilder`'s `add`), opened read-only;
 - completion of names in scope, members after `.` (builtin types' too),
   and an object literal's property names;
 - find references and rename, across the library's files;
@@ -90,9 +92,13 @@ runs the tests in a real VS Code. `--binaries DIR` bundles each
 - `src/inert.ts`: the editor's marks on `temper inert` blocks, found by
   `src/page.ts`'s `inertBlocks`, as the preview finds them.
   `src/page.test.ts` tests the pure parts under Node's test runner.
+- `src/readonly.ts`: marks editors of the server's std and core copies
+  (`tempest-std-HASH` in the temporary directory) read-only, since VS
+  Code ignores the files' permissions by default.
 - `test/suite.ts`: diagnostics (and an incremental edit), none for an
   untitled document, inert blocks' marks following an edit, hover,
-  definition, completion, rename, and the preview (rendered, updated,
+  definition (also of a builtin, into core's read-only copy),
+  completion, rename, and the preview (rendered, updated,
   and scrolled both ways), in a real VS Code on a small library, run by `test/run.ts` with `@vscode/test-electron` against
   the platform package as built, with its tempest. On Linux without a
   display, it runs under `xvfb-run`, or else Electron's headless mode.

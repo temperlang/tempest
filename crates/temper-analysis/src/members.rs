@@ -271,7 +271,7 @@ impl Analysis {
     }
 
     /// The type a name names, if it names one: a class or a builtin type.
-    fn type_named(&self, node: NodeId) -> Option<Named> {
+    pub(crate) fn type_named(&self, node: NodeId) -> Option<Named> {
         let tree = &self.settled.library.tree;
         if tree.kind(node) != NodeKind::RightName {
             return None;
@@ -306,7 +306,7 @@ impl Analysis {
 }
 
 /// A type that a name names.
-enum Named {
+pub(crate) enum Named {
     Class(NodeId),
     Builtin(&'static str),
 }
