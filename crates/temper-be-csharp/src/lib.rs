@@ -234,6 +234,17 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
             program_loads = loads(p, module);
         }
     }
+    // A library without a root module loads every module, as Lua's
+    // `init.lua` requires each, so `tempest run` runs them all.
+    if !p.modules.iter().any(|m| m.path.is_empty()) {
+        for module in &p.modules {
+            for class in loads(p, module) {
+                if !program_loads.contains(&class) {
+                    program_loads.push(class);
+                }
+            }
+        }
+    }
     let mut files = vec![OutFile {
         path: format!("{library}/src/{root}.csproj"),
         text: library_project(p, &root, variant),
@@ -457,8 +468,8 @@ fn program_project(root: &str, version: &str, variant: &Variant) -> String {
 }
 
 /// The entry point, Kotlin's template: simple logging to stdout, then the
-/// root module's class initialized, after those of the modules it imports
-/// ([`loads`]), which runs their static constructors, in a top-level
+/// root module's class initialized (or, with no root module, each
+/// module's), after those of the modules it imports ([`loads`]), which runs their static constructors, in a top-level
 /// turn, so async blocks start after them, then any async tasks waited
 /// for (`Async` in full, as a library named `async` would hide it).
 fn program(loads: &[String]) -> String {

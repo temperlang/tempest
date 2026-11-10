@@ -1544,7 +1544,13 @@ copied Kotlin's:
   counts as one failure named by its file, as Python's unittest reports
   a module that won't import, and the other files' results still count
   (fixed 2026-11-10).
-  Test: tempest/tests/cli.rs, `lua_library_without_root_module`.
+  Test: tempest/tests/cli.rs, `library_without_root_module_lua`.
+- **C# `run` of a library with no root module:** its `Program.cs`
+  initialized only the root module's class, so `run` of a library of
+  only `x/`, `y/`, and `z/` ran nothing; with no root module it now
+  initializes every module's, as Lua's `init.lua` requires each
+  (fixed 2026-11-10). Java's `run` still runs one module's `…Main`.
+  Test: tempest/tests/cli.rs, `library_without_root_module_csharp`.
 - **Lua `Boolean` comparisons:** Kotlin's Lua writes `a < b` on booleans,
   as its C# does, which Lua refuses at run time ("attempt to compare two
   boolean values"). Tempest's writes the order as logic (`not a and b`),

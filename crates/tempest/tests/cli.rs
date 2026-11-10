@@ -817,13 +817,15 @@ fn test_a_library_on_each_backend() {
 }
 
 /// A library with no root module, only `x/`, `y/`, and `z/`, as some
-/// real libraries are, on Lua: `init.lua` requires each module, as
-/// Kotlin's, so `run` loads them, and `test` runs each module's tests
-/// file (there's no `init-test.lua`); one that fails as it loads counts
-/// as a failure by its file's name, and the others' results still count.
-#[test]
-#[cfg(feature = "lua")]
-fn lua_library_without_root_module() {
+/// real libraries are, on the interpreter and each backend whose tools
+/// run here (skipped where they're missing, unless
+/// `TEMPEST_REQUIRE_CHECKERS` is set): `run` loads every module, and
+/// `test` runs every module's tests. A module that fails as it loads
+/// should be one failure by its name while the others' results still
+/// count; Python names its tests module, Lua its tests file, and Java the
+/// test, but the rest don't yet, nor does Java's `run` load every
+/// module, so those check what they do now.
+fn library_without_root_module(backend: &str) {
     let files = [
         (
             "x/x.temper",
@@ -836,29 +838,44 @@ fn lua_library_without_root_module() {
         ),
         ("z/z.temper", "test(\"z\") { assert(true) }\n"),
     ];
-    with_library("lua-rootless", &files, |dir| {
-        let (code, out, err) = tempest(&["run", "-w", dir, "--library", "a", "-b", "lua"]);
-        if err.contains("couldn't run") {
-            assert!(
-                std::env::var_os("TEMPEST_REQUIRE_CHECKERS").is_none(),
-                "lua is missing (needed with TEMPEST_REQUIRE_CHECKERS):\n{err}"
-            );
-            eprintln!("skipped: no lua");
+    let mut missing = false;
+    with_library(&format!("rootless-{backend}"), &files, |dir| {
+        let (code, out, err) = tempest(&["run", "-w", dir, "--library", "a", "-b", backend]);
+        if tools_missing(backend, &err) {
+            missing = true;
             return;
         }
-        assert_eq!((code, out.as_str()), (0, "x\ny\n"), "{err}");
-        let lua = Path::new(dir).join("temper.out/lua/a");
-        assert_eq!(
-            fs::read_to_string(lua.join("init.lua")).unwrap(),
-            "require(\"a/x\")\nrequire(\"a/y\")\nrequire(\"a/z\")\n"
+        // Java runs one module's `…Main`, for now.
+        if backend != "java" {
+            assert_eq!((code, out.as_str()), (0, "x\ny\n"), "{backend}: {err}");
+        }
+        assert_eq!(code, 0, "{backend}: {err}");
+        if backend == "lua" {
+            let lua = Path::new(dir).join("temper.out/lua/a");
+            assert_eq!(
+                fs::read_to_string(lua.join("init.lua")).unwrap(),
+                "require(\"a/x\")\nrequire(\"a/y\")\nrequire(\"a/z\")\n"
+            );
+            assert!(!lua.join("tests/init-test.lua").exists());
+        }
+        let (code, out, err) = tempest(&["test", "-b", backend, dir]);
+        if tools_missing(backend, &format!("{out}{err}")) {
+            missing = true;
+            return;
+        }
+        // As each tool names it: `y2`, or C#'s method `Y2`.
+        let failed = out.to_lowercase().contains("  failed  y2 - expected");
+        assert!(failed, "{backend}:\n{out}{err}");
+        assert!(
+            out.ends_with("Tests passed: 3 of 4\n"),
+            "{backend}:\n{out}{err}"
         );
-        assert!(!lua.join("tests/init-test.lua").exists());
-        let (code, out, err) = tempest(&["test", "-b", "lua", dir]);
-        assert!(out.contains("  failed  y2 - expected"), "{out}{err}");
-        assert!(out.ends_with("Tests passed: 3 of 4\n"), "{out}{err}");
-        assert_eq!(code, 1);
+        assert_eq!(code, 1, "{backend}");
     });
-    // `y`'s module failing as it loads, and so its tests file.
+    if missing {
+        return;
+    }
+    // `y`'s module failing as it loads, and so its tests.
     let files = [
         ("x/x.temper", "test(\"x\") { assert(true) }\n"),
         (
@@ -867,13 +884,77 @@ fn lua_library_without_root_module() {
              test(\"y\") { assert(n == 1) }\n",
         ),
     ];
-    with_library("lua-rootless-broken", &files, |dir| {
-        let (code, out, err) = tempest(&["test", "-b", "lua", dir]);
-        let failed = "  failed  a/tests/y-test.lua - no test results: ";
-        assert!(out.contains(failed), "{out}{err}");
-        assert!(out.ends_with("Tests passed: 1 of 2\n"), "{out}{err}");
-        assert_eq!(code, 1);
+    with_library(&format!("rootless-broken-{backend}"), &files, |dir| {
+        let (code, out, err) = tempest(&["test", "-b", backend, dir]);
+        let (failed, summary) = match backend {
+            "py" => (
+                Some("  failed  unittest.loader._FailedTest.tests.test_y - ImportError: "),
+                "1 of 2",
+            ),
+            "lua" => (
+                Some("  failed  a/tests/y-test.lua - no test results: "),
+                "1 of 2",
+            ),
+            "java" => (Some("  failed  y - panic"), "1 of 2"),
+            // Every test fails, for now.
+            "rust" => (None, "0 of 2"),
+            // No results at all, for now.
+            _ => (None, "0 of 2 (2 not run)"),
+        };
+        if let Some(failed) = failed {
+            assert!(out.contains(failed), "{backend}:\n{out}{err}");
+        }
+        let summary = format!("Tests passed: {summary}\n");
+        assert!(out.ends_with(&summary), "{backend}:\n{out}{err}");
+        assert_eq!(code, 1, "{backend}");
     });
+}
+
+#[test]
+fn library_without_root_module_interp() {
+    library_without_root_module("interp");
+}
+
+#[test]
+#[cfg(feature = "cpp")]
+fn library_without_root_module_cpp() {
+    library_without_root_module("cpp");
+}
+
+#[test]
+#[cfg(feature = "csharp")]
+fn library_without_root_module_csharp() {
+    library_without_root_module("csharp");
+}
+
+#[test]
+#[cfg(feature = "java")]
+fn library_without_root_module_java() {
+    library_without_root_module("java");
+}
+
+#[test]
+#[cfg(feature = "js")]
+fn library_without_root_module_js() {
+    library_without_root_module("js");
+}
+
+#[test]
+#[cfg(feature = "lua")]
+fn library_without_root_module_lua() {
+    library_without_root_module("lua");
+}
+
+#[test]
+#[cfg(feature = "py")]
+fn library_without_root_module_py() {
+    library_without_root_module("py");
+}
+
+#[test]
+#[cfg(feature = "rust")]
+fn library_without_root_module_rust() {
+    library_without_root_module("rust");
 }
 
 /// A library that doesn't build for a backend, as it uses what tmpl
