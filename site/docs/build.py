@@ -5,6 +5,7 @@
 
     uv run site/docs/build.py [--out DIR] [--kelpto DIR] [--tempest BIN]
                               [--chromium PATH | --no-diagrams]
+                              [--commit REV]
 
 Kelpto, the Markdown and HTML library written in Temper, renders every
 page, built for Python by tempest itself: this copies Kelpto's four
@@ -21,7 +22,10 @@ Temper highlighting (with the VS Code extension's grammar, through
 editors/vscode/check_grammar.py's tokenizer), and links rewritten for
 the site: `.md` to `.html` (`README.md` to `index.html`), and the
 playground's absolute link to its relative path. Links to files outside
-docs/ (sources in the repository) become plain text, and are counted.
+docs/ (sources in the repository) go to them on GitHub, at REPO_URL, at
+the commit the site is built from: `--commit REV`, else `$GITHUB_SHA` (in
+GitHub Actions), else HEAD. If the working tree has uncommitted changes,
+links still go to HEAD, and the build says so.
 
 Mermaid diagrams are drawn here, as inline SVG, light and dark, by
 site/docs/mermaid/render.mjs: mermaid in headless Chromium, through
@@ -41,13 +45,17 @@ Writes to `--out DIR` (default `site/_out/site/`): `index.html` from
 README.md, `docs/…` from docs/, `assets/site.css`, and the licenses as
 `.txt`. The playground goes in `playground/` beside them, built by
 site/playground/build.py. Then it checks that every link in the site
-leads to a page, file, and heading that exist, and exits with 1 if not.
+leads to a page, file, and heading that exist, and each repository link
+to a file or directory at that commit, in git's own objects, with its
+`#L12` or `#L10-L20` within the file and its heading in a `.md` file;
+it exits with 1 if not.
 """
 
 import argparse
 import hashlib
 import html
 import json
+import os
 import posixpath
 import re
 import shutil
@@ -55,7 +63,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from urllib.parse import unquote
+from urllib.parse import quote, unquote
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
@@ -71,6 +79,8 @@ REMOVALS = HERE / "removals.txt"
 KELPTO_LIBS = ["kelpto-core", "kelpto-md", "kelpto-html", "kelpto"]
 # The playground's published address, from README.md, as pages.yml reads it.
 SITE_URL = re.compile(r"https://temperlang\.github\.io/tempest/[0-9a-f]{32}/")
+# Where links to the repository's files outside the site go, at a commit.
+REPO_URL = "https://github.com/temperlang/tempest"
 # The header's sections: docs/ folders and their names.
 SECTIONS = [
     ("guide", "Guide"),
@@ -378,14 +388,102 @@ def slug(text: str) -> str:
     return re.sub(r"[^\w\- ]", "", text.strip().lower()).replace(" ", "-")
 
 
+def md_anchors(text: str) -> set[str]:
+    """A Markdown file's heading anchors, as GitHub makes them and as
+    compat/check_anchors.py finds them."""
+    found: set[str] = set()
+    counts: dict[str, int] = {}
+    fenced = False
+    for line in text.splitlines():
+        if line.startswith("```"):
+            fenced = not fenced
+        elif not fenced and (m := re.match(r"#{1,6}\s+(.*)", line)):
+            base = slug(re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", m.group(1)))
+            n = counts.get(base, 0)
+            counts[base] = n + 1
+            found.add(base if n == 0 else f"{base}-{n}")
+    return found
+
+
+class Repo:
+    """The repository at the commit the site is built from. Links to its
+    files that aren't on the site go to them on GitHub at that commit, and
+    are checked against git's objects for it, not over the network."""
+
+    def __init__(self, rev: str | None):
+        rev = rev or "HEAD"
+        found = self.git("rev-parse", "--verify", "--quiet", f"{rev}^{{commit}}")
+        if found.returncode != 0:
+            sys.exit(f"build.py: no commit {rev} in the repository; pass --commit REV")
+        self.commit = found.stdout.decode().strip()
+        head = self.git("rev-parse", "--verify", "--quiet", "HEAD").stdout.decode().strip()
+        changed = self.git("status", "--porcelain", "--untracked-files=no").stdout.strip()
+        # Uncommitted changes, when linking to HEAD: they aren't at the links.
+        self.dirty = self.commit == head and bool(changed)
+        listed = self.git("ls-tree", "-r", "-t", "-z", "--full-tree", self.commit)
+        if listed.returncode != 0:
+            sys.exit(f"build.py: can't list the files at {self.commit}:\n{listed.stderr.decode()}")
+        self.kinds = {"": "tree"}  # path to blob or tree (or commit, for a submodule)
+        for entry in listed.stdout.decode().split("\0"):
+            if entry:
+                meta, _, path = entry.partition("\t")
+                self.kinds[path] = meta.split()[1]
+        self.links: list[tuple[str, str, str]] = []  # page, path, fragment
+
+    @staticmethod
+    def git(*args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(["git", "-C", str(ROOT), *args], capture_output=True)
+
+    def url(self, path: str, fragment: str, src: str) -> str:
+        """The GitHub address of `path` (from the repository's root) at the
+        commit, with its fragment; noted for check()."""
+        path = "" if path == "." else path
+        self.links.append((src, path, fragment))
+        kind = "blob" if self.kinds.get(path, "blob") == "blob" else "tree"
+        return f"{REPO_URL}/{kind}/{self.commit}" + (f"/{quote(path)}" if path else "") + (f"#{fragment}" if fragment else "")
+
+    def check(self) -> list[str]:
+        """Each link's path exists at the commit, a line fragment is within
+        its file, and a fragment on a `.md` file names a heading in it."""
+        problems = []
+        texts: dict[str, str] = {}
+        for src, path, fragment in self.links:
+            shown = f"{src}: {path or '.'}" + (f"#{fragment}" if fragment else "")
+            kind = self.kinds.get(path)
+            if kind is None:
+                problems.append(f"{shown}: not in the repository at {self.commit[:12]}")
+                continue
+            if not fragment:
+                continue
+            if kind != "blob":
+                problems.append(f"{shown}: a fragment on a directory")
+                continue
+            if path not in texts:
+                texts[path] = self.git("cat-file", "blob", f"{self.commit}:{path}").stdout.decode(errors="replace")
+            text = texts[path]
+            lines = re.fullmatch(r"L(\d+)(?:-L(\d+))?", fragment)
+            if path.endswith(".md"):
+                if unquote(fragment) not in md_anchors(text):
+                    problems.append(f"{shown}: no such heading")
+            elif lines:
+                first, last = int(lines.group(1)), int(lines.group(2) or lines.group(1))
+                count = len(text.splitlines())
+                if not 1 <= first <= last <= count:
+                    problems.append(f"{shown}: not lines of the file, which has {count}")
+            else:
+                problems.append(f"{shown}: neither lines (#L12, #L10-L20) nor a heading in Markdown")
+        return problems
+
+
 class Site:
-    def __init__(self, kelpto: Kelpto, highlighter: Highlighter, out: Path, diagrams: Diagrams | None):
+    def __init__(self, kelpto: Kelpto, highlighter: Highlighter, out: Path, diagrams: Diagrams | None, repo: Repo):
         self.kelpto = kelpto
+        self.repo = repo
         self.diagrams = diagrams
         self.highlighter = highlighter
         self.out = out
         self.sources = ["README.md"] + sorted(p.relative_to(ROOT).as_posix() for p in DOCS.rglob("*.md"))
-        self.offsite: dict[str, int] = {}  # source paths linked from pages, with counts
+        self.outside: list[str] = []  # links outside the repository, and images not on the site
         self.stale: list[str] = []  # links to the site at another path than README.md's
         found = SITE_URL.search((ROOT / "README.md").read_text())
         if not found:
@@ -419,8 +517,9 @@ class Site:
         return None, path
 
     def rewrite_links(self, body: str, src: str, page: str) -> str:
-        def site_relative(href: str) -> str | None:
-            """A link's new href, or None if it can't be on the site."""
+        def site_relative(href: str, github: bool = True) -> str | None:
+            """A link's new href: on the site, relative; else to the
+            repository on GitHub (if `github`); else None."""
             if href.startswith("#"):
                 return href
             if m := SITE_URL.match(href):
@@ -431,8 +530,9 @@ class Site:
                 return href
             target, outside = self.target(href, src)
             if target is None:
-                self.offsite[outside or href] = self.offsite.get(outside or href, 0) + 1
-                return None
+                if outside is None or outside.startswith("../") or not github:
+                    return None
+                return self.repo.url(outside, href.partition("#")[2], src)
             path, hash_, fragment = target.partition("#")
             return relative(path, page) + hash_ + fragment
 
@@ -444,17 +544,17 @@ class Site:
             href = html.unescape(found.group(1))
             new = site_relative(href)
             if new is None:
-                note = html.escape(f"In the tempest repository: {posixpath.normpath(posixpath.join(posixpath.dirname(src), href.partition('#')[0]))}")
-                return f'<span class="offsite" title="{note}">{inner}</span>'
+                self.outside.append(f"{src}: {href}: outside the repository")
+                return inner
             attrs = attrs.replace(found.group(0), 'href="' + html.escape(new) + '"')
             return f"<a{attrs}>{inner}</a>"
 
         def image(m: re.Match) -> str:
             href = html.unescape(m.group(2))
-            new = site_relative(href)
+            new = site_relative(href, github=False)
             if new is None:
-                self.offsite[href] = self.offsite.get(href, 0) + 1
-                return m.group(0)
+                self.outside.append(f"{src}: {href}: an image not on the site")
+                return f'{m.group(1)}""'
             return f'{m.group(1)}"{html.escape(new)}"'
 
         body = re.sub(r"<a\b([^>]*)>(.*?)</a>", anchor, body, flags=re.S)
@@ -754,6 +854,9 @@ def main() -> int:
     parser.add_argument("--tempest", type=Path, help="tempest (default target/release/tempest, else target/small/tempest)")
     parser.add_argument("--chromium", help="Chromium to draw diagrams with (default $TEMPEST_CHROMIUM, else Playwright's)")
     parser.add_argument("--no-diagrams", action="store_true", help="show Mermaid diagrams' source, not drawn")
+    parser.add_argument(
+        "--commit", default=os.environ.get("GITHUB_SHA"), help="the commit repository links go to (default $GITHUB_SHA, else HEAD)"
+    )
     args = parser.parse_args()
     started = time.monotonic()
     tempest = args.tempest or next(
@@ -765,24 +868,21 @@ def main() -> int:
     py = build_kelpto(args.kelpto.resolve(), tempest)
     built = time.monotonic()
     diagrams = None if args.no_diagrams else Diagrams(args.chromium)
-    site = Site(Kelpto(py), Highlighter(), args.out.resolve(), diagrams)
+    repo = Repo(args.commit)
+    site = Site(Kelpto(py), Highlighter(), args.out.resolve(), diagrams, repo)
     n = site.build()
     rendered = time.monotonic()
     problems, count, skipped = check(args.out.resolve())
-    problems = site.stale + check_removals(site.removed, REMOVALS.read_text()) + problems
+    problems = site.stale + site.outside + repo.check() + check_removals(site.removed, REMOVALS.read_text()) + problems
     print(f"build.py: {n} pages in {args.out} (Kelpto {built - started:.1f} s, pages {rendered - built:.1f} s)")
     if diagrams:
         print(f"build.py: {len(diagrams.svgs)} Mermaid diagrams, light and dark: {diagrams.drawn} drawn, {diagrams.cached} cached ({diagrams.seconds:.1f} s)")
     else:
         print("build.py: Mermaid diagrams shown as source (--no-diagrams)")
-    offsite = sum(site.offsite.values())
-    if offsite:
-        tops: dict[str, int] = {}
-        for path, k in site.offsite.items():
-            top = path.split("/")[0] if "/" in path else path
-            tops[top] = tops.get(top, 0) + k
-        listed = ", ".join(f"{t} {k}" for t, k in sorted(tops.items(), key=lambda x: -x[1]))
-        print(f"build.py: {offsite} links to {len(site.offsite)} repository files not on the site, shown as text ({listed})")
+    paths = {path for _, path, _ in repo.links}
+    print(f"build.py: {len(repo.links)} links to {len(paths)} repository files not on the site, to {REPO_URL} at {repo.commit[:12]}, checked in git")
+    if repo.dirty:
+        print(f"build.py: the working tree has uncommitted changes; repository links go to HEAD, {repo.commit[:12]}, without them")
     if site.removed:
         kinds: dict[str, int] = {}
         for r in site.removed:
@@ -794,7 +894,7 @@ def main() -> int:
         print(f"build.py: {len(skipped)} links into playground/ not checked (it isn't built here)")
     for p in problems:
         print(f"build.py: {p}", file=sys.stderr)
-    print(f"build.py: {count} links checked, {len(problems)} problems")
+    print(f"build.py: {count + len(repo.links)} links checked, {len(problems)} problems")
     return 1 if problems else 0
 
 

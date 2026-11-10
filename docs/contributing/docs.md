@@ -146,15 +146,21 @@ Flavored Markdown with raw HTML and renders it with Kelpto's
 anchors and alerts, Temper highlighting with the VS Code extension's
 grammar, a header and a sidebar from each folder's `README.md`, and
 links rewritten for the site (`.md` to `.html`, and `README.md` to
-`index.html`). Links to the repository's sources, outside docs/, can't
-work there, so they show as plain text, dotted, with the path in a
-tooltip; the build counts them, and publishes the license files, as
-`.txt`, so those links work. What Kelpto's sanitizer drops (comments, `style`,
+`index.html`). Links to the repository's files outside docs/ go to
+GitHub, pinned to the commit the site is built from (HEAD, or
+`$GITHUB_SHA` in Actions, or `--commit REV`), with `blob/` for files and
+`tree/` for folders; headings in `.md` files and line fragments
+(`#L12`, `#L10-L20`) carry over. If the working tree has uncommitted
+changes, the build says so, since the links show HEAD without them. The
+license files are published as `.txt`, so their links stay on the site.
+What Kelpto's sanitizer drops (comments, `style`,
 and mkdocs' `markdown` attributes) must be listed, with a reason, in
 `site/docs/removals.txt`, or the build fails, so content can't
 silently go missing from a page. The build ends by
 checking that every link on the site leads to a page, a file, and a
-heading that exist, and fails if one doesn't; links into the
+heading that exist, and that every link to GitHub leads to a file or
+folder at that commit, a heading in it, and lines within it, by git's
+own objects, not the network; it fails if one doesn't. Links into the
 playground are only listed when it isn't built.
 
 Mermaid diagrams are drawn at build time, into inline SVG, so readers

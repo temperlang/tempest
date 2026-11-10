@@ -77,7 +77,8 @@ jobs:
       # README.md and docs/, rendered by Kelpto, which tempest builds for
       # Python; every page carries noindex, nofollow, and no-referrer. It
       # ends by checking every link on the site, into the playground too,
-      # and fails if any is broken.
+      # and fails if any is broken. Links to repository files outside
+      # docs/ go to GitHub at $GITHUB_SHA, checked against this checkout.
       # Mermaid diagrams are drawn by mermaid in headless Chromium, which
       # the pinned playwright-core installs: its own build, cached by the
       # lockfile.
