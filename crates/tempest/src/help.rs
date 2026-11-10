@@ -113,6 +113,12 @@ const LOGFORMAT: &str = "    --logformat text|json
             per line, as Kotlin's.
 ";
 
+const TIMEOUT: &str = "    --timeout S|none
+            On a backend, the seconds each command its tools start (a
+            tests file, a build) may take, killed with what it started
+            if it runs over; as TEMPEST_TIMEOUT. none for no limit.
+";
+
 const STD: &str = "    --std DIR
             Read std from DIR instead of the copy built in.
 ";
@@ -154,6 +160,8 @@ pub fn command(name: &str) -> Option<String> {
              \x20           On the interpreter, the steps each test may take, and the\n\
              \x20           top-level code before them (default {TEST_FUEL}); a test\n\
              \x20           that runs out fails alone. none for no limit.\n\
+             {TIMEOUT}\
+             \x20           Default 600.\n\
              {NO_CONNECTED}{VERBOSE}{LOGFORMAT}{STD}"
         ),
         "run" => format!(
@@ -171,6 +179,9 @@ pub fn command(name: &str) -> Option<String> {
              {WORKROOT}{IGNOREFILE}\
              \x20   -o, --output-directory DIR\n\
              \x20           As for build.\n\
+             {TIMEOUT}\
+             \x20           The program itself has none by default; each step that\n\
+             \x20           builds it, 600.\n\
              {NO_CONNECTED}{VERBOSE}{LOGFORMAT}{STD}"
         ),
         "init" => "usage: tempest init [-o DIR]\n\

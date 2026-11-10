@@ -6,9 +6,11 @@
 //!     tempest build [-w DIR] [-ign FILE] [-o DIR] [-b BACKEND]... [--no-connected]
 //!                   [-v] [--logformat text|json] [--std DIR]
 //!     tempest test [-w DIR | DIR] [-ign FILE] [--library NAME] [-b interp|BACKEND]...
-//!                  [--fuel N|none] [--no-connected] [-v] [--logformat text|json] [--std DIR]
+//!                  [--fuel N|none] [--timeout S|none] [--no-connected] [-v]
+//!                  [--logformat text|json] [--std DIR]
 //!     tempest run --library NAME -b interp|BACKEND [-w DIR] [-ign FILE] [-o DIR]
-//!                 [--no-connected] [-v] [--logformat text|json] [--std DIR]
+//!                 [--timeout S|none] [--no-connected] [-v] [--logformat text|json]
+//!                 [--std DIR]
 //!     tempest init [-o DIR]
 //!     tempest serve|lsp [--std DIR]
 //!     tempest version | license | licenses | help [COMMAND]
@@ -26,7 +28,10 @@
 //!   DIR is where the work root's search starts, as `-w`'s default
 //!   starts from the current directory. On the interpreter, each test
 //!   may take `--fuel` steps, [`temper_frontend::interp::TEST_FUEL`] by
-//!   default, so a runaway test fails alone ("ran out of steps").
+//!   default, so a runaway test fails alone ("ran out of steps"). On a
+//!   backend, each command its tools start may take `--timeout` seconds
+//!   (or `TEMPEST_TIMEOUT`'s), 600 by default, and dies with tempest
+//!   ([`temper_tmpl::tools::output`]).
 //! - `run` builds the work root for one backend, then runs a library's
 //!   top level with that language's tools, or on the interpreter
 //!   ([`temper_driver::run`]).
@@ -68,6 +73,7 @@ use temper_frontend::log::{LogFormat, task};
 use temper_frontend::project::{ignore_file, work_root};
 use temper_frontend::sources::Sources;
 use temper_tmpl::Backend;
+use temper_tmpl::tools;
 
 /// Exit codes.
 const FAILED: u8 = 1;
@@ -173,12 +179,13 @@ struct Flags {
     port: Option<String>,
     tokens: Option<String>,
     fuel: Option<String>,
+    timeout: Option<String>,
     positional: Vec<String>,
 }
 
 /// Each option: its long name, its short one if any, and whether it
 /// takes a value.
-const OPTIONS: [(&str, Option<&str>, bool); 12] = [
+const OPTIONS: [(&str, Option<&str>, bool); 13] = [
     ("std", None, true),
     ("workroot", Some("w"), true),
     ("ignorefile", Some("ign"), true),
@@ -191,6 +198,7 @@ const OPTIONS: [(&str, Option<&str>, bool); 12] = [
     ("port", None, true),
     ("tokens", None, true),
     ("fuel", None, true),
+    ("timeout", None, true),
 ];
 
 /// Parses a command's arguments, allowing the options in `allowed` (by
@@ -248,6 +256,7 @@ fn parse(command: &str, args: &[String], allowed: &[&str], positional: usize) ->
             "port" => once(&mut flags.port)?,
             "tokens" => once(&mut flags.tokens)?,
             "fuel" => once(&mut flags.fuel)?,
+            "timeout" => once(&mut flags.timeout)?,
             "backend" => {
                 if !flags.backends.contains(&value) {
                     flags.backends.push(value);
@@ -407,11 +416,15 @@ fn test_command(args: &[String]) -> u8 {
         "verbose",
         "logformat",
         "fuel",
+        "timeout",
     ];
     let flags = match parse("test", args, &allowed, 1) {
         Ok(flags) => flags,
         Err(code) => return code,
     };
+    if let Err(code) = set_limits("test", &flags) {
+        return code;
+    }
     let fuel = match flags.fuel.as_deref().map(parse_fuel) {
         None => Some(TEST_FUEL),
         Some(Ok(fuel)) => fuel,
@@ -513,6 +526,31 @@ fn parse_fuel(value: &str) -> Result<Option<u64>, ()> {
     }
 }
 
+/// Sets the time limit of what backends' tools start, `--timeout`'s,
+/// else `TEMPEST_TIMEOUT`'s, and checks `TEMPEST_MEMORY_LIMIT`; or says
+/// what's wrong and gives the usage error's exit code.
+fn set_limits(command: &str, flags: &Flags) -> Result<(), u8> {
+    let wrong = |what: &str, why: String| {
+        eprintln!("tempest {command}: {what} is {why}");
+        USAGE
+    };
+    match flags.timeout.as_deref() {
+        Some(value) => {
+            let limit = tools::parse_seconds(value).map_err(|why| wrong("--timeout", why))?;
+            tools::set_timeout(limit);
+        }
+        None => {
+            if let Ok(value) = std::env::var("TEMPEST_TIMEOUT") {
+                tools::parse_seconds(&value).map_err(|why| wrong("TEMPEST_TIMEOUT", why))?;
+            }
+        }
+    }
+    if let Ok(value) = std::env::var("TEMPEST_MEMORY_LIMIT") {
+        tools::parse_mib(&value).map_err(|why| wrong("TEMPEST_MEMORY_LIMIT", why))?;
+    }
+    Ok(())
+}
+
 /// `tempest run --library NAME -b BACKEND`.
 fn run_library(args: &[String]) -> u8 {
     let allowed = [
@@ -525,11 +563,15 @@ fn run_library(args: &[String]) -> u8 {
         "no-connected",
         "verbose",
         "logformat",
+        "timeout",
     ];
     let flags = match parse("run", args, &allowed, 0) {
         Ok(flags) => flags,
         Err(code) => return code,
     };
+    if let Err(code) = set_limits("run", &flags) {
+        return code;
+    }
     let Some(library) = flags.library.as_deref() else {
         eprintln!("tempest run: --library NAME is required");
         return USAGE;

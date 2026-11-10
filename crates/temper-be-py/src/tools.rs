@@ -8,7 +8,7 @@
 
 use std::path::Path;
 use std::process::Command;
-use temper_tmpl::tools::{junit_file, output, program, tool};
+use temper_tmpl::tools::{junit_file, limit_memory, output, program, tool};
 use temper_tmpl::{TestResults, Tested, Tools};
 
 pub const TOOLS: Tools = Tools {
@@ -33,7 +33,7 @@ fn run(dir: &Path, library: &Tested, all: &[Tested]) -> Result<bool, String> {
          await_safe_to_exit()\n"
     );
     program(
-        Command::new(tool("PYTHON", "python3"))
+        limit_memory(&mut Command::new(tool("PYTHON", "python3")))
             .args(["-B", "-c", &top])
             .env("PYTHONPATH", python_path(dir, all)?)
             .current_dir(dir),
@@ -47,7 +47,7 @@ fn test(dir: &Path, library: &Tested, all: &[Tested]) -> TestResults {
     let results = here.join("result.xml");
     let _ = std::fs::remove_file(&results);
     let run = output(
-        Command::new(tool("PYTHON", "python3"))
+        limit_memory(&mut Command::new(tool("PYTHON", "python3")))
             .args(["-B", "-m", "temper_core.testing", "result.xml"])
             .env("PYTHONPATH", path)
             .current_dir(&here),

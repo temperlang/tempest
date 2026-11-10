@@ -9,7 +9,7 @@
 
 use std::path::Path;
 use std::process::Command;
-use temper_tmpl::tools::{junit_file, output, program, step, tool, tool_output};
+use temper_tmpl::tools::{junit_file, limit_memory, output, program, step, tool, tool_output};
 use temper_tmpl::{TestResults, Tested, Tools};
 
 pub const TOOLS: Tools = Tools {
@@ -35,7 +35,7 @@ fn run(dir: &Path, library: &Tested, _: &[Tested]) -> Result<bool, String> {
         "cmake --build",
     )?;
     program(
-        Command::new(here.join("build").join(&target)).current_dir(&here),
+        limit_memory(&mut Command::new(here.join("build").join(&target))).current_dir(&here),
         &target,
     )
 }
@@ -66,7 +66,7 @@ fn test(dir: &Path, library: &Tested, _: &[Tested]) -> TestResults {
     let results = here.join("test-results.xml");
     let _ = std::fs::remove_file(&results);
     let run = output(
-        Command::new(build.join(&target)).current_dir(&here),
+        limit_memory(&mut Command::new(build.join(&target))).current_dir(&here),
         "the tests",
     )?;
     junit_file(&results, &run, str::to_string)

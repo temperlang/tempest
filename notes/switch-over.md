@@ -108,7 +108,9 @@ Risks to the date:
      tempest ran each module's tests file, 2026-11-10: 31 of 54 on Lua
      5.4, each tests file given 240 seconds and 1.5 GB, the rest
      failing in the regex runtime or not reached, and 15 on LuaJIT,
-     where that runtime needs `utf8`), but with
+     where that runtime needs `utf8`; since then, each command
+     tools start has 600 seconds and dies with tempest, and Lua's may
+     write 4 GiB, so a runaway tests file fails alone), but with
      5 errors, exiting 1: one in its HTML codec, until its own fix
      (removing the check, under way on its branch) lands, and four in
      its contextual autoescaping's `if (DEBUG)` branches (`context`),

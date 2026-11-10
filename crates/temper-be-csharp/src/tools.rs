@@ -45,9 +45,10 @@ fn run(dir: &Path, library: &Tested, _: &[Tested]) -> Result<bool, String> {
     );
     let ran = built.and_then(|()| program(dotnet().args(["run", "--no-build"]), "dotnet run"));
     // No build server left running once the program is done.
-    let _ = Command::new(tool("DOTNET", "dotnet"))
-        .args(["build-server", "shutdown"])
-        .output();
+    let _ = output(
+        Command::new(tool("DOTNET", "dotnet")).args(["build-server", "shutdown"]),
+        "dotnet build-server shutdown",
+    );
     ran
 }
 
@@ -69,9 +70,10 @@ fn test(dir: &Path, library: &Tested, _: &[Tested]) -> TestResults {
         "dotnet",
     );
     // No build server left running once the tests are done.
-    let _ = Command::new(tool("DOTNET", "dotnet"))
-        .args(["build-server", "shutdown"])
-        .output();
+    let _ = output(
+        Command::new(tool("DOTNET", "dotnet")).args(["build-server", "shutdown"]),
+        "dotnet build-server shutdown",
+    );
     let run = run?;
     if strict {
         let runtime = dir.join("temper-core");

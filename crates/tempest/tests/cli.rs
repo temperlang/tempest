@@ -1285,3 +1285,211 @@ fn test_flags() {
         let _ = fs::remove_file(&list);
     });
 }
+
+/// A library with a test that never ends, in `x/`, and one that passes,
+/// in `y/`.
+const HANGING: [(&str, &str); 2] = [
+    (
+        "x/x.temper",
+        "test(\"hang\") { for (var i = 0; i < 5;) {} }\n",
+    ),
+    ("y/y.temper", "test(\"y\") { assert(true) }\n"),
+];
+
+/// The processes whose working directory is under `dir`, which are what
+/// tempest started there, by their ids.
+#[cfg(target_os = "linux")]
+fn processes_in(dir: &Path) -> Vec<u32> {
+    let dir = fs::canonicalize(dir).unwrap();
+    let mut found = Vec::new();
+    for entry in fs::read_dir("/proc").unwrap().flatten() {
+        let Ok(id) = entry.file_name().to_string_lossy().parse::<u32>() else {
+            continue;
+        };
+        if fs::read_link(entry.path().join("cwd")).is_ok_and(|cwd| cwd.starts_with(&dir)) {
+            found.push(id);
+        }
+    }
+    found
+}
+
+/// Whether a process is running: there, and not a zombie.
+#[cfg(target_os = "linux")]
+fn alive(id: u32) -> bool {
+    let stat = fs::read_to_string(format!("/proc/{id}/stat")).unwrap_or_default();
+    // `ID (NAME) STATE …`, the name possibly holding spaces.
+    let state = stat.rsplit_once(") ").map(|(_, rest)| &rest[..1]);
+    state.is_some_and(|s| s != "Z" && s != "X")
+}
+
+/// Waits up to `secs` for none of `ids` to be running.
+#[cfg(target_os = "linux")]
+fn all_gone(ids: &[u32], secs: u64) -> bool {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(secs);
+    while ids.iter().any(|&id| alive(id)) {
+        if std::time::Instant::now() > deadline {
+            return false;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    true
+}
+
+/// Whether a backend's tools are missing, by what tempest said; which
+/// fails the test with `TEMPEST_REQUIRE_CHECKERS`.
+fn tools_missing(backend: &str, err: &str) -> bool {
+    if !err.contains("couldn't run") {
+        return false;
+    }
+    assert!(
+        std::env::var_os("TEMPEST_REQUIRE_CHECKERS").is_none(),
+        "{backend}'s tools are missing (needed with TEMPEST_REQUIRE_CHECKERS):\n{err}"
+    );
+    eprintln!("skipped {backend}: its tools are missing");
+    true
+}
+
+/// Runs tempest in the background, noting the processes it starts in
+/// `dir`'s `temper.out` while it runs; once it's started one, `signal`,
+/// if given, is sent to tempest. Its status, stdout, stderr, and what it
+/// started.
+#[cfg(target_os = "linux")]
+fn watch_tempest(
+    args: &[&str],
+    dir: &str,
+    signal: Option<&str>,
+) -> (std::process::ExitStatus, String, String, Vec<u32>) {
+    let logs = std::env::temp_dir().join(format!(
+        "tempest-cli-{}-{}",
+        std::process::id(),
+        Path::new(dir).file_name().unwrap().to_string_lossy()
+    ));
+    let (out_log, err_log) = (logs.with_extension("out"), logs.with_extension("err"));
+    let mut tempest = Command::new(env!("CARGO_BIN_EXE_tempest"))
+        .args(args)
+        .stdout(fs::File::create(&out_log).unwrap())
+        .stderr(fs::File::create(&err_log).unwrap())
+        .spawn()
+        .unwrap();
+    let out_dir = Path::new(dir).join("temper.out");
+    let mut started: Vec<u32> = Vec::new();
+    let mut signalled = false;
+    let watch = std::time::Instant::now();
+    let status = loop {
+        if let Some(status) = tempest.try_wait().unwrap() {
+            break status;
+        }
+        if out_dir.is_dir() {
+            for id in processes_in(&out_dir) {
+                if !started.contains(&id) {
+                    started.push(id);
+                }
+            }
+        }
+        if let (Some(signal), false) = (signal, started.is_empty() || signalled) {
+            // Once tempest has registered it, as it does right after
+            // starting it.
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            let id = tempest.id().to_string();
+            let sent = Command::new("kill").args([signal, &id]).status().unwrap();
+            assert!(sent.success());
+            signalled = true;
+        }
+        if watch.elapsed().as_secs() > 180 {
+            let _ = tempest.kill();
+            panic!("{args:?}: tempest still running after 180 s");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    };
+    let read = |path: &Path| {
+        let text = fs::read_to_string(path).unwrap_or_default();
+        let _ = fs::remove_file(path);
+        text
+    };
+    (status, read(&out_log), read(&err_log), started)
+}
+
+/// `--timeout`: a test that never ends is killed, with nothing it
+/// started left running, and fails, its run's other results kept: on
+/// Lua, each tests file is its own run, and on Python, a library's tests
+/// are one.
+#[test]
+#[cfg(all(target_os = "linux", feature = "lua", feature = "py"))]
+fn test_timeout() {
+    with_library("timeout", &HANGING, |dir| {
+        for backend in ["lua", "py"] {
+            let args = ["test", "-b", backend, "--timeout", "3", dir];
+            let (status, out, err, started) = watch_tempest(&args, dir, None);
+            if tools_missing(backend, &format!("{out}{err}")) {
+                continue;
+            }
+            assert!(!started.is_empty(), "{backend}: nothing seen running");
+            assert!(all_gone(&started, 0), "{backend}: left running");
+            match backend {
+                "lua" => {
+                    let failed = "  failed  a/tests/x-test.lua - timed out after 3 s\n";
+                    assert!(out.contains(failed), "{out}{err}");
+                    assert!(out.ends_with("Tests passed: 1 of 2\n"), "{out}{err}");
+                }
+                _ => {
+                    assert!(out.contains("a: py: timed out after 3 s\n"), "{out}{err}");
+                    let tally = "Tests passed: 0 of 2 (2 not run)\n";
+                    assert!(out.ends_with(tally), "{out}{err}");
+                }
+            }
+            assert_eq!(status.code(), Some(1), "{out}{err}");
+        }
+        // TEMPEST_TIMEOUT is the same; a wrong one is a usage error.
+        let (code, _, err) = tempest(&["test", "--timeout", "0", dir]);
+        assert_eq!(code, 2);
+        assert!(
+            err.starts_with("tempest test: --timeout is whole seconds above 0, or none, not 0\n"),
+            "{err}"
+        );
+        let output = Command::new(env!("CARGO_BIN_EXE_tempest"))
+            .args(["run", "-w", dir, "--library", "a", "-b", "interp"])
+            .env("TEMPEST_TIMEOUT", "soon")
+            .output()
+            .unwrap();
+        let err = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(output.status.code(), Some(2));
+        assert!(
+            err.starts_with(
+                "tempest run: TEMPEST_TIMEOUT is whole seconds above 0, or none, not soon\n"
+            ),
+            "{err}"
+        );
+    });
+}
+
+/// Killing tempest kills what it started: by SIGTERM (or SIGINT, which
+/// a test run may ignore), its handler kills each process group it
+/// started; by SIGKILL, which no
+/// handler sees, the parent-death signal kills each process it started.
+#[test]
+#[cfg(all(target_os = "linux", feature = "lua", feature = "py"))]
+fn killing_tempest_kills_its_children() {
+    with_library("killed", &HANGING, |dir| {
+        for backend in ["lua", "py"] {
+            for (signal, number) in [("-TERM", 15), ("-KILL", 9)] {
+                let args = ["test", "-b", backend, "--timeout", "none", dir];
+                let (status, out, err, started) = watch_tempest(&args, dir, Some(signal));
+                if tools_missing(backend, &format!("{out}{err}")) {
+                    break;
+                }
+                use std::os::unix::process::ExitStatusExt;
+                assert_eq!(
+                    status.signal(),
+                    Some(number),
+                    "{backend} {signal}: {out}{err}"
+                );
+                assert!(
+                    !started.is_empty(),
+                    "{backend} {signal}: nothing seen running"
+                );
+                // Orphans now, once tempest's gone, for init to reap.
+                assert!(all_gone(&started, 5), "{backend} {signal}: left running");
+            }
+        }
+    });
+}

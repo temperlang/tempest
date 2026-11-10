@@ -31,6 +31,8 @@ pub mod analysis;
 mod backend;
 pub mod builder;
 pub mod cells;
+#[cfg(any(unix, windows))]
+mod children;
 pub mod coroutines;
 mod decls;
 pub mod errors;

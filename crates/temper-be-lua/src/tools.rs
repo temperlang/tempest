@@ -4,10 +4,12 @@
 //! beside the libraries, as Kotlin copies it, and `LUA_PATH` of
 //! `?.lua;?/init.lua`, writing JUnit XML. `tempest run -b lua` runs the
 //! library's `init.lua` the same way, as Kotlin's `Lua51Specifics` does.
+//! Each file runs with a time and a memory limit (`limit_memory`), so a
+//! runaway file fails alone.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use temper_tmpl::tools::{files_with, junit_file, output, program, tool};
+use temper_tmpl::tools::{files_with, junit_file, limit_memory, output, program, tool};
 use temper_tmpl::{TestResults, Tested, Tools};
 
 pub const TOOLS: Tools = Tools {
@@ -18,7 +20,7 @@ pub const TOOLS: Tools = Tools {
 
 fn run(dir: &Path, library: &Tested, _: &[Tested]) -> Result<bool, String> {
     program(
-        Command::new(tool("LUA", "lua"))
+        limit_memory(&mut Command::new(tool("LUA", "lua")))
             .args(["-e", "TEMPER_LUA_DEBUG_FUNCS=false"])
             .arg(PathBuf::from(&library.name).join("init.lua"))
             .env("LUA_PATH", "?.lua;?/init.lua")
@@ -64,11 +66,15 @@ fn test(dir: &Path, library: &Tested, _: &[Tested]) -> TestResults {
             .map(|(file, why)| format!("{file}: {why}"));
         return Err(why.collect::<Vec<_>>().join("\n"));
     }
-    // A file that gave no results, as one that fails as it loads, is a
-    // failure by its name, as Python's unittest reports a module that
-    // won't import, so the others' results still count.
+    // A file that gave no results, as one that fails as it loads, or
+    // one that timed out, is a failure by its name, as Python's unittest
+    // reports a module that won't import, so the others' results still
+    // count.
     for (file, why) in errors {
-        let why = why.strip_prefix("no test results\n").unwrap_or(&why);
+        let Some(why) = why.strip_prefix("no test results\n") else {
+            results.push((file, Some(why)));
+            continue;
+        };
         let first = why.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
         results.push((file, Some(format!("no test results: {first}\n{why}"))));
     }
@@ -80,7 +86,7 @@ fn test_file(dir: &Path, test: &Path) -> TestResults {
     let results = dir.join("test-results.xml");
     let _ = std::fs::remove_file(&results);
     let run = output(
-        Command::new(tool("LUA", "lua"))
+        limit_memory(&mut Command::new(tool("LUA", "lua")))
             .args(["-e", "TEMPER_LUA_DEBUG_FUNCS=false"])
             .arg(test)
             .args(["-o", "junit", "-n", "test-results.xml"])

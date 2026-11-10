@@ -1,6 +1,8 @@
 //! What backends' [`Tools`](crate::Tools) share, and their tests too
 //! (`temper-be-testkit`): finding a tool, running it, and reading the
 //! results it writes as JUnit XML. Native only, as no tool runs in wasm.
+//! What they start is kept from running forever or outliving tempest
+//! (`children.rs`).
 
 use crate::TestResults;
 use std::path::{Path, PathBuf};
@@ -19,11 +21,15 @@ pub fn strict_warnings() -> bool {
     std::env::var_os("TEMPEST_STRICT_WARNINGS").is_some()
 }
 
-/// Runs a command, or says why it couldn't start.
+pub use crate::children::{
+    DEFAULT_MEMORY_LIMIT_MIB, DEFAULT_TIMEOUT, limit_memory, parse_mib, parse_seconds, set_timeout,
+};
+
+/// Runs a command, its output captured, or says why it couldn't start or
+/// that it timed out; in a process group of its own, which is killed if
+/// tempest is, or it times out (`children.rs`).
 pub fn output(command: &mut Command, what: &str) -> Result<Output, String> {
-    command
-        .output()
-        .map_err(|e| format!("couldn't run {what}: {e}"))
+    crate::children::output(command, what)
 }
 
 /// Runs a step that must succeed before a program can run, such as its
@@ -38,12 +44,9 @@ pub fn step(command: &mut Command, what: &str) -> Result<(), String> {
 
 /// Runs a program with this process's standard input, output, and error,
 /// so what it prints streams, as [`crate::Tools::run`] does; whether it
-/// succeeded.
+/// succeeded. As [`output`], but with no time limit unless one is given.
 pub fn program(command: &mut Command, what: &str) -> Result<bool, String> {
-    command
-        .status()
-        .map(|s| s.success())
-        .map_err(|e| format!("couldn't run {what}: {e}"))
+    crate::children::program(command, what)
 }
 
 /// The end of what a tool printed, which says most, as a traceback's.

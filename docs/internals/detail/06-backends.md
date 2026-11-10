@@ -375,6 +375,13 @@ tests fails them, as in the backends' own tests (the C# runtime's
 nullable warnings, Kotlin's, aside). All five libraries compile
 without one (2026-11-10).
 
+Every command a backend's tools start goes through `temper_tmpl::tools`'s
+`output` and `program` ([`children.rs`](../../../crates/temper-tmpl/src/children.rs)):
+each runs in a process group of its own, killed when it ends, times
+out (600 seconds by default), or tempest is interrupted, and on Linux
+dies with tempest; tools that want a memory limit ask for it with
+`limit_memory` ([the CLI's page](../../tools/cli.md#what-tools-start)).
+
 **Not covered:** the declared MSRV (generated crates say 1.71.1; CI
 builds them with 1.85.0); PUC Lua 5.1 (LuaJIT runs the Lua tests);
 C#'s `net48` side, and Java 8; output built against the published

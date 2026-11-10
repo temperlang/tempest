@@ -41,6 +41,7 @@ the same wherever they're taken:
 | `-o DIR`, `--output-directory DIR` | `init`; `build` and `run` in tempest only | Where to write |
 | `--library NAME` | `test`, `run` | A library, by its dashed name (`foo-bar`) |
 | `--std DIR` | tempest only | Read Temper's std library from DIR instead of the copy built in |
+| `--timeout S\|none` | `test`, `run`; tempest only | Seconds each command a backend's tools start may take ([below](#what-tools-start)) |
 
 Backends that `temper` has and tempest doesn't yet (`cppv`, `data`,
 `java8`, and `mypyc`) [say so](#not-in-tempest-yet).
@@ -95,7 +96,7 @@ written, failing where it runs, and the exit status is 1.
 ## `test`
 
     temper test -b BACKEND... [-w DIR] [-ign FILE] [--library NAME] [--no-connected] [-v] [--logformat text|json]
-    tempest test [-b BACKEND|interp]... [-w DIR | DIR] [same] [--fuel N|none] [--std DIR]
+    tempest test [-b BACKEND|interp]... [-w DIR | DIR] [same] [--fuel N|none] [--timeout S|none] [--std DIR]
 
 Builds the libraries and runs their tests with each backend's own tools
 (Mocha, JUnit, `dotnet test`, `cargo test`, and so on), or on the
@@ -125,13 +126,18 @@ interpreter with `-b interp`. It prints the tests that failed, or with
   What the tests log is kept up to 64 KiB, then cut with a note, and
   printed only for a library with a failure. `temper` has neither
   limit.
+- **`--timeout S`**, tempest's, is how long each command a backend's
+  tools start may take: 600 seconds by default
+  ([below](#what-tools-start)). A tests file on Lua, or a library's
+  tests elsewhere, that runs over fails, "timed out after 600 s", and
+  the others' results still count. `temper` has no limit.
 - **Errors in an imported library** are reported once, under it, not
   again for each library importing it.
 
 ## `run`
 
     temper run --library NAME -b BACKEND [-w DIR] [--no-connected] [-v] [--logformat text|json]
-    tempest run [same] [-ign FILE] [-o DIR] [--std DIR]
+    tempest run [same] [-ign FILE] [-o DIR] [--timeout S|none] [--std DIR]
 
 Builds the work root for the backend, then runs the library's top
 level with that language: Python imports its package, Node imports its
@@ -144,7 +150,38 @@ files. Errors fail the run, as in `build`, but don't stop it.
 standard error, and on the interpreter, twice; tempest streams it to
 standard output, once, as it runs, on the interpreter too. On the
 interpreter, `run` has no step limit, as a program run any other way
-has none.
+has none. On a backend, the program has no time limit unless
+`--timeout` or `TEMPEST_TIMEOUT` gives one, as it may be a server; the
+steps that build it have the usual 600 seconds.
+
+### What tools start
+
+What `test -b` and `run -b` start (`lua`, `python3`, Node and Mocha,
+`dotnet`, `java`, `cargo`, CMake, and the programs they build) is
+tempest's to stop, which `temper` leaves to the tools:
+
+- **A time limit.** Each command may take `--timeout S` seconds, or
+  `TEMPEST_TIMEOUT`'s, 600 by default; `none` lifts it. One that runs
+  over is killed and fails, "timed out after S s", with the end of what
+  it printed.
+- **Nothing left behind.** Each command runs in a process group of its
+  own, which is killed when it ends or times out, and if tempest gets
+  SIGINT (Ctrl-C), SIGTERM, or SIGHUP; so what it started, such as
+  `cargo test`'s test binary, goes too. On Linux, each command also
+  dies when tempest does, even by SIGKILL (`PR_SET_PDEATHSIG`); what it
+  started survives that one case.
+- **A memory limit,** on Linux: Lua, Python, and C++'s test and main
+  programs may write at most `TEMPEST_MEMORY_LIMIT` MiB, 4096 by
+  default (`none` lifts it), so a runaway fails ("not enough memory",
+  `MemoryError`) rather than taking the machine. It's `RLIMIT_DATA`,
+  which counts memory written, not address space reserved, which the
+  JVM, .NET, and Node reserve far more of than they use, so they, and
+  the compilers, have none.
+
+On Windows, a command that runs over is killed, but not what it
+started, and nothing dies with tempest yet. A program run in its own
+group isn't in the terminal's foreground, so one that read the
+terminal would stop; Temper has no way to read it.
 
 ## `init`
 
