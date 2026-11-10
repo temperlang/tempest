@@ -670,6 +670,9 @@ impl Settle {
             .lib
             .add(NodeKind::Call, span, 0, &[dot, data, compiled], call);
         self.rewrite(call, NodeKind::Call, 0, &[method]);
+        if texts.len() == 1 {
+            self.lib.constant_regexes.insert(call);
+        }
         Ok(true)
     }
 

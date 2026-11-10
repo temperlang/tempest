@@ -15,6 +15,8 @@
 //!   and type errors.
 //! - [`order`]: top-level statements in dependency order.
 //! - [`builtins`]: the names modules start with.
+//! - `autoescape`: tagged strings' contextual autoescaping worked out at
+//!   compile time, as Kotlin's `OptimizeContextualAutoescapingBlocks`.
 //! - [`interp`]: an interpreter over core constructs, each function
 //!   lowered to a flat form.
 //! - [`print`](mod@print): settled trees as text, for tests.
@@ -28,6 +30,7 @@
 //! - [`to_tmpl`]: a settled library as tmpl, the backend IR.
 //! - `web_client`: HTTP requests for std's `net`, with the `net` feature.
 
+mod autoescape;
 pub mod builtins;
 mod classes;
 pub mod core;

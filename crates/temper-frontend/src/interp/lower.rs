@@ -103,6 +103,15 @@ pub(super) enum Op {
     /// not resolved yet pauses the generator, an `async` block's, until it
     /// is; the op then runs again.
     Await,
+    /// A constant regex literal's value, if it's been made: pushes it from
+    /// the interpreter's cache, by its index, and jumps past the code
+    /// making it; else goes on to that code.
+    Cached {
+        index: u32,
+        skip: u32,
+    },
+    /// Keeps the value on top in the cache, by its index.
+    Cache(u32),
     /// Ends the call with a `break`, `continue` or `return` (popping its
     /// value) for a frame further out.
     Exit(Exit),
@@ -471,6 +480,8 @@ pub(super) struct Lowering {
     /// Each error's message by its span, made the first time an
     /// expression is lowered ([`Lowering::error_at`]).
     errors: Option<HashMap<(u32, u32), Rc<str>>>,
+    /// Constant regex literals' cache indices, by node.
+    pub(super) cached: HashMap<NodeId, u32>,
 }
 
 /// Code being lowered.
@@ -687,7 +698,10 @@ impl Lowering {
     fn patch(&mut self, jump: usize) {
         let to = self.pc();
         match &mut self.b.ops[jump] {
-            Op::Jump(at) | Op::JumpIfFalse(at) | Op::Default { skip: at, .. } => *at = to,
+            Op::Jump(at)
+            | Op::JumpIfFalse(at)
+            | Op::Default { skip: at, .. }
+            | Op::Cached { skip: at, .. } => *at = to,
             op => unreachable!("not a jump: {op:?}"),
         }
     }
@@ -745,6 +759,14 @@ impl Lowering {
             Some(message) => {
                 self.emit(Op::Fail(Some(message)));
                 self.dead(base, keep);
+            }
+            None if keep && s.library.constant_regexes.contains(&node) => {
+                let next = self.cached.len() as u32;
+                let index = *self.cached.entry(node).or_insert(next);
+                let skip = self.emit(Op::Cached { index, skip: 0 });
+                self.node(s, node, keep);
+                self.emit(Op::Cache(index));
+                self.patch(skip);
             }
             None => self.node(s, node, keep),
         }

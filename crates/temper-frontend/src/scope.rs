@@ -257,6 +257,19 @@ impl Scopes {
         self.symbols[id.0 as usize].visible_from = at;
     }
 
+    /// Gives a symbol another name, as a pass that changes what a
+    /// temporary holds does.
+    pub fn rename(&mut self, id: SymbolId, name: NameId) {
+        let symbol = &mut self.symbols[id.0 as usize];
+        symbol.name = name;
+        let owner = symbol.owner;
+        for entry in &mut self.scopes[owner.0 as usize].names {
+            if entry.1 == id {
+                entry.0 = name;
+            }
+        }
+    }
+
     pub fn export(&mut self, id: SymbolId) {
         self.symbols[id.0 as usize].exported = true;
     }

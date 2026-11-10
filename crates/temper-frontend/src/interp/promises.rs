@@ -86,6 +86,11 @@ impl Interp<'_> {
         promise: Rc<Promise>,
         job: impl FnOnce() -> Result<Val, String> + 'static,
     ) {
+        // Native work never runs at compile time; what waits on it waits
+        // for good, so the code using it doesn't finish.
+        if self.compile_time {
+            return;
+        }
         self.ready.push_back(Task::Job(promise, Box::new(job)));
     }
 

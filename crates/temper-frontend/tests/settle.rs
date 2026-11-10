@@ -925,3 +925,152 @@ fn check(text: &str, kind: SourceKind, context: &str) {
         "{context}: settled differently twice\ninput: {text:?}"
     );
 }
+
+/// The toy content tag of `settle/autoescape.cases`, whose propagation
+/// first calls `hook(known)`, which each test declares.
+fn toy_tag() -> String {
+    let cases = include_str!("settle/autoescape.cases");
+    let start = cases.find("=== content tags\n").unwrap() + "=== content tags\n".len();
+    let end = cases.find("let q = Quoting;").unwrap();
+    let null_check = "  if (known == null) { return new After([], before); }";
+    let lib = cases[start..end].replace(null_check, &format!("  hook(known);\n{null_check}"));
+    assert!(lib.contains("hook(known)"));
+    format!("{lib}let q = Quoting;\nlet greet(x: String): String {{ q\"a '${{x}}' b\" }}\n")
+}
+
+/// Settles a library of the toy tag and `hook`, with the fake std
+/// modules given, returning whether the tag's use folded, and the
+/// settled library.
+fn toy_settled(hook: &str, files: &[(&str, &str)]) -> (bool, temper_frontend::settle::Settled) {
+    let mut library = Library::new();
+    let main = format!("{hook}\n{}", toy_tag());
+    library.add_file("main.temper", &main, SourceKind::Standalone);
+    for &(path, text) in files {
+        library.add_file(path, text, SourceKind::Standalone);
+    }
+    let settled = settle(library);
+    let mut tree = String::new();
+    write_settled(&settled, 100, &mut tree);
+    (tree.contains("collector#"), settled)
+}
+
+/// What a use's propagation reaches, its `hook`, and the fake std files.
+type ReachCase = (&'static str, String, Vec<(&'static str, &'static str)>);
+
+/// Nothing reaches outside the interpreter at compile time: a use whose
+/// propagation would send a request, read the clock, call a library's
+/// own `@connected` function, use a std module not on the allowlist, or
+/// start an `async` block is left to run time, and no request is made,
+/// even from the module's top level.
+#[test]
+fn content_tags_reach_nothing_at_compile_time() {
+    with_stack(|| {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let url = format!("http://127.0.0.1:{port}/compile-time");
+        let net = "@connected\n\
+                   let sendRequest(url: String, method: String, bodyContent: String?, bodyMimeType: String?): Promise<String>;\n\
+                   export let send(url: String): Promise<String> { sendRequest(url, \"GET\", null, null) }";
+        let temporal = "export class Date(public year: Int) {\n\
+                          @connected public static today(): Date;\n\
+                        }";
+        let other = "export let pure(s: String): String { s }";
+        let net_file = ("-std-/net/net.temper", net);
+        // Control: a pure hook folds.
+        let (folded, _) = toy_settled("let hook(k: String?): Void {}", &[]);
+        assert!(folded, "the control should fold");
+        let cases: Vec<ReachCase> = vec![
+            (
+                "a request in the propagation",
+                format!("let {{ send }} = import(\"std/net\");\nlet hook(k: String?): Void {{ send(\"{url}\"); }}"),
+                vec![net_file],
+            ),
+            (
+                "a request at the top level",
+                format!("let {{ send }} = import(\"std/net\");\nlet hook(k: String?): Void {{}}\nsend(\"{url}\");"),
+                vec![net_file],
+            ),
+            (
+                "the clock",
+                "let { Date } = import(\"std/temporal\");\nlet hook(k: String?): Void { Date.today(); }".into(),
+                vec![("-std-/temporal/temporal.temper", temporal)],
+            ),
+            (
+                "a std module not on the allowlist",
+                "let { pure } = import(\"std/other\");\nlet hook(k: String?): Void { pure(\"x\"); }".into(),
+                vec![("-std-/other/other.temper", other)],
+            ),
+            (
+                "a library's own @connected function",
+                "@connected\nlet effect(): Void;\nlet hook(k: String?): Void { effect(); }".into(),
+                vec![],
+            ),
+            (
+                "an async block",
+                "let hook(k: String?): Void {\n  async { (): GeneratorResult<Empty> extends GeneratorFn => void; }\n}".into(),
+                vec![],
+            ),
+        ];
+        for (what, hook, files) in cases {
+            let (folded, settled) = toy_settled(&hook, &files);
+            assert!(!folded, "{what}: folded");
+            // Left to run time for what it reaches, not for an error.
+            let errors: Vec<String> = (settled.library.diagnostics.iter())
+                .filter(|d| d.level == Level::Error)
+                .map(|d| d.message.text())
+                .collect();
+            assert!(errors.is_empty(), "{what}: {errors:?}");
+        }
+        assert!(
+            matches!(listener.accept(), Err(e) if e.kind() == std::io::ErrorKind::WouldBlock),
+            "a request was made at compile time"
+        );
+    });
+}
+
+/// A use whose propagation runs out of steps at compile time is left to
+/// run time, and the session that ran out isn't used again: the next use
+/// folds, and both give what the tag's own methods do.
+#[test]
+fn content_tags_out_of_steps() {
+    with_stack(|| {
+        let hook = "let hook(k: String?): Void {\n\
+                      if (k == \"slow\") { var i = 0; while (i < 2000000) { i += 1; } }\n\
+                    }\n\
+                    let slow(x: String): String { q\"slow${x}\" }";
+        let (_, settled) = toy_settled(hook, &[]);
+        let mut tree = String::new();
+        write_settled(&settled, 100, &mut tree);
+        let slow = &tree[tree.find("^slow:").unwrap()..];
+        let slow = &slow[..slow.find("\n  (Let").unwrap_or(slow.len())];
+        assert!(slow.contains("accumulator#"), "slow folded:\n{slow}");
+        let greet = &tree[tree.find("^greet:").unwrap()..];
+        let greet = &greet[..greet.find("\n  (Let").unwrap_or(greet.len())];
+        assert!(greet.contains("collector#"), "greet didn't fold:\n{greet}");
+    });
+}
+
+/// What compile-time runs may use is listed in one place, so additions
+/// are deliberate: printed here, and checked against what's expected.
+#[test]
+fn compile_time_allowlist() {
+    use temper_frontend::builtins::{Builtin, Function};
+    use temper_frontend::interp::compile_time::{
+        ALLOWED_STD_MODULES, DENIED_MEMBERS, builtin_allowed,
+    };
+    println!("std modules allowed: {ALLOWED_STD_MODULES:?}");
+    println!("members denied: {DENIED_MEMBERS:?}");
+    assert_eq!(ALLOWED_STD_MODULES, ["regex", "json", "temporal"]);
+    assert_eq!(DENIED_MEMBERS, [("temporal", "Date", "today")]);
+    let builtins: Vec<&str> = temper_frontend::builtins::BUILTINS
+        .iter()
+        .filter_map(|&(name, b)| match b {
+            Builtin::Function(f) if builtin_allowed(f) => Some(name),
+            _ => None,
+        })
+        .collect();
+    println!("builtin functions allowed: {builtins:?}");
+    assert!(!builtin_allowed(Function::Async), "async runs code later");
+    assert!(builtin_allowed(Function::Cat));
+}

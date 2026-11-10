@@ -621,6 +621,14 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   Test: settle/types.cases, "function results" (`nothing`), for the
   first.
 
+- **An override of an `@overload` method** answers to the overloaded
+  name, as an escaper's `applyString`, overriding its interface's
+  `@overload("apply")` method without repeating the decorator, does to
+  `escaper.apply(x)`. Tempest saw only the methods marked themselves,
+  so `SomeEscaper.instance.apply(x)` was "No member apply"; now a
+  method overriding a marked one counts too (fixed 2026-11-10).
+  Test: programs/content-tags (`Both`), settle/autoescape.cases.
+
 ### Interpreter, core and std
 
 - **`Float64.toString` cuts at 16 digits** in the interpreter
@@ -889,7 +897,8 @@ Other differences we won't copy:
 
 - **Diagnostic levels** (2026-11-10): a diagnostic is an error or it
   isn't. Kotlin's info level is tempest's hint (`Level::Hint`), advice
-  about correct code, now only "Unnecessary type check": the LSP sends
+  about correct code, now "Unnecessary type check" and a content tag's
+  problems in a test's body ("Content tags" below): the LSP sends
   it as a hint (faded in editors), the playground shows it, and the CLI
   prints it only with `-v`, where Kotlin always prints info. JSON
   records still name it `info`, as Kotlin's. Kotlin's separate info
@@ -898,6 +907,46 @@ Other differences we won't copy:
   i64 at the end for an Int64"); that warning stays a warning until the
   team decides on integer literals typed from context.
   Test: crates/tempest/tests/cli.rs, `hints_only_with_verbose`.
+- **Content tags worked out at compile time** (2026-11-10): as
+  Kotlin's `OptimizeContextualAutoescapingBlocks`, a tagged string whose
+  class implements an interface named `ContextualAutoescapingAccumulator`
+  (as a library's `html` or `sql`) gets its contexts at compile
+  time, so generated code calls the escapers directly
+  ([compile-time.md](compile-time.md), "Content tags"). Differences,
+  most of them to fold only what gives what run time does:
+  - A join folds only when `sameStatePredicate` holds for both
+    branches. Kotlin uses `mergeStates`' result, and a library's may
+    keep the first branch's state when only nested languages' (JS,
+    CSS, URL) states differ; then, where branches end in different
+    states inside `<script>`, Kotlin's pass, by its code (not run),
+    escapes the second branch's value for the first's context, with no
+    diagnostic.
+  - A branch that may leave early isn't merged (tempest's walk would
+    otherwise have; Kotlin's paths don't reach the join).
+  - A picked escaper must be alike its class's `instance`; Kotlin
+    calls `instance` whatever the picker gave.
+  - A use the library reports an error for isn't folded, and the error
+    is an ordinary one; Kotlin folds it and logs the error.
+  - Only allowlisted code runs at compile time (compile-time.md, "What
+    runs at compile time"); a use that needs more is left to run time.
+  - It runs where Kotlin's gives up for reasons not confirmed: on a
+    real library with HTML and SQL tags, its SQL uses fold too, where
+    Kotlin folds only HTML ones. It doesn't follow loops or jumps (Kotlin
+    follows forward edges); it builds an `EventParseEffect`'s event
+    where it's used rather than hoisting it to a module-level
+    temporary; it writes no `exportAnalyses` data files, having no
+    `dataFile`.
+  - A rewrite whose new code doesn't type, as an escaper without an
+    `apply` for the value, or whose `apply` takes another type than
+    the append, is undone rather than reported.
+
+  The interpreter also keeps a regex literal without interpolations
+  once compiled, which the library's propagation functions rebuild on
+  every call.
+  Test: settle/autoescape.cases, "content tags" and "content tags left
+  to run time"; tests/settle.rs, `content_tags_reach_nothing_at_compile_time`,
+  `content_tags_out_of_steps`, `compile_time_allowlist`;
+  programs/content-tags.
 
 - **Ignore files** (2026-11-06): Kotlin reads one, the nearest
   `.temperignore` or `.gitignore` at or above where it starts (its

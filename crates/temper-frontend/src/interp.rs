@@ -22,6 +22,7 @@
 //! user's `@connected` class with a complete Temper implementation runs
 //! that, as an ordinary class, as Kotlin Temper's interpreter does.
 
+pub mod compile_time;
 mod frame;
 mod lower;
 mod maps;
@@ -106,6 +107,9 @@ pub enum Val {
     Connected(NodeId),
     /// A response from std `net`'s `sendRequest`.
     NetResponse(Rc<net::NetResponse>),
+    /// A callout a compile-time pass gives a library, keeping what it's
+    /// called with ([`compile_time::callout`]).
+    Callout(compile_time::Callouts),
     /// A declared local not yet given a value.
     Uninit,
 }
@@ -270,6 +274,9 @@ fn run_with(
         globals,
         lowering,
         ready: VecDeque::new(),
+        cached: Vec::new(),
+        compile_time: false,
+        allowed_nodes: HashMap::new(),
     };
     let mut result = Ok(Val::Void);
     for module in &settled.modules {
@@ -433,6 +440,13 @@ struct Interp<'a> {
     lowering: Lowering,
     /// `async` blocks and native jobs ready to run.
     ready: VecDeque<Task>,
+    /// Constant regex literals' values, once made (`lower::Op::Cached`).
+    cached: Vec<Option<Val>>,
+    /// Running at compile time ([`compile_time`]), where nothing may
+    /// reach outside the interpreter, and which functions and classes,
+    /// by their nodes, it may then run.
+    compile_time: bool,
+    allowed_nodes: HashMap<NodeId, bool>,
 }
 
 fn fail(message: impl Into<String>) -> Abrupt {
@@ -456,6 +470,9 @@ impl Interp<'_> {
 
     /// Calls a function's code with what it captured.
     fn call(&mut self, s: &Settled, f: NodeId, captures: Rc<[Cell]>, args: Vec<Val>) -> R {
+        if self.compile_time && !self.module_allowed(s, f) {
+            return Err(compile_time::refused("a function of a std module"));
+        }
         if self.depth >= MAX_DEPTH {
             return Err(Abrupt::Panic("calls nested too deeply".into()));
         }
@@ -543,6 +560,19 @@ impl Interp<'_> {
     }
 
     fn apply(&mut self, s: &Settled, function: Val, args: Vec<Val>) -> R {
+        if self.compile_time {
+            match &function {
+                Val::Builtin(f) if !compile_time::builtin_allowed(*f) => {
+                    return Err(compile_time::refused(Builtin::Function(*f).name()));
+                }
+                Val::Connected(decl) => {
+                    let name = core::let_parts(&s.library.tree, *decl).0;
+                    let name = s.library.name(name).map_or("?", |n| s.library.names.get(n));
+                    return Err(compile_time::refused(name));
+                }
+                _ => {}
+            }
+        }
         match function {
             Val::Fn(closure) => self.call(s, closure.node, closure.captures.clone(), args),
             Val::Builtin(Function::New) => match args.split_first() {
@@ -648,6 +678,7 @@ impl Interp<'_> {
             },
             Val::Builtin(Function::Async) => self.start_async(s, args),
             Val::Connected(decl) => self.connected_function(s, decl, args),
+            Val::Callout(callouts) => compile_time::call_callout(&callouts, args),
             // `m[i, j]` on an object calls its `get(i, j)`.
             Val::Builtin(Function::Index) if matches!(args.first(), Some(Val::Object(_))) => {
                 let mut args = args;
@@ -705,6 +736,7 @@ impl Interp<'_> {
             return self.apply(s, value, args);
         };
         check_access(s, from, &class, decl, name)?;
+        self.allowed_now(s, &class, decl, name)?;
         match core::member_fn(&s.library.tree, decl) {
             Some(f) => {
                 let this = receiver(this, s.library.tree.data(decl), &class);
@@ -1267,6 +1299,13 @@ impl Interp<'_> {
     /// constructor, if any.
     fn construct(&mut self, s: &Settled, class: Rc<Class>, args: Vec<Val>) -> R {
         let tree = &s.library.tree;
+        let connected = tree.data(class.node) & CLASS_CONNECTED != 0;
+        if self.compile_time
+            && !(self.module_allowed(s, class.node)
+                && (!connected || compile_time::connected_allowed(s, class.node, None)))
+        {
+            return Err(compile_time::refused(class_name(s, class.node)));
+        }
         if tree.data(class.node) & CLASS_INTERFACE != 0 {
             return Err(fail(format!(
                 "Cannot instantiate abstract type {}",
@@ -1360,6 +1399,42 @@ impl Interp<'_> {
                 name.unwrap_or("?")
             ))),
         }
+    }
+
+    /// At compile time, refuses a member of a class in a module not on
+    /// the allowlist, or a `@connected` one not allowed
+    /// ([`compile_time::ALLOWED_STD_MODULES`]).
+    fn allowed_now(
+        &mut self,
+        s: &Settled,
+        class: &Rc<Class>,
+        decl: NodeId,
+        name: NameId,
+    ) -> Result<(), Abrupt> {
+        let tree = &s.library.tree;
+        let connected =
+            tree.data(class.node) & CLASS_CONNECTED != 0 || tree.data(decl) & MEMBER_CONNECTED != 0;
+        let name = s.library.names.get(name);
+        if !self.compile_time {
+            return Ok(());
+        }
+        let allowed = self.module_allowed(s, class.node)
+            && (!connected || compile_time::connected_allowed(s, class.node, Some(name)));
+        if !allowed {
+            return Err(compile_time::refused(&format!(
+                "{}.{name}",
+                class_name(s, class.node)
+            )));
+        }
+        Ok(())
+    }
+
+    /// Whether code declared at `node` may run at compile time, by its
+    /// module, remembered per node.
+    fn module_allowed(&mut self, s: &Settled, node: NodeId) -> bool {
+        *(self.allowed_nodes)
+            .entry(node)
+            .or_insert_with(|| compile_time::module_allowed(s, node))
     }
 
     /// Runs code of a class outside its members' functions, with `this`:
@@ -1530,6 +1605,7 @@ impl Interp<'_> {
             return Err(fail(format!("No member {}", s.library.names.get(name))));
         };
         check_access(s, from, &class, decl, name)?;
+        self.allowed_now(s, &class, decl, name)?;
         let data = s.library.tree.data(decl);
         match data & ROLE_MASK {
             ROLE_METHOD => Ok(Val::Method(Rc::new((object.clone(), name)))),
@@ -1571,6 +1647,7 @@ impl Interp<'_> {
             return Err(fail(format!("No member {}", s.library.names.get(name))));
         };
         check_access(s, from, &class, decl, name)?;
+        self.allowed_now(s, &class, decl, name)?;
         let data = s.library.tree.data(decl);
         if data & ROLE_MASK == ROLE_SETTER {
             return match core::member_fn(&s.library.tree, decl) {
@@ -1814,6 +1891,7 @@ fn equal(a: &Val, b: &Val) -> bool {
         (Val::Regex(a), Val::Regex(b)) => Rc::ptr_eq(a, b),
         (Val::Connected(a), Val::Connected(b)) => a == b,
         (Val::NetResponse(a), Val::NetResponse(b)) => Rc::ptr_eq(a, b),
+        (Val::Callout(a), Val::Callout(b)) => Rc::ptr_eq(a, b),
         (Val::Generator(a), Val::Generator(b)) => Rc::ptr_eq(a, b),
         (Val::Promise(a), Val::Promise(b)) | (Val::PromiseBuilder(a), Val::PromiseBuilder(b)) => {
             Rc::ptr_eq(a, b)
@@ -1864,7 +1942,9 @@ fn type_name(value: &Val) -> &'static str {
         Val::Map(_) => "Map",
         Val::MapBuilder(_) => "MapBuilder",
         Val::Pair(_) => "Pair",
-        Val::Fn(_) | Val::Builtin(_) | Val::Method(_) | Val::Connected(_) => "Function",
+        Val::Fn(_) | Val::Builtin(_) | Val::Method(_) | Val::Connected(_) | Val::Callout(_) => {
+            "Function"
+        }
         Val::Console => "Console",
         Val::Class(_) => "Class",
         Val::Object(_) => "Object",

@@ -127,3 +127,147 @@ inputs, back to back, since timing on this machine is noisy.
   bodies assigning the caller's locals). Only the call's result may be
   kept, and only if it's immutable; the closures and the locals they
   captured must not leak into the folded tree.
+
+## Content tags (contextual autoescaping), 2026-11-10
+
+A tagged string such as a library's `html"<a href='${u}'>"`
+settles to `do { let t = new C(); t.appendSafe("<a href='"); t.append(u);
+…; t.accumulated }`. Run as written, each use propagates HTML contexts
+at run time with the library's transition tables. Kotlin Temper
+instead works the contexts out at compile time, and so does
+tempest now.
+
+**How Kotlin does it.** Not a general mechanism, such as folding a
+tag's static parts: one hard-coded micro-pass in the frontend,
+`OptimizeContextualAutoescapingBlocks.kt`, run after the function
+macro stage's interpretation (`FunctionMacroStage`). Its doc calls it a
+stand-in for a user-space macro in the library, once macros can do it.
+The library only follows conventions its `ContextualAutoescapingAccumulator`
+interface documents; it has no annotations or macros of its own. The pass:
+
+1. finds `t.accumulated` reads where `t`'s type is a concrete class with
+   a supertype *named* `ContextualAutoescapingAccumulator` (found by
+   name, since it's not in std), declared once in the block;
+2. walks the block's paths from `let t = …` to `.accumulated`,
+   interpreting at compile time the class's statics `initialState()`,
+   `propagator()`, `sameStatePredicate()`, `picker()`, the core module's
+   `propagateOver(...)` for each fixed part (and with `null` before each
+   value), `picker.escaperFor(state)`, `mergeStates(a, b)` where paths
+   join (each branch on a deep copy), `checkEndState(state)` at the end,
+   and `foldAnalyses`/`exportAnalyses` per basic block, with each use
+   capped at about ten million steps;
+3. rewrites the block: `let collector = C.newCollector()`, each fixed
+   part as the effects it gave (`collector.append("…")`, or
+   `appendSafe` if the collector has it, and `C.enact(event,
+   collector)` for an `EventParseEffect`, the event hoisted to a
+   module-level temporary), each value as
+   `collector.append(E2.instance.apply(E1.instance.apply(x)))`, a
+   composed escaper's `first` and `second` unravelled, and
+   `C.fromCollector(collector)` for the read;
+4. logs what the library reports through the `callout` it's given as
+   `content tag reported:…`: errors and warnings, infos in a test's body;
+   and writes `exportAnalyses`' data files with `dataFile`.
+
+Anything that doesn't fit (a failed interpretation, a value it can't
+rebuild as code) leaves the block as written. In practice, on a real
+library with HTML and SQL tags, Kotlin optimizes most of the HTML
+uses, leaving a `for … of` template (a closure, which tempest leaves
+too), and none of the SQL ones; why it gives up on those isn't
+confirmed.
+
+**In tempest** (`crates/temper-frontend/src/autoescape.rs`), the same
+pass runs at the end of `settle`, once typing is done and the modules
+are ordered, so the interpreter, tmpl, and every backend see the
+rewritten code. It folds only what it can prove gives what run time
+does; anything else is left as written, which propagates contexts at
+run time, path by path, and is always safe:
+
+- **Interpreter:** `interp::compile_time::Session` runs the modules'
+  top-level code once, through the latest module a use needs (the
+  class's and the interface's), with what they log dropped, then lets
+  the pass call functions, statics, and getters on the values made,
+  each use with ten million steps. After a call fails or runs out of
+  steps, the session is made again, so half-updated module state
+  can't reach the next use. Only what the allowlist below permits
+  runs. A `Val::Callout` collects what the library reports. Values
+  come back as owned data (`Construction`): constants,
+  `String.begin`, lists, and `new C(…)` of classes without their own
+  constructor.
+- **Walk:** structured rather than over paths: blocks in order, an
+  `if` as two branches on deep copies. A join folds only when
+  `sameStatePredicate` holds for the branches' states; `mergeStates`
+  still runs, for what it reports. (A library's `mergeStates` may
+  keep the first branch's state, as when only nested languages' states
+  differ, which would give the second branch's values the wrong
+  escaper.) A branch that reads
+  the accumulator and may leave early (`return`, `break`, `continue`,
+  `bubble()`, `panic()`, or a `Never` expression) stops the walk.
+  Loops, closures (a `for … of` template), `orelse`, a `break` into the
+  region, an append in a condition, a fixed part that isn't a constant,
+  or any other read of the accumulator leave the use as written.
+- **Escapers:** each picked escaper must be alike its class's static
+  `instance` (that object, or one of the same class whose fields are
+  alike), since the folded code calls `instance`; a composed one,
+  with fields `first` and `second`, is taken to apply as
+  `second.apply(first.apply(x))`, as the library's conventions say.
+- **Rewrite and typing:** the new nodes are checked and typed like the
+  rest (`Settle::type_new_nodes`), so `apply` and `append` resolve to
+  their `@overload`s, and the innermost escaper's `apply` must take
+  the type the append it replaces took. If anything doesn't hold, the
+  rewrite is undone (old children, parents, name, and type back; the
+  new nodes emptied and detached), so the pass never adds an error.
+  The accumulator's temporary is renamed `collector`, as Kotlin's.
+- **Diagnostics:** `Message::ContentTag`, at Kotlin's positions, at
+  the level the library gives, hints in a test's body (Kotlin's
+  infos). A use the library reports an error for isn't folded: the
+  error is an ordinary error, and the code propagates at run time.
+- **Speed:** a library may rebuild and compile every regex literal on
+  each call of its propagation functions; the interpreter now compiles
+  a regex literal without interpolations once and keeps it
+  (`Library::constant_regexes`), which took one real library's uses
+  from seconds to a fraction of a second in a release build.
+- **On a real library** with HTML and SQL tags, all but a few uses
+  fold, the SQL ones included; the `for … of` template and uses in
+  corner-case tests the library reports errors for are left to run
+  time. Kotlin folds most of the HTML uses and none of the SQL ones;
+  why it skips those isn't confirmed (its member lookup does see
+  supertypes' `@overload`s).
+
+### What runs at compile time
+
+The content-tag session is the only place tempest runs the
+interpreter before run time (constant folding and macros are Rust
+code), and it runs only what an allowlist in one place,
+`interp::compile_time`, permits; anything else is refused as "not
+yet", so the use it was for is left to run time and nothing outside
+the interpreter happens. Effects (network, clock, randomness, I/O) are
+only for `run` and `test` on the interpreter and for backends.
+
+- Allowed: a library's own Temper code; core (builtin types and the
+  builtin functions `builtin_allowed` names one by one, not `async`);
+  of std, the pure modules `regex`, `json`, and `temporal`
+  (`ALLOWED_STD_MODULES`). Console output is dropped.
+- Denied: `temporal`'s `Date.today()` (`DENIED_MEMBERS`); every other
+  std module, as `net` and `testing`, and any added later; every
+  `@connected` function or class outside the allowed std modules, a
+  library's own included; native jobs (requests are queued as such,
+  and never run), and `async` blocks.
+
+A new connected function or std module is refused until it's added
+on purpose; `compile_time_allowlist` in `tests/settle.rs` prints the
+lists. Kotlin guards differently: builtins carry an `isPure` flag, and
+`Date.today` gives `NotYet` before the run stage; its interpreter has
+no implementation of std `net`'s connected functions at all (only its
+backends' support code does), which is why it never sends a request
+at compile time.
+
+**Not done yet:** `exportAnalyses`' data files, since tempest has no
+`dataFile` or `data` backend (`foldAnalyses` still runs, for its
+diagnostics); events are built where they're used rather than hoisted
+to module-level temporaries; paths with loops or jumps aren't
+followed, where Kotlin follows forward edges only; a branch inside a
+nested language (`<script>`, `<style>`, URL or CSS attribute values)
+doesn't fold until the library compares delegates by value. The
+general mechanism Kotlin's doc points to, a user-space macro in the
+library, needs macros written in Temper, which neither compiler has
+yet.

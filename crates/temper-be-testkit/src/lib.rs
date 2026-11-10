@@ -265,8 +265,9 @@ pub fn without_net(cases: &mut [Case]) {
 /// (type errors, undeclared names and types, misspelled members, a
 /// missing bracket), whose errors each fail where they run and whose
 /// good parts run as written; `triple` the architecture docs' running
-/// example.
-pub const PROGRAMS: [&str; 17] = [
+/// example; `content-tags` a tagged string whose contexts are worked out
+/// at compile time, so its escapers are called directly.
+pub const PROGRAMS: [&str; 18] = [
     "classes",
     "nullables",
     "generics",
@@ -284,6 +285,7 @@ pub const PROGRAMS: [&str; 17] = [
     "libraries",
     "errors",
     "triple",
+    "content-tags",
 ];
 
 /// The shared programs that are libraries of several modules, in

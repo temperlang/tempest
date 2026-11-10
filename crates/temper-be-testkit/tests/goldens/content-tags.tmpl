@@ -1,0 +1,291 @@
+tmpl 1 model 1 library `content-tags` 0.0.0
+
+uses `temper-core`#17 0.1.0 {
+  class StringBuilder#18 {
+    connected method append#77(substring: String): Void;
+    connected method toString#79(): String;
+    connected constructor constructor#80(): StringBuilder#18;
+  }
+  class List#31<T#32> extends Listed#33<T#32> {
+    connected get length#100(): Int32;
+    connected method get#126(index: Int32): T#32;
+  }
+  interface Listed#33<T#34> {}
+  interface Console#91 {
+    connected method log#92(message: String): Void;
+  }
+  class String#101 {
+    connected method split#102(separator: String): List#31<String>;
+  }
+  connected fn getConsole#146(name?: String): Console#91;
+}
+
+module `content-tags`#0 {
+  let ~console#93: Console#91;
+
+  export class Mark#1 {
+    let label#15: String;
+    constructor constructor#16(label#75: String): Mark#1 {
+      this.label#15 = label#75;
+    }
+  }
+
+  export class Buffer#2 {
+    private let sb#19: StringBuilder#18;
+    constructor constructor#23(): Buffer#2 {
+      this.sb#19 = new constructor#80();
+    }
+    method append#20(x#76: String): Void {
+      this.sb#19.append#77(x#76);
+    }
+    method mark#21(m#78: Mark#1): Void {
+      this.sb#19.append#77(%String.cat(%String.cat("{", m#78.label#15), "}"));
+    }
+    method toString#22(): String {
+      return this.sb#19.toString#79();
+    }
+  }
+
+  export interface Effect#3 {
+    abstract method enactOn#24(c#81: Buffer#2): Void;
+  }
+
+  export class AppendParseEffect#4 extends Effect#3 {
+    let text#25: String;
+    constructor constructor#27(text#83: String): AppendParseEffect#4 {
+      this.text#25 = text#83;
+    }
+    method enactOn#26(c#82: Buffer#2): Void {
+      c#82.append#20(this.text#25);
+    }
+  }
+
+  export class EventParseEffect#5 extends Effect#3 {
+    let event#28: Mark#1;
+    constructor constructor#30(event#85: Mark#1): EventParseEffect#5 {
+      this.event#28 = event#85;
+    }
+    method enactOn#29(c#84: Buffer#2): Void {
+      c#84.mark#21(this.event#28);
+    }
+  }
+
+  export class After#6 {
+    let effects#35: List#31<Effect#3>;
+    let stateAfter#36: Boolean;
+    constructor constructor#37(effects#86: List#31<Effect#3>, stateAfter#87: Boolean): After#6 {
+      this.effects#35 = effects#86;
+      this.stateAfter#36 = stateAfter#87;
+    }
+  }
+
+  export class Propagator#7 {
+    let quote#38: String;
+    constructor constructor#39(quote#88: String): Propagator#7 {
+      this.quote#38 = quote#88;
+    }
+  }
+
+  fn ignore#70(problem#89: String, isError#90: Boolean): Void {
+    if (isError#90) {
+      ~console#93.log#92(problem#89);
+    }
+  }
+
+  export fn propagateOver#71(p#94: Propagator#7, before#95: Boolean, known#96: String?, same#97: fn (Boolean, Boolean): Boolean, callout#98: fn (String, Boolean): Void): After#6 {
+    if (isNull(known#96)) {
+      return new constructor#37((list()): List#31<Effect#3>, before#95);
+    }
+    if (%String.eq((nonNull(known#96)): String, "!")) {
+      return new constructor#37((list((upcast(new constructor#30(new constructor#16("bang")))): Effect#3)): List#31<Effect#3>, before#95);
+    }
+    let angles#99: Int32 = ((nonNull(known#96)): String).split#102("<").length#100();
+    if (%Int32.gt(angles#99, 1)) {
+      callout#98("angle bracket in fixed text", false);
+    }
+    if (%Boolean.not(same#97(before#95, before#95))) {
+      callout#98("states differ from themselves", true);
+    }
+    let quotes#103: Int32 = %Int32.sub(((nonNull(known#96)): String).split#102(p#94.quote#38).length#100(), 1);
+    return new constructor#37((list((upcast(new constructor#27((nonNull(known#96)): String))): Effect#3)): List#31<Effect#3>, (if (%Int32.eq(%Int32.modSafe(quotes#103, 2), 1)) %Boolean.not(before#95) else before#95): Boolean);
+  }
+
+  export interface Escaper#8 {
+    abstract method applyString#40(x#104: String): String;
+  }
+
+  export class TextEscaper#9 extends Escaper#8 {
+    constructor constructor#43(): TextEscaper#9 {}
+    static let instance#41: TextEscaper#9;
+    method applyString#42(x#105: String): String {
+      return %String.cat(%String.cat("[", x#105), "]");
+    }
+  }
+
+  export class QuoteEscaper#10 extends Escaper#8 {
+    constructor constructor#46(): QuoteEscaper#10 {}
+    static let instance#44: QuoteEscaper#10;
+    method applyString#45(x#106: String): String {
+      return %String.cat(%String.cat("(", x#106), ")");
+    }
+  }
+
+  export class Both#11 extends Escaper#8 {
+    let first#47: Escaper#8;
+    let second#48: Escaper#8;
+    constructor constructor#50(first#108: Escaper#8, second#109: Escaper#8): Both#11 {
+      this.first#47 = first#108;
+      this.second#48 = second#109;
+    }
+    method applyString#49(x#107: String): String {
+      return this.second#48.applyString#40(this.first#47.applyString#40(x#107));
+    }
+  }
+
+  export class Picker#12 {
+    let strict#51: Boolean;
+    constructor constructor#53(strict#112: Boolean): Picker#12 {
+      this.strict#51 = strict#112;
+    }
+    method escaperFor#52(inQuote#110: Boolean, callout#111: fn (String, Boolean): Void): Escaper#8 {
+      if (this.strict#51 && inQuote#110) {
+        callout#111("a value in quotes", false);
+      }
+      if (inQuote#110) {
+        return (upcast(new constructor#50((upcast(instance#41)): Escaper#8, (upcast(instance#44)): Escaper#8))): Escaper#8;
+      } else {
+        return (upcast(instance#41)): Escaper#8;
+      }
+    }
+  }
+
+  export interface ContextualAutoescapingAccumulator#13 {
+    abstract get accumulated#54(): String;
+  }
+
+  export class Quoting#14 extends ContextualAutoescapingAccumulator#13 {
+    static fn newCollector#55(): Buffer#2 {
+      return new constructor#23();
+    }
+    static fn initialState#56(): Boolean {
+      return false;
+    }
+    static fn propagator#57(): Propagator#7 {
+      return new constructor#39("'");
+    }
+    static fn picker#58(): Picker#12 {
+      return new constructor#53(false);
+    }
+    static fn sameStatePredicate#59(): fn (Boolean, Boolean): Boolean {
+      return (fn ~fn#113(a#114: Boolean, b#115: Boolean): Boolean {
+        return %Boolean.eq(a#114, b#115);
+      }): fn (Boolean, Boolean): Boolean;
+    }
+    static fn mergeStates#60(a#116: Boolean, b#117: Boolean, callout#118: fn (String, Boolean): Void): Boolean {
+      if (%Boolean.not(%Boolean.eq(a#116, b#117))) {
+        callout#118("branches end in different contexts", true);
+      }
+      return a#116;
+    }
+    static fn checkEndState#61(inQuote#119: Boolean, callout#120: fn (String, Boolean): Void): Void {
+      if (inQuote#119) {
+        callout#120("ends inside quotes", true);
+      }
+    }
+    static fn fromCollector#62(c#121: Buffer#2): String {
+      return c#121.toString#22();
+    }
+    static fn enact#63(m#122: Mark#1, c#123: Buffer#2): Void {
+      c#123.mark#21(m#122);
+    }
+    private var inQuote#64: Boolean;
+    private let collector#65: Buffer#2;
+    constructor constructor#69(): Quoting#14 {
+      this.inQuote#64 = false;
+      this.collector#65 = new constructor#23();
+    }
+    method appendSafe#66(x#124: String): Void {
+      let after#125: After#6 = propagateOver#71(propagator#57(), this.inQuote#64, (asNullable(x#124)): String?, sameStatePredicate#59(), (ref(ignore#70)): fn (String, Boolean): Void);
+      this.inQuote#64 = after#125.stateAfter#36;
+      {
+        let ~list#127: List#31<Effect#3> = after#125.effects#35;
+        let ~length#128: Int32 = ~list#127.length#100();
+        var ~i#129: Int32 = 0;
+        ~loop#130: while (%Int32.lt(~i#129, ~length#128)) {
+          let e#131: Effect#3 = ~list#127.get#126(~i#129);
+          ~i#129 = %Int32.add(~i#129, 1);
+          e#131.enactOn#24(this.collector#65);
+        }
+      }
+    }
+    method append#67(x#132: String): Void {
+      let escaped#133: String = picker#58().escaperFor#52(this.inQuote#64, (ref(ignore#70)): fn (String, Boolean): Void).applyString#40(x#132);
+      this.collector#65.append#20(escaped#133);
+    }
+    get accumulated#68(): String {
+      return this.collector#65.toString#22();
+    }
+  }
+
+  fn greet#72(name#134: String, who#135: String): String {
+    {
+      let collector#136: Buffer#2 = newCollector#55();
+      {
+        collector#136.append#20("say 'hi ");
+        collector#136.append#20(instance#44.applyString#45(instance#41.applyString#42(name#134)));
+        collector#136.append#20("' to ");
+        collector#136.append#20(instance#41.applyString#42(who#135));
+        enact#63(new constructor#16("bang"), collector#136);
+      }
+      return fromCollector#62(collector#136);
+    }
+  }
+
+  fn branch#73(c#137: Boolean, x#138: String): String {
+    {
+      let collector#139: Buffer#2 = newCollector#55();
+      {
+        collector#139.append#20(instance#41.applyString#42(x#138));
+        if (c#137) {
+          collector#139.append#20("''");
+        }
+        collector#139.append#20(" '");
+        collector#139.append#20(instance#44.applyString#45(instance#41.applyString#42(x#138)));
+        collector#139.append#20("'");
+      }
+      return fromCollector#62(collector#139);
+    }
+  }
+
+  fn each#74(xs#140: List#31<String>): String {
+    {
+      let accumulator#141: Quoting#14 = new constructor#69();
+      {
+        {
+          let ~length#142: Int32 = xs#140.length#100();
+          var ~i#143: Int32 = 0;
+          ~loop#144: while (%Int32.lt(~i#143, ~length#142)) {
+            let x#145: String = xs#140.get#126(~i#143);
+            ~i#143 = %Int32.add(~i#143, 1);
+            accumulator#141.appendSafe#66("'");
+            accumulator#141.append#67(x#145);
+            accumulator#141.appendSafe#66("' ");
+            accumulator#141.append#67(x#145);
+            accumulator#141.appendSafe#66(";");
+          }
+        }
+      }
+      return accumulator#141.accumulated#68();
+    }
+  }
+
+  init {
+    init ~console#93 = getConsole#146(omitted);
+    init instance#41 = new constructor#43();
+    init instance#44 = new constructor#46();
+    ~console#93.log#92(greet#72("Ann", "Bob"));
+    ~console#93.log#92(branch#73(true, "a"));
+    ~console#93.log#92(branch#73(false, "b"));
+    ~console#93.log#92(each#74((list("c", "d")): List#31<String>));
+  }
+}

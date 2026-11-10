@@ -216,6 +216,10 @@ pub enum Message {
     UserConnectedClassBackendsNeedBodies(String),
     /// Ours: a regex literal that doesn't parse, and why.
     InvalidRegex(String),
+    /// A problem a content tag's library reported while working out its
+    /// contexts at compile time ([`crate::autoescape`]). Kotlin's
+    /// `ContextAutoescCalloutMessage`.
+    ContentTag(String),
     /// Ours: a feature the settle loop doesn't have yet.
     Unsupported(String),
     /// Ours: the item never settled; the chain of what it waited on.
@@ -451,6 +455,7 @@ impl Message {
                  for the backends not listed"
             ),
             Message::InvalidRegex(why) => format!("Invalid regex: {why}"),
+            Message::ContentTag(problem) => format!("content tag reported:{problem}"),
             Message::Unsupported(what) => format!("Not supported yet: {what}"),
             Message::NeverSettled(chain) => format!("Never settled, waiting on {chain}"),
             Message::OutOfSteps(n) => format!("Gave up after {n} steps"),
@@ -504,6 +509,11 @@ pub struct Library {
     pub connected: std::collections::HashMap<NodeId, Connected>,
     /// Declarations marked `@keep`, which host code may use.
     pub kept: std::collections::HashSet<NodeId>,
+    /// Regex literals without interpolations, as the calls that compile
+    /// them, which the interpreter compiles once and keeps
+    /// ([`crate::interp`]): a compiled `Regex` can't change, so each run
+    /// of one gives what the first did.
+    pub constant_regexes: std::collections::HashSet<NodeId>,
     next_base: u32,
     next_origin: u32,
 }

@@ -11,7 +11,7 @@
 
 use super::members::Receiver;
 use crate::builtins::{Builtin, Function};
-use crate::core::{MEMBER_STATIC, ROLE_MASK, ROLE_METHOD};
+use crate::core::{self, MEMBER_STATIC, ROLE_MASK, ROLE_METHOD};
 use crate::settle::{Fact, Settle};
 use crate::types::{Param, TypeData, TypeId};
 use temper_syntax::ast::Value;
@@ -109,20 +109,36 @@ impl Settle {
         Ok(self.receiver(t).map(|r| (r, false)))
     }
 
-    /// A class's methods, own and inherited, marked `@overload("name")`.
+    /// A class's methods, own and inherited, marked `@overload("name")`,
+    /// or overriding one so marked, as an escaper's `applyString` does
+    /// its interface's in the `content-tags` program: an override
+    /// answers to the name too, as in Kotlin Temper.
     fn overloads_named(&self, class: NodeId, name: NameId, statics: bool) -> Vec<NodeId> {
         let Some(scope) = self.scopes.of_node(class) else {
             return Vec::new();
         };
         let tree = &self.lib.tree;
+        let marked = |m: NodeId| self.overloads.get(&m).is_some_and(|ns| ns.contains(&name));
+        // The names of the methods marked in its supertypes.
+        let mut inherited: Vec<NameId> = Vec::new();
+        if !statics {
+            for sup in self.ancestors(class) {
+                for &m in core::class_parts(tree, sup).2 {
+                    if marked(m) {
+                        inherited.extend(self.lib.name(tree.children(m)[0]));
+                    }
+                }
+            }
+        }
         let mut found: Vec<NodeId> = (self.scopes.get(scope).names.iter())
-            .filter_map(|&(_, b)| self.scopes.symbol(b).decl)
-            .filter(|&m| {
+            .filter_map(|&(n, b)| Some((n, self.scopes.symbol(b).decl?)))
+            .filter(|&(n, m)| {
                 tree.kind(m) == NodeKind::Let
                     && tree.data(m) & ROLE_MASK == ROLE_METHOD
                     && (tree.data(m) & MEMBER_STATIC != 0) == statics
-                    && self.overloads.get(&m).is_some_and(|ns| ns.contains(&name))
+                    && (marked(m) || inherited.contains(&n))
             })
+            .map(|(_, m)| m)
             .collect();
         found.dedup();
         found

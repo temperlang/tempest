@@ -176,7 +176,7 @@ impl Typing {
     }
 
     /// The node a node is a child of, if it's under a file's root.
-    fn parent(&self, node: NodeId) -> Option<NodeId> {
+    pub(crate) fn parent(&self, node: NodeId) -> Option<NodeId> {
         (self.parents.get(node.0 as usize).copied()).filter(|&p| p != NO_PARENT)
     }
 
@@ -886,6 +886,84 @@ impl Settle {
         self.type_all_exprs();
     }
 
+    /// Types and checks nodes a pass made once typing was done, those
+    /// numbered from `first_new` on, under `roots`, whose parents are
+    /// noted from `containers` down; older nodes among them, moved there,
+    /// keep what typing found for them. A declaration's type comes from its
+    /// initializer again where `redeclared` lists it, before the rest,
+    /// which may use it. True if every new expression is typed, each call
+    /// among them resolved, and checking found no error.
+    pub(crate) fn type_new_nodes(
+        &mut self,
+        first_new: u32,
+        containers: &[NodeId],
+        redeclared: &[NodeId],
+        roots: &[NodeId],
+    ) -> bool {
+        for &c in containers {
+            self.note_parents_under(c);
+        }
+        let errors = |s: &Settle| {
+            (s.lib.diagnostics.iter())
+                .filter(|d| d.level == Level::Error)
+                .count()
+        };
+        let errors_before = errors(self);
+        let mut complete = true;
+        for &decl in redeclared {
+            if let Some(init) = core::let_parts(&self.lib.tree, decl).2 {
+                self.check_added(init, first_new);
+                complete &= self.type_new_exprs(init, first_new);
+                let t = self.known_type(init);
+                self.typing.decls.insert(decl, t);
+            }
+        }
+        for &root in roots.iter().filter(|&&r| r.0 >= first_new) {
+            self.check_added(root, first_new);
+            complete &= self.type_new_exprs(root, first_new);
+        }
+        complete && errors(self) == errors_before
+    }
+
+    /// [`Settle::check`] for the new nodes under `node`.
+    fn check_added(&mut self, node: NodeId, first_new: u32) {
+        if node.0 < first_new {
+            return;
+        }
+        for i in 0..self.lib.tree.children(node).len() {
+            let child = self.lib.tree.children(node)[i];
+            self.check_added(child, first_new);
+        }
+        self.check_node(node);
+    }
+
+    /// Each new expression's type and resolution, as
+    /// [`Settle::type_all_exprs`] finds them; true if all are typed and
+    /// those that resolve are resolved.
+    fn type_new_exprs(&mut self, root: NodeId, first_new: u32) -> bool {
+        let exprs = exprs::Exprs::new(&self.lib, &self.scopes).under(root);
+        let mut complete = true;
+        for expr in exprs.into_iter().filter(|e| e.node.0 >= first_new) {
+            complete &= self.known_type(expr.node) != UNKNOWN;
+            if expr.resolves {
+                self.resolve_call(expr.node);
+                complete &= self.typing.resolved.contains_key(&expr.node);
+            }
+        }
+        complete
+    }
+
+    /// Notes the parents of a node's descendants.
+    pub(crate) fn note_parents_under(&mut self, node: NodeId) {
+        let mut stack = vec![node];
+        while let Some(node) = stack.pop() {
+            for &child in self.lib.tree.children(node) {
+                self.typing.set_parent(child, node);
+                stack.push(child);
+            }
+        }
+    }
+
     /// [`Settle::check_member_exists`] for every member read or call, in
     /// `scope` or the scope a node under it makes.
     fn check_members_exist(&mut self, node: NodeId, scope: ScopeId) {
@@ -907,6 +985,12 @@ impl Settle {
             let child = self.lib.tree.children(node)[i];
             self.check(child);
         }
+        self.check_node(node);
+    }
+
+    /// Checks a node, its children already checked.
+    fn check_node(&mut self, node: NodeId) {
+        let count = self.lib.tree.children(node).len();
         let first = self.lib.tree.children(node).first().copied();
         let last = self.lib.tree.children(node).last().copied();
         match (self.lib.tree.kind(node), first, last) {

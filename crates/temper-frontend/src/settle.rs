@@ -175,35 +175,25 @@ pub fn settle(library: Library) -> Settled {
             s.engine.will_produce(Fact::ScopeComplete(scope), item);
         }
     }
+    let mut typed = false;
     if s.run() {
         s.drop_dead_branches();
         s.queue_typing();
         if s.run() {
             s.check_types();
+            typed = true;
         }
     }
     // Only if the step budget ran out.
     s.decide_object_literals_left();
     #[cfg(debug_assertions)]
     s.check_reads();
-    let mut modules = Vec::new();
-    for id in s.run_order() {
-        let scope = s.modules[id.0 as usize];
-        let files = &s.lib.modules[id.0 as usize].files;
-        let roots: Vec<NodeId> = files
-            .iter()
-            .map(|f| s.lib.files[f.0 as usize].root)
-            .collect();
-        let top_levels = crate::order::sort_top_levels(&mut s.lib.tree, &s.scopes, scope, &roots);
-        let tests = s.test_run(id);
-        let test_cases = s.test_cases(id);
-        modules.push(SettledModule {
-            id,
-            scope,
-            top_levels,
-            tests,
-            test_cases,
-        });
+    let mut modules = s.settled_modules();
+    // Tagged strings' contexts worked out at compile time, once the tree
+    // is typed and ordered so it can run; then the top levels are sorted
+    // again, for what the rewritten code reads.
+    if typed && s.optimize_autoescaping(&mut modules) {
+        modules = s.settled_modules();
     }
     Settled {
         steps: s.engine.steps(),
@@ -211,6 +201,34 @@ pub fn settle(library: Library) -> Settled {
         library: s.lib,
         scopes: s.scopes,
         modules,
+    }
+}
+
+impl Settle {
+    /// The modules in the order they run, with their top levels sorted.
+    fn settled_modules(&mut self) -> Vec<SettledModule> {
+        let s = self;
+        let mut modules = Vec::new();
+        for id in s.run_order() {
+            let scope = s.modules[id.0 as usize];
+            let files = &s.lib.modules[id.0 as usize].files;
+            let roots: Vec<NodeId> = files
+                .iter()
+                .map(|f| s.lib.files[f.0 as usize].root)
+                .collect();
+            let top_levels =
+                crate::order::sort_top_levels(&mut s.lib.tree, &s.scopes, scope, &roots);
+            let tests = s.test_run(id);
+            let test_cases = s.test_cases(id);
+            modules.push(SettledModule {
+                id,
+                scope,
+                top_levels,
+                tests,
+                test_cases,
+            });
+        }
+        modules
     }
 }
 

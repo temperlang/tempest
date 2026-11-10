@@ -93,32 +93,30 @@ Risks to the date:
      the methods' own names, as Kotlin (typing.md, "Overloads"), a
      multi-declarator `for` saw its earlier declarations, `continue` in
      a `for … of` targeted the inlined loop, and an `orelse` fallback's
-     `??` took its branches' type. A private library (119
-     tests) passes 119 of 119 on the interpreter and on C++, C#,
-     Java, JS, Python, and Rust (2026-11-06; Lua skipped), once one undeclared name in it
-     is fixed, which Kotlin folds away silently and tempest reports (so
-     as committed, 115 on the interpreter, and no backend builds).
-     Since 2026-11-10 tempest reports that name, and a dead `if
-     (DEBUG)` branch's undeclared names, as errors, recovering as
-     Kotlin silently does (folding the null check, dropping the
-     branch), so the library's all-backends branch passes
-     54 of 54 on the interpreter and Python (and passed on C++, C#,
-     Java, JS, and Rust that way while these were warnings; on Lua,
-     which ran none of its tests, as it has no root module, until
-     tempest ran each module's tests file, 2026-11-10: 31 of 54 on Lua
-     5.4, each tests file given 240 seconds and 1.5 GB, the rest
-     failing in the regex runtime or not reached, and 15 on LuaJIT,
-     where that runtime needs `utf8`; since then, each command
-     tools start has 600 seconds and dies with tempest, and Lua's may
-     write 4 GiB, so a runaway tests file fails alone), but with
-     5 errors, exiting 1: one in its HTML codec, until its own fix
-     (removing the check, under way on its branch) lands, and four in
-     its contextual autoescaping's `if (DEBUG)` branches (`context`),
-     which need their own fix too. Since 2026-11-10 a generic
-     call's type parameter that nothing at the call binds takes its
-     bound, and Rust and C# write such calls' type arguments, so with
-     `combineEffects`'s `CONTEXT` put back (dropped for Kotlin's Rust)
-     it passes 54 of 54 on the interpreter, C++, C#, and Rust. That
+     `??` took its branches' type. A private library that
+     uses content tags passes its tests on the interpreter and on C++,
+     C#, Java, JS, Python, and Rust (2026-11-06), and on Lua all but one
+     tests file, which times out in uses left to run time, whose regexes
+     Lua's runtime is slow or wrong on (2026-11-10). Along the way
+     (2026-11-10): tempest reports an undeclared name that Kotlin folds
+     away silently, and a dead `if (DEBUG)` branch's undeclared names,
+     as errors, recovering as Kotlin silently does (folding the null
+     check, dropping the branch), so such a library still runs, but
+     exits with 1 until its own code is fixed; `tempest test -b lua`
+     runs every module's tests file of a library with no root module;
+     each command tools start has 600 seconds and dies with tempest,
+     and Lua's may write 4 GiB, so a runaway tests file fails alone; a
+     generic call's type parameter that nothing at the call binds takes
+     its bound, and Rust and C# write such calls' type arguments; and
+     tagged strings' contexts are worked out at compile time, as
+     Kotlin's `OptimizeContextualAutoescapingBlocks` does
+     ([compile-time.md](compile-time.md), "Content tags"), so the
+     generated code calls the escapers directly instead of running the
+     regex-based propagation on every use (all but a few uses; the
+     rest, where that can't be shown to match run time, still
+     propagate at run time), which took Lua from timing out or
+     overflowing the stack on most of the tests to all but one file.
+     That
      took `@overload`s of lists and
      of classes told apart, a dead `if (DEBUG)` branch dropped as
      error recovery, generic `is`

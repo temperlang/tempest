@@ -137,6 +137,21 @@ impl Interp<'_> {
                     frame.pc = *to;
                     Ok(())
                 }
+                Op::Cached { index, skip } => {
+                    if let Some(Some(value)) = self.cached.get(*index as usize) {
+                        frame.push(value.clone());
+                        frame.pc = *skip;
+                    }
+                    Ok(())
+                }
+                Op::Cache(index) => {
+                    let i = *index as usize;
+                    if self.cached.len() <= i {
+                        self.cached.resize(i + 1, None);
+                    }
+                    self.cached[i] = frame.values.last().cloned();
+                    Ok(())
+                }
                 Op::JumpIfFalse(to) => match frame.pop() {
                     Val::Bool(true) => Ok(()),
                     Val::Bool(false) => {
