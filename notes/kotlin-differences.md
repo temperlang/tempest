@@ -1357,6 +1357,14 @@ copied Kotlin's:
   `a.CompareTo(b) < 0`, and its C# tests compile and run it.
   Test: temper-be-csharp/tests/functional.rs, `HIDING` (`before`);
   programs/operators.temper.md (`same`).
+- **C# dropped values:** C# takes only calls, assignments, `++`,
+  `--`, `await`, and `new` as statements. Kotlin's C# passes any other
+  dropped value to the runtime's `Core.Ignore(e)`, a call, and drops a
+  bare name. Tempest's writes a call as itself, `_ = e;` for a value
+  with effects (a getter, `new`, a cast), and nothing for one without
+  (a literal, a local, a field, an operator that can't fail), after
+  removing unchecked conversions (`x!`) (done 2026-11-10).
+  Test: temper-be-csharp/tests/functional.rs, `DROPPED`.
 - **C# bodies:** besides numbered names, Kotlin's C# wraps a function
   that returns early in labeled blocks with a `goto` and a `return__N`
   variable, keeps `zero = zero` (C# warning CS1717), and names

@@ -106,6 +106,38 @@ const DISPATCH: &str = "# Dispatch
     console.log(\"${pick(true, true)} ${pick(true, false)} ${pick(false, true)}\");
 ";
 
+/// Values dropped where C# takes only some expressions as statements, as
+/// Wherewith's `if (…) { lexer.scan("\n"); }`, whose call tmpl wraps in
+/// an unchecked `NonNull`: a call alone, `_ = e;` for a getter or another
+/// value with effects, and nothing for a value without.
+const DROPPED: &str = "# Dropped
+
+    interface Lexer {
+      scan(text: String): String?;
+      get count(): Int;
+    }
+    class L extends Lexer {
+      public var n: Int = 0;
+      public scan(text: String): String? { n += 1; if (text == \"x\") { null } else { text } }
+      public get count(): Int { n += 10; n }
+    }
+    let go(lexer: Lexer, b: Boolean, d: Int): Int throws Bubble {
+      if (b) { lexer.scan(\"x\"); }
+      if (b) { lexer.count; }
+      if (b) { lexer.scan(\"y\") ?? \"z\"; }
+      if (b) { 7 / d; }
+      if (b) { d + 1; }
+      if (b) { lexer is L; }
+      lexer.scan(\"x\");
+      0
+    }
+    let l = new L();
+    go(l, true, 1) orelse panic();
+    console.log(l.n.toString());
+    console.log((go(l, true, 0) orelse -1).toString());
+    console.log(l.n.toString());
+";
+
 /// The .NET analyzers' rules allowed in generated code, each with why;
 /// every other rule is an error (`AnalysisMode` `All`, as warnings, and
 /// warnings as errors), in the libraries' sources, Kotlin's `Logging.cs`
@@ -173,6 +205,12 @@ fn cases() -> Vec<Case> {
         "dispatch.temper.md",
         DISPATCH,
         vec!["C wins! C's b".into(), "ab a only not a".into()],
+    ));
+    cases.push(Case::inline(
+        "dropped",
+        "dropped.temper.md",
+        DROPPED,
+        vec!["13".into(), "-1".into(), "25".into()],
     ));
     cases
 }

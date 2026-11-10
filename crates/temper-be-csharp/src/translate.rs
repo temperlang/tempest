@@ -2005,8 +2005,15 @@ impl<'a> Translator<'a> {
                 out.push(self.bubble());
                 return Ok(());
             }
-            // `void`, as an `orelse`'s fallback, does nothing.
-            Node::VoidLit {} if matches!(place, Sink::Drop) => return Ok(()),
+            // `void`, as an `orelse`'s fallback, does nothing, as does any
+            // value without effects; a conversion that checks nothing
+            // (C#'s `e!`) drops with its value.
+            _ if matches!(place, Sink::Drop) && no_effects(p, id) => return Ok(()),
+            Node::NonNull { value } | Node::AsNullable { value } | Node::Upcast { value }
+                if matches!(place, Sink::Drop) =>
+            {
+                return self.sink(value, place, out);
+            }
             // A conditional whose branch needs statements: an `if`, each
             // branch given to the place, as Kotlin's.
             Node::IfValue { cond, then, els } if self.needs_statements(id) => {
@@ -2390,6 +2397,7 @@ impl<'a> Translator<'a> {
                     out.push(self.bubble());
                     return Ok(());
                 }
+                let expr = unconverted(p, expr);
                 // A setter's call is an assignment of its property.
                 if let Node::CallMethod {
                     method,
@@ -2412,33 +2420,32 @@ impl<'a> Translator<'a> {
                         return Ok(());
                     }
                 }
-                let e = self.expr(expr)?;
                 // An object made for its constructor's effects alone, `_ =
-                // new C();`, as C#'s analyzers want (CA1806).
-                if let Node::New { ctor, .. } = p.nodes.get(expr) {
-                    if !by_connection(p, ctor, crate::connected::connects_std) {
+                // new C();`, as C#'s analyzers want (CA1806); a cast for its
+                // check alone, `_ = (C)x;`; or an `await`'s result, which
+                // throws if its promise is broken.
+                let discard = match p.nodes.get(expr) {
+                    Node::New { ctor, .. } => {
+                        !by_connection(p, ctor, crate::connected::connects_std)
+                    }
+                    Node::Await { .. } => true,
+                    _ => false,
+                };
+                if discard || matches!(p.nodes.get(expr), Node::As { .. }) {
+                    let e = self.expr(expr)?;
+                    if discard || !e.is_statement() {
                         out.push(Stmt::Assign {
                             target: Expr::name("_"),
                             value: e,
                         });
-                        return Ok(());
+                    } else {
+                        out.push(Stmt::Expr(e));
                     }
-                }
-                // A cast for its check alone: `_ = (C)x;`, or an `await`'s
-                // result, which throws if its promise is broken.
-                if let (Expr::Cast(..), Node::As { .. }) | (_, Node::Await { .. }) =
-                    (&e, p.nodes.get(expr))
-                {
-                    out.push(Stmt::Assign {
-                        target: Expr::name("_"),
-                        value: e,
-                    });
                     return Ok(());
                 }
-                if !e.is_statement() {
-                    return not_yet("an expression statement that isn't a call");
-                }
-                out.push(Stmt::Expr(e));
+                // Any other value: a call as itself, nothing for a value
+                // without effects, else `_ = e;`.
+                self.sink(expr, &Sink::Drop, out)?;
             }
             // What a generator yields is the runtime's business.
             Node::Yield { value } => {
@@ -3597,4 +3604,52 @@ impl Split {
             });
         }
     }
+}
+
+/// A value without the conversions around it that check nothing at run
+/// time (`NonNull` is unchecked; C#'s `e!` only quiets its compiler),
+/// for a value that's dropped.
+fn unconverted(p: &Program, mut id: NodeId) -> NodeId {
+    while let Node::NonNull { value } | Node::AsNullable { value } | Node::Upcast { value } =
+        p.nodes.get(id)
+    {
+        id = value;
+    }
+    id
+}
+
+/// Whether a value, dropped, needn't be written at all: literals, reads
+/// of locals, module `let`s, and fields, operators that can't fail, and
+/// functions made but not called, which do nothing a statement would
+/// show. Anything else, dropped, is `_ = e;`.
+fn no_effects(p: &Program, id: NodeId) -> bool {
+    let here = match p.nodes.get(id) {
+        Node::FunctionLiteral { .. } | Node::FunctionRef { .. } => return true,
+        Node::Op { may_bubble, .. } => !may_bubble,
+        Node::BoolLit { .. }
+        | Node::Int32Lit { .. }
+        | Node::Int64Lit { .. }
+        | Node::Float64Lit { .. }
+        | Node::StringLit { .. }
+        | Node::VoidLit {}
+        | Node::TypeValue { .. }
+        | Node::This {}
+        | Node::Null {}
+        | Node::Omitted {}
+        | Node::Local { .. }
+        | Node::GetModuleLet { .. }
+        | Node::GetField { .. }
+        | Node::IsNull { .. }
+        | Node::NonNull { .. }
+        | Node::AsNullable { .. }
+        | Node::Upcast { .. }
+        | Node::EqNullable { .. }
+        | Node::Is { .. }
+        | Node::Identical { .. }
+        | Node::And { .. }
+        | Node::Or { .. }
+        | Node::IfValue { .. } => true,
+        _ => false,
+    };
+    here && p.nodes.kids(id).iter().all(|&k| no_effects(p, k))
 }
