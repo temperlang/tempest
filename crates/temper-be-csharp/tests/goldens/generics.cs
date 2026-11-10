@@ -6,6 +6,23 @@ namespace Generics;
 
 public static class GenericsGlobal
 {
+    internal static T Tagged<S, T>(T x)
+    {
+        return x;
+    }
+
+    internal static int CountOf<T>(int n)
+    {
+        IList<T> b = new List<T>();
+        return b.Count + n;
+    }
+
+    internal static T Relayed<S, T>(T x)
+        where S : IScene
+    {
+        return Tagged<S, T>(x);
+    }
+
     public static T First<T>(IReadOnlyList<T> items, T fallback)
     {
         if (items.Count == 0)
@@ -60,6 +77,8 @@ public static class GenericsGlobal
         Shelf<Named> empty = new Shelf<Named>(noNames);
         string? subject2 = empty.FirstName();
         console.Log(subject2 == null ? "none" : subject2);
+        int n = shelf.Tally<Named>(1) + shelf.Tally<Named>(2);
+        console.Log(string.Create(CultureInfo.InvariantCulture, $"{Tagged<IScene, int>(4)} {Tagged<IScene, string>("t")} {CountOf<object>(3)} {Relayed<IScene, int>(5)} {n}"));
         IList<string> builder = new List<string>();
         builder.Add("x");
         builder.Add("y");

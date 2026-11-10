@@ -40,6 +40,16 @@ pub(crate) fn init() -> temper_core::Result<()> {
                     .clone()
                     .unwrap_or_else(|| Arc::new("none".to_string()))
             });
+            let n = shelf
+                .tally::<Named>(1)
+                .wrapping_add(shelf.tally::<Named>(2));
+            println!(
+                "{} {} {} {} {n}",
+                tagged::<Scene, i32>(4),
+                tagged::<Scene, Arc<String>>(Arc::new("t".to_string())),
+                count_of::<temper_core::AnyValue>(3),
+                relayed::<Scene, i32>(5)
+            );
             let builder: temper_core::ListBuilder<Arc<String>> = temper_core::listed::new_builder();
             temper_core::listed::add(&builder, Arc::new("x".to_string()), None);
             temper_core::listed::add(&builder, Arc::new("y".to_string()), None);
@@ -230,12 +240,89 @@ impl<T: Clone + Send + Sync + 'static + Into<Named>> Shelf<T> {
         }
     }
 
+    #[allow(clippy::extra_unused_type_parameters)]
+    pub fn tally<TName: Clone + Send + Sync + 'static>(&self, extra: i32) -> i32 {
+        temper_core::ListedTrait::len(&self.0.items).wrapping_add(extra)
+    }
+
     pub fn items(&self) -> temper_core::List<T> {
         self.0.items.clone()
     }
 }
 
 temper_core::impl_any_value_trait!(Shelf<T>, [] where T: Into<Named>);
+
+pub trait SceneTrait: temper_core::AsAnyValue + temper_core::AnyValueTrait + Send + Sync {
+    fn clone_boxed(&self) -> Scene;
+}
+
+#[derive(Clone)]
+pub struct Scene(Arc<dyn SceneTrait>);
+
+impl Scene {
+    pub fn new(selfish: impl SceneTrait + 'static) -> Scene {
+        Scene(Arc::new(selfish))
+    }
+}
+
+impl SceneTrait for Scene {
+    fn clone_boxed(&self) -> Scene {
+        SceneTrait::clone_boxed(&*self.0)
+    }
+}
+
+temper_core::impl_any_value_trait_for_interface!(Scene);
+
+impl std::ops::Deref for Scene {
+    type Target = dyn SceneTrait;
+
+    fn deref(&self) -> &Self::Target {
+        &*self.0
+    }
+}
+
+struct StageStruct {}
+
+#[derive(Clone)]
+pub struct Stage(Arc<StageStruct>);
+
+impl Stage {
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> Stage {
+        Stage(Arc::new(StageStruct {}))
+    }
+}
+
+impl SceneTrait for Stage {
+    fn clone_boxed(&self) -> Scene {
+        Scene::new(self.clone())
+    }
+}
+
+temper_core::impl_any_value_trait!(Stage, [Scene]);
+
+#[allow(clippy::extra_unused_type_parameters)]
+pub(crate) fn tagged<S: Clone + Send + Sync + 'static, T: Clone + Send + Sync + 'static>(
+    x: T,
+) -> T {
+    x.clone()
+}
+
+#[allow(clippy::extra_unused_type_parameters)]
+pub(crate) fn count_of<T: Clone + Send + Sync + 'static>(n: i32) -> i32 {
+    let b: temper_core::ListBuilder<T> = temper_core::listed::new_builder();
+    temper_core::ListedTrait::len(&b).wrapping_add(n)
+}
+
+#[allow(clippy::extra_unused_type_parameters)]
+pub(crate) fn relayed<
+    S: SceneTrait + Clone + Send + Sync + 'static,
+    T: Clone + Send + Sync + 'static,
+>(
+    x: T,
+) -> T {
+    tagged::<S, T>(x.clone())
+}
 
 pub fn first<T: Clone + Send + Sync + 'static>(
     items: impl temper_core::ToListed<T>,

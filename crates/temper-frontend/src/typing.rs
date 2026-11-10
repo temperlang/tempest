@@ -532,7 +532,7 @@ impl Settle {
         }
         if let Some(mut solved) = self.solve_call(node, forced)? {
             let t = self.solved_type(&mut solved, forced)?;
-            let actuals = solved.actuals().to_vec();
+            let actuals = self.settled_type_args(&solved);
             self.typing.type_args.insert(node, actuals);
             return Ok(t);
         }
@@ -811,6 +811,22 @@ impl Settle {
         };
         self.typing.types.set_bound(symbol, bound);
         t
+    }
+
+    /// A type parameter's bound as declared: the type it `extends`, or
+    /// `AnyValue`; for one not declared by a `let` (core's), as
+    /// [`Types::bound_of`] has it, `AnyValue` if unset. Evaluated here, as
+    /// [`Types::param`] may have made its type before its bound was set.
+    pub(crate) fn declared_bound(&mut self, symbol: SymbolId) -> TypeId {
+        let tree = &self.lib.tree;
+        let decl = (self.scopes.symbol(symbol).decl).filter(|&d| {
+            tree.kind(d) == NodeKind::Let && tree.data(d) & ROLE_MASK == ROLE_TYPE_PARAM
+        });
+        match decl.map(|d| core::let_parts(tree, d).1) {
+            Some(Some(bound)) => self.eval_type(bound),
+            Some(None) => ANY_VALUE,
+            None => self.typing.types.bound_of(symbol).unwrap_or(ANY_VALUE),
+        }
     }
 
     /// A generic type given arguments, as `List<Int>` or `Box<String>`.

@@ -775,7 +775,15 @@ impl<'a> Translator<'a> {
                 // What the statement around a literal hoists stays there,
                 // out of the literal's body.
                 let pre = std::mem::take(&mut self.pre);
+                // A type parameter only the body mentions (`new
+                // ListBuilder<T>()` in `countOf<T>(n: Int)`) is unbound
+                // there for mypy and pyright, so its bound stands in.
+                let saved_args = self.type_args.clone();
+                for (tp, bound) in self.body_only_type_params(decl) {
+                    self.type_args.insert(tp, bound);
+                }
                 let body = self.block(block, &mut stmts);
+                self.type_args = saved_args;
                 self.pre = pre;
                 self.annotated = annotated;
                 self.temps = temps;
@@ -792,6 +800,27 @@ impl<'a> Translator<'a> {
             result,
             body: stmts,
         })
+    }
+
+    /// A function's or method's own type parameters that appear in none
+    /// of its parameters' types nor its result's, each with its bound
+    /// (`AnyValue` if none).
+    fn body_only_type_params(&self, decl: DeclId) -> Vec<(DeclId, TypeId)> {
+        let p = self.p;
+        let Some(sig) = p.signature(decl) else {
+            return Vec::new();
+        };
+        (p.decls.type_params(decl).iter())
+            .filter(|&&tp| {
+                let f = p.decls.get(tp).ty;
+                !p.types.mentions(sig.result, f)
+                    && !sig.params.iter().any(|&t| p.types.mentions(t, f))
+            })
+            .map(|&tp| {
+                let bound = p.decls.supers(tp).first().copied();
+                (tp, bound.unwrap_or(TypeId::ANY_VALUE))
+            })
+            .collect()
     }
 
     /// A function literal: a lambda where its body is one `return` of an

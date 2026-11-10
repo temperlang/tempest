@@ -176,3 +176,24 @@ T4 @19: id#13 takes 1 type arguments, not 0
 T3 @20: argument 1 is Int32, but should be (no type)
 T3 @22: the initializer is Int32, but should be String
 T3 @26: argument 1 is String, but should be Int32
+
+=== a type argument outside its bound (T4)
+tmpl 1 model 1 library gen 0.1.0
+
+module gen#0 {
+  export interface Scene#1 {}
+
+  export class Stage#2 {}
+
+  fn tagged#3<S#4 extends Scene#1, T#5>(x#6: T#5): T#5 {
+    return x#6;
+  }
+
+  fn use#7(): Int32 {
+    return %Int32.add(tagged#3<Scene#1, Int32>(1), tagged#3<Stage#2, Int32>(2));
+  }
+
+  init {}
+}
+--- problems
+T4 @13: type argument Stage#2 isn't within S#4's bound Scene#1

@@ -107,7 +107,12 @@ Risks to the date:
      5 errors, exiting 1: one in its HTML codec, until its own fix
      (removing the check, under way on its branch) lands, and four in
      its contextual autoescaping's `if (DEBUG)` branches (`context`),
-     which need their own fix too. That took `@overload`s of lists and
+     which need their own fix too. Since 2026-11-10 a generic
+     call's type parameter that nothing at the call binds takes its
+     bound, and Rust and C# write such calls' type arguments, so with
+     `combineEffects`'s `CONTEXT` put back (dropped for Kotlin's Rust)
+     it passes 54 of 54 on the interpreter, C++, C#, and Rust. That
+     took `@overload`s of lists and
      of classes told apart, a dead `if (DEBUG)` branch dropped as
      error recovery, generic `is`
      checks, identity of nullable generic values, `[]` and list literals

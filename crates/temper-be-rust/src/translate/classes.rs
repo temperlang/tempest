@@ -418,7 +418,7 @@ impl<'a> Translator<'a> {
         let vis = if style == Params::Trait {
             ""
         } else {
-            self.member_vis(decl)
+            self.allow_unused_type_params(decl, self.member_vis(decl))
         };
         Ok(Member::Fn {
             vis,
@@ -1740,11 +1740,13 @@ impl<'a> Translator<'a> {
     pub(crate) fn call_method(
         &mut self,
         method: DeclId,
+        fish: &str,
         receiver: NodeId,
         args: &[NodeId],
     ) -> R<Expr> {
         let p = self.p;
-        let rust = self.member_name(method);
+        let name = self.member_name(method);
+        let rust = format!("{name}{fish}");
         if !p.is_virtual(method) {
             // Rust's `==` where both sides are values; a side narrowed
             // from a nullable one is a reference, which `==` won't take
@@ -1784,7 +1786,7 @@ impl<'a> Translator<'a> {
         // scope.
         let plain = home(p, iface) == Some(self.here)
             && !self.in_tests
-            && ty.is_some_and(|t| self.unambiguous(t, &rust));
+            && ty.is_some_and(|t| self.unambiguous(t, &name));
         if plain {
             return Ok(recv.method(rust, xs));
         }

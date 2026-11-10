@@ -50,6 +50,7 @@ end
 ---@class generics.Shelf
 ---@field items any[]
 ---@field firstName fun(self: generics.Shelf): string|temper.Null
+---@field tally fun(self: generics.Shelf, extra: integer): integer
 
 ---@class generics.Shelf.type: temper.Type
 ---@operator call: generics.Shelf
@@ -69,6 +70,52 @@ function Shelf.methods.firstName(this)
   else
     return temper.list_get(this.items, 0).name
   end
+end
+
+---@param this generics.Shelf
+---@param extra integer
+---@return integer
+function Shelf.methods.tally(this, extra)
+  return temper.int32_add(temper.list_length(this.items), extra)
+end
+
+---@class generics.Scene
+
+---@class generics.Scene.type: temper.Type
+local Scene = temper.type("generics.Scene")
+
+---@class generics.Stage: generics.Scene
+
+---@class generics.Stage.type: temper.Type
+---@operator call: generics.Stage
+local Stage = temper.type("generics.Stage", Scene)
+
+---@param this generics.Stage
+function Stage.constructor(this)
+end
+
+---@generic S
+---@generic T
+---@param x T
+---@return T
+local function tagged(x)
+  return x
+end
+
+---@generic T
+---@param n integer
+---@return integer
+local function countOf(n)
+  local b = temper.listbuilder_constructor()
+  return temper.int32_add(temper.listbuilder_length(b), n)
+end
+
+---@generic S: generics.Scene
+---@generic T
+---@param x T
+---@return T
+local function relayed(x)
+  return tagged(x)
 end
 
 ---@generic T
@@ -126,6 +173,8 @@ local noNames = {}
 local empty = Shelf(noNames)
 local subject2 = empty:firstName()
 print(temper.is_null(subject2) and "none" or (subject2 --[[@as string]]))
+local n = temper.int32_add(shelf:tally(1), shelf:tally(2))
+print(tagged(4) .. " " .. tagged("t") .. " " .. countOf(3) .. " " .. relayed(5) .. " " .. n)
 local builder = temper.listbuilder_constructor()
 temper.listbuilder_add(builder, "x")
 temper.listbuilder_add(builder, "y")
@@ -172,5 +221,7 @@ return {
   Box = Box,
   Named = Named,
   Shelf = Shelf,
+  Scene = Scene,
+  Stage = Stage,
   first = first,
 }

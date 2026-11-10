@@ -19,10 +19,13 @@ from temper_core import (
 from types import MappingProxyType as _MappingProxyType
 from typing import Generic as _Generic, TypeVar as _TypeVar
 
-__all__ = ('Holder', 'Box', 'Named', 'Shelf', 'first')
+__all__ = ('Holder', 'Box', 'Named', 'Shelf', 'Scene', 'Stage', 'first')
 
 _T = _TypeVar('_T')
 _T_2 = _TypeVar('_T_2', bound='Named')
+_TName = _TypeVar('_TName')
+_S = _TypeVar('_S')
+_S_2 = _TypeVar('_S_2', bound='Scene')
 
 
 class Holder(_Generic[_T], metaclass=_ABCMeta):
@@ -82,6 +85,30 @@ class Shelf(_Generic[_T_2]):
         else:
             return _list_get(self._items, 0).name
 
+    def tally(self, extra: int, /) -> int:
+        return _int_add(len(self._items), extra)
+
+
+class Scene(metaclass=_ABCMeta):
+    __slots__ = ()
+
+
+class Stage(Scene):
+    __slots__ = ()
+
+
+def _tagged(x: _T, /) -> _T:
+    return x
+
+
+def _count_of(n: int, /) -> int:
+    b: _MutableSequence[object] = []
+    return _int_add(len(b), n)
+
+
+def _relayed(x: _T, /) -> _T:
+    return _tagged(x)
+
 
 def first(items: _Sequence[_T], fallback: _T, /) -> _T:
     if not items:
@@ -121,6 +148,8 @@ _console.log('none' if (_subject := _shelf.first_name()) is None else _subject)
 _no_names: _Sequence[Named] = ()
 _empty: Shelf[Named] = Shelf(_no_names)
 _console.log('none' if (_subject2 := _empty.first_name()) is None else _subject2)
+_n: int = _int_add(_shelf.tally(1), _shelf.tally(2))
+_console.log(f"{_tagged(4)} {_tagged('t')} {_count_of(3)} {_relayed(5)} {_n}")
 _builder: _MutableSequence[str] = []
 _builder.append('x')
 _builder.append('y')

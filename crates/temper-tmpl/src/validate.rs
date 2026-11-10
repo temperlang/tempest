@@ -16,6 +16,7 @@
 //!   its method's owner's, and `Omitted` only for optional parameters;
 //!   **T4** (generics, subset B) a generic call's type arguments, as
 //!   many as its callee has type parameters (a constructor's class's),
+//!   each within its type parameter's bounds (but a builtin type's),
 //!   with each argument's and the result's type put in;
 //!   **T5** types well formed. `Error` nodes are exempt from T2 and T3.
 //! - **R1** ids exist; **R2** references name the right kind of
@@ -2242,6 +2243,38 @@ impl Validator {
             if !p.types.contains(a) {
                 let message = format!("type {} doesn't exist", a.0);
                 self.node_problem(Rule::R1, id, message);
+                return args;
+            }
+        }
+        // Each within its type parameter's bounds, the others put in; a
+        // builtin type's only as far as tmpl knows its supertypes, so not
+        // checked (`String` for `T extends MapKey`).
+        let generic = match p.decls.contains(generic).then(|| p.decls.get(generic).kind) {
+            Some(DeclKind::Constructor) => p.decls.get(generic).owner,
+            Some(_) => generic,
+            None => return args,
+        };
+        let formals = crate::analysis::type_param_types(p, generic);
+        if formals.len() != args.len() {
+            return args;
+        }
+        for (&tp, &a) in p.decls.type_params(generic).iter().zip(&args) {
+            if matches!(p.types.get(a), TypeData::Scalar(_)) {
+                continue;
+            }
+            for &bound in p.decls.supers(tp) {
+                let Some(bound) = p.types.substituted(bound, &formals, &args) else {
+                    continue;
+                };
+                if !crate::analysis::is_subtype(p, a, bound) {
+                    let message = format!(
+                        "type argument {} isn't within {}'s bound {}",
+                        p.show_type(a),
+                        show(p, tp),
+                        p.show_type(bound)
+                    );
+                    self.node_problem(Rule::T4, id, message);
+                }
             }
         }
         args

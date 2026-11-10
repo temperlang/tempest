@@ -14,6 +14,19 @@ import temper.core.Nullable;
 public final class GenericsGlobal {
     private GenericsGlobal() {}
 
+    static <S, T> T tagged(T x) {
+        return x;
+    }
+
+    static <T> int countOf(int n) {
+        List<T> b = new ArrayList<>();
+        return b.size() + n;
+    }
+
+    static <S extends Scene, T> T relayed(T x) {
+        return tagged(x);
+    }
+
     public static <T> T first(List<T> items, T fallback) {
         if (items.isEmpty()) {
             return fallback;
@@ -59,6 +72,8 @@ public final class GenericsGlobal {
         Shelf<Named> empty = new Shelf<Named>(noNames);
         @Nullable String subject2 = empty.firstName();
         console.log(subject2 == null ? "none" : subject2);
+        int n = shelf.tally(1) + shelf.tally(2);
+        console.log(tagged(4) + " " + tagged("t") + " " + countOf(3) + " " + relayed(5) + " " + n);
         List<String> builder = new ArrayList<>();
         builder.add("x");
         builder.add("y");

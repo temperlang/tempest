@@ -3,8 +3,11 @@
 Generic functions, a generic class with a bounded type parameter and a
 generic method, a generic interface, and core's generic types: list
 literals, `Listed`'s and `List`'s members, `ListBuilder`, `Pair`, `Map`,
-and `MapBuilder`, with nullables mixed in. The log is what tempest's
-interpreter gives.
+and `MapBuilder`, with nullables mixed in; and generic functions and a
+method with a type parameter that no parameter's type mentions, which
+the frontend binds to its bound unless the call says, and which Rust,
+C#, and C++ then spell out. The log is what tempest's interpreter
+gives.
 
     export interface Holder<T> {
       public get held(): T;
@@ -21,7 +24,19 @@ interpreter gives.
       public firstName(): String? {
         if (items.isEmpty) { null } else { items[0].name }
       }
+      public tally<TName extends Named>(extra: Int): Int { items.length + extra }
     }
+
+    export interface Scene {}
+    export class Stage extends Scene {}
+
+    // `S` appears nowhere, and `T` only in the body.
+    let tagged<S extends Scene, T>(x: T): T { x }
+    let countOf<T>(n: Int): Int {
+      let b = new ListBuilder<T>();
+      b.length + n
+    }
+    let relayed<S extends Scene, T>(x: T): T { tagged<S, T>(x) }
 
     export let first<T>(items: Listed<T>, fallback: T): T {
       if (items.isEmpty) { fallback } else { items[0] }
@@ -50,6 +65,8 @@ interpreter gives.
     let noNames: List<Named> = [];
     let empty = new Shelf(noNames);
     console.log(empty.firstName() ?? "none");
+    let n = shelf.tally(1) + shelf.tally<Named>(2);
+    console.log("${tagged(4)} ${tagged("t")} ${countOf(3)} ${relayed<Stage, Int>(5)} ${n}");
     let builder = new ListBuilder<String>();
     builder.add("x");
     builder.add("y");
@@ -77,6 +94,7 @@ boxed
 boxed 7
 ann
 none
+4 t 3 5 7
 3 w y
 2 ? x
 2 -1 true 2

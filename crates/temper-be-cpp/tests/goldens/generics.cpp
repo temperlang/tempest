@@ -17,6 +17,8 @@ struct Box;
 struct Named;
 template <class T>
 struct Shelf;
+struct Scene;
+struct Stage;
 
 template <class T>
 struct Holder : public virtual temper::core::AnyValueBase {
@@ -43,7 +45,15 @@ struct Shelf : public std::enable_shared_from_this<Shelf<T>> {
   std::shared_ptr<std::vector<T>> items;
   static std::shared_ptr<Shelf<T>> make(std::shared_ptr<std::vector<T>> const & items);
   temper::core::NullableParam<temper::core::Str> firstName() const;
+  template <class TName>
+  int32_t tally(int32_t extra) const;
   std::shared_ptr<std::vector<T>> get_items() const;
+};
+
+struct Scene : public virtual temper::core::AnyValueBase {};
+
+struct Stage : public virtual Scene {
+  static std::shared_ptr<Stage> make();
 };
 
 template <class T>
@@ -87,6 +97,12 @@ temper::core::NullableParam<temper::core::Str> Shelf<T>::firstName() const {
 }
 
 template <class T>
+template <class TName>
+int32_t Shelf<T>::tally(int32_t extra) const {
+  return temper::core::Int::add(temper::core::List::length<T>(this->items), extra);
+}
+
+template <class T>
 std::shared_ptr<std::vector<T>> Shelf<T>::get_items() const {
   return this->items;
 }
@@ -119,6 +135,28 @@ std::shared_ptr<Named> Named::make(core::Str const & name) {
 
 core::Str Named::get_name() const {
   return this->name;
+}
+
+std::shared_ptr<Stage> Stage::make() {
+  global_init_init();
+  std::shared_ptr<Stage> self = std::make_shared<Stage>();
+  return self;
+}
+
+template <class S, class T>
+static T tagged(T x) {
+  return x;
+}
+
+template <class T>
+static int32_t countOf(int32_t n) {
+  std::shared_ptr<std::vector<T>> b = core::ListBuilder::make<T>();
+  return core::Int::add(core::List::length<T>(b), n);
+}
+
+template <class S, class T>
+static T relayed(T x) {
+  return generics::tagged<S, T>(x);
 }
 
 template <class T>
@@ -160,6 +198,8 @@ void global_init_init() {
     std::shared_ptr<Shelf<std::shared_ptr<Named>>> empty = Shelf<std::shared_ptr<Named>>::make(noNames);
     core::NullableParam<core::Str> subject2 = empty->firstName();
     core::Console::log(console, subject2 == nullptr ? TEMPER_STR("none") : subject2.value);
+    int32_t n = core::Int::add(shelf->tally<std::shared_ptr<Named>>(1), shelf->tally<std::shared_ptr<Named>>(2));
+    core::Console::log(console, std::to_string(tagged<std::shared_ptr<Scene>, int32_t>(4)) + " " + generics::tagged<std::shared_ptr<Scene>, core::Str>(TEMPER_STR("t")) + " " + std::to_string(countOf<std::shared_ptr<core::AnyValueBase>>(3)) + " " + std::to_string(relayed<std::shared_ptr<Scene>, int32_t>(5)) + " " + std::to_string(n));
     std::shared_ptr<std::vector<core::Str>> builder = core::ListBuilder::make<core::Str>();
     core::ListBuilder::add<core::Str>(builder, TEMPER_STR("x"));
     core::ListBuilder::add<core::Str>(builder, TEMPER_STR("y"));

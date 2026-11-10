@@ -369,6 +369,24 @@ impl<'a> Translator<'a> {
         }
     }
 
+    /// `::<A, B>`, a generic call's type arguments, all of them, where
+    /// Rust can't infer them from the arguments, as when a type parameter
+    /// appears in no parameter's type (`analysis::infers_type_args`);
+    /// otherwise nothing, leaving them to Rust.
+    fn turbofish(&mut self, callee: DeclId, type_args: temper_tmpl::TypeArgs) -> R<String> {
+        if temper_tmpl::analysis::infers_type_args(self.p, callee) {
+            return Ok(String::new());
+        }
+        let mut texts = Vec::new();
+        for &a in self.p.types.args_of(type_args) {
+            texts.push(self.ty(a)?);
+        }
+        if texts.is_empty() {
+            return Ok(String::new());
+        }
+        Ok(format!("::<{}>", texts.join(", ")))
+    }
+
     /// A type as Rust writes it.
     fn ty(&mut self, ty: TypeId) -> R<String> {
         Ok(match self.p.types.get(ty) {
@@ -756,6 +774,27 @@ impl<'a> Translator<'a> {
         }
     }
 
+    /// `vis`, with clippy's `extra_unused_type_parameters` allowed where
+    /// a type parameter of function or method `decl` appears in neither
+    /// its parameters' types nor its result's, as Temper allows
+    /// (`CONTEXT` in `combine<CONTEXT extends Context, T>(x: T): T`),
+    /// which its calls spell out ([`Translator::turbofish`]).
+    pub(crate) fn allow_unused_type_params(&self, decl: DeclId, vis: &'static str) -> &'static str {
+        let p = self.p;
+        let Some(sig) = p.signature(decl) else {
+            return vis;
+        };
+        let unused = (temper_tmpl::analysis::type_param_types(p, decl).iter()).any(|&f| {
+            !p.types.mentions(sig.result, f) && !sig.params.iter().any(|&t| p.types.mentions(t, f))
+        });
+        match (unused, vis) {
+            (true, "pub") => "#[allow(clippy::extra_unused_type_parameters)]\npub",
+            (true, "pub(crate)") => "#[allow(clippy::extra_unused_type_parameters)]\npub(crate)",
+            (true, "") => "#[allow(clippy::extra_unused_type_parameters)]\n",
+            _ => vis,
+        }
+    }
+
     /// A module `let`'s static and its getter.
     fn static_items(&mut self, decl: DeclId) -> R<Vec<Item>> {
         let d = self.p.decls.get(decl);
@@ -891,7 +930,7 @@ impl<'a> Translator<'a> {
         let (params, result, body) = self.callable(item, decl, params, body, Params::Free)?;
         let (generics, _) = self.type_params(decl)?;
         Ok(Item::Fn {
-            vis: self.vis(decl),
+            vis: self.allow_unused_type_params(decl, self.vis(decl)),
             name: format!("{}{generics}", self.name(decl)),
             params,
             result,
@@ -1910,9 +1949,9 @@ impl<'a> Translator<'a> {
             }
             Node::CallFunction {
                 callee,
+                type_args,
                 may_bubble,
                 args,
-                ..
             } => {
                 let args = p.nodes.list(args);
                 let call =
@@ -1925,21 +1964,23 @@ impl<'a> Translator<'a> {
                             Some(path) => path,
                             None => self.top_path(callee)?,
                         };
-                        Expr::path(path).call(args)
+                        let fish = self.turbofish(callee, type_args)?;
+                        Expr::path(format!("{path}{fish}")).call(args)
                     };
                 if may_bubble { call.try_() } else { call }
             }
             Node::CallMethod {
                 method,
+                type_args,
                 may_bubble,
                 receiver,
                 args,
-                ..
             } => {
                 // Core's by the connection table; other libraries' as the
                 // library's own.
                 if !temper_tmpl::qname::by_connection(p, method, crate::connected::connects_std) {
-                    let call = self.call_method(method, receiver, p.nodes.list(args))?;
+                    let fish = self.turbofish(method, type_args)?;
+                    let call = self.call_method(method, &fish, receiver, p.nodes.list(args))?;
                     return Ok(if may_bubble { call.try_() } else { call });
                 }
                 let mut all = vec![receiver];

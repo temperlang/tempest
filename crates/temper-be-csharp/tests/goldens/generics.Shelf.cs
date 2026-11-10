@@ -31,4 +31,9 @@ public class Shelf<T>
             return this.items[0].Name;
         }
     }
+
+    public int Tally<TName>(int extra)
+    {
+        return this.items.Count + extra;
+    }
 }

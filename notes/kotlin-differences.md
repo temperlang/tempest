@@ -1767,6 +1767,22 @@ copied Kotlin's:
     (mypy and pyright, strict).
   - **C# `new TemperLang.Core.OrderedDictionary<K, V>()`,** qualified,
     since .NET 9's `System.Collections.Generic` has one too.
+  - **A type parameter no parameter's type mentions** (`CONTEXT` in
+    `combine<CONTEXT extends Context, T>(x: T): T`) can't be inferred by
+    Rust or C#: Kotlin's Rust fails rustc's E0283 (its C# should fail
+    C#'s CS0411 the same way, not tried).
+    Tempest's frontend binds it, as Kotlin's does, to what the call says
+    or else its bound (`AnyValue` if none), and tmpl carries every
+    generic call's type arguments, so Rust and C# spell them all out
+    there (`combine::<Context, i32>(1)`, `Combine<IContext, int>(1)`)
+    and nowhere else, and Rust allows clippy's
+    `extra_unused_type_parameters` on such a function. C++ already
+    writes every call's. Where only the body mentions one (`new
+    ListBuilder<T>()`), Python annotates the body with its bound, as
+    mypy and pyright reject a type variable the signature doesn't bind.
+    2026-11-10.
+    Test: programs/generics.temper.md (`tagged`, `countOf`, `tally`)
+    on every backend.
   - **Not compared:** the Kotlin layout test (`kotlin_layout.rs`)
     doesn't cover the generics tests yet.
 - **Core's other types in the backends** (2026-11-02;

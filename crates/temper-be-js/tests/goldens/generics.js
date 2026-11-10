@@ -13,6 +13,37 @@ import {
 } from "@temperlang/core";
 
 /**
+ * @template S
+ * @template T
+ * @param {T} x
+ * @returns {T}
+ */
+function tagged(x) {
+  return x;
+}
+
+/**
+ * @template T
+ * @param {number} n
+ * @returns {number}
+ */
+function countOf(n) {
+  /** @type {T[]} */
+  const b = [];
+  return (b.length + n) | 0;
+}
+
+/**
+ * @template {Scene} S
+ * @template T
+ * @param {T} x
+ * @returns {T}
+ */
+function relayed(x) {
+  return tagged(x);
+}
+
+/**
  * @template T
  * @param {readonly T[]} items
  * @param {T} fallback
@@ -136,7 +167,20 @@ export class Shelf extends type() {
       return listedGet(/** @type {T[]} */ (this.#items), 0).name;
     }
   }
+
+  /**
+   * @template TName
+   * @param {number} extra
+   * @returns {number}
+   */
+  tally(extra) {
+    return (this.#items.length + extra) | 0;
+  }
 }
+
+export class Scene extends type() {}
+
+export class Stage extends type(Scene) {}
 
 /** @type {readonly number[]} */
 const ns = Object.freeze([1, 2, 3]);
@@ -158,6 +202,8 @@ const noNames = Object.freeze([]);
 /** @type {Shelf<Named>} */
 const empty_ = new Shelf(noNames);
 console.log(empty_.firstName() ?? "none");
+const n = (shelf.tally(1) + shelf.tally(2)) | 0;
+console.log(`${tagged(4)} ${tagged("t")} ${countOf(3)} ${relayed(5)} ${n}`);
 /** @type {string[]} */
 const builder = [];
 builder.push("x");

@@ -474,10 +474,20 @@ Types gain type arguments and type parameters ([types.md](types.md)).
   constructor's class's. Their types are the callee's result with the
   type parameters put in, and `GetField` is typed by its field with its
   object's type arguments put in (`TypeRule::Field`).
+- **Generic calls** always carry all their type arguments, settled by
+  the frontend, so no backend infers them: what the call says or its
+  arguments bind, and for a type parameter that appears in no
+  parameter's type nor the result's (`CONTEXT` in `combine<CONTEXT
+  extends Context, T>(x: T): T`), its bound, `AnyValue` if it has none,
+  as Kotlin binds it. Backends whose target infers only from arguments
+  (Rust, C#) write them where `analysis::infers_type_args` says it
+  can't, all of them, as neither allows some; C++ writes them always.
 - **Text:** `(list(a, b)): List#64<Int32>`.
 
 Validator rule T4: a call has as many type arguments as its callee has
-type parameters, each interned.
+type parameters, each interned, and each within its type parameter's
+bounds, the other arguments put in (a builtin type's isn't checked, as
+tmpl doesn't know all its supertypes).
 
 ### Subset B's next step: function values (As built, 2026-10-31, Proposed)
 
@@ -721,7 +731,7 @@ many times. Golden tests list problems as `RULE @node: message`.
   declaration its declared type. T2: a node the local rules cover has
   exactly their type. T3: every child's type is its role's exactly;
   there are no implicit conversions. T4: type arguments match the
-  callee's type parameters in number. T5: every type is well formed
+  callee's type parameters in number and fit their bounds. T5: every type is well formed
   (no `Nullable` of a nullable, `Result` only in a lowered program).
 - **R, references.** R1: every id exists and isn't removed. R2: a
   reference's declaration is of the kind its node wants (`Local` a

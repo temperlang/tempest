@@ -45,13 +45,6 @@ pub(super) struct Solved {
     has_type_args: bool,
 }
 
-impl Solved {
-    /// What each type parameter binds to at this call.
-    pub(super) fn actuals(&self) -> &[TypeId] {
-        &self.actuals
-    }
-}
-
 impl Settle {
     /// Solves a call of a generic function declared by `let`, as `id(1)`
     /// or `id<Int>(x)`: from its type arguments, if there are as many as
@@ -580,6 +573,36 @@ impl Settle {
                 }
             })
             .collect()
+    }
+
+    /// A solved call's type arguments, settled for tmpl: what the call
+    /// binds, and for a type parameter that appears in none of the
+    /// function's parameters' types nor its result's, so nothing at the
+    /// call can bind it (`CONTEXT` in `combine<CONTEXT extends Context,
+    /// T>(x: T): T`), its bound, or `AnyValue` if it has none, as Kotlin
+    /// Temper's solver binds it, with the other type parameters put in.
+    /// Others still unknown stay so.
+    pub(super) fn settled_type_args(&mut self, solved: &Solved) -> Vec<TypeId> {
+        let TypeData::Fn { params, ret, .. } = self.typing.types.get(solved.sig).clone() else {
+            return solved.actuals.clone();
+        };
+        let mut settled = solved.actuals.clone();
+        for (k, &formal) in solved.formals.iter().enumerate() {
+            let only = &solved.formals[k..=k];
+            let types = &self.typing.types;
+            let used =
+                types.mentions(ret, only) || params.iter().any(|p| types.mentions(p.ty, only));
+            if settled[k] != UNKNOWN || solved.ambiguous[k] || used {
+                continue;
+            }
+            let bound = self.declared_bound(formal);
+            let types = &mut self.typing.types;
+            let bound = types.substitute(bound, &solved.formals, &solved.actuals);
+            if types.is_known(bound) {
+                settled[k] = bound;
+            }
+        }
+        settled
     }
 
     /// Whether a value of type `s` can't be passed where a `t` is wanted,

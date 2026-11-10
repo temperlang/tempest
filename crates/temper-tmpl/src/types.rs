@@ -375,6 +375,27 @@ impl TypeTable {
         }
     }
 
+    /// Whether `ty` mentions the type parameter whose type is `param`.
+    pub fn mentions(&self, ty: TypeId, param: TypeId) -> bool {
+        if ty == param {
+            return true;
+        }
+        if !self.contains(ty) {
+            return false;
+        }
+        match self.get(ty) {
+            TypeData::TypeParam { .. } | TypeData::Scalar(_) => false,
+            TypeData::Nullable(inner) => self.mentions(inner, param),
+            TypeData::Nominal { args, .. } => {
+                self.list(args).iter().any(|&a| self.mentions(a, param))
+            }
+            TypeData::Function { .. } => self.signature(ty).is_some_and(|sig| {
+                sig.params.iter().any(|&p| self.mentions(p, param))
+                    || self.mentions(sig.result, param)
+            }),
+        }
+    }
+
     /// A nominal type's type arguments; none for other types.
     pub fn args(&self, ty: TypeId) -> &[TypeId] {
         match self.data.get(ty.index()) {

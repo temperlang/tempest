@@ -667,6 +667,23 @@ pub fn bindings(
     (from, to)
 }
 
+/// Whether a call of `callee`, a generic function or method, could leave
+/// out its own type arguments in a target that infers them only from
+/// the arguments (Rust, C#, C++): whether each of its type parameters
+/// appears in some parameter's type. Where one doesn't (`CONTEXT` in
+/// `combine<CONTEXT extends Context, T>(x: T): T`), those backends print
+/// the call's type arguments, all of them, as `combine::<Context, i32>(1)`
+/// (notes/tmpl/nodes.md, "Generic calls"). True for a callee that isn't
+/// generic.
+pub fn infers_type_args(p: &Program, callee: DeclId) -> bool {
+    let formals = type_param_types(p, callee);
+    if formals.is_empty() {
+        return true;
+    }
+    let params = p.signature(callee).map_or(&[][..], |s| s.params);
+    (formals.iter()).all(|&f| params.iter().any(|&t| p.types.mentions(t, f)))
+}
+
 /// The class or interface a type names, if it's one.
 pub fn nominal_decl(p: &Program, ty: TypeId) -> Option<DeclId> {
     match p.types.contains(ty).then(|| p.types.get(ty))? {
