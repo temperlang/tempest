@@ -5,6 +5,9 @@ __pycache__/
 # A local decision-graph tool's database
 .deciduous/
 
+# javac's argument files, left behind when a compile fails
+javac.*.args
+
 # The site's build output (docs, playground, and Kelpto's build) and npm packages
 /site/_out/
 /site/playground/node_modules
