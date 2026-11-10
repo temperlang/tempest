@@ -423,6 +423,11 @@ pub enum Item {
     Function(Function),
     /// Text as it is, such as a helper's definition.
     Raw(String),
+    /// A private function, or its prototype, that only tests call: only
+    /// where `TEMPER_TESTS` is defined, as the tests are, or a build
+    /// without them would have an unused `static` function
+    /// (`-Wunused-function`).
+    TestsOnly(Box<Item>),
 }
 
 /// A module's `.cpp` file.
@@ -912,6 +917,36 @@ pub fn spell_core(text: &str) -> String {
     out
 }
 
+/// One item of a `.cpp`, as [`source`] writes it.
+fn item_text(out: &mut String, item: &Item) {
+    match item {
+        Item::Variable { exported, ty, name } => {
+            let storage = if *exported { "" } else { "static " };
+            let _ = writeln!(out, "{storage}{ty} {name};");
+        }
+        Item::Prototype(f) => {
+            if !f.template.is_empty() {
+                let _ = writeln!(out, "{}", f.template);
+            }
+            let _ = writeln!(out, "static {};", f.signature());
+        }
+        Item::Function(f) => {
+            if !f.template.is_empty() {
+                let _ = writeln!(out, "{}", f.template);
+            }
+            if !f.exported {
+                out.push_str("static ");
+            }
+            let _ = write!(out, "{} ", f.definition());
+            body(out, &f.body, 0);
+            out.push('\n');
+        }
+        Item::Raw(text) => out.push_str(text),
+        // Written in its run by [`source`].
+        Item::TestsOnly(item) => item_text(out, item),
+    }
+}
+
 pub fn source(s: &Source) -> String {
     let mut out = String::new();
     let (header, rest) = s
@@ -934,44 +969,41 @@ pub fn source(s: &Source) -> String {
     if !s.aliases.is_empty() {
         out.push('\n');
     }
-    // Variables and prototypes in runs, blank lines around the rest.
-    let mut prev: Option<&Item> = None;
-    for item in &s.items {
-        let run = matches!(
-            (prev, item),
-            (Some(Item::Variable { .. }), Item::Variable { .. })
-                | (Some(Item::Prototype(_)), Item::Prototype(_))
-        );
-        if prev.is_some() && !run {
-            out.push('\n');
+    // Variables and prototypes in runs, blank lines around the rest; a
+    // run of what only tests use in one `#ifdef`.
+    fn unwrap(i: &Item) -> (bool, &Item) {
+        match i {
+            Item::TestsOnly(inner) => (true, inner),
+            i => (false, i),
         }
-        match item {
-            Item::Variable { exported, ty, name } => {
-                let storage = if *exported { "" } else { "static " };
-                let _ = writeln!(out, "{storage}{ty} {name};");
+    }
+    let mut prev: Option<(bool, &Item)> = None;
+    for item in &s.items {
+        let (tests, item) = unwrap(item);
+        if let Some((prev_tests, prev)) = prev {
+            if prev_tests && !tests {
+                out.push_str("#endif  // TEMPER_TESTS\n");
             }
-            Item::Prototype(f) => {
-                if !f.template.is_empty() {
-                    let _ = writeln!(out, "{}", f.template);
-                }
-                let _ = writeln!(out, "static {};", f.signature());
-            }
-            Item::Function(f) => {
-                if !f.template.is_empty() {
-                    let _ = writeln!(out, "{}", f.template);
-                }
-                if !f.exported {
-                    out.push_str("static ");
-                }
-                let _ = write!(out, "{} ", f.definition());
-                body(&mut out, &f.body, 0);
+            let run = prev_tests == tests
+                && matches!(
+                    (prev, item),
+                    (Item::Variable { .. }, Item::Variable { .. })
+                        | (Item::Prototype(_), Item::Prototype(_))
+                );
+            if !run {
                 out.push('\n');
             }
-            Item::Raw(text) => out.push_str(text),
         }
-        prev = Some(item);
+        if tests && !prev.is_some_and(|(t, _)| t) {
+            out.push_str("#ifdef TEMPER_TESTS\n");
+        }
+        item_text(&mut out, item);
+        prev = Some((tests, item));
     }
-    if prev.is_some() {
+    if let Some((prev_tests, _)) = prev {
+        if prev_tests {
+            out.push_str("#endif  // TEMPER_TESTS\n");
+        }
         out.push('\n');
     }
     // The init function: its body runs once, through the runtime's

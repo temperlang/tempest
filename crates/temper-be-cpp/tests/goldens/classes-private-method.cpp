@@ -191,7 +191,7 @@ void global_init_init() {
     a->spendFrom(b);
     core::Console::log(console, "b spent: " + std::to_string(b->get_timesSpent()));
     std::shared_ptr<Label> label = Label::make(1);
-    core::Console::log(console, "close: " + std::to_string(label->close(TenSink::make())));
+    core::Console::log(console, "close: " + std::to_string(label->close(core::to_base<Sink>(TenSink::make()))));
     core::Console::log(console, "noted: " + label->noted(TEMPER_STR("!")));
   });
 }

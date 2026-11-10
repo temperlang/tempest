@@ -58,6 +58,15 @@
 //!   which run only so). Skipped, with a message,
 //!   without `g++`; with `TEMPEST_REQUIRE_CHECKERS` set, as in CI, that
 //!   fails it instead.
+//! - `strict`: every library's generated `.cpp`s (std's too, and the
+//!   generated files of those with host code) compiled, not linked, at
+//!   `-O2`, as other people's release builds are, with [`STRICT`] by
+//!   `g++-12` and `g++-14`, whichever are installed, or the compilers
+//!   `TEMPEST_STRICT_CXX` names (clang++ with [`CLANG_STRICT`]), as CI
+//!   does; the newest GCC at `-O3` too. `-O2` inlines more, and GCC's
+//!   path-following warnings (`-Wnull-dereference`, `-Warray-bounds`,
+//!   `-Wmaybe-uninitialized`) see what `-O1`'s builds don't. In bulk,
+//!   which inlines across files.
 //! - `net_client_from_host`: `host/net.cpp` plugs a client of its own
 //!   into std `net` and runs the `netresponse` tests' libraries, under
 //!   the sanitizers. In `runs`, those tests pass where `g++` finds
@@ -240,12 +249,7 @@ const TESTS: Mode = Mode {
 /// (`-isystem`), so only generated code answers to the four that the
 /// runtime breaks ([`RUNTIME_WARNINGS`] has the rest). Not on: `-Weffc++`,
 /// whose rules (members initialized in constructors' lists, and the like)
-/// are older advice than C++11's, and which the runtime breaks too; and
-/// `-Wnull-dereference`, whose path analysis, since strings became the
-/// runtime's `Str` (Temper #654), reports a call on an interface's
-/// `shared_ptr` with a literal argument, `labeled->label(TEMPER_STR("a"))`:
-/// the upcast to a virtual base checks for null, and the literal's
-/// function-local `static` keeps that null path alive (g++ 12 to 14).
+/// are older advice than C++11's, and which the runtime breaks too.
 const STRICT: &[&str] = &[
     "-std=c++14",
     "-Wall",
@@ -263,6 +267,7 @@ const STRICT: &[&str] = &[
     "-Wduplicated-cond",
     "-Wextra-semi",
     "-Wformat=2",
+    "-Wnull-dereference",
     "-Wimplicit-fallthrough=5",
     "-Winvalid-pch",
     "-Wlogical-op",
@@ -513,10 +518,12 @@ struct Mode {
 impl Mode {
     /// [`Mode::options`], then `TEMPEST_CXXFLAGS`, split at spaces, for every
     /// mode but [`TSAN`], whose sanitizer can't be combined with others (the
-    /// nightly workflow builds with AddressSanitizer this way).
+    /// nightly workflow builds with AddressSanitizer this way), and
+    /// [`strict`]'s, which only compile.
     fn flags(&self) -> Vec<String> {
         let mut flags: Vec<String> = self.options.iter().map(|o| o.to_string()).collect();
-        if self.name != TSAN.name {
+        let strict = [STRICT_O2, STRICT_O2_TESTS, STRICT_O3, STRICT_O3_TESTS].map(|m| m.name);
+        if self.name != TSAN.name && !strict.contains(&self.name) {
             let extra = env::var("TEMPEST_CXXFLAGS").unwrap_or_default();
             flags.extend(extra.split_whitespace().map(String::from));
         }
@@ -555,6 +562,98 @@ const TSAN: Mode = Mode {
     options: &["-O1", "-g", "-fsanitize=thread", "-fno-pie", "-no-pie"],
 };
 
+/// [`strict`]'s build: compiled only, optimized as a release is (CMake's
+/// `RelWithDebInfo`), where GCC's warnings that follow the code's paths
+/// (`-Wnull-dereference`, `-Wmaybe-uninitialized`, `-Warray-bounds`, and
+/// the like) see what `-O1` doesn't inline.
+const STRICT_O2: Mode = Mode {
+    name: "strict-o2",
+    options: &["-O2"],
+};
+
+/// [`STRICT_O2`], with the tests defined.
+const STRICT_O2_TESTS: Mode = Mode {
+    name: "strict-o2-tests",
+    options: &["-O2", "-DTEMPER_TESTS"],
+};
+
+/// [`STRICT_O2`] at `-O3`, CMake's `Release`, which inlines and unrolls
+/// more again (g++'s `-Warray-bounds` in libstdc++'s `vector<bool>` showed
+/// only here), for the newest GCC [`strict`] has.
+const STRICT_O3: Mode = Mode {
+    name: "strict-o3",
+    options: &["-O3"],
+};
+
+/// [`STRICT_O3`], with the tests defined.
+const STRICT_O3_TESTS: Mode = Mode {
+    name: "strict-o3-tests",
+    options: &["-O3", "-DTEMPER_TESTS"],
+};
+
+/// `clang++`'s options for generated code, for [`strict`]: [`STRICT`]'s,
+/// as clang names them, less GCC's own (`-Wduplicated-branches`,
+/// `-Wduplicated-cond`, `-Wlogical-op`, `-Wuseless-cast`,
+/// `-Wstrict-null-sentinel`, `-Wredundant-decls`'s GCC sense, and the
+/// levels of `-Wcast-align=strict` and `-Wimplicit-fallthrough=5`), with
+/// `-Wmissing-prototypes`, which is GCC's `-Wmissing-declarations` for
+/// C++. Checked only in CI: the container has no clang.
+const CLANG_STRICT: &[&str] = &[
+    "-std=c++14",
+    "-Wall",
+    "-Wextra",
+    "-Wpedantic",
+    "-Werror",
+    "-Wcast-align",
+    "-Wcast-qual",
+    "-Wconversion",
+    "-Wdate-time",
+    "-Wdouble-promotion",
+    "-Wextra-semi",
+    "-Wfloat-equal",
+    "-Wformat=2",
+    "-Wimplicit-fallthrough",
+    "-Wmissing-prototypes",
+    "-Wnon-virtual-dtor",
+    "-Wnull-dereference",
+    "-Wold-style-cast",
+    "-Woverloaded-virtual",
+    "-Wpessimizing-move",
+    "-Wredundant-move",
+    "-Wshadow",
+    "-Wsign-conversion",
+    "-Wsuggest-override",
+    "-Wswitch-enum",
+    "-Wundef",
+    "-Wvla",
+    "-Wzero-as-null-pointer-constant",
+];
+
+/// The compilers [`strict`] builds with, each with its `--version`:
+/// `TEMPEST_STRICT_CXX`, split at spaces (empty for none), or else
+/// `g++-12` and `g++-14`, the oldest and newest GCC that CI has, those
+/// that run. With `TEMPEST_REQUIRE_CHECKERS`, one that's named and
+/// doesn't run fails.
+fn strict_compilers() -> Vec<(String, String)> {
+    let named = env::var("TEMPEST_STRICT_CXX").ok();
+    let names: Vec<String> = match &named {
+        Some(list) => list.split_whitespace().map(String::from).collect(),
+        None => vec!["g++-12".into(), "g++-14".into()],
+    };
+    let mut found = Vec::new();
+    for name in names {
+        let out = Command::new(&name).arg("--version").output();
+        match out {
+            Ok(out) if out.status.success() => {
+                found.push((name, String::from_utf8_lossy(&out.stdout).into_owned()));
+            }
+            _ if named.is_some() => kit::missing(&format!("{name} (TEMPEST_STRICT_CXX)")),
+            _ => eprintln!("strict: skipped {name}, which isn't installed"),
+        }
+    }
+    found
+}
+
 /// Runs a command, panicking with its errors if it fails.
 fn check(what: &str, mut command: Command) -> Output {
     let out = command.output().unwrap();
@@ -574,8 +673,27 @@ fn check(what: &str, mut command: Command) -> Output {
 /// The first build also checks the runtime itself with every warning it
 /// tolerates.
 fn runtime_pch(gxx: &str, version: &str, mode: &Mode) -> PathBuf {
-    let root =
-        PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("be-cpp-runtime-{}", mode.name));
+    runtime_pch_with(
+        gxx,
+        version,
+        mode,
+        STRICT,
+        Some(&STRICT[..RUNTIME_WARNINGS]),
+    )
+}
+
+/// [`runtime_pch`], with these warning options in place of [`STRICT`],
+/// and the runtime checked with `runtime`'s, if any, when it's built.
+fn runtime_pch_with(
+    gxx: &str,
+    version: &str,
+    mode: &Mode,
+    warnings: &[&str],
+    runtime: Option<&[&str]>,
+) -> PathBuf {
+    let compiler = Path::new(gxx).file_name().unwrap().to_string_lossy();
+    let root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join(format!("be-cpp-runtime-{}-{compiler}", mode.name));
     let mut headers: Vec<PathBuf> = fs::read_dir(vendored().join("temper-core"))
         .unwrap()
         .map(|e| e.unwrap().path())
@@ -584,26 +702,28 @@ fn runtime_pch(gxx: &str, version: &str, mode: &Mode) -> PathBuf {
     let gch = root.join("runtime.hpp.gch");
     kit::cached(
         &root,
-        (version, STRICT, mode.flags()),
+        (version, warnings, mode.flags()),
         &headers,
         &gch,
         || {
             // The runtime as it is, an ordinary directory.
-            let probe = root.join("probe.cpp");
-            fs::write(
-                &probe,
-                "#include <temper-core/core.hpp>\n#include <temper-core/net.hpp>\n",
-            )
-            .unwrap();
-            let mut command = Command::new(gxx);
-            command
-                .args(&STRICT[..RUNTIME_WARNINGS])
-                .args(mode.flags())
-                .arg("-I")
-                .arg(vendored())
-                .args(["-fsyntax-only"])
-                .arg(&probe);
-            check("g++, the runtime with its warnings", command);
+            if let Some(runtime) = runtime {
+                let probe = root.join("probe.cpp");
+                fs::write(
+                    &probe,
+                    "#include <temper-core/core.hpp>\n#include <temper-core/net.hpp>\n",
+                )
+                .unwrap();
+                let mut command = Command::new(gxx);
+                command
+                    .args(runtime)
+                    .args(mode.flags())
+                    .arg("-I")
+                    .arg(vendored())
+                    .args(["-fsyntax-only"])
+                    .arg(&probe);
+                check("g++, the runtime with its warnings", command);
+            }
             fs::write(
                 root.join("runtime.hpp"),
                 "#include <temper-core/core.hpp>\n",
@@ -611,7 +731,7 @@ fn runtime_pch(gxx: &str, version: &str, mode: &Mode) -> PathBuf {
             .unwrap();
             let mut command = Command::new(gxx);
             command
-                .args(STRICT)
+                .args(warnings)
                 .args(mode.flags())
                 .arg("-isystem")
                 .arg(vendored())
@@ -626,12 +746,20 @@ fn runtime_pch(gxx: &str, version: &str, mode: &Mode) -> PathBuf {
 }
 
 /// How many compilers run at once: four at most, which the sanitizers'
-/// memory allows beside other work.
+/// memory allows beside other work, or `TEMPEST_CXX_JOBS`, fewer where
+/// memory's short (an `-O3` group's `cc1plus` takes up to a gigabyte).
 fn jobs() -> usize {
-    std::thread::available_parallelism()
-        .map_or(1, |n| n.get())
-        .min(4)
+    let cpus = std::thread::available_parallelism().map_or(1, |n| n.get());
+    let cap = (env::var("TEMPEST_CXX_JOBS").ok())
+        .and_then(|j| j.parse().ok())
+        .unwrap_or(4);
+    cpus.min(cap).max(1)
 }
+
+/// Held by [`runs`] and [`strict`] while they build, so that only one
+/// has [`jobs`] compilers running at a time (an optimized group's
+/// `cc1plus` takes half a gigabyte).
+static BUILDS: Mutex<()> = Mutex::new(());
 
 /// Runs `work` on every item, [`jobs`] at a time, each thread taking the
 /// next item as it finishes one, giving the results in order.
@@ -678,7 +806,9 @@ fn compile_one(
             let dir = format!("{library}/");
             source.to_string_lossy().contains(&format!("/{dir}")) || text.contains(&dir)
         })
-        .map(|&(_, flag)| flag);
+        .map(|&(_, flag)| flag)
+        // Of warnings the set has: clang++ has no `-Wduplicated-branches`.
+        .filter(|flag| warnings.contains(&flag.replacen("-Wno-", "-W", 1).as_str()));
     let out = Command::new(gxx)
         .args(warnings)
         .args(allowed)
@@ -770,8 +900,21 @@ fn compile_bulk(
     out: &Path,
     sources: &[PathBuf],
 ) -> Vec<PathBuf> {
+    compile_bulk_with(gxx, STRICT, mode, pch, src, out, sources)
+}
+
+/// [`compile_bulk`], with these warning options in place of [`STRICT`].
+fn compile_bulk_with(
+    gxx: &str,
+    warnings: &[&str],
+    mode: &Mode,
+    pch: &Path,
+    src: &Path,
+    out: &Path,
+    sources: &[PathBuf],
+) -> Vec<PathBuf> {
     if !bulk() {
-        return compile(gxx, mode, pch, src, out, sources);
+        return compile_with(gxx, warnings, mode, pch, src, out, sources);
     }
     let library = |s: &PathBuf| {
         s.strip_prefix(src)
@@ -810,14 +953,14 @@ fn compile_bulk(
         })
         .collect();
     let results = parallel(&units, |(unit, object, _)| {
-        compile_one(gxx, STRICT, mode, pch, src, unit, object)
+        compile_one(gxx, warnings, mode, pch, src, unit, object)
     });
     let mut objects = Vec::new();
     for ((_, object, files), result) in units.iter().zip(results) {
         if result.is_ok() {
             objects.push(object.clone());
         } else {
-            objects.extend(compile(gxx, mode, pch, src, out, files));
+            objects.extend(compile_with(gxx, warnings, mode, pch, src, out, files));
             eprintln!(
                 "g++ ({}): a bulk group failed, but each file alone passed",
                 mode.name
@@ -1016,6 +1159,7 @@ fn runs() {
         kit::missing("no g++ (on PATH, or named by CXX)");
         return;
     };
+    let _builds = BUILDS.lock().unwrap_or_else(|e| e.into_inner());
     kit::with_stack(move || {
         let out = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("be-cpp");
         let _ = fs::remove_dir_all(&out);
@@ -1255,6 +1399,127 @@ fn runs() {
         }
 
         kit::assert_none(&failures);
+    });
+}
+
+/// Every library's generated C++, as other people build it: each `.cpp`
+/// of every case [`runs`] builds, std's, and the generated files of the
+/// libraries with host code, compiled (not linked) at `-O2` with every
+/// warning an error, by each of [`strict_compilers`]: g++ with
+/// [`STRICT`], clang++ with [`CLANG_STRICT`]; the newest GCC again at
+/// `-O3` ([`STRICT_O3`]), but not the libraries with host code. Every
+/// library compiles without `TEMPER_TESTS`, as users build it, and those
+/// with tests, and std, again with it. In bulk ([`compile_bulk`]),
+/// which inlines across a group's files, a library with host code alone.
+#[test]
+fn strict() {
+    let compilers = strict_compilers();
+    if compilers.is_empty() {
+        eprintln!("strict: skipped, no compiler (TEMPEST_STRICT_CXX, or g++-12 and g++-14)");
+        return;
+    }
+    let _builds = BUILDS.lock().unwrap_or_else(|e| e.into_inner());
+    kit::with_stack(move || {
+        let out = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("be-cpp-strict");
+        let _ = fs::remove_dir_all(&out);
+        let src = out.join("src");
+        let write = |root: &Path, files: Vec<OutFile>| -> Vec<PathBuf> {
+            let mut written = Vec::new();
+            for file in files {
+                let path = root.join(&file.path);
+                fs::create_dir_all(path.parent().unwrap()).unwrap();
+                fs::write(&path, &file.text).unwrap();
+                written.push((path, file.path));
+            }
+            (written.into_iter())
+                .filter(|(_, p)| p.ends_with(".cpp"))
+                .map(|(path, _)| path)
+                .collect()
+        };
+        let (connected, cases): (Vec<Case>, Vec<Case>) =
+            cases().into_iter().partition(|c| !c.host_files.is_empty());
+        let std = translate(&kit::std_program(), &CPP).unwrap_or_else(|e| panic!("std: {e}"));
+        let std_sources: Vec<PathBuf> = (write(&src, std).into_iter())
+            .filter(|s| !s.ends_with("main.cpp"))
+            .collect();
+        let mut plain = std_sources.clone();
+        let mut tested = std_sources;
+        // Every `main.cpp` is the same three lines, which one stands for;
+        // and each defines `main`, as each `test.cpp` does, so they're
+        // compiled alone, not in bulk.
+        let mut main = None;
+        let mut test_mains = Vec::new();
+        for case in &cases {
+            let sources = write(&src, generate(case));
+            let main_cpp = |s: &PathBuf| s.ends_with("main.cpp");
+            if sources.iter().any(|s| s.ends_with("test.cpp")) {
+                let (test, rest): (Vec<PathBuf>, Vec<PathBuf>) = (sources.iter())
+                    .filter(|&s| !main_cpp(s))
+                    .cloned()
+                    .partition(|s| s.ends_with("test.cpp"));
+                tested.extend(rest);
+                test_mains.extend(test);
+            }
+            // Every library's modules, those with tests too, as a user's
+            // build without `TEMPER_TESTS` has them (what only tests call
+            // is in their `#ifdef`); a `main` of one that runs as a
+            // program, as in [`runs`].
+            if case.tests.is_none() {
+                main = main.or_else(|| sources.iter().find(|s| main_cpp(s)).cloned());
+            }
+            let module = |s: &PathBuf| !main_cpp(s) && !s.ends_with("test.cpp");
+            plain.extend(sources.into_iter().filter(module));
+        }
+        // Each library with host code, its generated files alone.
+        let connected: Vec<(PathBuf, Vec<PathBuf>)> = (connected.iter())
+            .map(|case| {
+                let root = out.join("connected").join(&case.key);
+                let host = |s: &PathBuf| {
+                    let rest = s
+                        .strip_prefix(root.join("src").join(&case.library))
+                        .unwrap();
+                    (case.host_files.iter()).any(|(p, _)| Path::new(p) == rest)
+                };
+                let sources = write(&root.join("src"), generate(case));
+                let sources = sources.into_iter().filter(|s| !host(s)).collect();
+                (root, sources)
+            })
+            .collect();
+        // The newest GCC, the last named, at `-O3` too.
+        let newest = compilers.iter().rposition(|(_, v)| !v.contains("clang"));
+        for (i, (cxx, version)) in compilers.iter().enumerate() {
+            let clang = version.contains("clang");
+            let warnings = if clang { CLANG_STRICT } else { STRICT };
+            let bin = out.join(Path::new(cxx).file_name().unwrap());
+            let mains = [main.clone().unwrap()];
+            let mut modes = vec![
+                (&STRICT_O2, &plain, &mains[..]),
+                (&STRICT_O2_TESTS, &tested, &test_mains[..]),
+            ];
+            if Some(i) == newest {
+                modes.push((&STRICT_O3, &plain, &mains[..]));
+                modes.push((&STRICT_O3_TESTS, &tested, &test_mains[..]));
+            }
+            for (mode, sources, mains) in modes {
+                let pch = runtime_pch_with(cxx, version, mode, warnings, None);
+                let bin = bin.join(mode.name);
+                compile_bulk_with(cxx, warnings, mode, &pch, &src, &bin, sources);
+                compile_with(cxx, warnings, mode, &pch, &src, &bin.join("main"), mains);
+            }
+            let pch = runtime_pch_with(cxx, version, &STRICT_O2, warnings, None);
+            for (root, sources) in &connected {
+                let bin = root.join(Path::new(cxx).file_name().unwrap());
+                compile_with(
+                    cxx,
+                    warnings,
+                    &STRICT_O2,
+                    &pch,
+                    &root.join("src"),
+                    &bin,
+                    sources,
+                );
+            }
+        }
     });
 }
 

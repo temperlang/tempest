@@ -48,7 +48,7 @@ void global_init_init() {
   core::init_once([] {
     temper_globals::console.construct();
     temper_globals::console.value = core::Console::get_console();
-    std::shared_ptr<Greeter> greeter = HiGreeter::make();
+    std::shared_ptr<Greeter> greeter = core::to_base<Greeter>(HiGreeter::make());
     core::checked_cast<HiGreeter>(greeter)->greet();
   });
 }

@@ -190,7 +190,7 @@ void global_init_init() {
   core::init_once([] {
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
     std::shared_ptr<Slippy> slippy = Slippy::make();
-    std::shared_ptr<Slappy> slappy = slippy;
+    std::shared_ptr<Slappy> slappy = core::to_base<Slappy>(slippy);
     core::Console::log(console, std::to_string(slippy->get_thingums()));
     core::Console::log(console, std::to_string(slappy->get_thingums()));
     core::Console::log(console, std::to_string(slippy->get_thingumses()));

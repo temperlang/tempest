@@ -24,6 +24,7 @@ where they differ, why, and how they're tested.
   - [Each language runs its own tests](#each-language-runs-its-own-tests)
 - [The pipeline each backend runs](#the-pipeline-each-backend-runs)
 - [Per-backend choices](#per-backend-choices)
+  - [C++'s warning policy](#cs-warning-policy)
 - [Naming rules by backend](#naming-rules-by-backend)
 - [The main types and functions](#the-main-types-and-functions)
 - [Tests](#tests)
@@ -269,13 +270,38 @@ spills nor fails; its translator hoists and orders operands itself.
 | **Null** | null `shared_ptr` or `NullableParam` | `T?` | `@Nullable`, boxed | `T \| null` (JSDoc) | `temper.null` (Lua's `nil` can't be a table value) | `T \| None` | `Option<T>` |
 | **Statements in expressions** | translator, after `spill_with` | translator (`hoist`, `sink`), after `spill_with` | translator (`spilled`) | translator (`pre`, `t$0`) | translator, after `spill` | translator (`:=` for `??`) | native block expressions |
 | **Order of evaluation** | its own analysis ([`effects`](../../../crates/temper-be-cpp/src/effects.rs)), since C++ leaves argument order open | left to right | left to right | left to right | left to right | left to right | left to right |
-| **Checked by** | `g++ -Wall -Wextra -Wpedantic -Werror` and more; ASan, UBSan, TSan | `csc`, nullable references, warnings and analyzers as errors | `javac -Xlint:all -Werror` | `tsc --checkJs --strict` | `luac`, LuaLS | mypy and pyright, strict | `cargo build`, clippy |
+| **Checked by** | `g++ -Wall -Wextra -Wpedantic -Werror` and more ([policy below](#cs-warning-policy)), at `-O1` to `-O3`; ASan, UBSan, TSan | `csc`, nullable references, warnings and analyzers as errors | `javac -Xlint:all -Werror` | `tsc --checkJs --strict` | `luac`, LuaLS | mypy and pyright, strict | `cargo build`, clippy |
 | **Notable** | module `var`s under a lock; shifts defined for every count; only exports in headers; strings the runtime's shared `core::Str`, literals `TEMPER_STR("…")`, as Kotlin | parameter names are API, never renamed; culture-invariant formatting | lists that may hold null via `Core.listOf` | source maps ([`translate_with_source_maps`](../../../crates/temper-be-js/src/lib.rs)) | `goto` only for `continue` and jumps out of inner loops; LuaCATS annotations | module privates start with `_` | module state safe across threads; `Arc<String>` strings |
 
 Each row is from the crate's `lib.rs` doc comment and its profile;
 the per-language API rules are in
 [api-compat.md](../../../notes/api-compat.md), and the as-built notes
 per backend in [notes/tmpl/profiles.md](../../../notes/tmpl/profiles.md).
+
+### C++'s warning policy
+
+Generated C++ compiles cleanly under whatever strict settings its
+users build with, `-Werror` included, so no warning is turned off for
+generated code to pass. The tests'
+[`STRICT`](../../../crates/temper-be-cpp/tests/functional.rs) is `-Wall -Wextra -Wpedantic -Werror` and 33 more, `-Wnull-dereference`,
+`-Wconversion`, and `-Wshadow` among them; only `-Weffc++`, older advice
+than C++11's, is off. `runs` builds with it at `-O1`, and `strict`
+compiles everything again at `-O2`, where more inlining shows GCC's
+path-following warnings more, on g++ 12 and 14 (14 at `-O3` too,
+CMake's `Release`), and in CI on clang++ with its own names for the
+same set (`CLANG_STRICT`). The runtime's
+headers are a system directory there, as in a user's build, so its
+own few (`-Wshadow`, `-Wsign-conversion`, `-Wuseless-cast`,
+`-Wfloat-equal`) are its own. When a warning is a false positive, the
+fix is in what's generated or the runtime, not a pragma: an upcast to
+an interface, a virtual base, goes through the runtime's `to_base`,
+which tells the compiler the value isn't null, since the conversion's
+null check otherwise gives `-Wnull-dereference` a path to report at the
+next call on the result (a class's value is called as the class, with
+no conversion); a list literal of Booleans skips `reserve`, whose
+libstdc++ code g++ misreads at `-O3` (`-Warray-bounds`); and private
+functions that only tests call are inside `#ifdef TEMPER_TESTS` with
+the tests, so a build without them has no unused function.
 
 ## Naming rules by backend
 
@@ -331,6 +357,7 @@ tests: [`temper-be-testkit`](../../../crates/temper-be-testkit/src/lib.rs).
 | Goldens | Each covered functional test's and shared program's output, file by file, in `tests/goldens/` (93 for C++ to 404 for C#); `UPDATE_SNAPSHOTS=1` rewrites them for review | each crate's `tests/functional.rs` |
 | Runs | The output runs with the language's own tools against the vendored runtime and logs what Kotlin's backend is expected to log; tests run as tests compare their failures with `expectedFailures` | each crate's `tests/functional.rs` |
 | Strict checkers | The checkers in [the table above](#per-backend-choices), on every case; ill-typed programs' output is skipped, as Kotlin's | each crate's `tests/functional.rs` |
+| Strict at `-O2` | C++'s every generated file compiled at `-O2` with `STRICT` by g++ 12 and 14 (14 at `-O3` too), and in CI by clang++ too ([policy](#cs-warning-policy)) | `temper-be-cpp`'s `tests/functional.rs`, `strict` |
 | Sanitizers | C++ under ASan, UBSan, and TSan; `module-state` from 8 threads on every backend that has threads | `temper-be-cpp`'s `tests/functional.rs`; testkit's `threads_expected` |
 | Tables | Every operator spelled; every connection keyed by a real connected declaration | each crate's `tests/tables.rs` |
 | Host code | A library's own connected functions and classes, with host files, as is and under `--no-connected` | each crate's `tests/host/` and `CONNECTED` cases |

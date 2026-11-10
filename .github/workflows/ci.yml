@@ -6,8 +6,9 @@
 # generated C# compiled by csc with nullable reference types and every
 # warning and .NET analyzer an error, and run, and generated C++ compiled
 # by g++ with every warning an error, and run, also under AddressSanitizer,
-# UndefinedBehaviorSanitizer, and ThreadSanitizer, and generated Lua run
-# by Lua 5.4.6, parsed by luac, and type checked by LuaLS),
+# UndefinedBehaviorSanitizer, and ThreadSanitizer, and compiled at -O2 by
+# g++ 12 and 14 (14 at -O3 too) and clang++, every warning an error, and
+# generated Lua run by Lua 5.4.6, parsed by luac, and type checked by LuaLS),
 # the wasm build and the playground (type checked, bundled, and smoke
 # tested in headless Chromium), the VS Code extension (type checked,
 # bundled, packaged, and tested in a real VS Code against the release
@@ -122,8 +123,15 @@ jobs:
         run: sudo sysctl vm.mmap_rnd_bits=28
       # libcurl's headers, for std `net`'s default C++ client, so the
       # `netresponse` tests take the libcurl path, as they do locally.
-      - name: libcurl for C++'s std net
-        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
+      # And the compilers that the C++ backend's `strict` test builds all
+      # generated C++ with at -O2, every warning an error, as other
+      # people's release builds might: the oldest and newest g++ (the
+      # runner's g++ is 13) and clang++, which the container lacks, so
+      # only CI checks it.
+      - name: libcurl for C++'s std net, and strict compilers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcurl4-openssl-dev g++-12 g++-14 clang
       # The Lua backend's tests run generated Lua with the vendored
       # temper-core under Lua 5.4.6 (built from lua.org's source by the
       # action, with luac), the version the tests use locally.
@@ -143,6 +151,7 @@ jobs:
         run: cargo test --locked --workspace
         env:
           TEMPEST_REQUIRE_CHECKERS: "1"
+          TEMPEST_STRICT_CXX: g++-12 g++-14 clang++
       # The vendored Rust runtime's own unit tests, which the workspace
       # (excluding vendor/) leaves out.
       - name: Vendored Rust runtime's tests

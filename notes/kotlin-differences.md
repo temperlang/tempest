@@ -1449,6 +1449,34 @@ copied Kotlin's:
   (`label(core::Str l)`), which compiles and runs the same, but host
   C++ overriding such a method needs the other signature. Not on
   purpose; to follow.
+- **C++ upcasts and `-Wnull-dereference`** (2026-11-09): Kotlin's C++
+  converts a class's `shared_ptr` to an interface's implicitly
+  (`std::shared_ptr<Labeled> labeled = Sub::make(t);`). Interfaces are
+  virtual bases, so the conversion checks for null, and g++ 12 to 14
+  at `-O1` and up report the null path at the next call
+  (`labeled->label(...)`), failing `-Werror` builds; Kotlin's own
+  `property-members` escapes only because its top-level values are
+  globals, reloaded. Tempest's converts a value that isn't nullable
+  through the runtime's `core::to_base<Labeled>(...)` (patch
+  `0021-cpp-to-base`),
+  which says it isn't null, so the check and its path are gone (two
+  instructions fewer); a nullable value converts as before, and a
+  class's value called through an interface is called as the class, as
+  before. Logged for a Kotlin fix, which could emit the same. And the
+  runtime's `List::make` skips `reserve` for Booleans (patch
+  `0022-cpp-bool-list-reserve`), whose libstdc++ code g++ 12 to 14
+  misread at `-O3` (`-Warray-bounds`, in `-Wall`); also logged.
+  Test: temper-be-cpp/tests/functional.rs, `runs` and `strict`
+  (`-Wnull-dereference` in `STRICT`), and the goldens.
+- **C++ tests and what only they call** (2026-11-10): Kotlin's C++
+  builds a library's tests into every build; tempest's only where
+  `TEMPER_TESTS` is defined, and now the private functions that only
+  tests call (Hrefine's `urlTestData`) are in the same `#ifdef`. Before,
+  a build without tests had them as unused `static` functions, which
+  `-Wall -Werror` fails (`-Wunused-function`), in all five libraries.
+  Test: temper-be-cpp/tests/functional.rs, `strict` (libraries with
+  tests compiled without `TEMPER_TESTS` too), and the
+  `testing-asserts` golden.
 - **C++ temporaries:** Kotlin's C++ returns lists as `shared_ptr`s, so
   iterating one in place (`for (auto const &x : *obj->list())`) reads a
   vector already freed. Tempest's C++ will name such a list first

@@ -107,10 +107,10 @@ void global_init_init() {
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
     {
       std::shared_ptr<Apple> x;
-      x = Fuji::make();
+      x = core::to_base<Apple>(Fuji::make());
       core::Console::log(console, core::checked_cast<Apple>(x)->get_name());
       core::Console::log(console, core::checked_cast<Fuji>(x)->get_name());
-      x = Gala::make();
+      x = core::to_base<Apple>(Gala::make());
       core::Str value;
       try {
         value = core::checked_cast<Fuji>(x)->get_name();

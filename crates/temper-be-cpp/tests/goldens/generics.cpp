@@ -150,7 +150,7 @@ void global_init_init() {
     core::Console::log(console, std::to_string(generics::total(ns)) + " " + std::to_string(generics::first<int32_t>(ns, 0)) + " " + std::to_string(generics::first<int32_t>(none, -1)));
     core::Console::log(console, generics::first<core::Str>(core::List::make<core::Str>(TEMPER_STR("a"), TEMPER_STR("b")), TEMPER_STR("z")));
     std::shared_ptr<Box<core::Str>> box = Box<core::Str>::make(TEMPER_STR("boxed"));
-    core::Console::log(console, generics::held<core::Str>(box));
+    core::Console::log(console, generics::held<core::Str>(core::to_base<Holder<core::Str>>(box)));
     std::shared_ptr<core::Pair<core::Str, int32_t>> pair = box->pairWith(7);
     core::Console::log(console, pair->key + " " + std::to_string(pair->value));
     std::shared_ptr<Shelf<std::shared_ptr<Named>>> shelf = Shelf<std::shared_ptr<Named>>::make(core::List::make<std::shared_ptr<Named>>(Named::make(TEMPER_STR("ann")), Named::make(TEMPER_STR("bo"))));

@@ -1,11 +1,43 @@
 #pragma once
 #include <memory>
+#include <utility>
 #include "temper_bubble.hpp"
 #include "base_types.hpp"
 #include "any_value.hpp"
 
 namespace temper {
     namespace core {
+
+        // A value that's never null (a Temper type that isn't nullable) as its base, an
+        // interface it implements: the shared_ptr conversion, without its null check.
+        // Interfaces are virtual bases, so the conversion reads the vtable for the offset
+        // unless the pointer is null; the compiler can't know it isn't, and the null path
+        // reaches the caller's next `->` on the result, which g++'s -Wnull-dereference
+        // reports, in generated code with nothing wrong in it. Saying so here drops the
+        // check and the path.
+        template<class Target, class Source>
+        inline std::shared_ptr<Target> to_base(const std::shared_ptr<Source>& src) noexcept {
+#if defined(__GNUC__)
+            if (!src) {
+                __builtin_unreachable();
+            }
+#elif defined(_MSC_VER)
+            __assume(src != nullptr);
+#endif
+            return src;
+        }
+
+        template<class Target, class Source>
+        inline std::shared_ptr<Target> to_base(std::shared_ptr<Source>&& src) noexcept {
+#if defined(__GNUC__)
+            if (!src) {
+                __builtin_unreachable();
+            }
+#elif defined(_MSC_VER)
+            __assume(src != nullptr);
+#endif
+            return std::move(src);
+        }
 
         template<class Target, class Source>
         std::shared_ptr<Target> checked_cast(const std::shared_ptr<Source>& src) {

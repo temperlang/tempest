@@ -307,8 +307,8 @@ temper::core::Str effectsOf(temper::core::Str const & text, T event, T other) {
   global_init_init();
   std::shared_ptr<std::vector<std::shared_ptr<Effect<T>>>> into = temper::core::ListBuilder::make<std::shared_ptr<Effect<T>>>();
   libraries::joinEffects<T>(into, temper::core::List::make<std::shared_ptr<Effect<T>>>());
-  libraries::joinEffects<T>(into, temper::core::List::make<std::shared_ptr<Effect<T>>>(Plain<T>::make(text)));
-  libraries::joinEffects<T>(into, temper::core::List::make<std::shared_ptr<Effect<T>>>(Happened<T>::make(event), Plain<T>::make(TEMPER_STR("!")), Happened<T>::make(other)));
+  libraries::joinEffects<T>(into, temper::core::List::make<std::shared_ptr<Effect<T>>>(temper::core::to_base<Effect<T>>(Plain<T>::make(text))));
+  libraries::joinEffects<T>(into, temper::core::List::make<std::shared_ptr<Effect<T>>>(temper::core::to_base<Effect<T>>(Happened<T>::make(event)), temper::core::to_base<Effect<T>>(Plain<T>::make(TEMPER_STR("!"))), temper::core::to_base<Effect<T>>(Happened<T>::make(other))));
   temper::core::Str shown = temper::core::Str();
   {
     std::shared_ptr<std::vector<std::shared_ptr<Effect<T>>>> list = temper::core::List::toList<std::shared_ptr<Effect<T>>>(into);
@@ -539,7 +539,7 @@ static core::Str shapeName(std::shared_ptr<Shape> const & s) {
 }
 
 static std::shared_ptr<Shape> shapeOf(int32_t n) {
-  std::shared_ptr<Shape> shape = n > 1 ? std::shared_ptr<Shape>(Line::make(n)) : std::shared_ptr<Shape>(Dot::make(n));
+  std::shared_ptr<Shape> shape = n > 1 ? core::to_base<Shape>(Line::make(n)) : core::to_base<Shape>(Dot::make(n));
   return shape;
 }
 
@@ -985,7 +985,7 @@ void global_init_init() {
     core::Str value9 = libraries::effectsOf<int32_t>(TEMPER_STR("ab"), 1, 2);
     core::Console::log(console, value9 + " " + Bundle<core::Str>::make(core::List::make<std::shared_ptr<Effect<core::Str>>>(), TEMPER_STR("2"))->first + " " + std::to_string(core::List::length<bool>(flags)));
     std::shared_ptr<Ticks> counter = Ticks::make();
-    std::shared_ptr<Counting<core::Str>> stepper = counter;
+    std::shared_ptr<Counting<core::Str>> stepper = core::to_base<Counting<core::Str>>(counter);
     stepper->step();
     core::Str value10 = core::List::get<core::Str>(stepper->step(), 0);
     core::Console::log(console, value10 + " " + std::to_string(counter->get_count()) + " " + std::to_string(Names::make()->take(Tag::make(TEMPER_STR("abc")))) + " " + Quoting::make()->escapeFlag(true));

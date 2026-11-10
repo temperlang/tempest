@@ -39,8 +39,8 @@ void global_init_init() {
     temper_globals::commaItemStartRegex.construct();
     temper_std::global_init_regex();
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
-    std::shared_ptr<temper_std::RegexNode> regexNode = temper_std::Or::make(core::List::make<std::shared_ptr<temper_std::RegexNode>>(temper_std::temper_globals::Begin.value, temper_std::CodePoints::make(TEMPER_STR(","))));
-    temper_globals::commaItemStartRegex.value = temper_std::Sequence::make(core::List::make<std::shared_ptr<temper_std::RegexNode>>(regexNode, temper_std::Repeat::make(temper_std::temper_globals::Space.value, 0, nullptr, false)))->compiled();
+    std::shared_ptr<temper_std::RegexNode> regexNode = core::to_base<temper_std::RegexNode>(temper_std::Or::make(core::List::make<std::shared_ptr<temper_std::RegexNode>>(core::to_base<temper_std::RegexNode>(temper_std::temper_globals::Begin.value), core::to_base<temper_std::RegexNode>(temper_std::CodePoints::make(TEMPER_STR(","))))));
+    temper_globals::commaItemStartRegex.value = temper_std::Sequence::make(core::List::make<std::shared_ptr<temper_std::RegexNode>>(regexNode, core::to_base<temper_std::RegexNode>(temper_std::Repeat::make(core::to_base<temper_std::RegexNode>(temper_std::temper_globals::Space.value), 0, nullptr, false))))->compiled();
     core::Console::log(console, zero_advance::bulletizeList(TEMPER_STR("apples, bananas, cherries")));
   });
 }

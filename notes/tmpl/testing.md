@@ -230,7 +230,14 @@ As built with the Python backend (2026-10-30):
   reserves or the translator prints (`std`, `core`, `int32_t`,
   `explicit`, `M_PI`), `Boolean`'s `<`, a trigraph and a NUL in
   strings, and shifts past the width. A library also builds by hand
-  with CMake, as a user's project would (not in the tests).
+  with CMake, as a user's project would (not in the tests). `strict`
+  (2026-11-09) compiles every generated `.cpp` again, not linked, at
+  `-O2` with `STRICT` by `g++-12` and `g++-14` (those installed, or
+  `TEMPEST_STRICT_CXX`'s list), as release builds would, and the newest
+  GCC at `-O3` too: `-O1` misses some of GCC's path-following warnings,
+  such as a null upcast's `-Wnull-dereference`, and only `-O3` showed
+  libstdc++'s `vector<bool>` `-Warray-bounds`. CI adds clang++ with its own set
+  (`CLANG_STRICT`), which only CI checks.
 - **Lua** (2026-10-30): no compiler, so the checks are a run, a parse,
   and a type checker. With `lua` (or `LUA`), from one directory holding
   every generated library and a copy of the vendored `temper-core`

@@ -68,9 +68,9 @@ void global_init_init() {
   core::init_once([] {
     temper_globals::console.construct();
     temper_globals::console.value = core::Console::get_console();
-    specific::checkB(BravoClass::make());
-    specific::checkB(CharlieClass::make());
-    std::shared_ptr<std::vector<std::shared_ptr<AlphaInterface>>> items = core::List::make<std::shared_ptr<AlphaInterface>>(BravoClass::make(), CharlieClass::make());
+    specific::checkB(core::to_base<AlphaInterface>(BravoClass::make()));
+    specific::checkB(core::to_base<AlphaInterface>(CharlieClass::make()));
+    std::shared_ptr<std::vector<std::shared_ptr<AlphaInterface>>> items = core::List::make<std::shared_ptr<AlphaInterface>>(core::to_base<AlphaInterface>(BravoClass::make()), core::to_base<AlphaInterface>(CharlieClass::make()));
     specific::checkB(core::List::get<std::shared_ptr<AlphaInterface>>(items, 0));
     specific::checkB(core::List::get<std::shared_ptr<AlphaInterface>>(items, 1));
     specific::checkIfB(core::List::get<std::shared_ptr<AlphaInterface>>(items, 0));

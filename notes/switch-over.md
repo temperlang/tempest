@@ -111,7 +111,13 @@ Risks to the date:
      patches 0021 to 0023, which Kotlin's `main` has since taken
      (dropped in the 2026-11-09 sync, which also brought C++'s shared
      `Str` strings, #654; all five libraries pass on C++ after it,
-     Wherewith's 76 once a discarded `String?` call was a statement). Real libraries run nightly
+     Wherewith's 76 once a discarded `String?` call was a statement;
+     and generated C++ clean under `-Wnull-dereference` again, through
+     the runtime's `to_base` for upcasts, with every generated file
+     compiled at `-O2` on g++ 12 and 14, 14 at `-O3` too, once a list
+     literal of Booleans skipped `reserve`, and clang++ in CI; and the
+     five libraries build without their tests under `-Werror` once
+     what only tests call went into their `#ifdef`). Real libraries run nightly
      on GitHub, from a list ([test-speed.md](test-speed.md), "Real
      libraries, nightly").
    - Kotlin Temper bugs these libraries hit are fixed in tempest's

@@ -109,7 +109,7 @@ void global_init_init() {
     std::shared_ptr<Bar> bar = Bar::make(TEMPER_STR("initial"));
     bar->usingSet(TEMPER_STR("next"));
     core::Console::log(console, bar->get_bar());
-    std::shared_ptr<Whatever> what = ConcreteWhatever::make(4);
+    std::shared_ptr<Whatever> what = core::to_base<Whatever>(ConcreteWhatever::make(4));
     what->set_something(5);
     core::Console::log(console, "something set to " + std::to_string(what->get_something()));
   });

@@ -7,7 +7,8 @@
 # ThreadSanitizer's also under AddressSanitizer and
 # UndefinedBehaviorSanitizer, through `TEMPEST_CXXFLAGS`, so the plain
 # programs and the tests run sanitized too. Not clang++: the tests'
-# warnings (`STRICT`) are GCC's.
+# warnings (`STRICT`) are GCC's; ci.yml's `strict` compiles generated C++
+# with clang++ too, with clang's.
 #
 # Also real libraries' tests, as `tempest test -b` runs them, on each
 # backend each passes on: the libraries are data, listed in
@@ -73,6 +74,9 @@ jobs:
         env:
           CXX: ${{ matrix.cxx }}
           TEMPEST_CXXFLAGS: ${{ matrix.cxxflags }}
+          # Not `strict` again: ci.yml builds with g++ 12 and 14 and
+          # clang++ at -O2 on every push.
+          TEMPEST_STRICT_CXX: ""
           ASAN_OPTIONS: detect_leaks=0
           TEMPEST_REQUIRE_CHECKERS: "1"
 

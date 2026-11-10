@@ -252,7 +252,7 @@ void global_init_init() {
     std::shared_ptr<Person> person2 = Person::make(TEMPER_STR("Bob"), 45);
     std::shared_ptr<Circle> circle1 = Circle::make(2);
     std::shared_ptr<Circle> circle2 = Circle::make(1);
-    std::shared_ptr<std::vector<std::shared_ptr<Stringable>>> things = core::List::make<std::shared_ptr<Stringable>>(person1, person2, circle1, circle2);
+    std::shared_ptr<std::vector<std::shared_ptr<Stringable>>> things = core::List::make<std::shared_ptr<Stringable>>(core::to_base<Stringable>(person1), core::to_base<Stringable>(person2), core::to_base<Stringable>(circle1), core::to_base<Stringable>(circle2));
     auto fn = [](std::shared_ptr<Stringable> thing) -> int32_t {
       core::Console::log(temper_globals::console.value, thing->toString());
       return 0;

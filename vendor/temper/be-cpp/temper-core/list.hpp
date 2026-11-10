@@ -32,10 +32,21 @@ namespace temper {
                 return any_box(std::forward<Arg>(arg));
             }
 
+            // Room for a list literal's items, but none for Booleans: a vector<bool>
+            // packs 64 to a word, so its first push_back makes room for most literals,
+            // and g++ 12 to 14 at -O3 report a false -Warray-bounds in libstdc++'s
+            // vector<bool> reserve, failing -Wall -Werror release builds.
+            template<class Elem>
+            void reserve_items(std::vector<Elem>& list, std::size_t n) {
+                list.reserve(n);
+            }
+
+            inline void reserve_items(std::vector<bool>&, std::size_t) {}
+
             template<class Elem, class... Args>
             std::shared_ptr<std::vector<Elem>> make(Args... args) {
                 std::shared_ptr<std::vector<Elem>> list = std::make_shared<std::vector<Elem>>();
-                list->reserve(sizeof...(Args));
+                reserve_items(*list, sizeof...(Args));
                 // Expand the pack in a braced list, which runs in order, rather than
                 // recursing, which copied the rest of the pack at each step and ran past
                 // the compiler's template depth for long list literals.

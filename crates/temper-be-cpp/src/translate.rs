@@ -37,7 +37,9 @@
 //! `TEMPER_TESTS` is defined: at the end of the `.cpp`, after an include
 //! of what only they import (std's `testing`), and declared in the header,
 //! so the library builds and runs without std, which tmpl doesn't
-//! translate yet, and a test build ([`crate::test_main`]) has them. Functions are
+//! translate yet, and a test build ([`crate::test_main`]) has them; the
+//! private functions only they call are in that `#ifdef` too
+//! ([`Item::TestsOnly`]), where they are in the module. Functions are
 //! functions, `static` unless exported, which the header declares; the
 //! init block is the body of the module's init function,
 //! `global_init_init()`, declared first in the header, which runs it
@@ -738,6 +740,50 @@ impl<'a> Translator<'a> {
                 _ => {}
             });
         }
+        // The private functions that only tests call, directly or through
+        // others: only where `TEMPER_TESTS` is defined, as the tests are,
+        // or a library built without them has unused `static` functions
+        // (`-Wunused-function`). Everything else is reached from the
+        // module's other items, its exports and `@keep`s, and its init.
+        let bodies: HashMap<DeclId, NodeId> = (module.items.iter())
+            .filter_map(|&i| match p.nodes.get(i) {
+                Node::Function { decl, .. } => Some((decl, i)),
+                _ => None,
+            })
+            .collect();
+        let private = |d: DeclId| !self.exported(d) && !p.decls.get(d).facts.contains(Facts::KEEP);
+        let mut live = HashSet::new();
+        // And the arities they're called with outside tests, as `arities`,
+        // so an overload only tests call is with them too.
+        let mut live_arities: HashSet<(DeclId, usize)> = HashSet::new();
+        let mut work: Vec<NodeId> = (module.items.iter().copied())
+            .filter(|&i| !matches!(p.nodes.get(i), Node::Function { decl, .. } if private(decl)))
+            .chain([module.init])
+            .collect();
+        while let Some(item) = work.pop() {
+            temper_tmpl::analysis::walk(p, item, &mut |id| {
+                let (callee, arity) = match p.nodes.get(id) {
+                    Node::CallFunction { callee, args, .. } => {
+                        let given = (p.nodes.list(args).iter())
+                            .rposition(|&a| !matches!(p.nodes.get(a), Node::Omitted {}))
+                            .map_or(0, |i| i + 1);
+                        (callee, given)
+                    }
+                    Node::FunctionRef { target } => (target, usize::MAX),
+                    _ => return,
+                };
+                live_arities.insert((callee, arity));
+                if let Some(&body) = bodies.get(&callee) {
+                    if live.insert(callee) {
+                        work.push(body);
+                    }
+                }
+            });
+        }
+        let tests_only: HashSet<String> = (called.iter())
+            .filter(|&&d| bodies.contains_key(&d) && private(d) && !live.contains(&d))
+            .map(|&d| self.name(d))
+            .collect();
         // Host code (`_connected.hpp` beside the module's source, and the
         // `.cpp`s the library has), which the `.cpp` includes where it
         // takes a function or class from it.
@@ -812,12 +858,24 @@ impl<'a> Translator<'a> {
                         f.exported = true;
                     }
                     let k = trailing_optional(p, params);
-                    let mut made = vec![f.clone()];
+                    let mut made = vec![(f.clone(), false)];
                     let any = arities.contains(&(decl, usize::MAX));
-                    made.extend(overloads(&f, k).into_iter().filter(|o| {
-                        f.exported || any || arities.contains(&(decl, o.params.len()))
-                    }));
-                    for f in made {
+                    let live_any = live_arities.contains(&(decl, usize::MAX));
+                    made.extend(
+                        (overloads(&f, k).into_iter())
+                            .filter(|o| {
+                                f.exported || any || arities.contains(&(decl, o.params.len()))
+                            })
+                            .map(|o| {
+                                // One that only tests call, of a function that
+                                // others call with other arguments.
+                                let n = o.params.len();
+                                let tests =
+                                    !f.exported && !live_any && !live_arities.contains(&(decl, n));
+                                (o, tests)
+                            }),
+                    );
+                    for (f, tests) in made {
                         // An exported template, defined where others include,
                         // or a private one that one calls.
                         if (f.exported || header_private.contains(&decl)) && !f.template.is_empty()
@@ -831,7 +889,10 @@ impl<'a> Translator<'a> {
                         } else if !called.contains(&decl) && !keep {
                             continue;
                         }
-                        functions.push(Item::Function(f));
+                        functions.push(match tests {
+                            true => Item::TestsOnly(Box::new(Item::Function(f))),
+                            false => Item::Function(f),
+                        });
                     }
                 }
                 Node::Class { decl, .. } | Node::Interface { decl, .. } => {
@@ -1013,6 +1074,16 @@ impl<'a> Translator<'a> {
         }
         items.extend(accessors);
         items.extend(functions);
+        for item in &mut items {
+            let name = match item {
+                Item::Function(f) | Item::Prototype(f) if !f.exported => &f.name,
+                _ => continue,
+            };
+            if tests_only.contains(name) {
+                let it = std::mem::replace(item, Item::Raw(String::new()));
+                *item = Item::TestsOnly(Box::new(it));
+            }
+        }
         let templates: String = (templates.iter())
             .map(|f| tree::header_definition(f) + "\n")
             .collect();
@@ -2160,6 +2231,8 @@ impl<'a> Translator<'a> {
                 let ty = self.ty(self.p.nodes.ty(id))?;
                 Ok(Expr::name(ty).call(vec![self.expr(value)?]))
             }
+            // Through `to_base`, typed already.
+            Node::Upcast { value } if self.base_of(value, id)?.is_some() => self.expr(id),
             // Not between string indices, all `int32_t`s, which
             // `-Wuseless-cast` would mention.
             Node::Upcast { value }
@@ -2170,6 +2243,30 @@ impl<'a> Translator<'a> {
             }
             _ => self.expr(id),
         }
+    }
+
+    /// The base an upcast of a value that's never null converts its
+    /// `shared_ptr` to, as `to_base` takes it: an interface the value's
+    /// class or interface extends, a virtual base. The runtime's
+    /// `to_base` says the value isn't null, so the conversion has no
+    /// null check, whose null path g++'s `-Wnull-dereference` follows to
+    /// the next call on the result. `None` for a nullable value, and for
+    /// any other conversion, which C++ makes as it is.
+    fn base_of(&self, value: NodeId, id: NodeId) -> R<Option<String>> {
+        let p = self.p;
+        if p.types.is_nullable(p.nodes.ty(value)) {
+            return Ok(None);
+        }
+        let (from, to) = (self.ty(p.nodes.ty(value))?, self.ty(p.nodes.ty(id))?);
+        let pointee = |t: &str| {
+            (t.strip_prefix("std::shared_ptr<"))
+                .and_then(|t| t.strip_suffix('>'))
+                .map(str::to_string)
+        };
+        Ok(match (pointee(&from), pointee(&to)) {
+            (Some(_), Some(base)) if from != to => Some(base),
+            _ => None,
+        })
     }
 
     /// A coalesced value where it isn't null, as `ty`: a `NullableParam`'s
@@ -2220,6 +2317,18 @@ impl<'a> Translator<'a> {
         let p = self.p;
         // Those left out at the end, as its overloads leave them out.
         let args = &args[..self.given(args)?];
+        // A class's value called as one of its interfaces is called as
+        // the class: its members settle which it calls, with no
+        // conversion (nor `to_base`'s copy of the `shared_ptr`).
+        let receiver = match p.nodes.get(receiver) {
+            Node::Upcast { value }
+                if temper_tmpl::analysis::nominal_decl(p, p.nodes.ty(value))
+                    .is_some_and(|d| p.decls.get(d).kind == DeclKind::Class) =>
+            {
+                value
+            }
+            _ => receiver,
+        };
         let mut ids = vec![receiver];
         ids.extend_from_slice(args);
         let named: Vec<bool> = (ids.iter().enumerate())
@@ -2239,7 +2348,9 @@ impl<'a> Translator<'a> {
             let hoisted = matches!(&recv, Expr::Name(n) if self.pending.iter().any(
                 |s| matches!(s, Stmt::Local { name, .. } if name == n)
             ));
-            if interface && !hoisted && !matches!(p.nodes.get(value), Node::This {}) {
+            // Nor `to_base`'s, which has it too.
+            let based = self.base_of(value, receiver)?.is_some();
+            if interface && !hoisted && !based && !matches!(p.nodes.get(value), Node::This {}) {
                 recv = Expr::name(self.ty(p.nodes.ty(receiver))?).call(vec![recv]);
             }
         }
@@ -2554,9 +2665,11 @@ impl<'a> Translator<'a> {
                 return self.connected(target, &[]);
             }
             Node::GetStatic { target } => self.top(target),
-            // A class's `shared_ptr` converts to its interfaces' itself.
-            // A builtin value as an `AnyValue`, boxed, as Kotlin's; a
-            // string as the `core::Str` it is.
+            // A class's `shared_ptr` converts to its interfaces' through
+            // the runtime's `to_base` where it's never null (`base_of`),
+            // and itself where it may be. A builtin value as an
+            // `AnyValue`, boxed, as Kotlin's; a string as the `core::Str`
+            // it is.
             Node::Upcast { value }
                 if p.types.non_null(p.nodes.ty(id)) == TypeId::ANY_VALUE
                     && matches!(p.types.get(p.nodes.ty(value)), TypeData::Scalar(_)) =>
@@ -2564,7 +2677,13 @@ impl<'a> Translator<'a> {
                 let v = self.expr(value)?.str_value();
                 self.core("any_box").call(vec![v])
             }
-            Node::Upcast { value } => self.expr(value)?,
+            Node::Upcast { value } => match self.base_of(value, id)? {
+                Some(base) => {
+                    let v = self.expr(value)?;
+                    self.core(&format!("to_base<{base}>")).call(vec![v])
+                }
+                None => self.expr(value)?,
+            },
             // Checked as `as` is, as Kotlin's: interfaces are virtual
             // bases, which only a `dynamic_cast` leaves, and one that
             // could give null would need a check, or `-Wnull-dereference`

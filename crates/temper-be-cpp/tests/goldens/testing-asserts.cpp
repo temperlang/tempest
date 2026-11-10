@@ -90,6 +90,7 @@ int32_t TestHelper::get_j() const {
   return this->j;
 }
 
+#ifdef TEMPER_TESTS
 static void assertMoreThings(std::shared_ptr<temper_std::Test> const & t, std::shared_ptr<TestHelper> const & helper, std::shared_ptr<std::vector<std::shared_ptr<std::vector<core::Str>>>> const & strings) {
   {
     int32_t i = 0;
@@ -115,6 +116,7 @@ static void assertMoreThings(std::shared_ptr<temper_std::Test> const & t, std::s
     }
   }
 }
+#endif  // TEMPER_TESTS
 
 void global_init_init() {
   core::init_once([] {

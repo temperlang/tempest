@@ -358,9 +358,9 @@ void global_init_init() {
     std::shared_ptr<Rect> r = Rect::make(2, 3);
     core::Console::log(console, r->toString());
     core::Console::log(console, std::to_string(r->get_area()));
-    std::shared_ptr<Shape> s = classes::shape(r);
+    std::shared_ptr<Shape> s = classes::shape(core::to_base<Shape>(r));
     core::Console::log(console, s->describe());
-    std::shared_ptr<Shape> q = classes::shape(Square::make(4));
+    std::shared_ptr<Shape> q = classes::shape(core::to_base<Shape>(Square::make(4)));
     core::Console::log(console, q->describe());
     core::Console::log(console, std::to_string(q->get_area()));
     core::Console::log(console, std::to_string(r->scaled(2)->scaled(3)->get_area()));
@@ -396,7 +396,7 @@ void global_init_init() {
     sql->appendString(TEMPER_STR("it"));
     sql->appendString(nullptr);
     sql->appendInt(3);
-    sql->appendShape(Square::make(2));
+    sql->appendShape(core::to_base<Shape>(Square::make(2)));
     sql->appendRect(Rect::make(1, 2));
     core::Console::log(console, sql->get_accumulated());
     int32_t seven = 7;

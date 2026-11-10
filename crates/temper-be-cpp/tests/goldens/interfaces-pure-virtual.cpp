@@ -105,10 +105,10 @@ void global_init_init() {
   core::init_once([] {
     temper_globals::console.construct();
     temper_globals::console.value = core::Console::get_console();
-    std::shared_ptr<Greeter> greeter = HiGreeter::make();
+    std::shared_ptr<Greeter> greeter = core::to_base<Greeter>(HiGreeter::make());
     greeter->greet();
-    std::shared_ptr<Wrapper<std::shared_ptr<Box>>> boxWrapper = BoxWrapper::make();
-    std::shared_ptr<Wrapper<int32_t>> intWrapper = IntWrapper::make();
+    std::shared_ptr<Wrapper<std::shared_ptr<Box>>> boxWrapper = core::to_base<Wrapper<std::shared_ptr<Box>>>(BoxWrapper::make());
+    std::shared_ptr<Wrapper<int32_t>> intWrapper = core::to_base<Wrapper<int32_t>>(IntWrapper::make());
     core::Console::log(temper_globals::console.value, boxWrapper->wrap(Box::make(TEMPER_STR("box")))->label);
     core::Console::log(temper_globals::console.value, std::to_string(intWrapper->wrap(41)));
   });
