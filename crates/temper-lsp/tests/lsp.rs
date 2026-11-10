@@ -228,6 +228,18 @@ fn a_session() {
     assert_eq!(client.diagnostics(&uses).len(), 1);
     edit(&mut client, &uses, 4, 1, 7, 13, "Int");
     assert_eq!(client.diagnostics(&uses), Vec::<Json>::new());
+    // An unnecessary type check is a hint (severity 4), not a warning.
+    change(
+        &mut client,
+        &uses,
+        5,
+        "let a = area(3);\nlet b = a is Int;\n",
+    );
+    let found = client.diagnostics(&uses);
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(num_at(&found[0], &["severity"]), 4);
+    change(&mut client, &uses, 6, "let a = area(3);\nlet b: Int = a;\n");
+    assert_eq!(client.diagnostics(&uses), Vec::<Json>::new());
 
     // Hover on `area`, declared in the other file.
     let hover = client.request("textDocument/hover", at(&uses, 0, 9));
@@ -309,7 +321,7 @@ fn a_session() {
     change(
         &mut client,
         &uses,
-        5,
+        7,
         "let a = area(3);
 let b: Int = area(",
     );

@@ -91,7 +91,7 @@ answers come from what settling already worked out, with nothing
 settled again:
 
 - [`diagnostics`](../../crates/temper-analysis/src/lib.rs): every
-  error and warning, at its span in its file. The editor underlines all
+  error, warning, and hint, at its span in its file. The editor marks all
   of them, and settling keeps going past errors, so later code still
   gets types.
 - [`hover`](../../crates/temper-analysis/src/lib.rs): for a name,

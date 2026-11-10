@@ -165,7 +165,6 @@ impl Builtin {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Level {
-    Info,
     Warn,
     Error,
 }
@@ -178,9 +177,11 @@ pub enum Message {
     SyntaxReservedForTuples,
     ClassPropertyMustAppearFirst,
     MalformedNumber,
-    Int32OutOfBounds(String),
+    /// The value as written, and whether it would fit an `Int64`, which
+    /// the text then suggests: ours, where Kotlin adds a separate info,
+    /// MaybePromoteInt32ToInt64.
+    Int32OutOfBounds(String, bool),
     Int64OutOfBounds(String),
-    MaybePromoteInt32ToInt64,
     ExtraneousModuleContent,
     InvalidMetadata,
     /// Ours: Kotlin runs out of stack instead.
@@ -217,9 +218,8 @@ impl Message {
             Message::SyntaxReservedForTuples => "SyntaxReservedForTuples",
             Message::ClassPropertyMustAppearFirst => "ClassPropertyMustAppearFirst",
             Message::MalformedNumber => "MalformedNumber",
-            Message::Int32OutOfBounds(_) => "Int32OutOfBounds",
+            Message::Int32OutOfBounds(..) => "Int32OutOfBounds",
             Message::Int64OutOfBounds(_) => "Int64OutOfBounds",
-            Message::MaybePromoteInt32ToInt64 => "MaybePromoteInt32ToInt64",
             Message::ExtraneousModuleContent => "ExtraneousModuleContent",
             Message::InvalidMetadata => "InvalidMetadata",
             Message::NestedTooDeeply => "NestedTooDeeply",
@@ -234,7 +234,7 @@ impl Message {
     pub fn argument(&self) -> Option<&str> {
         match self {
             Message::Unparsable(production) => Some(production),
-            Message::Int32OutOfBounds(n) | Message::Int64OutOfBounds(n) => Some(n),
+            Message::Int32OutOfBounds(n, _) | Message::Int64OutOfBounds(n) => Some(n),
             Message::MissingOperator(stray, _) => Some(stray),
             _ => None,
         }
@@ -252,14 +252,14 @@ impl Message {
                 "In {...} object syntax, any `class` property must appear first".into()
             }
             Message::MalformedNumber => "Malformed number".into(),
-            Message::Int32OutOfBounds(n) => {
+            Message::Int32OutOfBounds(n, false) => {
                 format!("Int32 value, {n}, out of representable bounds")
             }
+            Message::Int32OutOfBounds(n, true) => format!(
+                "Int32 value, {n}, out of representable bounds; add i64 at the end for an Int64"
+            ),
             Message::Int64OutOfBounds(n) => {
                 format!("Int64 value, {n}, out of representable bounds")
-            }
-            Message::MaybePromoteInt32ToInt64 => {
-                "You can turn an Int32 literal into an Int64 by putting i64 at the end".into()
             }
             Message::ExtraneousModuleContent => "Extraneous module content".into(),
             Message::InvalidMetadata => "Module metadata is not well-formed JSON".into(),
@@ -732,10 +732,7 @@ impl Lift {
                 };
                 match warning {
                     Some(NumberWarning::Int32OutOfBounds(n, fits64)) => {
-                        self.report(Level::Warn, Message::Int32OutOfBounds(n), at);
-                        if fits64 {
-                            self.report(Level::Info, Message::MaybePromoteInt32ToInt64, at);
-                        }
+                        self.report(Level::Warn, Message::Int32OutOfBounds(n, fits64), at);
                     }
                     Some(NumberWarning::Int64OutOfBounds(n)) => {
                         self.report(Level::Warn, Message::Int64OutOfBounds(n), at);

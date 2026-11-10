@@ -11,8 +11,9 @@ The extension highlights Temper (`.temper`) and literate Temper
 (`.temper.md`), shows a rendered preview of literate files, and runs
 the language server for:
 
-- errors and warnings as you type, for the whole library around a file,
-  unsaved edits included;
+- errors, warnings, and hints (faded, such as an unnecessary type
+  check) as you type, for the whole library around a file, unsaved
+  edits included;
 - hover, with a name's type or signature and its doc comment;
 - go to definition, into the standard library too;
 - completion of names, members, and object literals' properties;

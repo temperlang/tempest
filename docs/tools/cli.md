@@ -36,7 +36,7 @@ the same wherever they're taken:
 | `-ign FILE`, `--ignorefile FILE` | `build`, `test`, `run` | An [ignore file](#ignore-files) with the last word |
 | `-b BACKEND`, `--backend BACKEND` | `build`, `test`, `run` | A backend: `cpp`, `csharp`, `java`, `js`, `lua`, `py`, or `rust` ([target languages](../backends/README.md)), or `interp`, the interpreter, for `test` and `run`. `build` and `test` take it more than once |
 | `--no-connected` | `build`, `test`, `run` | Use the Temper bodies of `@connected` functions, where they have them, instead of each language's own code |
-| `-v`, `--verbose` | `build`, `test`, `run` | Say more: what was written, every test's result, and what the code logs |
+| `-v`, `--verbose` | `build`, `test`, `run` | Say more: what was written, every test's result, what the code logs, and [hints](#diagnostics) |
 | `--logformat text\|json` | `build`, `test`, `run` | [How it reports](#logging) |
 | `-o DIR`, `--output-directory DIR` | `init`; `build` and `run` in tempest only | Where to write |
 | `--library NAME` | `test`, `run` | A library, by its dashed name (`foo-bar`) |
@@ -202,6 +202,21 @@ script can tell them from a failure:
 - **The backends:** `data` writes data files a library declares, and
   `cppv`, `java8`, and `mypyc` are variants of C++, Java, and Python
   that tempest's backends don't cover yet.
+
+## Diagnostics
+
+Each problem is reported as `path:line:column: level: message`, at one
+of three levels:
+
+- **error**: the code is wrong. The library doesn't build, its tests
+  count as failed, and the command exits with 1.
+- **warn**: worth a look but not wrong, such as an `Int32` literal too
+  big to fit, which wraps (as in `temper`, for now). The command still
+  succeeds.
+- **hint**: advice about correct code, such as an unnecessary type
+  check. Editors and the playground show hints; the command line says
+  them only with `-v`. `temper` calls these `info` and always prints
+  them; tempest's JSON records still say `info`.
 
 ## Logging
 

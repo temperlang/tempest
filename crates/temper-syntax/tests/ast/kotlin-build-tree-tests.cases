@@ -705,8 +705,7 @@ if ( x , y ) { }
 0xD48f0F134
 --- ast
 1223749940
-warn 0..11: Int32 value, 57058324788, out of representable bounds
-info 0..11: You can turn an Int32 literal into an Int64 by putting i64 at the end
+warn 0..11: Int32 value, 57058324788, out of representable bounds; add i64 at the end for an Int64
 
 === orElse
 do { f() } orelse do { if (x) { g(); } }

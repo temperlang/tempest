@@ -10,7 +10,7 @@ export interface GeneratedFile {
 /** What a backend generated, or why it couldn't. */
 export type BackendOutput = { files: GeneratedFile[] } | { error: string };
 
-export type Level = "error" | "warn" | "info";
+export type Level = "error" | "warn" | "hint";
 
 /**
  * A problem the compiler found. `from` and `to` count UTF-16 code units
@@ -121,7 +121,7 @@ function list<T>(value: Json, what: string, item: (v: Json) => T): T[] {
 }
 
 function level(value: Json): Level {
-  return value === "error" || value === "warn" || value === "info" ? value : fail("level");
+  return value === "error" || value === "warn" || value === "hint" ? value : fail("level");
 }
 
 export function toFiles(value: Json): GeneratedFile[] {

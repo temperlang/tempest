@@ -25,10 +25,8 @@
   (Error)
   1
   #void)
-warn 34..44: Int32 value, 2147483648, out of representable bounds
-info 34..44: You can turn an Int32 literal into an Int64 by putting i64 at the end
-warn 46..59: Int32 value, 4294967296, out of representable bounds
-info 46..59: You can turn an Int32 literal into an Int64 by putting i64 at the end
+warn 34..44: Int32 value, 2147483648, out of representable bounds; add i64 at the end for an Int64
+warn 46..59: Int32 value, 4294967296, out of representable bounds; add i64 at the end for an Int64
 warn 61..81: Int32 value, 99999999999999999999, out of representable bounds
 warn 89..111: Int64 value, 9223372036854775808, out of representable bounds
 error 160..163: Malformed number

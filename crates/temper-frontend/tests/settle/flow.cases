@@ -258,7 +258,7 @@ let c8(a: String?): Void { while (a == null) { return; }; take(a) }
         (Call take:0 a:20)))))
 error 89..90: Expected subtype of String, but got String?
 error 156..157: Expected subtype of String, but got String?
-info 194..206: Unnecessary type check to String? from expression with type String? which is a subtype
+hint 194..206: Unnecessary type check to String? from expression with type String? which is a subtype
 error 215..216: Expected subtype of String, but got String?
 error 296..297: Expected subtype of String, but got String?
 error 395..396: Expected subtype of String, but got String?
@@ -643,5 +643,5 @@ error 889..890: Expected subtype of D, but got I
 error 942..943: Expected subtype of D, but got I
 error 968..969: Cannot assign to D from I
 error 996..1002: Actual arguments do not match signature: (Int32, Int32) -> Boolean expected [Int32, Int32], but got [I, I]
-info 1063..1069: Unnecessary type check to I from expression with type D which is a subtype
+hint 1063..1069: Unnecessary type check to I from expression with type D which is a subtype
 error 1473..1474: Expected subtype of D, but got I

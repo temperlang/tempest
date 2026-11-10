@@ -278,6 +278,27 @@ fn test_a_library() {
     });
 }
 
+/// Hints, advice about correct code, are said only with `-v`; editors
+/// show them anyway. A warning is always said.
+#[test]
+fn hints_only_with_verbose() {
+    let source = "let z: Int = 1;\nlet b = 2147483648;\ntest(\"a\") { assert(z is Int) }\n";
+    with_library("hints", &[("a.temper", source)], |dir| {
+        let hint = "a.temper:3:20: hint: Unnecessary type check to Int32";
+        let warn = "a.temper:2:9: warn: Int32 value, 2147483648, out of representable bounds; \
+                    add i64 at the end for an Int64\n";
+        let (code, _, err) = tempest(&["test", dir]);
+        assert!(!err.contains("hint:"), "{err}");
+        assert!(err.contains(warn), "{err}");
+        assert_eq!(code, 0);
+        let (code, _, err) = tempest(&["test", "-v", dir]);
+        assert!(err.contains(hint), "{err}");
+        assert_eq!(code, 0);
+        let (_, _, err) = tempest(&["build", "-b", "js", "-o", &format!("{dir}/out"), dir]);
+        assert!(!err.contains("hint:"), "{err}");
+    });
+}
+
 /// The audit's probe (scratch/deps): `b` imports `a`, which has an
 /// error. Each command reports it once, under `a`, the library it's in,
 /// though settling `b` finds it again; and still fails.

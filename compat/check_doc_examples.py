@@ -10,7 +10,8 @@ library, by `tempest test -v` on the interpreter, which settles it (names,
 macros, and types) and runs its top level. It's judged by the marker on
 its last line, the convention Temper's docs have always used:
 
-- `// ✅` (maybe followed by the expected value): must run cleanly.
+- `// ✅` (maybe followed by the expected value): must run cleanly,
+  with no warning either (hints, which `-v` shows, are fine).
 - `// ❌` (maybe followed by the expected errors): must report an error.
 - `// ⏸️`: shown, not checked (a fragment, or needs context).
 - ```temper inert, or another language: not checked.
@@ -45,6 +46,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 FENCE = re.compile(r"^(\s*)```temper\s*$\n(.*?)^\1```\s*$", re.M | re.S)
+# A diagnostic line, `path:line:column: level: message`, at tempest's levels.
+DIAGNOSTIC = re.compile(r":\d+:\d+: (error|warn|hint): ")
 KNOWN = re.compile(r"^\s*<!-- known:((?:\s+I\d+)+) -->\s*$", re.M)
 
 
@@ -67,7 +70,7 @@ def logged(out: str) -> list[str]:
     lines = out.splitlines()
     start = next((i + 1 for i, ln in enumerate(lines) if ln.startswith("Testing ")), 0)
     return [ln for ln in lines[start:] if not ln.startswith("Tests passed")
-            and not re.search(r": (error|warning|info):", ln)]
+            and not DIAGNOSTIC.search(ln)]
 
 
 def expected_logs(body: str) -> list[str]:
@@ -145,6 +148,10 @@ def main() -> int:
             if agrees and ok and marker == "ok" and want_logs and logged(out) != want_logs:
                 agrees = False
                 out = f"logs {logged(out)!r}, not {want_logs!r}"
+            warned = [ln for ln in out.splitlines() if ": warn: " in ln and DIAGNOSTIC.search(ln)]
+            if agrees and marker == "ok" and warned:
+                agrees = False
+                out = f"warns: {warned[0].replace(tmp_prefix(out), '')}"
             if ids:
                 tag = " ".join(ids)
                 if agrees:
@@ -160,7 +167,7 @@ def main() -> int:
             counts[key] = counts.get(key, 0) + 1
             if not agrees:
                 errs = [ln for ln in out.splitlines() if "error" in ln.lower() or "panic" in ln.lower()]
-                first = out if out.startswith("logs ") else \
+                first = out if out.startswith(("logs ", "warns: ")) else \
                     errs[0].replace(tmp_prefix(out), "") if errs else "runs cleanly"
                 if marker != "none":
                     wrong.append(f"{where}: marked {marker}, but {first}")

@@ -3,8 +3,9 @@
 Highlighting for Temper (`.temper`) and literate Temper (`.temper.md`),
 and tempest's language server, `tempest lsp`, for:
 
-- errors and warnings as you type, for the whole library around a file
-  (its `config.temper.md` and every file in it), unsaved edits included;
+- errors, warnings, and hints (such as an unnecessary type check) as
+  you type, for the whole library around a file (its
+  `config.temper.md` and every file in it), unsaved edits included;
 - hover: what a name is, its type or signature, and its doc comment
   (builtins' too, from core);
 - go to definition, into std's sources and core's builtins too

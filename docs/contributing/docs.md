@@ -150,7 +150,9 @@ links rewritten for the site (`.md` to `.html`, and `README.md` to
 work there, so they show as plain text, dotted, with the path in a
 tooltip; the build counts them, and publishes the license files, as
 `.txt`, so those links work. What Kelpto's sanitizer drops (comments, `style`,
-and mkdocs' `markdown` attributes) is counted too. The build ends by
+and mkdocs' `markdown` attributes) must be listed, with a reason, in
+`site/docs/removals.txt`, or the build fails, so content can't
+silently go missing from a page. The build ends by
 checking that every link on the site leads to a page, a file, and a
 heading that exist, and fails if one doesn't; links into the
 playground are only listed when it isn't built.

@@ -6,10 +6,16 @@
 //! instead, which needs its network. `tempest run -b java` compiles the
 //! runtime, std, and the libraries the same way, quietly, and runs the
 //! library's `…Main` class under `java`, as Kotlin runs it by exec.
+//!
+//! javac's warnings are hidden, as in Kotlin, unless
+//! `TEMPEST_STRICT_WARNINGS` is set ([`strict_warnings`]): then the
+//! tests compile std, the libraries, and their tests with every lint as
+//! an error, as this crate's own tests do, and the runtime, Kotlin's, on
+//! its own, quietly.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use temper_tmpl::tools::{files_with, output, program, tool, tool_output};
+use temper_tmpl::tools::{files_with, output, program, strict_warnings, tool, tool_output};
 use temper_tmpl::{TestResults, Tested, Tools};
 
 pub const TOOLS: Tools = Tools {
@@ -19,28 +25,58 @@ pub const TOOLS: Tools = Tools {
 };
 
 /// Compiles the runtime, std, and the libraries' main sources with
-/// `javac` (`JAVAC`) into `classes`, with `extra` sources and `classpath`.
+/// `javac` (`JAVAC`) into `classes`, with `extra` sources and `classpath`;
+/// with `strict`, the runtime first, quietly, then the rest with every
+/// lint an error.
 fn compile_main(
     dir: &Path,
     all: &[Tested],
     classes: &Path,
     extra: &[PathBuf],
     classpath: &std::ffi::OsStr,
+    strict: bool,
 ) -> Result<(), String> {
+    let mut runtime = Vec::new();
+    files_with(&dir.join("temper-core/src/main/java"), "java", &mut runtime);
     let mut sources = Vec::new();
-    let roots = ["temper-core", "std"].into_iter().map(String::from);
+    let roots = std::iter::once("std".to_string());
     for root in roots.chain(all.iter().map(|l| l.name.clone())) {
         files_with(&dir.join(root).join("src/main/java"), "java", &mut sources);
     }
     sources.extend(extra.iter().cloned());
-    javac(classes, classpath, &sources)
+    if !strict {
+        runtime.extend(sources);
+        return javac(classes, classpath, &runtime, false);
+    }
+    javac(classes, classpath, &runtime, false)?;
+    let mut with_runtime = vec![classes.to_path_buf()];
+    with_runtime.extend(std::env::split_paths(classpath).filter(|p| !p.as_os_str().is_empty()));
+    let with_runtime = std::env::join_paths(with_runtime).map_err(|e| e.to_string())?;
+    javac(classes, &with_runtime, &sources, true)
+}
+
+/// javac's options with `strict`: every lint and Javadoc check but for
+/// missing comments, as errors, as this crate's tests compile generated
+/// code; else no warnings.
+fn lints(strict: bool) -> &'static [&'static str] {
+    match strict {
+        true => &["-Xlint:all", "-Xdoclint:all,-missing", "-Werror"],
+        false => &["-nowarn"],
+    }
 }
 
 /// `javac` on `files` into a directory, against a class path.
-fn javac(into: &Path, classpath: &std::ffi::OsStr, files: &[PathBuf]) -> Result<(), String> {
+fn javac(
+    into: &Path,
+    classpath: &std::ffi::OsStr,
+    files: &[PathBuf],
+    strict: bool,
+) -> Result<(), String> {
     let built = output(
         Command::new(tool("JAVAC", "javac"))
-            .args(["-encoding", "UTF-8", "-nowarn", "-d"])
+            .args(["-encoding", "UTF-8"])
+            .args(lints(strict))
+            .arg("-d")
             .arg(into)
             .arg("-cp")
             .arg(classpath)
@@ -74,7 +110,7 @@ fn run(dir: &Path, library: &Tested, all: &[Tested]) -> Result<bool, String> {
         .ok_or_else(|| format!("no main class in {}", here.display()))?;
     let classes = here.join("target/tempest/classes");
     let _ = std::fs::remove_dir_all(&classes);
-    compile_main(dir, all, &classes, &[], std::ffi::OsStr::new(""))?;
+    compile_main(dir, all, &classes, &[], std::ffi::OsStr::new(""), false)?;
     program(
         Command::new(tool("JAVA", "java"))
             .args(["-XX:TieredStopAtLevel=1", "-XX:+UseSerialGC", "-cp"])
@@ -174,7 +210,8 @@ fn test(dir: &Path, library: &Tested, all: &[Tested]) -> TestResults {
         .and_then(|()| std::fs::write(&runner, RUN_TESTS));
     written.map_err(|e| format!("{}: {e}", runner.display()))?;
     let classpath = std::env::join_paths(&jars).map_err(|e| e.to_string())?;
-    compile_main(dir, all, &main, &[runner], &classpath)?;
+    let strict = strict_warnings();
+    compile_main(dir, all, &main, &[runner], &classpath, strict)?;
     let mut test_sources = Vec::new();
     files_with(
         &dir.join(&library.name).join("src/test/java"),
@@ -183,7 +220,7 @@ fn test(dir: &Path, library: &Tested, all: &[Tested]) -> TestResults {
     );
     let with_main = std::env::join_paths(std::iter::once(main.clone()).chain(jars.iter().cloned()))
         .map_err(|e| e.to_string())?;
-    javac(&tests, &with_main, &test_sources)?;
+    javac(&tests, &with_main, &test_sources, strict)?;
     let everything = std::env::join_paths([tests.clone(), main].into_iter().chain(jars))
         .map_err(|e| e.to_string())?;
     let run = output(

@@ -245,6 +245,7 @@ pre { margin: 0; font: 0.95rem/1.5 var(--mono); white-space: pre-wrap; overflow-
 .diagnostic { display: flex; gap: 0.7rem; align-items: baseline; padding: 0.3rem 0; font: 0.95rem var(--mono); }
 .diagnostic.error span { color: var(--error); }
 .diagnostic.warn span { color: var(--warn); }
+.diagnostic.hint span { color: var(--muted); }
 .where { padding: 0 0.4rem; font: inherit; color: var(--accent); }
 
 .status { border-top: 1px solid var(--border); border-bottom: none; font-size: 0.9rem; color: var(--muted); padding-block: 0.4rem; }

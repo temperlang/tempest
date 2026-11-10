@@ -1001,6 +1001,7 @@ Unlike the [`>>>`](#operator--shift-right-zero-extending) operator, this operato
 When shifting right by *n* bits, the *n* highest bits in the output are copied
 from the most-significant bit in the input.
 
+<!-- known: I23 -->
 ```temper
 (0x8000_0000_0000_0000 >> 2) ==
 // |\
@@ -1031,6 +1032,7 @@ Unlike the [`>>`](#operator--shift-right) operator, this operator is zero extend
 When shifting right by *n* bits, the *n* highest bits in the output are copied
 from the most-significant bit in the input.
 
+<!-- known: I23 -->
 ```temper
 (0x8000_0000_0000_0000 >>> 2) ==
  0x2000_0000_0000_0000
@@ -1043,6 +1045,7 @@ two [*Int64*](types.md#class-int64)s and returns an integer of the same size
 that has each bit set when the corresponding bits in the inputs
 are different.
 
+<!-- known: I23 -->
 ```temper
 // Using binary number syntax
 (0b1111_0000_1111_0000_1111_0000_1111_0000 ^
@@ -1071,6 +1074,7 @@ The `~` operator negates the bits in an integer.
 Given an [*Int32*](types.md#class-int32) or [*Int64*](types.md#class-int64) it returns the integer
 of the same size with the opposite bits.
 
+<!-- known: I23 -->
 ```temper
 // Using binary number syntax
 ~0b0000_0001_0010_0011_0100_0101_0110_0111 ==

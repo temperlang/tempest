@@ -368,6 +368,13 @@ tests: [`temper-be-testkit`](../../../crates/temper-be-testkit/src/lib.rs).
 A missing tool skips its test with a message, unless
 `TEMPEST_REQUIRE_CHECKERS` is set, as in CI, where it fails.
 
+`tempest test -b csharp` and `-b java` hide the compilers' warnings,
+as Kotlin's do, unless `TEMPEST_STRICT_WARNINGS` is set, as in CI's
+runs of the real libraries: then a warning in std, a library, or its
+tests fails them, as in the backends' own tests (the C# runtime's
+nullable warnings, Kotlin's, aside). All five libraries compile
+without one (2026-11-10).
+
 **Not covered:** the declared MSRV (generated crates say 1.71.1; CI
 builds them with 1.85.0); PUC Lua 5.1 (LuaJIT runs the Lua tests);
 C#'s `net48` side, and Java 8; output built against the published

@@ -74,6 +74,8 @@ pub struct Options<'a> {
     pub ignore: Option<&'a IgnoreFile>,
     /// Text, or JSON records (`--logformat`).
     pub log: LogFormat,
+    /// Reports hints, not only warnings and errors (`-v`).
+    pub hints: bool,
 }
 
 impl Options<'_> {
@@ -122,7 +124,7 @@ pub fn build(
     let mut results = Vec::new();
     let mut programs = Vec::new();
     let mut tests = Vec::new();
-    let mut reported = Reported::default();
+    let mut reported = Reported::new(options.hints);
     for library in &libraries {
         let name = &library.config.name;
         match program(sources, library, &libraries, options, &mut reported, err) {

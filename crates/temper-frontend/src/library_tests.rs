@@ -91,7 +91,7 @@ pub fn test_libraries(
         err,
     )?;
     let mut ok = true;
-    let mut reported = Reported::default();
+    let mut reported = Reported::new(options.verbose);
     for library in &libraries {
         if options
             .library
@@ -398,6 +398,8 @@ pub fn write_located_diagnostic(s: &Settled, d: &Diagnostic, out: &mut String) {
 /// notes/library-cache.md.)
 #[derive(Default)]
 pub struct Reported {
+    /// Reports hints too, as `-v` asks; else they're skipped.
+    hints: bool,
     /// Each reported: its file, span in the file, and message.
     seen: HashSet<(String, u32, u32, String)>,
     /// Each library with errors, by name, and how many, in the order
@@ -406,6 +408,14 @@ pub struct Reported {
 }
 
 impl Reported {
+    /// None reported yet; hints among them only with `hints` (`-v`).
+    pub fn new(hints: bool) -> Self {
+        Reported {
+            hints,
+            ..Reported::default()
+        }
+    }
+
     /// `settled`'s diagnostics that aren't reported yet, as text or JSON
     /// records, a line each, counting their errors under the libraries
     /// among `all` that hold their files, or else under `library`, the
@@ -420,6 +430,9 @@ impl Reported {
         let mut text = String::new();
         let lib = &settled.library;
         for d in &lib.diagnostics {
+            if d.level == Level::Hint && !self.hints {
+                continue;
+            }
             let (file, start) = lib.locate(d.span.start);
             let (_, end) = lib.locate(d.span.end.max(d.span.start));
             let file = &lib.files[file.0 as usize];

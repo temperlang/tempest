@@ -109,7 +109,7 @@ impl Settle {
             let t = if or_null { self.eval_type(written) } else { t };
             if !needs_null_check && !narrowed && (f == Function::Is || s == t) {
                 let message = Message::UnnecessaryRttiCheck(self.show(t), self.show(s));
-                self.lib.report(Level::Info, message, span);
+                self.lib.report(Level::Hint, message, span);
             }
             return;
         };

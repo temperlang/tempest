@@ -55,10 +55,8 @@ error 11..16: Module metadata is not well-formed JSON
 (Block)
 metadata (Call "[]" -2147483648 (Call - -2147483648))
 json [-2147483648,2147483648]
-warn 5..15: Int32 value, 2147483648, out of representable bounds
-info 5..15: You can turn an Int32 literal into an Int64 by putting i64 at the end
-warn 18..28: Int32 value, 2147483648, out of representable bounds
-info 18..28: You can turn an Int32 literal into an Int64 by putting i64 at the end
+warn 5..15: Int32 value, 2147483648, out of representable bounds; add i64 at the end for an Int64
+warn 18..28: Int32 value, 2147483648, out of representable bounds; add i64 at the end for an Int64
 
 === not JSON at all
 ;;; garbage

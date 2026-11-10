@@ -11,6 +11,14 @@ pub fn tool(var: &str, name: &str) -> String {
     std::env::var(var).unwrap_or_else(|_| name.to_string())
 }
 
+/// Whether compiler warnings on generated code fail a library's tests
+/// (`TEMPEST_STRICT_WARNINGS` set, as CI's runs of real libraries set
+/// it), as the backends' own tests fail on them; else they're hidden, as
+/// in Kotlin. The runtimes, Kotlin's, keep their own warnings quiet.
+pub fn strict_warnings() -> bool {
+    std::env::var_os("TEMPEST_STRICT_WARNINGS").is_some()
+}
+
 /// Runs a command, or says why it couldn't start.
 pub fn output(command: &mut Command, what: &str) -> Result<Output, String> {
     command

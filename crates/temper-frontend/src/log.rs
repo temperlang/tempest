@@ -141,10 +141,10 @@ pub fn quoted(s: &str) -> String {
     out
 }
 
-/// A level's name in records, as Kotlin's.
+/// A level's name in records, as Kotlin's, which calls a hint info.
 pub fn level_name(level: Level) -> &'static str {
     match level {
-        Level::Info => "info",
+        Level::Hint => "info",
         Level::Warn => "warn",
         Level::Error => "error",
     }

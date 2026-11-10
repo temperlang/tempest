@@ -13,7 +13,9 @@
 # Also real libraries' tests, as `tempest test -b` runs them, on each
 # backend each passes on: the libraries are data, listed in
 # .github/nightly-libraries.json (name, repository, ref, and backends),
-# one job each, so adding one is a line there, not a step here; per-push
+# one job each, so adding one is a line there, not a step here, with
+# C#'s and Java's compiler warnings on generated code as failures
+# (`TEMPEST_STRICT_WARNINGS`); per-push
 # CI (ci.yml) tests `tempest test` and `build` on small fixtures instead
 # (notes/test-speed.md, "Real libraries, nightly").
 #
@@ -153,6 +155,9 @@ jobs:
           exit $status
         env:
           DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+          # C#'s and Java's compiler warnings on generated code fail the
+          # tests, as in the backends' own tests.
+          TEMPEST_STRICT_WARNINGS: "1"
 
   # Each checker of generated code at its latest release, the others at
   # ci.yml's pins, on the tests of the backend it checks. A failure here

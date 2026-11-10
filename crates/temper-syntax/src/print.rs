@@ -168,7 +168,6 @@ pub fn write_ast_lines(ast: &Ast, out: &mut String) {
     }
     for d in ast.diagnostics() {
         let level = match d.level {
-            Level::Info => "info",
             Level::Warn => "warn",
             Level::Error => "error",
         };

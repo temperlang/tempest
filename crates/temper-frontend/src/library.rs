@@ -45,9 +45,13 @@ pub struct File {
     pub root: NodeId,
 }
 
+/// A diagnostic's level. An error fails the build; a warning is for
+/// what genuinely isn't a mistake; a hint (Kotlin's info) is advice
+/// about correct code, for editors: the LSP and the playground show it,
+/// the CLI only with `-v`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Level {
-    Info,
+    Hint,
     Warn,
     Error,
 }
@@ -580,7 +584,6 @@ impl Library {
         }
         for d in ast.diagnostics() {
             let level = match d.level {
-                ast::Level::Info => Level::Info,
                 ast::Level::Warn => Level::Warn,
                 ast::Level::Error => Level::Error,
             };

@@ -14,8 +14,7 @@ console.log((-5 % 3).toString());
     (Call (Call . (Call / (Call - -2147483648) (Call - 1)) \toString)))
   (Call (Call . console \log) (Call (Call . (Call % (Call - 5) 3) \toString)))
   #void)
-warn 72..82: Int32 value, 2147483648, out of representable bounds
-info 72..82: You can turn an Int32 literal into an Int64 by putting i64 at the end
+warn 72..82: Int32 value, 2147483648, out of representable bounds; add i64 at the end for an Int64
 log -2147483648
 log -2147483648
 log -2
@@ -219,7 +218,7 @@ console.log(((q as P) orelse p).name);
   (Call (Call . console \log) (Call (Call . (Call is q:4 P:1) \toString)))
   (Call (Call . console \log) (Call . (Orelse (Call as q:4 P:1) p:3) \name))
   #void)
-info 710..720: Unnecessary type check to Named from expression with type Q which is a subtype
+hint 710..720: Unnecessary type check to Named from expression with type Q which is a subtype
 error 748..754: Runtime type check from Q to P can never succeed
 error 783..789: Runtime type check from Q to P can never succeed
 log Hi, Ann
@@ -1402,7 +1401,7 @@ console.log("${e == empty()} ${e is Empty}");
     (Call cat (Call == e:2 (Call empty)) " " (Call is e:2 Empty)))
   #void)
 error 155..175: Actual arguments do not match signature: (Int32, Int32) -> Boolean expected [Int32, Int32], but got [R, R]
-info 228..238: Unnecessary type check to Empty from expression with type Empty which is a subtype
+hint 228..238: Unnecessary type check to Empty from expression with type Empty which is a subtype
 Failed: Actual arguments do not match signature: (Int32, Int32) -> Boolean expected [Int32, Int32], but got [R, R]
 
 === auto equality from a sealed supertype
@@ -2047,7 +2046,7 @@ console.log(show(it.nextSafe()));
   (Call (Call . console \log) (Call cat (Call . it:2 \done)))
   (Call (Call . console \log) (Call show:1 (Call (Call . it:2 \nextSafe))))
   #void)
-info 377..401: Unnecessary type check to SafeGenerator<Int32> from expression with type SafeGenerator<Int32> which is a subtype
+hint 377..401: Unnecessary type check to SafeGenerator<Int32> from expression with type SafeGenerator<Int32> which is a subtype
 log true false
 log value 0
 log value 2

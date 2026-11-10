@@ -1,0 +1,13 @@
+# What Kelpto's sanitizer may remove from the docs. site/docs/build.py
+# fails on any other removal, or on a line here that no longer matches.
+#
+# A line each: `PAGE: REMOVAL [xN]  # why`, where REMOVAL is as the
+# build prints it (`comment`, `attribute NAME`, `element NAME`), N is how
+# many on that page (default 1), and PAGE may be `*` for every page, with
+# no count. Every line needs its reason.
+
+*: comment  # HTML comments are authoring notes: TODOs, and the `<!-- known: -->` markers compat/check_doc_examples.py reads
+docs/guide/why.md: attribute style x2  # the job ad's spacing and small caps; the site's stylesheet styles pages
+docs/language/builtins.md: attribute markdown x7  # Python-Markdown's markdown="1" on the do/while table; GFM needs no marker
+docs/language/types.md: attribute markdown  # the same, on a figcaption
+docs/language/types.md: attribute border  # border=1 on the encodings table; the stylesheet borders every table

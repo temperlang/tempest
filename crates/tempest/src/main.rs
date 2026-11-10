@@ -380,6 +380,7 @@ fn build_command(args: &[String]) -> u8 {
         out_dir: flags.output.as_deref().map(Path::new),
         ignore: ignore.as_ref(),
         log: flags.log,
+        hints: flags.verbose,
     };
     let mut out = io::BufWriter::new(io::stdout().lock());
     let built = build::build(
@@ -449,6 +450,7 @@ fn test_command(args: &[String]) -> u8 {
         out_dir: None,
         ignore: ignore.as_ref(),
         log: flags.log,
+        hints: flags.verbose,
     };
     let json = flags.log == LogFormat::Json;
     let several = chosen.len() > 1;
@@ -558,6 +560,7 @@ fn run_library(args: &[String]) -> u8 {
         out_dir: flags.output.as_deref().map(Path::new),
         ignore: ignore.as_ref(),
         log: flags.log,
+        hints: flags.verbose,
     };
     let mut out = io::stdout();
     let ok = run::run(

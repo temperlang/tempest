@@ -104,7 +104,8 @@ const NO_CONNECTED: &str = "    --no-connected
 ";
 
 const VERBOSE: &str = "    -v, --verbose
-            Say more.
+            Say more, including hints: advice about correct code, such
+            as an unnecessary type check, which editors show anyway.
 ";
 
 const LOGFORMAT: &str = "    --logformat text|json

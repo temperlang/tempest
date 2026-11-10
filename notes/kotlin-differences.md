@@ -887,6 +887,18 @@ Other differences we won't copy:
 
 ## Later (backends and tooling)
 
+- **Diagnostic levels** (2026-11-10): a diagnostic is an error or it
+  isn't. Kotlin's info level is tempest's hint (`Level::Hint`), advice
+  about correct code, now only "Unnecessary type check": the LSP sends
+  it as a hint (faded in editors), the playground shows it, and the CLI
+  prints it only with `-v`, where Kotlin always prints info. JSON
+  records still name it `info`, as Kotlin's. Kotlin's separate info
+  "You can turn an Int32 literal into an Int64…" is folded into the
+  out-of-range literal's warning ("…out of representable bounds; add
+  i64 at the end for an Int64"); that warning stays a warning until the
+  team decides on integer literals typed from context.
+  Test: crates/tempest/tests/cli.rs, `hints_only_with_verbose`.
+
 - **Ignore files** (2026-11-06): Kotlin reads one, the nearest
   `.temperignore` or `.gitignore` at or above where it starts (its
   "TODO Support multiple ignore files"). Tempest reads every

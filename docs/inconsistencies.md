@@ -35,6 +35,7 @@ page doesn't repeat those.
 | [I20](#i20-top-level-statements-run-out-of-order) | builtins | Logs in source order | Settle top-level order |
 | [I21](#i21-dateyearsbetween-with-the-later-date-first) | std/temporal | Negative, off by one | Fix std, or document |
 | [I22](#i22-named-groups-in-regular-expressions) | std/regex | `(?<name>…)` | Pick one syntax, or both |
+| [I23](#i23-integer-literals-too-big-for-int32) | builtins | Four bit examples wrap | Decide literal typing, then fix |
 
 ## Licensing and community
 
@@ -276,3 +277,17 @@ remove its `known` comment and its row here.
   aren't supported; use (?name=pattern)`.
 - **Suggested:** accept `(?<name>…)` in tempest too, since JavaScript,
   Java, C#, and Python 3.11's `re` (as `(?P<name>…)`) users expect it.
+
+### I23: Integer literals too big for Int32
+
+- **Docs:** four [builtins](language/builtins.md#operator--shift-right)
+  examples, `>>`, `>>>`, `^`, and `~`, write 64-bit hex or 32-bit binary
+  literals without `i64`, such as `0x8000_0000_0000_0000` and
+  `0b1111_0000_…`.
+- **Both compilers:** read them as `Int32`, warn that they're out of
+  bounds, and wrap them (hex up to `0xFFFF_FFFF` is exempt, as bits;
+  binary isn't). The `^` and `~` examples still hold after wrapping; the
+  shifts compare wrapped values.
+- **Suggested:** decide whether integer literals take their type from
+  context; then add `i64`, or write the 32-bit ones in hex, as the
+  answer needs.

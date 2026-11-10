@@ -691,7 +691,7 @@ fn diagnostics_by_file(
             severity: Some(match problem.level {
                 Level::Error => lsp::DiagnosticSeverity::ERROR,
                 Level::Warn => lsp::DiagnosticSeverity::WARNING,
-                Level::Info => lsp::DiagnosticSeverity::INFORMATION,
+                Level::Hint => lsp::DiagnosticSeverity::HINT,
             }),
             source: Some("tempest".to_string()),
             message: problem.message,

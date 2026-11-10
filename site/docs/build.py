@@ -32,6 +32,11 @@ else Playwright's own. Drawings are cached in `site/_out/mermaid/` by
 mermaid's version, render.mjs, the theme, and the source, so only new
 diagrams are drawn. `--no-diagrams` shows their source instead.
 
+Kelpto's sanitizer drops what isn't safe or allowed (scripts, event
+attributes, inline styles, comments). Each removal must be on the list
+in site/docs/removals.txt, with its reason, or the build fails, so
+content isn't lost from a page unnoticed.
+
 Writes to `--out DIR` (default `site/_out/site/`): `index.html` from
 README.md, `docs/…` from docs/, `assets/site.css`, and the licenses as
 `.txt`. The playground goes in `playground/` beside them, built by
@@ -61,6 +66,8 @@ MERMAID = HERE / "mermaid"
 DRAWN = ROOT / "site" / "_out" / "mermaid"
 # How small a wide diagram may shrink to fit, before it scrolls sideways.
 DIAGRAM_MIN_SCALE = 0.6
+# The sanitizer's removals the docs mean, with their reasons.
+REMOVALS = HERE / "removals.txt"
 KELPTO_LIBS = ["kelpto-core", "kelpto-md", "kelpto-html", "kelpto"]
 # The playground's published address, from README.md, as pages.yml reads it.
 SITE_URL = re.compile(r"https://temperlang\.github\.io/tempest/[0-9a-f]{32}/")
@@ -673,6 +680,42 @@ Rendered by <a href="https://github.com/temperlang/kelpto">Kelpto</a>, a Temper 
 # Checking
 
 
+def check_removals(removed: list[str], allowed_text: str) -> list[str]:
+    """Removals (`PAGE: REMOVAL`, one per removal) not on the allow-list
+    (removals.txt), and lines of the list that no longer match: each says
+    so, as a problem."""
+    problems = []
+    allowed: dict[tuple[str, str], int | None] = {}
+    line_re = re.compile(r"(\S+): (.+?)(?: x(\d+))?\s+#\s*\S.*")
+    for n, line in enumerate(allowed_text.splitlines(), 1):
+        if not line.strip() or line.startswith("#"):
+            continue
+        m = line_re.fullmatch(line.strip())
+        if not m or (m.group(1) == "*" and m.group(3)):
+            problems.append(f"site/docs/removals.txt:{n}: not `PAGE: REMOVAL [xN]  # why`")
+            continue
+        allowed[(m.group(1), m.group(2))] = None if m.group(1) == "*" else int(m.group(3) or 1)
+    counts: dict[tuple[str, str], int] = {}
+    for r in removed:
+        page, _, what = r.partition(": ")
+        counts[(page, what.strip())] = counts.get((page, what.strip()), 0) + 1
+    for (page, what), k in sorted(counts.items()):
+        if ("*", what) in allowed:
+            continue
+        want = allowed.get((page, what))
+        if want != k:
+            listed = f"{want} listed" if want else "not listed"
+            problems.append(f"{page}: Kelpto's sanitizer removed {what} x{k} ({listed} in site/docs/removals.txt)")
+    for (page, what), want in sorted(allowed.items()):
+        if page == "*":
+            if not any(w == what for _, w in counts):
+                problems.append(f"site/docs/removals.txt: `*: {what}` matches nothing removed; remove it")
+        elif (page, what) not in counts:
+            problems.append(f"site/docs/removals.txt: `{page}: {what}` matches nothing removed; remove it")
+    return problems
+
+
+
 def check(out: Path) -> tuple[list[str], int, list[str]]:
     """Every relative href and src in the site leads to a file, and every
     fragment to an id in it. Gives the problems, the links checked, and
@@ -726,7 +769,7 @@ def main() -> int:
     n = site.build()
     rendered = time.monotonic()
     problems, count, skipped = check(args.out.resolve())
-    problems = site.stale + problems
+    problems = site.stale + check_removals(site.removed, REMOVALS.read_text()) + problems
     print(f"build.py: {n} pages in {args.out} (Kelpto {built - started:.1f} s, pages {rendered - built:.1f} s)")
     if diagrams:
         print(f"build.py: {len(diagrams.svgs)} Mermaid diagrams, light and dark: {diagrams.drawn} drawn, {diagrams.cached} cached ({diagrams.seconds:.1f} s)")
@@ -746,7 +789,7 @@ def main() -> int:
             kind = r.split(": ", 1)[1].strip()
             kinds[kind] = kinds.get(kind, 0) + 1
         listed = ", ".join(f"{k} {n}" for k, n in sorted(kinds.items(), key=lambda x: -x[1]))
-        print(f"build.py: Kelpto's sanitizer removed {len(site.removed)} things ({listed})")
+        print(f"build.py: Kelpto's sanitizer removed {len(site.removed)} things ({listed}), each checked against site/docs/removals.txt")
     if skipped:
         print(f"build.py: {len(skipped)} links into playground/ not checked (it isn't built here)")
     for p in problems:
