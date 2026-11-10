@@ -1,12 +1,13 @@
 //! How Lua runs built libraries' tests, for `tempest test -b lua`: each
-//! library's `tests/init-test.lua` under `lua` (or `LUA`), with LuaUnit
+//! library's `tests/*-test.lua`, one module's tests each (the root
+//! module's `init-test.lua`), in turn under `lua` (or `LUA`), with LuaUnit
 //! beside the libraries, as Kotlin copies it, and `LUA_PATH` of
 //! `?.lua;?/init.lua`, writing JUnit XML. `tempest run -b lua` runs the
 //! library's `init.lua` the same way, as Kotlin's `Lua51Specifics` does.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use temper_tmpl::tools::{junit_file, output, program, tool};
+use temper_tmpl::tools::{files_with, junit_file, output, program, tool};
 use temper_tmpl::{TestResults, Tested, Tools};
 
 pub const TOOLS: Tools = Tools {
@@ -39,13 +40,49 @@ fn write_luaunit(dir: &Path, _: &[Tested]) -> Result<(), String> {
 }
 
 fn test(dir: &Path, library: &Tested, _: &[Tested]) -> TestResults {
+    // Each module's tests file, `tests/init-test.lua` for the root
+    // module's and `tests/a-b-test.lua` for `a/b`'s, run in turn, as
+    // Kotlin runs each, since a library may have no root module.
+    let mut files = Vec::new();
+    files_with(&dir.join(&library.name).join("tests"), "lua", &mut files);
+    files.retain(|f| f.to_string_lossy().ends_with("-test.lua"));
+    if files.is_empty() {
+        return Err(format!("no test files in {}/tests", library.name));
+    }
+    let mut results = Vec::new();
+    let mut errors = Vec::new();
+    for file in &files {
+        let test = file.strip_prefix(dir).unwrap_or(file);
+        match test_file(dir, test) {
+            Ok(found) => results.extend(found),
+            Err(why) => errors.push((test.to_string_lossy().replace('\\', "/"), why)),
+        }
+    }
+    if results.is_empty() && !errors.is_empty() {
+        let why = errors
+            .into_iter()
+            .map(|(file, why)| format!("{file}: {why}"));
+        return Err(why.collect::<Vec<_>>().join("\n"));
+    }
+    // A file that gave no results, as one that fails as it loads, is a
+    // failure by its name, as Python's unittest reports a module that
+    // won't import, so the others' results still count.
+    for (file, why) in errors {
+        let why = why.strip_prefix("no test results\n").unwrap_or(&why);
+        let first = why.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
+        results.push((file, Some(format!("no test results: {first}\n{why}"))));
+    }
+    Ok(results)
+}
+
+/// One tests file's results.
+fn test_file(dir: &Path, test: &Path) -> TestResults {
     let results = dir.join("test-results.xml");
     let _ = std::fs::remove_file(&results);
-    let test = PathBuf::from(&library.name).join("tests/init-test.lua");
     let run = output(
         Command::new(tool("LUA", "lua"))
             .args(["-e", "TEMPER_LUA_DEBUG_FUNCS=false"])
-            .arg(&test)
+            .arg(test)
             .args(["-o", "junit", "-n", "test-results.xml"])
             .env("LUA_PATH", "?.lua;?/init.lua")
             .current_dir(dir),

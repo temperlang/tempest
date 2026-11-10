@@ -1519,6 +1519,18 @@ copied Kotlin's:
   (`exports.ticks = …` in `tick`), and its test reads it back (done
   2026-10-30; [tmpl/profiles.md](tmpl/profiles.md#as-built-lua)).
   Test: temper-be-lua/tests/functional.rs, `runs` (`LIVE`).
+- **Lua tests of a library with no root module:** as Kotlin's, a
+  library whose `src` holds only subdirectories gets an `init.lua`
+  that requires each module, and each module's tests go in their own
+  `tests/PATH-test.lua`, with no `init-test.lua`. Tempest's `test -b lua`
+  ran only `init-test.lua`, so it ran none of such a library's tests,
+  nor a rooted library's other modules';
+  it now runs every `tests/*-test.lua` in turn, as Kotlin's does. A
+  file that gives no results, as one whose module fails as it loads,
+  counts as one failure named by its file, as Python's unittest reports
+  a module that won't import, and the other files' results still count
+  (fixed 2026-11-10).
+  Test: tempest/tests/cli.rs, `lua_library_without_root_module`.
 - **Lua `Boolean` comparisons:** Kotlin's Lua writes `a < b` on booleans,
   as its C# does, which Lua refuses at run time ("attempt to compare two
   boolean values"). Tempest's writes the order as logic (`not a and b`),

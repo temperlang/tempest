@@ -816,6 +816,66 @@ fn test_a_library_on_each_backend() {
     }
 }
 
+/// A library with no root module, only `x/`, `y/`, and `z/`, as some
+/// real libraries are, on Lua: `init.lua` requires each module, as
+/// Kotlin's, so `run` loads them, and `test` runs each module's tests
+/// file (there's no `init-test.lua`); one that fails as it loads counts
+/// as a failure by its file's name, and the others' results still count.
+#[test]
+#[cfg(feature = "lua")]
+fn lua_library_without_root_module() {
+    let files = [
+        (
+            "x/x.temper",
+            "export let one = 1;\nconsole.log(\"x\");\ntest(\"x\") { assert(one == 1) }\n",
+        ),
+        (
+            "y/y.temper",
+            "let { one } = import(\"../x\");\nconsole.log(\"y\");\n\
+             test(\"y\") { assert(one + 1 == 2) }\ntest(\"y2\") { assert(one == 2) }\n",
+        ),
+        ("z/z.temper", "test(\"z\") { assert(true) }\n"),
+    ];
+    with_library("lua-rootless", &files, |dir| {
+        let (code, out, err) = tempest(&["run", "-w", dir, "--library", "a", "-b", "lua"]);
+        if err.contains("couldn't run") {
+            assert!(
+                std::env::var_os("TEMPEST_REQUIRE_CHECKERS").is_none(),
+                "lua is missing (needed with TEMPEST_REQUIRE_CHECKERS):\n{err}"
+            );
+            eprintln!("skipped: no lua");
+            return;
+        }
+        assert_eq!((code, out.as_str()), (0, "x\ny\n"), "{err}");
+        let lua = Path::new(dir).join("temper.out/lua/a");
+        assert_eq!(
+            fs::read_to_string(lua.join("init.lua")).unwrap(),
+            "require(\"a/x\")\nrequire(\"a/y\")\nrequire(\"a/z\")\n"
+        );
+        assert!(!lua.join("tests/init-test.lua").exists());
+        let (code, out, err) = tempest(&["test", "-b", "lua", dir]);
+        assert!(out.contains("  failed  y2 - expected"), "{out}{err}");
+        assert!(out.ends_with("Tests passed: 3 of 4\n"), "{out}{err}");
+        assert_eq!(code, 1);
+    });
+    // `y`'s module failing as it loads, and so its tests file.
+    let files = [
+        ("x/x.temper", "test(\"x\") { assert(true) }\n"),
+        (
+            "y/y.temper",
+            "export let broken(): Int { panic() }\nlet n = broken();\n\
+             test(\"y\") { assert(n == 1) }\n",
+        ),
+    ];
+    with_library("lua-rootless-broken", &files, |dir| {
+        let (code, out, err) = tempest(&["test", "-b", "lua", dir]);
+        let failed = "  failed  a/tests/y-test.lua - no test results: ";
+        assert!(out.contains(failed), "{out}{err}");
+        assert!(out.ends_with("Tests passed: 1 of 2\n"), "{out}{err}");
+        assert_eq!(code, 1);
+    });
+}
+
 /// A library that doesn't build for a backend, as it uses what tmpl
 /// doesn't cover yet, still counts its tests, as not run, so the summary
 /// says how many there are.

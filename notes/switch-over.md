@@ -103,7 +103,12 @@ Risks to the date:
      Kotlin silently does (folding the null check, dropping the
      branch), so the library's all-backends branch passes
      54 of 54 on the interpreter and Python (and passed on C++, C#,
-     Java, JS, and Rust that way while these were warnings), but with
+     Java, JS, and Rust that way while these were warnings; on Lua,
+     which ran none of its tests, as it has no root module, until
+     tempest ran each module's tests file, 2026-11-10: 31 of 54 on Lua
+     5.4, each tests file given 240 seconds and 1.5 GB, the rest
+     failing in the regex runtime or not reached, and 15 on LuaJIT,
+     where that runtime needs `utf8`), but with
      5 errors, exiting 1: one in its HTML codec, until its own fix
      (removing the check, under way on its branch) lands, and four in
      its contextual autoescaping's `if (DEBUG)` branches (`context`),

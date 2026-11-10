@@ -154,6 +154,11 @@ pub fn rock_version(p: &Program) -> String {
 /// fibonacci/fibonacci-dev-1.rockspec  depending on temper-core 0.6.0
 /// ```
 ///
+/// A library with no root module (only `src/a/…` and `src/b/…`) gets an
+/// `init.lua` that requires each module, as Kotlin's, and has no
+/// `init-test.lua`: each module's tests are in their own file, which
+/// `tempest test` runs in turn.
+///
 /// Kotlin also zips the library beside the rockspec, for LuaRocks, whose
 /// `source.url` names the zip by its absolute path; this names it
 /// relative, as Kotlin does when it has no path, and writes no zip:
@@ -194,6 +199,20 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
                 text: tree::chunk(&chunk),
             });
         }
+    }
+    // A library without a root module still gets an `init.lua`, as
+    // Kotlin's, which requires each module, so `require("LIBRARY")` (and
+    // `tempest run`) loads them all; it exports nothing.
+    if !p.modules.iter().any(|m| m.path.is_empty()) {
+        let require = |m: &temper_tmpl::Module| {
+            let path = translate::require_path(p, m.decl);
+            tree::Stmt::Expr(tree::Expr::name("require").call(vec![tree::Expr::Str(path)]))
+        };
+        let body = p.modules.iter().map(require).collect();
+        files.push(OutFile {
+            path: format!("{library}/init.lua"),
+            text: tree::chunk(&tree::Chunk { body }),
+        });
     }
     // The root module first.
     files.sort_by_key(|f| !f.path.ends_with("/init.lua"));
