@@ -35,7 +35,10 @@ permissions:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    # Pinned, not ubuntu-latest, so the packages from Ubuntu's archive
+    # can't change underneath the tests: noble's lua5.4 is 5.4.6, its
+    # lua-socket 3.1.0, and its g++ 13 (the Lua step checks the first two).
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: dtolnay/rust-toolchain@cfcaf53ba4c621917ec7f78a66bff7a8848ddad4 # 1.85.0 branch, 2026-10-16
@@ -130,23 +133,28 @@ jobs:
       # only CI checks it.
       - name: libcurl for C++'s std net, and strict compilers
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libcurl4-openssl-dev g++-12 g++-14 clang
+          sudo apt-get -o Acquire::Retries=3 update
+          sudo apt-get -o Acquire::Retries=3 install -y libcurl4-openssl-dev g++-12 g++-14 clang
       # The Lua backend's tests run generated Lua with the vendored
-      # temper-core under Lua 5.4.6 (built from lua.org's source by the
-      # action, with luac), the version the tests use locally.
-      - uses: leafo/gh-actions-lua@35bcb06abec04ec87df82e08caa84d545348536e # v10.0.0
-        with:
-          luaVersion: "5.4.6"
-      # LuaRocks for that Lua, and LuaSocket, std `net`'s default client on
-      # Lua, at the versions the tests use locally, so the `netresponse`
-      # tests send their requests (without it, they give Kotlin's expected
-      # failures). Plain HTTP only: no LuaSec.
-      - uses: leafo/gh-actions-luarocks@e65774a6386cb4f24e293dca7fc4ff89165b64c5 # v4.3.0
-        with:
-          luarocksVersion: "3.11.1"
-      - name: LuaSocket
-        run: luarocks install luasocket 3.1.0-1
+      # temper-core under Lua 5.4.6, with luac, the version the tests use
+      # locally, and LuaSocket 3.1.0, std `net`'s default client on Lua,
+      # also as locally, so the `netresponse` tests send their requests
+      # (without it, they give Kotlin's expected failures; plain HTTP
+      # only, no LuaSec). Both from Ubuntu's archive, whose mirrors are
+      # near the runners (building Lua from lua.org's tarball, as an
+      # action did, failed on flaky downloads): ubuntu-24.04's lua5.4 is
+      # 5.4.6, and its lua-socket 3.1.0, which the tests find on Lua's own
+      # paths, so this job's runner is pinned to it. `lua` and `luac` are
+      # made 5.4's, and the versions checked, so a change fails here.
+      - name: Lua and LuaSocket
+        run: |
+          sudo apt-get -o Acquire::Retries=3 install -y lua5.4 lua-socket
+          sudo update-alternatives --set lua-interpreter /usr/bin/lua5.4
+          sudo update-alternatives --set lua-compiler /usr/bin/luac5.4
+          lua -v | grep -F "Lua 5.4.6"
+          luac -v | grep -F "Lua 5.4.6"
+          dpkg-query -W -f '${Version}' lua-socket | grep "^3\.1\.0-"
+          lua -e "require('socket.http')"
       - name: Tests
         run: cargo test --locked --workspace
         env:
@@ -191,6 +199,18 @@ jobs:
       # VS Code (@vscode/test-electron), under xvfb, against its tempest.
       - name: Release build of tempest
         run: cargo build --locked --profile small -p tempest
+      # VS Code, cached by the version build.py pins (VSCODE_VERSION), so
+      # its update servers, which sometimes fail to answer, are needed
+      # only when that changes. test/run.ts retries a failed download.
+      - id: vscode
+        run: |
+          version=$(sed -n 's/^VSCODE_VERSION = "\(.*\)"$/\1/p' editors/vscode/build.py)
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: editors/vscode/.vscode-test
+          key: vscode-${{ runner.os }}-${{ steps.vscode.outputs.version }}
       - name: VS Code extension
         run: uv run editors/vscode/build.py --tempest target/small/tempest --test
       # Each marked ```temper block in docs/ runs on the release build as its

@@ -494,7 +494,7 @@ oldest it accepts), which every current compiler has; nothing in subset
 A needs more. C++17 would give `[[maybe_unused]]`, `std::optional`,
 and sequenced `<<`, and C++20 `std::atomic<std::shared_ptr<T>>` and
 defined signed shifts, worth weighing for a later variant. The tests use
-g++ 13.3 locally and the runner's g++ (13 on ubuntu-latest) in CI.
+g++ 13.3 locally and the runner's g++ (13 on ubuntu-24.04) in CI.
 
 ### As built: Lua
 
@@ -607,8 +607,8 @@ out of an inner loop; Kotlin's needs it for every early return too), and
 **Lua 5.3 or later** for exact `Int32` and `Int64` arithmetic (on 5.1
 and LuaJIT, numbers are doubles, so `Int64` is exact only to 2^53, and
 `int32_mul` of large operands isn't exact); Kotlin's CI runs Lua 5.4.
-The tests use Lua 5.4.6, locally and in CI (`leafo/gh-actions-lua`,
-pinned to 5.4.6), and LuaLS 3.19.2. CI also runs the generated Lua
+The tests use Lua 5.4.6, locally and in CI (Ubuntu 24.04's `lua5.4`,
+the runner pinned for it), and LuaLS 3.19.2. CI also runs the generated Lua
 under LuaJIT 2.1, built from a pinned commit, and it passes; 5.1 isn't
 tested.
 A later variant could require 5.3 and print its operators (`a & b`,

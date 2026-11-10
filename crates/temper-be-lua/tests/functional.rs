@@ -16,7 +16,8 @@
 //! `regex/zero-advance` gives what Kotlin's issue 166 expects, and only
 //! `types/date` runs on LuaJIT, which lacks `utf8` and 64-bit integers),
 //! std `net`'s (`kit::NET`), through LuaSocket under a Lua that loads it
-//! by LuaRocks' paths (the `LUA` that runs the rest, or else `lua`),
+//! by LuaRocks' paths or its own (the `LUA` that runs the rest, or else
+//! `lua`),
 //! where they pass, else as Kotlin's suite expects them to fail here (a
 //! request gives a broken promise, `kit::without_net`), and with a client
 //! that host code plugs in (`tests/host/net.lua`), on
@@ -613,7 +614,7 @@ fn runs() {
         let net = net_lua(&lua);
         if net.is_none() {
             eprintln!(
-                "std net's LuaSocket client skipped: no Lua that loads socket.http through luarocks' paths"
+                "std net's LuaSocket client skipped: no Lua that loads socket.http through luarocks' paths or its own"
             );
             kit::without_net(&mut cases);
         }
@@ -911,7 +912,9 @@ fn is_net(case: &Case) -> bool {
 }
 
 /// A Lua that loads LuaSocket's `socket.http`, std `net`'s default
-/// client, through LuaRocks' paths (`luarocks path`), with those paths.
+/// client, through LuaRocks' paths (`luarocks path`), or else through
+/// Lua's own (`;;`), where a system package puts it (as CI's Ubuntu
+/// `lua-socket` does), with those paths.
 struct NetLua {
     lua: String,
     path: String,
@@ -928,18 +931,22 @@ fn net_lua(lua: &str) -> Option<NetLua> {
             .success()
             .then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
     };
-    let (path, cpath) = (rocks("--lr-path")?, rocks("--lr-cpath")?);
-    [lua, "lua"].into_iter().find_map(|lua| {
-        let loads = Command::new(lua)
-            .args(["-e", "require('socket.http')"])
-            .env("LUA_PATH", &path)
-            .env("LUA_CPATH", &cpath)
-            .output()
-            .is_ok_and(|o| o.status.success());
-        loads.then(|| NetLua {
-            lua: lua.to_string(),
-            path: path.clone(),
-            cpath: cpath.clone(),
+    let rocks_paths = rocks("--lr-path").zip(rocks("--lr-cpath"));
+    let own = (";;".to_string(), ";;".to_string());
+    let paths: Vec<_> = rocks_paths.into_iter().chain([own]).collect();
+    paths.iter().find_map(|(path, cpath)| {
+        [lua, "lua"].into_iter().find_map(|lua| {
+            let loads = Command::new(lua)
+                .args(["-e", "require('socket.http')"])
+                .env("LUA_PATH", path)
+                .env("LUA_CPATH", cpath)
+                .output()
+                .is_ok_and(|o| o.status.success());
+            loads.then(|| NetLua {
+                lua: lua.to_string(),
+                path: path.clone(),
+                cpath: cpath.clone(),
+            })
         })
     })
 }

@@ -1,16 +1,54 @@
 // Runs test/suite.ts in a real VS Code, downloaded by
 // @vscode/test-electron from VS Code's update servers, on a fresh library
 // workspace, with the extension at the path given (a platform package,
-// unpacked).
+// unpacked). A version already in CACHE_DIR is used without the network.
+// The download, which can fail on a flaky connection, is tried a few
+// times; the tests themselves run once, so their failures fail at once.
 //
 //   node out/test/run.js EXTENSION_DIR CACHE_DIR SUITE VERSION [VS_CODE_ARGS...]
 
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
-import { runTests } from "@vscode/test-electron";
+import { downloadAndUnzipVSCode, runTests } from "@vscode/test-electron";
 
 const [extensionDir, cachePath, suite, version, ...extra] = process.argv.slice(2);
+
+/** Tries to download VS Code, waiting 5 and then 15 seconds between tries. */
+const DOWNLOAD_WAITS = [5, 15];
+
+/** VS Code at `version` in `cachePath`, downloaded if it isn't there, with retries. */
+async function download(version: string, cachePath: string): Promise<string> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await downloadAndUnzipVSCode({ version, cachePath });
+    } catch (error) {
+      const wait = DOWNLOAD_WAITS[attempt];
+      if (wait === undefined) throw error;
+      console.error(`Downloading VS Code ${version} failed (try ${attempt + 1}):\n${describe(error)}`);
+      console.error(`Trying again in ${wait} seconds.`);
+      await new Promise<void>((resolve) => setTimeout(resolve, wait * 1000));
+    }
+  }
+}
+
+/**
+ * An error with what's inside it: an AggregateError's errors (as a failed
+ * connection to each of a host's addresses gives) and any `cause`, each
+ * indented under the one that holds it.
+ */
+function describe(error: unknown, indent = ""): string {
+  const text = error instanceof Error ? (error.stack ?? String(error)) : String(error);
+  const lines = text.split("\n").map((line) => indent + line);
+  const inner = indent + "  ";
+  if (error instanceof AggregateError) {
+    for (const each of error.errors) lines.push(describe(each, inner));
+  }
+  if (error instanceof Error && error.cause !== undefined) {
+    lines.push(`${inner}caused by:`, describe(error.cause, inner));
+  }
+  return lines.join("\n");
+}
 
 async function main(extensionDir: string, cachePath: string, suite: string, version: string): Promise<void> {
   const scratch = mkdtempSync(path.join(tmpdir(), "temper-vscode-test-"));
@@ -44,9 +82,9 @@ async function main(extensionDir: string, cachePath: string, suite: string, vers
     const user = path.join(scratch, "user-data", "User");
     mkdirSync(user, { recursive: true });
     writeFileSync(path.join(user, "settings.json"), JSON.stringify({ "chat.disableAIFeatures": true }));
+    const vscodeExecutablePath = await download(version, cachePath);
     await runTests({
-      version,
-      cachePath,
+      vscodeExecutablePath,
       extensionDevelopmentPath: extensionDir,
       extensionTestsPath: suite,
       launchArgs: [
@@ -61,7 +99,7 @@ async function main(extensionDir: string, cachePath: string, suite: string, vers
       ],
     });
   } catch (error) {
-    console.error(`VS Code tests failed: ${String(error)}`);
+    console.error(`VS Code tests failed:\n${describe(error)}`);
     process.exitCode = 1;
   } finally {
     rmSync(scratch, { recursive: true, force: true });

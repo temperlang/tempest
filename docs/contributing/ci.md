@@ -29,10 +29,28 @@ weeks old, so a bad release has time to be caught first.
   --ignore-scripts`; mypy at an exact version by `uv tool install`; and
   LuaLS at an exact version, its download checked against a recorded
   SHA-256.
+- **Lua and LuaSocket,** from Ubuntu's archive (`lua5.4` and
+  `lua-socket`), by pinning the jobs that install them to
+  `ubuntu-24.04`, whose packages are Lua 5.4.6 and LuaSocket 3.1.0, the
+  versions the tests use locally. The install step checks both
+  versions, so a change fails there, not in the tests.
+- **VS Code,** for the extension's tests, by `VSCODE_VERSION` in
+  [editors/vscode/build.py](../../editors/vscode/build.py).
 
-Not pinned: the runner images and what they install with `apt`; Node,
-Java, and .NET by major version; and Playwright's Chromium (from its
-own CDN, by the version in the Mermaid renderer's lockfile).
+Not pinned: the other jobs' runner images, and what the images and
+`apt` install besides Lua; Node, Java, and .NET by major version; and
+Playwright's Chromium (from its own CDN, by the version in the Mermaid
+renderer's lockfile).
+
+## Flaky downloads
+
+Downloads from servers far from GitHub's runners sometimes fail, so CI
+avoids or retries them: Lua comes from Ubuntu's mirrors, not lua.org;
+`apt-get` retries (`-o Acquire::Retries=3`); VS Code is cached
+(`actions/cache`, keyed on its version), and
+[test/run.ts](../../editors/vscode/test/run.ts) tries a failed download
+three times before running the tests, which run once, and prints each
+error inside an `AggregateError` or `cause`.
 
 ## Latest checkers, nightly
 
@@ -55,6 +73,10 @@ is the cue to fix the backend or the tests before bumping that pin.
   tag to its commit (`git ls-remote <repo> refs/tags/<tag>`, taking the
   `^{}` line for an annotated tag), and update the SHA and the comment
   everywhere the action is used.
+- **Ubuntu, for Lua:** moving a pinned job to a newer image changes
+  `lua5.4` and `lua-socket`; update the versions its Lua step checks,
+  and the tests' local versions, together.
+- **VS Code:** `VSCODE_VERSION` in build.py; CI's cache key follows it.
 - **The Rust toolchain:** take the SHA of the new version's branch
   (`git ls-remote https://github.com/dtolnay/rust-toolchain
   refs/heads/<version>`), and update the workspace's `rust-version`.

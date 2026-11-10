@@ -64,9 +64,9 @@ jobs:
       # Ubuntu's package is named as the command (g++-12, g++-14).
       - name: libcurl for C++'s std net, and the compiler
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libcurl4-openssl-dev
-          if [ "$CXX" != g++ ]; then sudo apt-get install -y "$CXX"; fi
+          sudo apt-get -o Acquire::Retries=3 update
+          sudo apt-get -o Acquire::Retries=3 install -y libcurl4-openssl-dev
+          if [ "$CXX" != g++ ]; then sudo apt-get -o Acquire::Retries=3 install -y "$CXX"; fi
         env:
           CXX: ${{ matrix.cxx }}
       - name: Tests
@@ -101,7 +101,8 @@ jobs:
       matrix:
         library: ${{ fromJSON(needs.plan.outputs.libraries) }}
     name: ${{ matrix.library.name }}
-    runs-on: ubuntu-latest
+    # Pinned, as ci.yml's, for Ubuntu's lua5.4, which is 5.4.6 on noble.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: dtolnay/rust-toolchain@cfcaf53ba4c621917ec7f78a66bff7a8848ddad4 # 1.85.0 branch, 2026-10-16
@@ -138,11 +139,14 @@ jobs:
       - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
           dotnet-version: 6.0.x
-      - name: libcurl for C++'s std net
-        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
-      - uses: leafo/gh-actions-lua@35bcb06abec04ec87df82e08caa84d545348536e # v10.0.0
-        with:
-          luaVersion: "5.4.6"
+      # As in ci.yml: libcurl's headers, for C++'s std net, and Lua
+      # 5.4.6 from Ubuntu's archive, as `lua`.
+      - name: libcurl for C++'s std net, and Lua
+        run: |
+          sudo apt-get -o Acquire::Retries=3 update
+          sudo apt-get -o Acquire::Retries=3 install -y libcurl4-openssl-dev lua5.4
+          sudo update-alternatives --set lua-interpreter /usr/bin/lua5.4
+          lua -v | grep -F "Lua 5.4.6"
       - name: Tests on each backend
         run: |
           cargo build --locked --release -p tempest
@@ -178,7 +182,8 @@ jobs:
           - checker: luals
             crate: temper-be-lua
     name: latest ${{ matrix.checker }}
-    runs-on: ubuntu-latest
+    # Pinned, as ci.yml's, for Ubuntu's lua5.4, which is 5.4.6 on noble.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: dtolnay/rust-toolchain@cfcaf53ba4c621917ec7f78a66bff7a8848ddad4 # 1.85.0 branch, 2026-10-16
@@ -191,11 +196,19 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
-      # As in ci.yml: Lua 5.4.6, for the Lua backend's tests.
+      # As in ci.yml: Lua 5.4.6 and LuaSocket 3.1.0 from Ubuntu's
+      # archive, for the Lua backend's tests.
       - if: matrix.crate == 'temper-be-lua'
-        uses: leafo/gh-actions-lua@35bcb06abec04ec87df82e08caa84d545348536e # v10.0.0
-        with:
-          luaVersion: "5.4.6"
+        name: Lua and LuaSocket
+        run: |
+          sudo apt-get -o Acquire::Retries=3 update
+          sudo apt-get -o Acquire::Retries=3 install -y lua5.4 lua-socket
+          sudo update-alternatives --set lua-interpreter /usr/bin/lua5.4
+          sudo update-alternatives --set lua-compiler /usr/bin/luac5.4
+          lua -v | grep -F "Lua 5.4.6"
+          luac -v | grep -F "Lua 5.4.6"
+          dpkg-query -W -f '${Version}' lua-socket | grep "^3\.1\.0-"
+          lua -e "require('socket.http')"
       - id: checkers
         name: Checkers, ${{ matrix.checker }} at its latest
         run: uv run .github/ci-tools/install.py --latest ${{ matrix.checker }}

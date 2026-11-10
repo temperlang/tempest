@@ -258,7 +258,7 @@ As built with the Python backend (2026-10-30):
   loop LuaLS can't follow; a test checks the runtime defines everything
   in it; the `missing-local-export-doc` lint is off until tmpl carries
   docs). LuaLS 3.19.2 passes locally (named by `LUALS`) and in CI,
-  which installs that release and Lua 5.4.6 (`leafo/gh-actions-lua`),
+  which installs that release and Lua 5.4.6 (Ubuntu 24.04's `lua5.4`),
   and runs the programs again under LuaJIT 2.1 (`LUA` names the
   interpreter).
   A missing `lua` or LuaLS skips with a
