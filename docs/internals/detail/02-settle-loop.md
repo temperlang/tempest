@@ -190,7 +190,10 @@ expressions, inherit), then typing (phase 2: infer declarations' types
 and decide object literals). Between them,
 [`drop_dead_branches`](../../../crates/temper-frontend/src/dead_branches.rs)
 keeps only the live branch of an `if (false)` whose dead branch has an
-error, and [`find_flow_facts`](../../../crates/temper-frontend/src/flow.rs)
+error, after folding an undeclared name's `!= null` to `true`. Kotlin
+does both silently; tempest reports the errors as errors and folds only
+to recover, so the code generated past them runs as Kotlin's does. Then
+[`find_flow_facts`](../../../crates/temper-frontend/src/flow.rs)
 walks every function. After them, typing's checks and recording, then
 module order and top-level order, are passes over the whole tree.
 

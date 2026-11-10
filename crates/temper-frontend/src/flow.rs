@@ -283,7 +283,7 @@ impl Settle {
         }
     }
 
-    fn is_null(&self, node: NodeId) -> bool {
+    pub(crate) fn is_null(&self, node: NodeId) -> bool {
         matches!(self.lib.value(node), Some(Value::Null))
             || self.scopes.resolved_builtin(node) == Some(Builtin::Value(Constant::Null))
     }

@@ -97,9 +97,19 @@ Risks to the date:
      tests) passes 119 of 119 on the interpreter and on C++, C#,
      Java, JS, Python, and Rust (2026-11-06; Lua skipped), once one undeclared name in it
      is fixed, which Kotlin folds away silently and tempest reports (so
-     as committed, 115 on the interpreter, and no backend builds). That
-     took `@overload`s of lists and of classes told apart, a dead `if
-     (DEBUG)` branch's undeclared names as warnings, generic `is`
+     as committed, 115 on the interpreter, and no backend builds).
+     Since 2026-11-10 tempest reports that name, and a dead `if
+     (DEBUG)` branch's undeclared names, as errors, recovering as
+     Kotlin silently does (folding the null check, dropping the
+     branch), so the library's all-backends branch passes
+     54 of 54 on the interpreter and Python (and passed on C++, C#,
+     Java, JS, and Rust that way while these were warnings), but with
+     5 errors, exiting 1: one in its HTML codec, until its own fix
+     (removing the check, under way on its branch) lands, and four in
+     its contextual autoescaping's `if (DEBUG)` branches (`context`),
+     which need their own fix too. That took `@overload`s of lists and
+     of classes told apart, a dead `if (DEBUG)` branch dropped as
+     error recovery, generic `is`
      checks, identity of nullable generic values, `[]` and list literals
      typed by a generic call's solution, a bare `List` typed by its
      value, `new Alias(…)` of a generic class, `when`s of only `null`

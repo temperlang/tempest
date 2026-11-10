@@ -2515,7 +2515,7 @@ f();
   (Call (Call . console \log) "start")
   (Call f:0)
   #void)
-warn 41..48: yield outside generator function body
+error 41..48: yield outside generator function body
 log start
 Failed: yield outside generator function body
 
@@ -2862,7 +2862,7 @@ async { (): GeneratorResult<Empty> extends GeneratorFn =>
         (Call (Call . gen:3 \nextSafe))
         (Call (Call . console \log) "not here")
         #void))))
-warn 13..52: await outside generator function body
+error 13..52: await outside generator function body
 error 197..236: Not supported yet: await in a for … of body
 log not a promise
 log f failed
@@ -3166,7 +3166,7 @@ log yield in loop 0 10 20
 log yield after loop 0 10 20
 log live past a yield 0 1 10 11 20 21
 
-=== a dead branch's undeclared name warns, as Kotlin folds the branch away
+=== a dead branch's undeclared name errs, though Kotlin folds the branch away
 let f(): Int {
   if (DEBUG) { console.log("${missing}"); }
   if (!DEBUG) { console.log("live"); }
@@ -3190,9 +3190,20 @@ let DEBUG = false;
         1)))
   (Call (Call . console \log) (Call (Call . (Call f:0) \toString)))
   #void)
-warn 45..52: missing has not been declared
+error 45..52: missing has not been declared
 log live
 log 1
+
+=== an undeclared name compared with null errs, though Kotlin folds it silently
+if (missing != null) { console.log("not null"); }
+if (null == missing) { console.log("null"); }
+--- settled
+(Block
+  (If #true (Block (Call (Call . console \log) "not null") #void) (Block))
+  (If #false (Block (Call (Call . console \log) "null") #void) (Block)))
+error 4..11: missing has not been declared
+error 62..69: missing has not been declared
+log not null
 
 === list literals passed to generic calls nested in each other
 let f<T>(xs: List<T>, x: T): List<T> { xs }
