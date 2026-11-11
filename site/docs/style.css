@@ -1,5 +1,7 @@
-/* The docs site's styles: light and dark, by prefers-color-scheme; no
-   fonts or scripts from elsewhere. Colors are the Temper logo's. */
+/* The docs site's styles: light and dark, by prefers-color-scheme unless
+   the header's toggle picks one (data-theme on <html>); no fonts or
+   scripts from elsewhere. Colors are the Temper logo's. The header's own
+   styles are site/shared/header.css, appended to this in assets/site.css. */
 
 :root {
   --bg: #ffffff;
@@ -29,7 +31,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #14171f;
     --fg: #e2e6ee;
     --muted: #9aa3b5;
@@ -56,6 +58,32 @@
   }
 }
 
+:root[data-theme="dark"] {
+  --bg: #14171f;
+  --fg: #e2e6ee;
+  --muted: #9aa3b5;
+  --line: #2c3240;
+  --panel: #1b1f29;
+  --code-bg: #1d222d;
+  --link: #8db4ff;
+  --accent: #e8a1a1;
+  --navy: #c9d3e8;
+  --note: #6ea8ff;
+  --tip: #4ac26b;
+  --important: #b48cff;
+  --warning: #d4a72c;
+  --caution: #ff7b72;
+  --hl-comment: #8b93a5;
+  --hl-string: #7ee2a0;
+  --hl-number: #f0a36e;
+  --hl-keyword: #f08cbf;
+  --hl-function: #8db4ff;
+  --hl-type: #c6a6ff;
+  --hl-decorator: #e3c26a;
+  --hl-embed: #e8a1a1;
+  color-scheme: dark;
+}
+
 * { box-sizing: border-box; }
 
 html { -webkit-text-size-adjust: 100%; }
@@ -76,46 +104,7 @@ code, pre, kbd, samp {
 }
 
 .skip { position: absolute; left: -999px; }
-.skip:focus { left: 8px; top: 8px; z-index: 10; background: var(--bg); padding: 4px 8px; }
-
-/* The header: logo, and the sections, scrolling sideways on phones. */
-
-.top {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  padding: 10px 24px;
-  background: var(--bg);
-  border-bottom: 1px solid var(--line);
-}
-
-.brand { display: flex; flex: none; }
-.brand img { display: block; height: 30px; width: auto; }
-
-.sections {
-  display: flex;
-  gap: 4px;
-  overflow-x: auto;
-  scrollbar-width: none;
-  min-width: 0;
-}
-.sections::-webkit-scrollbar { display: none; }
-
-.sections a {
-  flex: none;
-  padding: 4px 10px;
-  border-radius: 6px;
-  color: var(--fg);
-  text-decoration: none;
-  font-size: 15px;
-  white-space: nowrap;
-}
-.sections a:hover { background: var(--panel); }
-.sections a[aria-current] { background: var(--panel); color: var(--accent); font-weight: 600; }
-.sections a.play { color: var(--accent); font-weight: 600; }
+.skip:focus { left: 8px; top: 8px; z-index: 30; background: var(--bg); padding: 4px 8px; }
 
 /* The page: content, and the section's pages beside it. */
 
@@ -173,6 +162,7 @@ code, pre, kbd, samp {
   text-align: center;
 }
 .foot p { margin: 0 auto; max-width: 720px; }
+.foot code { font-size: 1em; }
 
 /* Content */
 
@@ -198,6 +188,7 @@ code, pre, kbd, samp {
 .doc li > p { margin: 0 0 0.5em; }
 .doc li + li { margin-top: 0.2em; }
 .doc img { max-width: 100%; height: auto; }
+.doc .logo { margin: 0 auto; }
 .doc hr { border: 0; border-top: 1px solid var(--line); margin: 2em 0; }
 
 /* A `temper inert` block, Temper that isn't compiled: tinted, labeled. */
@@ -293,9 +284,11 @@ code, pre, kbd, samp {
 .diagram-art svg { display: block; height: auto; margin: 0 auto; }
 .diagram-dark { display: none; }
 @media (prefers-color-scheme: dark) {
-  .diagram-light { display: none; }
-  .diagram-dark { display: block; }
+  :root:not([data-theme="light"]) .diagram-light { display: none; }
+  :root:not([data-theme="light"]) .diagram-dark { display: block; }
 }
+:root[data-theme="dark"] .diagram-light { display: none; }
+:root[data-theme="dark"] .diagram-dark { display: block; }
 .diagram-source summary { color: var(--muted); font-size: 13px; cursor: pointer; }
 .diagram-source pre { margin: 6px 0 0; }
 .diagram figcaption {
@@ -326,10 +319,6 @@ code, pre, kbd, samp {
 /* Phones and narrow windows: the content first, the section's pages after. */
 
 @media (max-width: 860px) {
-  .top { position: static; flex-wrap: wrap; padding: 10px 16px 8px; gap: 6px; }
-  .brand img { height: 26px; }
-  .sections { flex-basis: 100%; flex-wrap: wrap; gap: 2px; overflow: visible; margin-left: -8px; }
-  .sections a { padding: 2px 8px; font-size: 14px; }
   .doc h1, .doc h2, .doc h3, .doc h4, .doc h5, .doc h6 { scroll-margin-top: 12px; }
   .layout {
     grid-template-columns: minmax(0, 1fr);

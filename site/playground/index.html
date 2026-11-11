@@ -6,14 +6,13 @@
 <meta name="color-scheme" content="light dark">
 <title>Temper playground</title>
 <link rel="stylesheet" href="main.css">
+<script src="header.js"></script>
 <script type="module" src="main.js"></script>
 </head>
 <body>
-<header class="bar">
-  <h1 class="brand">
-    <a href="../" title="Temper: the docs">@@LOGO@@</a>
-    <span>playground</span>
-  </h1>
+@@HEADER@@
+<div class="bar" role="group" aria-label="Playground">
+  <h1 class="visually-hidden">Temper playground</h1>
   <div class="views" role="tablist" aria-label="View">
     <button id="view-editor" class="view" type="button" role="tab" aria-selected="true" aria-controls="source output">Editor</button>
     <button id="view-repl" class="view" type="button" role="tab" aria-selected="false" aria-controls="repl" tabindex="-1">REPL</button>
@@ -22,11 +21,9 @@
     <span>Example</span>
     <select id="example"></select>
   </label>
-  <div class="actions">
-    <button id="share" type="button">Share</button>
-    <button id="theme" type="button">Theme: system</button>
-  </div>
-</header>
+  <button id="share" type="button">Share</button>
+  <span id="compile-status" class="compile-status" aria-live="polite"></span>
+</div>
 <main>
   <section id="source" class="side source" aria-label="Temper source">
     <div class="side-head"><span>main.temper</span></div>
@@ -76,14 +73,6 @@
     </div>
   </section>
 </main>
-<footer class="bar status">
-  <span id="compile-status" aria-live="polite"></span>
-  <span id="wasm-size"></span>
-  <span class="grow"></span>
-  <span id="commit"></span>
-  <a href="https://github.com/temperlang/tempest">Repo</a>
-  <a href="../docs/internals/">How it works</a>
-  <a href="../">Docs</a>
-</footer>
+@@ABOUT@@
 </body>
 </html>

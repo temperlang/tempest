@@ -42,13 +42,15 @@ in site/docs/removals.txt, with its reason, or the build fails, so
 content isn't lost from a page unnoticed.
 
 Writes to `--out DIR` (default `site/_out/site/`): `index.html` from
-README.md, `docs/…` from docs/, `assets/site.css`, and the licenses as
-`.txt`. The playground goes in `playground/` beside them, built by
-site/playground/build.py. Then it checks that every link in the site
-leads to a page, file, and heading that exist, and each repository link
-to a file or directory at that commit, in git's own objects, with its
-`#L12` or `#L10-L20` within the file and its heading in a `.md` file;
-it exits with 1 if not.
+README.md, `docs/…` from docs/, `assets/site.css` (style.css, then
+site/shared's header.css), `assets/header.js`, and the licenses as
+`.txt`. The header, the footer, and the theme toggle are site/shared's,
+which the playground's build uses too. The playground goes in
+`playground/` beside them, built by site/playground/build.py. Then it
+checks that every link in the site leads to a page, file, and heading
+that exist, and each repository link to a file or directory at that
+commit, in git's own objects, with its `#L12` or `#L10-L20` within the
+file and its heading in a `.md` file; it exits with 1 if not.
 """
 
 import argparse
@@ -67,6 +69,11 @@ from urllib.parse import quote, unquote
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(HERE.parent / "shared"))
+import header as shared  # noqa: E402  (site/shared/header.py: the header, footer, and theme)
+from header import REPO_URL, SECTIONS, relative  # noqa: E402
+
 DOCS = ROOT / "docs"
 OUT = ROOT / "site" / "_out" / "site"
 WORK = ROOT / "site" / "_out" / "kelpto"
@@ -80,19 +87,8 @@ KELPTO_LIBS = ["kelpto-core", "kelpto-md", "kelpto-html", "kelpto"]
 # The site's published address, which links to it (as the README's to
 # the playground) are made relative to.
 SITE_URL = "https://temperlang.github.io/tempest/"
-# Where links to the repository's files outside the site go, at a commit.
-REPO_URL = "https://github.com/temperlang/tempest"
-# The header's sections: docs/ folders and their names.
-SECTIONS = [
-    ("guide", "Guide"),
-    ("language", "Language"),
-    ("std", "Std"),
-    ("tools", "Tools"),
-    ("backends", "Backends"),
-    ("contributing", "Contributing"),
-    ("internals", "Internals"),
-    ("release-notes", "Release notes"),
-]
+# Links to the repository's files outside the site go to REPO_URL, at a
+# commit; the header's sections are SECTIONS (both from site/shared).
 # Files at the top of the repository published as text, for the license links.
 TEXT_FILES = ["COPYRIGHT", "NOTICE", "LICENSE-APACHE", "LICENSE-MIT", "LICENSE-CC-BY-SA-4.0"]
 ALERTS = {"NOTE": "Note", "TIP": "Tip", "IMPORTANT": "Important", "WARNING": "Warning", "CAUTION": "Caution"}
@@ -369,17 +365,6 @@ def out_path(src: str) -> str:
     return src[: -len(".md")] + ".html"
 
 
-def relative(target: str, page_out: str) -> str:
-    """A link from `page_out` to `target`, both relative to the site's root;
-    index pages as their folder."""
-    rel = posixpath.relpath(target, posixpath.dirname(page_out) or ".")
-    if rel == "index.html":
-        return "./"
-    if rel.endswith("/index.html"):
-        return rel[: -len("index.html")]
-    return rel
-
-
 def text_of(fragment: str) -> str:
     return html.unescape(re.sub(r"<[^>]+>", "", fragment)).strip()
 
@@ -597,6 +582,19 @@ class Site:
         return self.CODE_BLOCK.sub(block, body)
 
     @staticmethod
+    def logos(body: str) -> str:
+        """The Temper logo, inline, so it follows the theme the reader
+        picks, not only the system's."""
+
+        def inline(m: re.Match) -> str:
+            alt = re.search(r'\balt="([^"]*)"', m.group(0))
+            width = re.search(r'\bwidth="(\d+)"', m.group(0))
+            label = html.unescape(alt.group(1)) if alt else "Temper"
+            return shared.logo(label, width.group(1) if width else None)
+
+        return re.sub(r'<img\b[^>]*\bsrc="[^"]*temper-logo-text-auto\.svg"[^>]*>', inline, body)
+
+    @staticmethod
     def alerts(body: str) -> str:
         """GitHub's alerts: a block quote starting `[!NOTE]` and the like."""
         marker = re.compile(r"<blockquote>\s*<p>\[!(" + "|".join(ALERTS) + r")\]\s*")
@@ -683,25 +681,12 @@ class Site:
             )
         return f'<nav class="side" aria-label="{label}"><p class="side-title">{label}</p><ul>{"".join(items)}</ul></nav>'
 
-    def header(self, src: str, page: str) -> str:
-        section = self.section_of(src)
-        links = []
-        for s, name in SECTIONS:
-            current = ' aria-current="true"' if s == section else ""
-            links.append(f'<a href="{relative(f"docs/{s}/index.html", page)}"{current}>{name}</a>')
-        links.append(f'<a class="play" href="{relative("playground/index.html", page)}">Playground</a>')
-        logo = relative("docs/images/temper-logo-text-auto.svg", page)
-        return (
-            f'<header class="top"><a class="brand" href="{relative("index.html", page)}">'
-            f'<img src="{logo}" alt="Temper" width="106" height="30"></a>'
-            f'<nav class="sections" aria-label="Sections">{"".join(links)}</nav></header>'
-        )
-
     def page(self, src: str, body: str) -> str:
         page = out_path(src)
         title = "Temper" if src == "README.md" else f"{self.titles.get(src, src)} · Temper"
         css = relative("assets/site.css", page)
-        licenses = relative("COPYRIGHT.txt", page)
+        js = relative("assets/header.js", page)
+        kelpto = 'Rendered by <a href="https://github.com/temperlang/kelpto">Kelpto</a>'
         return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -710,20 +695,18 @@ class Site:
 <meta name="color-scheme" content="light dark">
 <title>{html.escape(title)}</title>
 <link rel="stylesheet" href="{css}">
+<script src="{js}"></script>
 </head>
 <body>
 <a class="skip" href="#content">Skip to the content</a>
-{self.header(src, page)}
+{shared.header(page, self.section_of(src))}
 <div class="layout">
 <main id="content" class="doc">
 {body}
 </main>
 {self.sidebar(src, page)}
 </div>
-<footer class="foot">
-<p>Documentation <a href="{licenses}">CC BY-SA 4.0</a>; code Apache 2.0 or MIT.
-Rendered by <a href="https://github.com/temperlang/kelpto">Kelpto</a>, a Temper library, built for Python by tempest.</p>
-</footer>
+{shared.footer(page, self.repo.commit, (kelpto,))}
 </body>
 </html>
 """
@@ -746,6 +729,7 @@ Rendered by <a href="https://github.com/temperlang/kelpto">Kelpto</a>, a Temper 
             body = self.alerts(body)
             body = self.heading_ids(body, src)
             body = self.rewrite_links(body, src, page)
+            body = self.logos(body)
             body = re.sub(r"<table>", '<div class="table-wrap"><table>', body).replace("</table>", "</table></div>")
             bodies[src] = body
         if self.out.exists():
@@ -765,7 +749,8 @@ Rendered by <a href="https://github.com/temperlang/kelpto">Kelpto</a>, a Temper 
         for name in TEXT_FILES:
             shutil.copyfile(ROOT / name, self.out / f"{name}.txt")
         (self.out / "assets").mkdir(exist_ok=True)
-        shutil.copyfile(HERE / "style.css", self.out / "assets" / "site.css")
+        (self.out / "assets" / "site.css").write_text((HERE / "style.css").read_text() + "\n" + shared.CSS.read_text())
+        shutil.copyfile(shared.JS, self.out / "assets" / "header.js")
         return len(bodies)
 
 
@@ -810,9 +795,12 @@ def check_removals(removed: list[str], allowed_text: str) -> list[str]:
 
 def check(out: Path) -> tuple[list[str], int, list[str]]:
     """Every relative href and src in the site leads to a file, and every
-    fragment to an id in it. Gives the problems, the links checked, and
+    fragment to an id in it, on the docs pages and the playground's page
+    (its header and About). Gives the problems, the links checked, and
     what wasn't checked (the playground, when it isn't built)."""
     pages = {p: p.read_text() for p in out.rglob("*.html") if "playground" not in p.relative_to(out).parts[:1]}
+    if (play := out / "playground" / "index.html").is_file():
+        pages[play] = play.read_text()
     ids = {p: set(re.findall(r'\bid="([^"]+)"', t)) for p, t in pages.items()}
     problems, skipped, count = [], [], 0
     for page, text in pages.items():
@@ -823,6 +811,7 @@ def check(out: Path) -> tuple[list[str], int, list[str]]:
                 continue
             count += 1
             path, _, fragment = href.partition("#")
+            path = path.partition("?")[0]  # the playground's cache busting
             target = (page.parent / unquote(path)).resolve() if path else page
             if target.is_dir():
                 target = target / "index.html"

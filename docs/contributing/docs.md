@@ -144,8 +144,8 @@ nothing but Python's standard library, parses each page as GitHub
 Flavored Markdown with raw HTML and renders it with Kelpto's
 `renderSafe`. Then it adds what Kelpto leaves to us: GitHub's heading
 anchors and alerts, Temper highlighting with the VS Code extension's
-grammar, a header and a sidebar from each folder's `README.md`, and
-links rewritten for the site (`.md` to `.html`, and `README.md` to
+grammar, a sidebar from each folder's `README.md`, the site's header
+and footer, and links rewritten for the site (`.md` to `.html`, and `README.md` to
 `index.html`). Links to the repository's files outside docs/ go to
 GitHub, pinned to the commit the site is built from (HEAD, or
 `$GITHUB_SHA` in Actions, or `--commit REV`), with `blob/` for files and
@@ -163,9 +163,21 @@ folder at that commit, a heading in it, and lines within it, by git's
 own objects, not the network; it fails if one doesn't. Links into the
 playground are only listed when it isn't built.
 
+The header is one source for the docs and the playground:
+site/shared's [`header.py`](../../site/shared/header.py) makes it (the
+logo, which links home, the sections, Playground, and the theme
+toggle), with the docs' footer and the playground's About (the
+licenses, the repository, and the commit built), styled by
+`header.css` and run by `header.js`. The theme is the system's until
+the toggle picks light or dark, kept in `localStorage` as
+`temper-theme`, so the choice carries between the docs and the
+playground. Narrower than 860 px, the sections fold behind a Menu
+button. The playground's smoke test checks that a docs page's header
+matches its own and that the theme carries.
+
 Mermaid diagrams are drawn at build time, into inline SVG, so readers
 get them at once, with no script: each twice, in the site's light and
-dark colors, shown by `prefers-color-scheme`, with its source in a
+dark colors, shown by the theme, with its source in a
 "Diagram source" box below. site/docs/mermaid's
 [`render.mjs`](../../site/docs/mermaid/render.mjs) runs mermaid in one
 headless Chromium page, through playwright-core, with every request

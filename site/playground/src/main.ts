@@ -106,38 +106,7 @@ const $ = <T extends HTMLElement>(selector: string): T => {
   return element;
 };
 
-// Theme: the system's, unless the toggle picks one.
-
-const THEMES = ["system", "light", "dark"] as const;
-type Theme = (typeof THEMES)[number];
-const themeButton = $<HTMLButtonElement>("#theme");
-
-function storedTheme(): Theme {
-  try {
-    const theme = localStorage.getItem("theme");
-    return THEMES.find((t) => t === theme) ?? "system";
-  } catch {
-    return "system";
-  }
-}
-
-function applyTheme(theme: Theme): void {
-  if (theme === "system") delete document.documentElement.dataset.theme;
-  else document.documentElement.dataset.theme = theme;
-  themeButton.textContent = { system: "Theme: system", light: "Theme: light", dark: "Theme: dark" }[theme];
-  try {
-    localStorage.setItem("theme", theme);
-  } catch {
-    // Private windows may refuse; the theme still applies.
-  }
-}
-
-let theme = storedTheme();
-applyTheme(theme);
-themeButton.addEventListener("click", () => {
-  theme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length] ?? "system";
-  applyTheme(theme);
-});
+// The theme is the header's (site/shared/header.js), for the docs too.
 
 // Highlighting and editor looks, from CSS variables, so one theme
 // serves light and dark.
@@ -1009,10 +978,6 @@ function debounce(f: () => void, ms: number): () => void {
   };
 }
 
-function size(bytes: number): string {
-  return bytes >= 1 << 20 ? `${(bytes / (1 << 20)).toFixed(1)} MiB` : `${Math.round(bytes / 1024)} KiB`;
-}
-
 // Views: the editor and its tabs, or the REPL, which starts when first
 // shown.
 
@@ -1051,8 +1016,6 @@ views.editor.parentElement?.addEventListener("keydown", (event) => {
 // Start: the source from the link or the first example, then the wasm.
 
 async function start(): Promise<void> {
-  $("#wasm-size").textContent = `wasm ${size(BUILD.wasmBytes)} (${size(BUILD.wasmGzipBytes)} gzipped)`;
-  $("#commit").textContent = BUILD.commit ? `tempest ${BUILD.commit.slice(0, 7)}` : "tempest";
   const linked = await decode(location.hash);
   const first = examples[0];
   setSource(linked ?? first?.source ?? "");

@@ -559,7 +559,7 @@ only settled and ran. The backends are most of it: on 2026-11-03, the
 seven came to about 1.8 MiB and what only they use (much of tmpl) to
 about 0.5 MiB, against 1.25 MiB for the wasm without them
 (`backend-NAME-wasm`, `backends-shared-wasm`, `wasm-small-no-backends`).
-The page prints the size it loaded in its footer.
+The page's About, in the site's header, gives the wasm's size.
 
 ## Watch (planned)
 
@@ -632,8 +632,13 @@ with `--limit` on builds.
   function typed over several lines with Enter, a log seen while its
   input still runs, an input that runs out of steps and then keeps
   going, Stop during a run with the session restored and its numbering
-  kept, and `translate`. Console errors and failed requests fail it.
-  CI runs it after the docs' Chromium is installed.
+  kept, and `translate`. Then the site's header: its sections, with
+  Playground current; About from the keyboard; the theme toggle kept
+  across a reload; and at 390 px, the sections behind Menu with the
+  page's controls in view. With `--site`, the docs build around it,
+  a docs page's header must match, and the theme carry both ways.
+  Console errors and failed requests fail it. CI runs it after the
+  docs' Chromium is installed, with the docs site it built.
 
 Not covered: worker replacement, query waiting, and the other editor
 features (completion, rename, go to definition) are tested in the

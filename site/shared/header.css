@@ -1,0 +1,191 @@
+/* The site's header, shared by the docs and the playground (header.py
+   makes it): the logo, the sections, and the theme toggle, with its own
+   colors so it looks the same on both. The theme is the system's, unless
+   the toggle sets data-theme on <html> (header.js). */
+
+:root {
+  --top-bg: #ffffff;
+  --top-fg: #1d2433;
+  --top-muted: #5b6475;
+  --top-line: #dfe3ea;
+  --top-hover: #eef0f4;
+  --top-accent: #b85e5e;
+  --top-link: #2f5aa8;
+  --logo-ink: #2b3a55;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --top-bg: #14171f;
+    --top-fg: #e2e6ee;
+    --top-muted: #9aa3b5;
+    --top-line: #2c3240;
+    --top-hover: #232836;
+    --top-accent: #e8a1a1;
+    --top-link: #8db4ff;
+    --logo-ink: #ffffff;
+  }
+}
+
+:root[data-theme="dark"] {
+  --top-bg: #14171f;
+  --top-fg: #e2e6ee;
+  --top-muted: #9aa3b5;
+  --top-line: #2c3240;
+  --top-hover: #232836;
+  --top-accent: #e8a1a1;
+  --top-link: #8db4ff;
+  --logo-ink: #ffffff;
+}
+
+/* The logo, here and in pages: the petals' colors are the same in both
+   themes, the wordmark's ink isn't. */
+.logo { display: block; height: auto; max-width: 100%; }
+.logo-1 { fill: #e8c4c4; }
+.logo-2 { fill: #fff; }
+.logo-3 { fill: #ce7777; }
+.logo-4 { fill: var(--logo-ink); }
+.logo-5 { opacity: 0.5; }
+
+.top {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  min-height: 51px;
+  padding: 8px 24px;
+  background: var(--top-bg);
+  color: var(--top-fg);
+  border-bottom: 1px solid var(--top-line);
+  font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+/* The playground's: shorter, to leave the editor the height. */
+.top.compact { gap: 16px; min-height: 41px; padding: 4px 16px; }
+
+.top :focus-visible { outline: 2px solid var(--top-link); outline-offset: 2px; }
+
+.top .brand { display: flex; flex: none; border-radius: 4px; }
+.top .brand .logo { width: auto; height: 30px; }
+.top.compact .brand .logo { height: 24px; }
+
+.top .sections {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.top .sections::-webkit-scrollbar { display: none; }
+
+.top .sections a {
+  flex: none;
+  padding: 4px 10px;
+  border-radius: 6px;
+  color: var(--top-fg);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.top .sections a:hover { background: var(--top-hover); }
+.top .sections a[aria-current] { background: var(--top-hover); color: var(--top-accent); font-weight: 600; }
+.top .sections a.play { color: var(--top-accent); font-weight: 600; }
+
+.top-tools { display: flex; flex: none; align-items: center; gap: 6px; margin-left: auto; }
+
+.top .top-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--top-line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--top-fg);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.top.compact .top-button { height: 28px; }
+.top .top-button:hover, .about .top-button:hover { background: var(--top-hover); border-color: var(--top-muted); }
+
+.theme-toggle.top-button { width: 30px; padding: 0; }
+.top.compact .theme-toggle.top-button { width: 28px; }
+.theme-toggle .icon {
+  display: none;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.theme-toggle .icon .fill { fill: currentColor; stroke: none; }
+.theme-toggle[data-theme="system"] .icon-system,
+.theme-toggle[data-theme="light"] .icon-light,
+.theme-toggle[data-theme="dark"] .icon-dark { display: block; }
+
+.menu-button.top-button { display: none; }
+
+/* About: the playground's, a popover below the header. */
+.about {
+  position: fixed;
+  inset: 48px 12px auto auto;
+  width: min(23rem, calc(100vw - 24px));
+  margin: 0;
+  padding: 10px 16px 12px;
+  border: 1px solid var(--top-line);
+  border-radius: 8px;
+  background: var(--top-bg);
+  color: var(--top-fg);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.2);
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+.about :focus-visible { outline: 2px solid var(--top-link); outline-offset: 2px; }
+.about-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.about h2 { margin: 0; font-size: 15px; }
+.about .top-button {
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--top-line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--top-fg);
+  font: inherit;
+  cursor: pointer;
+}
+.about ul { margin: 8px 0 0; padding-left: 1.1em; }
+.about li + li { margin-top: 4px; }
+.about a { color: var(--top-link); }
+.about code { font-size: 0.95em; }
+
+/* Phones and narrow windows: the sections behind a Menu button (with a
+   script; without one, they wrap below the logo). */
+@media (max-width: 860px) {
+  .top { position: relative; flex-wrap: wrap; gap: 8px 10px; padding: 8px 16px; min-height: 0; }
+  .top.compact { padding: 4px 16px; }
+  .top .brand .logo { height: 26px; }
+  .top.compact .brand .logo { height: 24px; }
+  html:not(.js) .top .sections { order: 3; flex-basis: 100%; flex-wrap: wrap; gap: 2px; overflow: visible; margin-left: -8px; }
+  html:not(.js) .top .sections a { padding: 2px 8px; font-size: 14px; }
+  .js .menu-button.top-button { display: inline-flex; margin-left: auto; }
+  .js .top-tools { margin-left: 0; }
+  .js .top .sections {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    gap: 0;
+    padding: 6px 8px 10px;
+    background: var(--top-bg);
+    border-bottom: 1px solid var(--top-line);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.12);
+  }
+  .js .top.open .sections { display: flex; }
+  .js .top .sections a { padding: 9px 12px; font-size: 16px; }
+  .menu-button[aria-expanded="true"] { background: var(--top-hover); }
+}

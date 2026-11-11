@@ -14,8 +14,11 @@ linked from there), type-checks the TypeScript with `tsc`, bundles and
 minifies it with esbuild, and prints each file's size. CI runs it with
 `--skip-wasm` after its wasm build; the Pages workflow publishes it,
 with the docs site around it ([site/docs](../docs/build.py)), at
-`playground/` under it, so the top bar's Temper logo links to the site's
-home (`../`); served alone, that link just leads back to the playground.
+`playground/` under it. The page's header is the docs site's
+([site/shared](../shared/header.py): the logo, the sections, About,
+and the theme toggle), so its links lead into the docs (`../`); served
+alone, they don't. Below it, the playground's own bar: Editor or REPL,
+the example, Share, and the compile's status.
 
 ## How it fits together
 
@@ -55,8 +58,8 @@ home (`../`); served alone, that link just leads back to the playground.
   modes.
 - **Examples** are `examples/*.temper`, bundled as text; each starts
   with a `// Title` comment. `7-triple.temper` is the running example of
-  [the architecture docs](../../docs/internals/README.md), which the footer's "How
-  it works" links to on the docs site, beside the playground.
+  [the architecture docs](../../docs/internals/README.md), which About's
+  "How the playground works" leads to, on the docs site.
 
 ## IDE features
 
@@ -95,10 +98,13 @@ The worker keeps the source it last settled, and the wasm's `hover`,
   backend's tab, has no errors, and runs, with both runs agreeing; then
   a hover, a permalink across a reload, and the Temper link; then the
   REPL tab: a sum, a function over several lines, a streamed log, Stop
-  with the session restored, "Keep going", and `translate`. Console
-  errors and failed requests fail it. It takes 20 to 30 s.
+  with the session restored, "Keep going", and `translate`; then the
+  shared header, About, the theme toggle, and a phone's menu. With
+  `--site SITE` (the docs build), a docs page's header must match and
+  the theme carry. Console errors and failed requests fail it. It takes
+  20 to 30 s.
 
-      node site/playground/smoke.mjs [DIR] [--chromium PATH]
+      node site/playground/smoke.mjs [DIR] [--site SITE] [--chromium PATH]
 
   or `build.py --smoke`. Chromium is `--chromium`, else
   `$TEMPEST_CHROMIUM`, else Playwright's (`npx playwright-core install

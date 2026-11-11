@@ -402,7 +402,8 @@ jobs:
         run: |
           npm ci --ignore-scripts --no-audit --no-fund
           npx --no-install playwright-core install --only-shell chromium
-      - name: Docs site
+      - id: docs
+        name: Docs site
         if: ${{ !cancelled() && steps.small.outcome == 'success' && steps.renderer.outcome == 'success' }}
         run: uv run site/docs/build.py --kelpto .kelpto --tempest target/small/tempest --out "$RUNNER_TEMP/site"
       - id: wasm
@@ -418,7 +419,11 @@ jobs:
       # The playground in headless Chromium (site/playground/smoke.mjs):
       # each example compiles, fills every backend's tab without errors,
       # and runs, and a hover, a permalink, and the Temper link work; then
-      # the REPL tab runs inputs, streams logs, stops, and keeps going.
+      # the REPL tab runs inputs, streams logs, stops, and keeps going;
+      # then the shared header, About, the theme, and a phone's menu. With
+      # the docs site built, its header must match, and the theme carry.
       - name: Playground smoke test
         if: ${{ !cancelled() && steps.playground.outcome == 'success' && steps.renderer.outcome == 'success' }}
-        run: node site/playground/smoke.mjs
+        env:
+          SITE: ${{ steps.docs.outcome == 'success' && format('{0}/site', runner.temp) || '' }}
+        run: node site/playground/smoke.mjs ${SITE:+--site "$SITE"}

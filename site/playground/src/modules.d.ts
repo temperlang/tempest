@@ -12,12 +12,5 @@ declare module "@temperlang/core" {
   export = exports;
 }
 
-/** Facts about the build, from build.py. */
-declare const BUILD: {
-  commit: string;
-  wasmBytes: number;
-  wasmGzipBytes: number;
-};
-
 /** A hash of the build, for `?v=` on the URLs it loads, from build.py. */
 declare const BUILD_VERSION: string;

@@ -1,10 +1,11 @@
 // A smoke test of the built playground in headless Chromium, driven by
 // site/docs/mermaid's playwright-core (no packages of its own):
 //
-//   node site/playground/smoke.mjs [DIR] [--chromium PATH]
+//   node site/playground/smoke.mjs [DIR] [--site SITE] [--chromium PATH]
 //
 // DIR is the build (default site/_out/playground), served by a tiny
-// static server at /site/playground/, as Pages nests it. For each
+// static server at /site/playground/, as Pages nests it; SITE, the docs
+// site's build (site/docs/build.py's --out), served around it at /site/. For each
 // example: pick it, wait for its compile, check every backend's tab has
 // code and no error, that there are no error diagnostics, and that Run
 // shows output, with the interpreter's and the JavaScript's runs
@@ -15,6 +16,12 @@
 // its input runs, Stop with the session restored (and the numbering
 // kept), an input that runs out of steps and then keeps going, and
 // `translate`.
+// Then the site's header (site/shared): its sections, with Playground
+// current; About, opened and closed from the keyboard; the theme toggle,
+// kept across a reload; and at 390 px, the sections behind Menu, with
+// the playground's controls in view and no sideways scrolling. With
+// SITE, a docs page's header is the same, and a theme picked there
+// carries to the playground and back.
 // Throughout, no console errors, page errors, or failed requests.
 // Chromium is PATH, else $TEMPEST_CHROMIUM, else Playwright's own
 // (`npx playwright-core install --only-shell chromium` in
@@ -36,13 +43,16 @@ const TIMEOUT = 60_000;
 const args = process.argv.slice(2);
 const at = args.indexOf("--chromium");
 const executablePath = (at >= 0 ? args.splice(at, 2)[1] : null) || process.env.TEMPEST_CHROMIUM || undefined;
+const siteAt = args.indexOf("--site");
+const site = siteAt >= 0 ? resolve(args.splice(siteAt, 2)[1]) : null;
 if (args.length > 1) {
-  console.error("usage: node smoke.mjs [DIR] [--chromium PATH]");
+  console.error("usage: node smoke.mjs [DIR] [--site SITE] [--chromium PATH]");
   process.exit(2);
 }
 const dir = resolve(args[0] ?? fileURLToPath(new URL("../_out/playground", import.meta.url)));
 
-// The build, at /site/playground/; anything else is a 404.
+// The build, at /site/playground/, and SITE around it at /site/;
+// anything else is a 404.
 const TYPES = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
@@ -52,12 +62,15 @@ const TYPES = {
   ".map": "application/json",
 };
 const PREFIX = "/site/playground/";
+const SITE_PREFIX = "/site/";
 const server = createServer(async (request, response) => {
   const path = decodeURIComponent(new URL(request.url ?? "/", "http://x").pathname);
-  const rel = path.startsWith(PREFIX) ? normalize(path.slice(PREFIX.length) || "index.html") : null;
+  const [root, prefix] = path.startsWith(PREFIX) ? [dir, PREFIX] : site && path.startsWith(SITE_PREFIX) ? [site, SITE_PREFIX] : [null, ""];
+  let rel = root ? normalize(path.slice(prefix.length)) : null;
+  if (rel !== null && (path.endsWith("/") || rel === ".")) rel = join(rel, "index.html");
   try {
     if (rel === null || rel.startsWith("..")) throw new Error("outside");
-    const body = await readFile(join(dir, rel));
+    const body = await readFile(join(root, rel));
     response.writeHead(200, { "content-type": TYPES[extname(rel)] ?? "application/octet-stream" });
     response.end(body);
   } catch {
@@ -289,8 +302,8 @@ try {
     return [...expect("translation", text, /def _?sq\b/), ...expect("result", await lastResult(), /: void$/)];
   });
 
-  // The Temper link: to the site, one level up, with the logo.
-  const link = await page.$eval("header .brand a", (a) => ({
+  // The Temper link: the header's logo, to the site, one level up.
+  const link = await page.$eval("header.top a.brand", (a) => ({
     href: a.getAttribute("href"),
     resolved: a.href,
     logo: a.querySelector("svg.logo")?.getAttribute("aria-label") ?? null,
@@ -299,6 +312,107 @@ try {
   if (link.href !== "../" || link.resolved !== `${origin}/site/`) linkProblems.push(`href ${link.href} (${link.resolved})`);
   if (link.logo !== "Temper") linkProblems.push("no Temper logo");
   step("Temper link", linkProblems);
+
+  // The site's header, shared with the docs pages (site/shared).
+  const SECTIONS = ["Guide", "Language", "Std", "Tools", "Backends", "Contributing", "Internals", "Release notes", "Playground"];
+  const KEY = "temper-theme";
+  const headerProblems = [];
+  const nav = await page.$$eval("header.top nav a", (as) => as.map((a) => [a.textContent, a.getAttribute("aria-current")]));
+  if (nav.map(([t]) => t).join() !== SECTIONS.join()) headerProblems.push(`sections ${JSON.stringify(nav.map(([t]) => t))}`);
+  const current = nav.filter(([, c]) => c).map(([t, c]) => `${t}=${c}`);
+  if (current.join() !== "Playground=page") headerProblems.push(`current ${JSON.stringify(current)}`);
+  if (await page.$("header.top .brand + .menu-button + nav#sections + .top-tools > .theme-toggle") === null) headerProblems.push("not logo, Menu, sections, then tools");
+  if (await page.$("footer")) headerProblems.push("a footer");
+  step("shared header", [...headerProblems, ...quiet()]);
+
+  // About: from the keyboard, Enter opens it and Escape closes it.
+  const aboutProblems = [];
+  await page.focus("header.top button[popovertarget=about]");
+  await page.keyboard.press("Enter");
+  const about = await page.$eval("#about", (a) => (a.matches(":popover-open") ? a.textContent ?? "" : null));
+  if (about === null) aboutProblems.push("Enter didn't open it");
+  else for (const want of ["Apache-2.0 OR MIT", "on GitHub", "Built from", "MiB of wasm"]) if (!about.includes(want)) aboutProblems.push(`no ${JSON.stringify(want)}`);
+  await page.keyboard.press("Escape");
+  if (await page.$eval("#about", (a) => a.matches(":popover-open"))) aboutProblems.push("Escape didn't close it");
+  step("About", [...aboutProblems, ...quiet()]);
+
+  // The theme: the system's at first; the toggle cycles light, dark,
+  // and system, kept under KEY across a reload.
+  const themeOf = () => page.evaluate((key) => [document.documentElement.dataset.theme ?? "system", localStorage.getItem(key)], KEY);
+  const themeProblems = [];
+  const startTheme = await themeOf();
+  if (startTheme.join() !== "system,") themeProblems.push(`started as ${JSON.stringify(startTheme)}`);
+  await page.click("header.top .theme-toggle");
+  const light = await themeOf();
+  if (light.join() !== "light,light") themeProblems.push(`after a click ${JSON.stringify(light)}`);
+  await page.click("header.top .theme-toggle");
+  await compiled(() => page.reload());
+  const kept = await themeOf();
+  const label = await page.$eval("header.top .theme-toggle", (b) => b.getAttribute("aria-label"));
+  if (kept.join() !== "dark,dark" || label !== "Theme: dark") themeProblems.push(`after a reload ${JSON.stringify([...kept, label])}`);
+  const bg = await page.$eval("header.top", (h) => getComputedStyle(h).backgroundColor);
+  if (bg !== "rgb(20, 23, 31)") themeProblems.push(`the header's background in dark is ${bg}`);
+  await page.click("header.top .theme-toggle");
+  const back = await themeOf();
+  if (back.join() !== "system,") themeProblems.push(`back to the system's: ${JSON.stringify(back)}`);
+  step("theme toggle", [...themeProblems, ...quiet()]);
+
+  // A phone: the sections behind Menu, the controls still in view.
+  await page.setViewportSize({ width: 390, height: 844 });
+  const phoneProblems = [];
+  const visible = (selector) => page.$eval(selector, (e) => {
+    const r = e.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && r.left >= 0 && r.right <= innerWidth && getComputedStyle(e).visibility !== "hidden";
+  });
+  if (await visible("nav#sections")) phoneProblems.push("the sections show before Menu");
+  await page.click("header.top .menu-button");
+  if (!(await visible("nav#sections a.play"))) phoneProblems.push("Menu didn't show the sections");
+  await page.keyboard.press("Escape");
+  if (await visible("nav#sections")) phoneProblems.push("Escape didn't close the menu");
+  for (const control of ["#view-editor", "#view-repl", "#example", "#share", "header.top .theme-toggle", "header.top button[popovertarget=about]"]) {
+    if (!(await visible(control))) phoneProblems.push(`${control} out of view`);
+  }
+  const wide = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  if (wide > 0) phoneProblems.push(`${wide} px of sideways scrolling`);
+  step("phone header", [...phoneProblems, ...quiet()]);
+  await page.setViewportSize({ width: 1280, height: 800 });
+
+  // With the docs site: the same header there, and the theme carries.
+  if (site) {
+    const siteProblems = [];
+    /** The header, its links resolved, without what differs by page. */
+    const shared = () => page.$eval("header.top", (h) => {
+      const copy = h.cloneNode(true);
+      copy.classList.remove("compact");
+      for (const a of copy.querySelectorAll("a[href]")) a.setAttribute("href", new URL(a.getAttribute("href"), location.href).href);
+      for (const e of copy.querySelectorAll("[aria-current]")) e.removeAttribute("aria-current");
+      copy.querySelector("[popovertarget=about]")?.remove();
+      return copy.outerHTML;
+    });
+    const playHeader = await shared();
+    await page.goto(`${origin}${SITE_PREFIX}docs/guide/`);
+    const docsHeader = await shared();
+    if (docsHeader !== playHeader) siteProblems.push("the docs' header differs from the playground's");
+    const docsCurrent = await page.$$eval("header.top nav a[aria-current]", (as) => as.map((a) => a.textContent));
+    if (docsCurrent.join() !== "Guide") siteProblems.push(`the docs' current section ${JSON.stringify(docsCurrent)}`);
+    if (!(await page.$("footer.foot"))) siteProblems.push("no footer on the docs page");
+    await page.click("header.top .theme-toggle");
+    await page.click("header.top .theme-toggle");
+    const docsTheme = await themeOf();
+    await compiled(() => page.click("header.top nav a.play"));
+    const playTheme = await themeOf();
+    if (docsTheme.join() !== "dark,dark" || playTheme.join() !== "dark,dark") {
+      siteProblems.push(`dark on the docs (${docsTheme}) isn't on the playground (${playTheme})`);
+    }
+    await page.click("header.top .theme-toggle");
+    await page.click("header.top .brand");
+    await page.waitForLoadState();
+    const homeTheme = await themeOf();
+    if (homeTheme.join() !== "system,") siteProblems.push(`the system's on the playground isn't on the docs' home (${homeTheme})`);
+    step("docs site: same header, theme carries", [...siteProblems, ...quiet()]);
+  } else {
+    console.log("skip docs site: same header, theme carries (no --site)");
+  }
 } catch (e) {
   step("unexpected", [String(e.message ?? e).split("\n")[0]]);
 } finally {

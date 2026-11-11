@@ -15,11 +15,14 @@
 4. Bundles and minifies it with esbuild, with the examples as text and
    the JavaScript backend's runtime from vendor/temper/be-js, and writes
    the bundled packages' licenses beside it.
-5. Copies in index.html, with the Temper logo inlined (from
-   docs/images/, its colors from main.css, so the theme toggle reaches
-   it), and the wasm, and prints each file's size, raw and gzipped.
-6. Busts caches: every URL the page loads (main.js and main.css from
-   index.html; the workers and the wasm from main.js) gets `?v=HASH`, a
+5. Copies in index.html, with the site's header and the About popover
+   (site/shared/header.py, as on the docs pages, with the playground
+   marked current), site/shared/header.js (the theme and the phone
+   menu), and the wasm, and prints each file's size, raw and gzipped.
+   main.css imports site/shared/header.css, so esbuild bundles it.
+6. Busts caches: every URL the page loads (main.js, main.css, and
+   header.js from index.html; the workers and the wasm from main.js)
+   gets `?v=HASH`, a
    hash of the built files, so a normal reload picks up a new build. The
    bundles import nothing else, so no other URLs need it.
 
@@ -36,7 +39,6 @@ import gzip
 import hashlib
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -44,9 +46,12 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(HERE.parent / "shared"))
+import header as shared  # noqa: E402  (site/shared/header.py: the site's header and About)
+
 WASM = ROOT / "target/wasm32-unknown-unknown/small-wasm/temper_wasm.wasm"
 CORE = ROOT / "vendor/temper/be-js/temper-core/index.js"
-LOGO = ROOT / "docs/images/temper-logo-text-auto.svg"
 MERMAID = ROOT / "site/docs/mermaid"
 ENTRIES = ["src/main.ts", "src/compiler-worker.ts", "src/repl-worker.ts", "src/js-worker.ts", "src/main.css"]
 
@@ -113,20 +118,6 @@ def licenses(meta: dict, modules: Path, out: Path) -> None:
     (out / "THIRD-PARTY-NOTICES.txt").write_text("\n".join(notes))
 
 
-def logo() -> str:
-    """The docs site's logo, inline, without Inkscape's metadata and ids,
-    its classes renamed `logo-N` for main.css to color."""
-    svg = LOGO.read_text()
-    body = svg[svg.index("<g", svg.index("</defs>")) : svg.rindex("</svg>")]
-    body = re.sub(r'\s+id="[^"]*"', "", body)
-    body = re.sub(r'class="cls-(\d+)"', r'class="logo-\1"', body)
-    body = re.sub(r"\s+", " ", body).replace(" />", "/>").replace("> <", "><").strip()
-    view = re.search(r'viewBox="([^"]+)"', svg)
-    if not view:
-        raise SystemExit(f"build.py: no viewBox in {LOGO}")
-    return f'<svg class="logo" viewBox="{view.group(1)}" role="img" aria-label="Temper">{body}</svg>'
-
-
 VERSION_SLOT = "@@BUILD_VERSION@@"
 
 
@@ -143,10 +134,15 @@ def bust_caches(out: Path) -> str:
         if name == "index.html":
             text = text.replace('"main.css"', f'"main.css?v={VERSION_SLOT}"')
             text = text.replace('"main.js"', f'"main.js?v={VERSION_SLOT}"')
+            text = text.replace('"header.js"', f'"header.js?v={VERSION_SLOT}"')
         if VERSION_SLOT not in text:
             raise SystemExit(f"build.py: no {VERSION_SLOT} in {name}")
         path.write_text(text.replace(VERSION_SLOT, version))
     return version
+
+
+def mib(n: int) -> str:
+    return f"{n / 1024 / 1024:.1f} MiB"
 
 
 def sizes(out: Path) -> None:
@@ -183,19 +179,29 @@ def main() -> int:
         shutil.rmtree(out)
     out.mkdir(parents=True)
     wasm = WASM.read_bytes()
-    build = {"commit": commit(), "wasmBytes": len(wasm), "wasmGzipBytes": len(gzip.compress(wasm, 9))}
     meta = out.parent / "playground-meta.json"
     run(bin / "esbuild", *ENTRIES, "--bundle", "--minify", "--format=esm", "--target=es2022",
         "--sourcemap", "--legal-comments=none", "--log-override:duplicate-class-member=silent", "--loader:.temper=text",
-        f"--alias:@temperlang/core={CORE}", f"--define:BUILD={json.dumps(build)}",
+        f"--alias:@temperlang/core={CORE}",
         f"--define:BUILD_VERSION={json.dumps(VERSION_SLOT)}",
         f"--metafile={meta}", f"--outdir={out}", "--log-level=warning")
     licenses(json.loads(meta.read_text()), modules, out)
     meta.unlink()
     page = (HERE / "index.html").read_text()
-    if "@@LOGO@@" not in page:
-        raise SystemExit("build.py: no @@LOGO@@ in index.html")
-    (out / "index.html").write_text(page.replace("@@LOGO@@", logo()))
+    for slot in ["@@HEADER@@", "@@ABOUT@@"]:
+        if slot not in page:
+            raise SystemExit(f"build.py: no {slot} in index.html")
+    at = "playground/index.html"
+    wasm_size = f"The compiler: {mib(len(wasm))} of wasm, {mib(len(gzip.compress(wasm, 9)))} gzipped"
+    extra = (
+        wasm_size,
+        f'<a href="{shared.relative("docs/internals/08-playground.html", at)}">How the playground works</a>',
+        '<a href="THIRD-PARTY-NOTICES.txt">Bundled packages\' licenses</a>',
+    )
+    page = page.replace("@@HEADER@@", shared.header(at, shared.PLAYGROUND, about=True))
+    page = page.replace("@@ABOUT@@", shared.about(at, commit(), extra))
+    (out / "index.html").write_text(page)
+    shutil.copyfile(shared.JS, out / "header.js")
     shutil.copyfile(WASM, out / "temper_wasm.wasm")
     print(f"build version {bust_caches(out)}")
     sizes(out)
