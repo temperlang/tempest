@@ -180,6 +180,10 @@ runs:
     - name: Crates for generated Rust
       if: contains(inputs.backends, 'rust')
       shell: bash
+      # And the workspace's own crates: generated crates name ureq (std's
+      # `net`, an optional dependency), which offline builds still need
+      # in the cache, and which only builds with `net` would fetch.
       run: |
+        cargo fetch --locked
         cargo fetch --locked --manifest-path vendor/temper/be-rust/temper-core/Cargo.toml
         cargo fetch --locked --manifest-path compat/rust-std-deps/Cargo.toml
