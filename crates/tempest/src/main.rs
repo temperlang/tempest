@@ -192,12 +192,13 @@ struct Flags {
     prompt: Option<String>,
     color: Option<String>,
     no_history: bool,
+    no_workroot: bool,
     positional: Vec<String>,
 }
 
 /// Each option: its long name, its short one if any, and whether it
 /// takes a value.
-const OPTIONS: [(&str, Option<&str>, bool); 18] = [
+const OPTIONS: [(&str, Option<&str>, bool); 19] = [
     ("std", None, true),
     ("workroot", Some("w"), true),
     ("ignorefile", Some("ign"), true),
@@ -216,6 +217,7 @@ const OPTIONS: [(&str, Option<&str>, bool); 18] = [
     ("prompt", None, true),
     ("color", None, true),
     ("no-history", None, false),
+    ("no-workroot", None, false),
 ];
 
 /// Parses a command's arguments, allowing the options in `allowed` (by
@@ -285,6 +287,7 @@ fn parse(command: &str, args: &[String], allowed: &[&str], positional: usize) ->
             }
             "no-connected" => flags.no_connected = true,
             "no-history" => flags.no_history = true,
+            "no-workroot" => flags.no_workroot = true,
             "verbose" => flags.verbose = true,
             "logformat" => match LogFormat::named(&value) {
                 Some(format) => flags.log = format,

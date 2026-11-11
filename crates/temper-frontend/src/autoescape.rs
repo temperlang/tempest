@@ -1111,7 +1111,7 @@ impl<'a> Analysis<'a> {
         ];
         let after = self.ev.call(s, self.propagate_over.clone(), args).ok()?;
         self.drain(at);
-        let Val::List(effect_values) = self.ev.get(s, &after, self.names.effects).ok()? else {
+        let Val::List(ref effect_values) = self.ev.get(s, &after, self.names.effects).ok()? else {
             return None;
         };
         let mut effects = Vec::new();
@@ -1119,7 +1119,7 @@ impl<'a> Analysis<'a> {
             let class = ct::class_node(value)?;
             if class == self.append_effect {
                 match ct::field(s, value, self.names.text)? {
-                    Val::Str(text) => effects.push(Effect::Append(text.to_string())),
+                    Val::Str(ref text) => effects.push(Effect::Append(text.to_string())),
                     _ => return None,
                 }
             } else if class == self.event_effect {

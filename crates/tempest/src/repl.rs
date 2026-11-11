@@ -22,7 +22,9 @@ mod history;
 mod line;
 
 use crate::{Flags, NOT_YET_CODE, USAGE, parse, parse_fuel};
+use history::History;
 use rustyline::error::ReadlineError;
+use rustyline::history::MemHistory;
 use rustyline::{
     ColorMode, CompletionType, Config, Editor, EventHandler, KeyCode, KeyEvent, Modifiers,
 };
@@ -32,8 +34,13 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use temper_frontend::project::{CONFIG_FILE, find_libraries_ignoring, work_root};
-use temper_frontend::repl::{Chunker, ReplEvent, ReplOptions, ReplSession, ReplTools, Separator};
+use temper_frontend::repl::{
+    Chunker, ReplEvent, ReplOptions, ReplSession, ReplTools, Separator, escape_controls,
+};
 use temper_frontend::sources::Sources;
+
+/// The most history entries kept.
+const HISTORY_SIZE: usize = 1000;
 
 /// `tempest repl`.
 pub fn repl_command(args: &[String]) -> u8 {
@@ -49,6 +56,7 @@ pub fn repl_command(args: &[String]) -> u8 {
         "verbose",
         "color",
         "no-history",
+        "no-workroot",
     ];
     let flags = match parse("repl", args, &allowed, 0) {
         Ok(flags) => flags,
@@ -126,9 +134,17 @@ pub fn repl_command(args: &[String]) -> u8 {
         tools: Some(Rc::new(tools)),
         help_footer: help_footer(editing, history.as_deref()),
     };
+    // What an input logs is printed as is when piped or redirected, as
+    // `tempest run` prints it; on a terminal, escaped as the REPL's own
+    // output is, so a log can't rewrite the screen, set the clipboard,
+    // or hide text.
     let print = move |event: &ReplEvent| {
+        let text = match event {
+            ReplEvent::Log(line) if out_terminal => escape_controls(line),
+            _ => color::paint(event, colors),
+        };
         let mut out = io::stdout().lock();
-        let _ = writeln!(out, "{}", color::paint(event, colors));
+        let _ = writeln!(out, "{text}");
         let _ = out.flush();
     };
     let mut session = ReplSession::new(options, Box::new(print));
@@ -193,7 +209,7 @@ impl Editing {
     /// Reads inputs until Ctrl-D, feeding each.
     fn run(self, interrupt: &AtomicBool) -> rustyline::Result<()> {
         let config = Config::builder()
-            .max_history_size(1000)?
+            .max_history_size(HISTORY_SIZE)?
             .history_ignore_space(true)
             .auto_add_history(false)
             .completion_type(CompletionType::List)
@@ -202,7 +218,8 @@ impl Editing {
                 false => ColorMode::Disabled,
             })
             .build();
-        let mut editor: Editor<line::Line, _> = Editor::with_config(config)?;
+        let memory = MemHistory::with_config(&config);
+        let mut editor: Editor<line::Line, MemHistory> = Editor::with_history(config, memory)?;
         // Ctrl-C while an input runs is the interpreter's again, as
         // rustyline has taken SIGINT for itself.
         sigint::install();
@@ -218,26 +235,42 @@ impl Editing {
         };
         let enter = KeyEvent(KeyCode::Enter, Modifiers::NONE);
         editor.bind_sequence(enter, EventHandler::Conditional(Box::new(indent)));
-        let history = (self.history).filter(|path| match history::prepare(path) {
-            Ok(()) => true,
-            Err(why) => {
-                eprintln!("tempest repl: no history in {}: {why}", path.display());
-                false
-            }
+        // Read and written by tempest, through one checked descriptor;
+        // rustyline's is in memory only.
+        let opened = (self.history.as_deref()).map(|path| match History::open(path) {
+            Ok(history) => Ok(history),
+            Err(why) => Err(format!("no history in {}: {why}", path.display())),
         });
-        if let Some(path) = &history {
-            let _ = editor.load_history(path);
-        }
+        let mut history = match opened {
+            Some(Ok(mut history)) => match history.read(HISTORY_SIZE) {
+                Ok(entries) => {
+                    for entry in entries {
+                        let _ = editor.add_history_entry(entry);
+                    }
+                    Some(history)
+                }
+                Err(why) => {
+                    eprintln!("tempest repl: history not read: {why}");
+                    None
+                }
+            },
+            Some(Err(why)) => {
+                eprintln!("tempest repl: {why}");
+                None
+            }
+            None => None,
+        };
         loop {
             match editor.readline(self.prompt) {
                 Ok(buffer) => {
                     if buffer.trim().is_empty() {
                         continue;
                     }
-                    if let Some(path) = &history {
-                        let _ = editor.add_history_entry(buffer.as_str());
-                        if editor.append_history(path).is_ok() {
-                            let _ = history::owner_only(path);
+                    let added = editor.add_history_entry(buffer.as_str());
+                    if let (Some(file), Ok(true)) = (&mut history, added) {
+                        if let Err(why) = file.append(&buffer) {
+                            eprintln!("tempest repl: history no longer kept: {why}");
+                            history = None;
                         }
                     }
                     // Lines pasted together split into inputs as piped
@@ -266,8 +299,16 @@ impl Editing {
 }
 
 /// The libraries imports can name: those under `-w`'s work root, or
-/// else the work root around the current directory, if it's in one.
+/// else the work root around the current directory, if it's in one;
+/// none with `--no-workroot`.
 fn libraries(flags: &Flags, sources: &Sources) -> Result<Vec<(String, String)>, u8> {
+    if flags.no_workroot {
+        if flags.workroot.is_some() || flags.ignorefile.is_some() {
+            eprintln!("tempest repl: --no-workroot leaves no work root for -w or -ign");
+            return Err(USAGE);
+        }
+        return Ok(Vec::new());
+    }
     let root = match &flags.workroot {
         Some(root) => root.clone(),
         None => {

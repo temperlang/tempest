@@ -61,7 +61,9 @@ then its result, as `temper repl` prints it:
 | Anything that failed | `fail` |
 
 A value that contains itself prints `↻` where it recurs, and a very deep
-or long one ends with `…`, so printing never ends the session.
+or long one ends with `…`, a very long string too (`"yyy…"…`), so
+printing never ends the session. A very long line in an error's snippet
+is cut to the part around the error, with `…` where it's cut.
 
 ## Names
 
@@ -168,9 +170,15 @@ name to reach them by then.
 
 What `describe(n, "module")` and `translate(n)` show is one module:
 input `n` after the earlier inputs it uses, through the names they
-declare, transitively, each input whole. Where two of those inputs
-declare the same name, the later one's is renamed, `x__2`, as are the
-uses that meant it, so the module means what the inputs did:
+declare, transitively, and the earlier inputs that change what those
+declare, as `v = 2;` or `list.add(x);` do, each input whole. Where two
+of those inputs declare the same name, the later one's is renamed,
+`x__2`, as are the uses that meant it, so the module means what the
+inputs did; an import of what an earlier one imported, under the same
+name, is dropped instead. A module with errors isn't translated: its
+errors are shown, located in the module as `describe(n, "module")`
+shows it. A top-level `await` is one, as it runs only in the REPL; to
+translate it, put it in an `async` block.
 
 <!-- repl: restart -->
 ```console
@@ -213,7 +221,8 @@ interactive#6: void
 
 What they show is printed when they run, so an input's other output
 comes before or after it as the calls are. A failed call, as
-`describe(99)`, fails the input, saying why.
+`describe(99)`, fails the input, saying why. Ctrl-C stops them, as it
+stops any input.
 
 ## On a terminal
 
@@ -270,38 +279,67 @@ it has:
 | macOS | `~/Library/Application Support/tempest/repl-history.txt` |
 | Windows | `%APPDATA%\tempest\repl-history.txt` |
 
-What's typed may be private, a token pasted into a string say, so on
-Unix the directory is made readable by its owner alone (0700) and the
-file too (0600); a file found readable by others is made owner-only
-again, and a path that isn't a plain file, as a link, isn't used. A
-line starting with a space isn't kept, and `--no-history` keeps none
+What's typed may be private, a token pasted into a string say, so the
+file is opened once, checked, and only read and written through what
+was opened, never again by its path, so it can't be swapped for a link
+to another file as the session goes on:
+
+- **On Unix,** the directory must be the user's own, and not a link;
+  if others can read or write it, it's made owner-only (0700). The file
+  is opened without following a link, must be a regular file, the
+  user's, with no other hard links, and is made owner-only (0600).
+- **On Windows,** neither the directory nor the file may be a link or
+  a junction (a reparse point); `%APPDATA%` is the user's own by the
+  access control lists Windows gives it.
+
+If any of that fails, the session goes on without history, saying why.
+A line starting with a space isn't kept, and `--no-history` keeps none
 and reads none. `-e` inputs and piped input are never kept. `help()`
-says which file the session uses.
+says which file the session uses. The file is in rustyline's format:
+`#V2`, then an entry a line, its line breaks written `\n`.
 
 ## Security
 
 - What the REPL prints of its own, results, diagnostics, failures, and
   its functions' output, has control characters escaped as Temper
   writes them, `\u{1b}`: C0 controls other than line breaks and tabs,
-  DEL, C1 controls, and the bidirectional controls that reorder text
-  (U+061C, U+200E, U+200F, U+202A to U+202E, U+2066 to U+2069). So a
-  value or a pasted snippet can't move the cursor, recolor the
-  terminal, or hide text. Strings print quoted, every control and
-  format character escaped. What an input logs is printed as it's
-  logged, as `tempest run` prints it.
-- Importing one of the work root's libraries runs its top-level code,
-  as `tempest run` does, with the interpreter's access to the network
-  through std `net`. The work root is the one around the current
+  DEL, C1 controls, the bidirectional controls that reorder text
+  (U+061C, U+200E, U+200F, U+202A to U+202E, U+2066 to U+2069), the
+  line and paragraph separators (U+2028, U+2029), and invisible
+  characters: zero-width spaces and joiners (U+200B, U+FEFF, U+2060 to
+  U+2064), fillers, and tag characters. So a value or a pasted snippet
+  can't move the cursor, recolor the terminal, set the clipboard, or
+  hide text. A zero-width joiner or non-joiner between two visible
+  characters stays, so an emoji sequence such as 👩🏽‍💻 prints whole, as
+  do tag characters in an emoji flag's tag sequence. Strings print
+  quoted, every control and format character escaped, as Kotlin's do.
+- What an input logs, with `console.log`, is escaped the same way when
+  standard output is a terminal, so a log can't rewrite the screen or
+  set the clipboard either; piped or redirected, it's written as
+  logged, as `tempest run` writes it.
+- Importing runs the imported code's top level, as `tempest run` does,
+  with the interpreter's access to the network through std `net`: one
+  of the work root's libraries, or a directory relative to the current
+  one ([below](#imports)). The work root is the one around the current
   directory unless `-w` says otherwise, so start the REPL somewhere you
-  trust, or pass `-w` an empty directory.
+  trust, or pass `--no-workroot`.
 - History is kept owner-only ([above](#history)).
 
 ## Imports
 
-Inputs import std's modules, as `let { Date } = import("std/temporal");`,
-and the libraries of the work root by name. The work root is `-w`'s,
-or else the one around the current directory, found as `build` finds
-it, if there is one.
+Inputs import:
+
+- **std's modules,** as `let { Date } = import("std/temporal");`;
+- **the work root's libraries,** by name, as `import("greeting")`. The
+  work root is `-w`'s, or else the one around the current directory,
+  found as `build` finds it, if there is one, and none with
+  `--no-workroot`;
+- **directories relative to the current one,** where the REPL started,
+  as if the inputs' code were there: `import("./shapes")` is the
+  directory `shapes` in it, and `import("../lib")` the one beside it.
+
+Importing a module runs its top-level code, once, when the input that
+first imports it runs.
 
 ## Stopping
 
@@ -316,6 +354,7 @@ does.
 | Option | Meaning |
 |---|---|
 | `-w DIR`, `--workroot DIR` | The work root whose libraries inputs import |
+| `--no-workroot` | No work root, not even the one around the current directory |
 | `-ign FILE`, `--ignorefile FILE` | An [ignore file](cli.md#ignore-files) for the work root |
 | `-e CODE`, `--exec-before CODE` | An input to run first; may be given more than once |
 | `--separator newline\|semisemi\|eof` | What ends an input ([above](#inputs)) |
@@ -350,5 +389,7 @@ differences:
 - **The terminal:** a multi-line input is one buffer, and one history
   entry; history is one owner-only file, written as each input runs;
   `NO_COLOR` and `--color` are honored; and what the REPL prints has
-  control characters escaped.
+  control characters escaped, logs too on a terminal.
+- **Imports** relative to the current directory resolve from it, and
+  `--no-workroot` turns the work root off.
 - **Not yet:** `-b`, and suggestions from history as you type.

@@ -115,6 +115,111 @@ pub enum Val {
     Uninit,
 }
 
+/// Dropping a value drops the containers in it without recursing, so a
+/// very deep value, as a linked list of millions of objects, can't
+/// overflow the stack: the containers that only it owns are taken out
+/// into a work list, each of which, dropped in turn, has had its own
+/// taken out first.
+impl Drop for Val {
+    #[inline]
+    fn drop(&mut self) {
+        // Most values hold none, or share what they hold: those drop as
+        // they would without this.
+        if self.holds_values() {
+            drop_deep(self);
+        }
+    }
+}
+
+/// Drops what a container holds through a work list ([`Val`]'s `Drop`).
+#[inline(never)]
+fn drop_deep(value: &mut Val) {
+    let mut work = Vec::new();
+    take_containers(value, &mut work);
+    while let Some(mut value) = work.pop() {
+        take_containers(&mut value, &mut work);
+    }
+}
+
+impl Val {
+    /// Whether it may hold other values, which its drop would drop.
+    #[inline]
+    fn holds_values(&self) -> bool {
+        matches!(
+            self,
+            Val::List(_)
+                | Val::ListBuilder(_)
+                | Val::Deque(_)
+                | Val::Map(_)
+                | Val::MapBuilder(_)
+                | Val::Pair(_)
+                | Val::Method(_)
+                | Val::NullableType(_)
+                | Val::ValueResult(_)
+                | Val::Object(_)
+                | Val::Fn(_)
+                | Val::Class(_)
+        )
+    }
+}
+
+/// Moves the values in `value` that hold others into `work`, if `value`
+/// is a container that nothing else shares; its other values it drops
+/// as it is.
+fn take_containers(value: &mut Val, work: &mut Vec<Val>) {
+    let mut take = |v: &mut Val| {
+        if v.holds_values() {
+            work.push(std::mem::replace(v, Val::Null));
+        }
+    };
+    match value {
+        Val::List(items) => Rc::get_mut(items).into_iter().flatten().for_each(take),
+        Val::ListBuilder(items) => (Rc::get_mut(items).into_iter())
+            .for_each(|items| items.get_mut().iter_mut().for_each(&mut take)),
+        Val::Deque(items) => (Rc::get_mut(items).into_iter())
+            .for_each(|items| items.get_mut().iter_mut().for_each(&mut take)),
+        Val::Map(entries) => (Rc::get_mut(entries).into_iter())
+            .flat_map(|e| e.pairs_mut().iter_mut())
+            .for_each(|(k, v)| {
+                take(k);
+                take(v);
+            }),
+        Val::MapBuilder(entries) => (Rc::get_mut(entries).into_iter())
+            .flat_map(|e| e.get_mut().pairs_mut().iter_mut())
+            .for_each(|(k, v)| {
+                take(k);
+                take(v);
+            }),
+        Val::Pair(pair) => {
+            if let Some((k, v)) = Rc::get_mut(pair) {
+                take(k);
+                take(v);
+            }
+        }
+        Val::Method(method) => Rc::get_mut(method).into_iter().for_each(|m| take(&mut m.0)),
+        Val::NullableType(inner) | Val::ValueResult(inner) => {
+            Rc::get_mut(inner).into_iter().for_each(take)
+        }
+        Val::Object(object) => (Rc::get_mut(object).into_iter())
+            .for_each(|o| o.fields.get_mut().iter_mut().for_each(&mut take)),
+        Val::Fn(closure) => (Rc::get_mut(closure).into_iter())
+            .filter_map(|c| Rc::get_mut(&mut c.captures))
+            .flat_map(|cells| cells.iter_mut())
+            .filter_map(Rc::get_mut)
+            .for_each(|cell| take(cell.get_mut())),
+        Val::Class(class) => {
+            if let Some(class) = Rc::get_mut(class) {
+                class.statics.get_mut().iter_mut().for_each(&mut take);
+                (Rc::get_mut(&mut class.captures).into_iter())
+                    .flat_map(|cells| cells.iter_mut())
+                    .filter_map(Rc::get_mut)
+                    .for_each(|cell| take(cell.get_mut()));
+            }
+        }
+        _ => {}
+    }
+}
+
 /// A function value: its `Fn` and the variables it captured.
 #[derive(Debug)]
 pub struct Closure {
@@ -282,6 +387,8 @@ fn run_with(settled: &Settled, fuel: Option<u64>, tests: bool, sink: Option<Line
         compile_time: false,
         allowed_nodes: HashMap::new(),
         host: None,
+        inputs_parked: Vec::new(),
+        inputs_failed: Vec::new(),
     };
     let mut result = Ok(Val::Void);
     for module in &settled.modules {
@@ -309,7 +416,7 @@ fn run_with(settled: &Settled, fuel: Option<u64>, tests: bool, sink: Option<Line
         let runner = interp.run_top(settled, code);
         let code = interp.lowering.expression(settled, scope, list);
         let (runner, cases) = match (runner, interp.run_top(settled, code)) {
-            (Ok(runner), Ok(Val::List(cases))) => (runner, cases),
+            (Ok(runner), Ok(Val::List(ref cases))) => (runner, cases.clone()),
             (Err(abrupt), _) | (_, Err(abrupt)) => {
                 result = Err(abrupt);
                 break;
@@ -334,7 +441,7 @@ fn run_with(settled: &Settled, fuel: Option<u64>, tests: bool, sink: Option<Line
             let tasks = interp.run_tasks(settled);
             test_steps.push((name.clone(), budget - interp.fuel));
             let lines = match ran.and_then(|report| tasks.map(|()| report)) {
-                Ok(Val::Str(report)) => report.lines().map(String::from).collect(),
+                Ok(Val::Str(ref report)) => report.lines().map(String::from).collect(),
                 Ok(_) => junit_failure(&name, "Tests gave no report"),
                 Err(abrupt) => {
                     let mut why = describe(abrupt);
@@ -469,6 +576,12 @@ struct Interp<'a> {
     /// Implements bodiless `@connected` functions declared outside std,
     /// as the REPL's own `help`, `describe`, and `translate` ([`repl::Host`]).
     host: Option<repl::Host>,
+    /// `async` blocks that are REPL inputs paused at a top-level `await`,
+    /// each with its input's number, and how those that failed once
+    /// resumed failed, by number: their own failures, not the failure of
+    /// whatever ran the queue ([`repl`]).
+    inputs_parked: Vec<(Rc<Generator>, usize)>,
+    inputs_failed: Vec<(usize, Abrupt)>,
 }
 
 fn fail(message: impl Into<String>) -> Abrupt {
@@ -596,7 +709,7 @@ impl Interp<'_> {
             }
         }
         match function {
-            Val::Fn(closure) => self.call(s, closure.node, closure.captures.clone(), args),
+            Val::Fn(ref closure) => self.call(s, closure.node, closure.captures.clone(), args),
             Val::Builtin(Function::New) => match args.split_first() {
                 Some((Val::Class(class), rest)) => self.construct(s, class.clone(), rest.to_vec()),
                 Some((Val::BuiltinType(t), [])) if TYPES[*t as usize] == "ListBuilder" => {
@@ -641,7 +754,7 @@ impl Interp<'_> {
                 let [value, ty] =
                     <[Val; 2]>::try_from(args).map_err(|_| fail("Expected a value and a type"))?;
                 let (ty, or_null) = match ty {
-                    Val::NullableType(inner) => ((*inner).clone(), true),
+                    Val::NullableType(ref inner) => ((**inner).clone(), true),
                     ty => (ty, false),
                 };
                 let is = match (&value, &ty) {
@@ -700,7 +813,7 @@ impl Interp<'_> {
             },
             Val::Builtin(Function::Async) => self.start_async(s, args),
             Val::Connected(decl) => self.connected_function(s, decl, args),
-            Val::Callout(callouts) => compile_time::call_callout(&callouts, args),
+            Val::Callout(ref callouts) => compile_time::call_callout(callouts, args),
             // `m[i, j]` on an object calls its `get(i, j)`.
             Val::Builtin(Function::Index) if matches!(args.first(), Some(Val::Object(_))) => {
                 let mut args = args;
@@ -711,7 +824,7 @@ impl Interp<'_> {
                 }
             }
             Val::Builtin(f) => self.builtin(f, args),
-            Val::Method(method) => match &method.0 {
+            Val::Method(ref method) => match &method.0 {
                 this @ (Val::Object(_) | Val::Class(_)) => {
                     self.call_method(s, this, method.1, args, None)
                 }
@@ -1169,16 +1282,16 @@ impl Interp<'_> {
             }
             "join" => {
                 let (separator, f) = (arg()?, arg()?);
-                let Val::Str(separator) = separator else {
+                let Val::Str(ref separator) = separator else {
                     return Err(fail("join's separator isn't a String"));
                 };
                 let mut text = String::new();
                 for (i, item) in items.iter().enumerate() {
                     if i > 0 {
-                        text.push_str(&separator);
+                        text.push_str(separator);
                     }
                     match self.apply(s, f.clone(), vec![item.clone()])? {
-                        Val::Str(part) => text.push_str(&part),
+                        Val::Str(ref part) => text.push_str(part),
                         _ => return Err(fail("join's stringify didn't return a String")),
                     }
                 }
@@ -1418,6 +1531,8 @@ impl Interp<'_> {
         match s.library.name(name).map(|n| s.library.names.get(n)) {
             Some("sendRequest") if in_std(s, decl, "net") => self.send_request(args),
             name => match self.host.clone().and_then(|host| host(s, decl, &args)) {
+                // Stopped as Ctrl-C stops code, not failed.
+                Some(Err(why)) if why == INTERRUPTED => Err(Abrupt::Panic(why)),
                 Some(result) => result.map_err(fail),
                 None => Err(fail(format!(
                     "No connected implementation of {}",
@@ -1500,8 +1615,10 @@ impl Interp<'_> {
         }
         let mut supers = Vec::new();
         for &sup in core::class_parts(&s.library.tree, class.node).1 {
-            if let Val::Class(sup) = self.initialize(s, class, sup, Val::Class(class.clone()))? {
-                supers.push(sup);
+            if let Val::Class(ref sup) =
+                self.initialize(s, class, sup, Val::Class(class.clone()))?
+            {
+                supers.push(sup.clone());
             }
         }
         Ok(class.supers.get_or_init(|| supers.into()).clone())

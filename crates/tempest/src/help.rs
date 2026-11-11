@@ -232,11 +232,19 @@ pub fn command(name: &str) -> Option<String> {
              docs; describe(n, step) shows input n at one of tempest's steps;\n\
              translate(n, lang) prints it translated (docs/tools/repl.md).\n\
              \n\
+             Inputs import std, the work root's libraries by name, and\n\
+             directories relative to the current one, as import(\"./shapes\");\n\
+             importing runs that code's top level. On a terminal, what's\n\
+             logged is shown with control characters escaped.\n\
+             \n\
              Options:\n\
              \x20   -w, --workroot DIR\n\
              \x20           The work root whose libraries inputs can import, by name.\n\
              \x20           By default, the work root around the current directory, as\n\
              \x20           for build, if there is one.\n\
+             \x20   --no-workroot\n\
+             \x20           No work root: inputs import only std, and paths relative to\n\
+             \x20           the current directory.\n\
              {IGNOREFILE}\
              \x20   -e, --exec-before CODE\n\
              \x20           An input to run before reading any; may be given more than\n\

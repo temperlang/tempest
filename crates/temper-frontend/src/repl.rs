@@ -39,6 +39,13 @@ mod specials;
 
 pub use specials::{ReplTools, STEPS};
 
+/// How [`ReplTools`]' functions say a module has errors, so isn't
+/// translated, before a line for each.
+pub const MODULE_ERRORS: &str = "the module has errors, so it isn't translated";
+
+/// What [`ReplTools`]' functions fail with when they're interrupted.
+pub const INTERRUPTED: &str = crate::interp::INTERRUPTED;
+
 use crate::interp::repl::{Outcome, Runner, render};
 use crate::library::{Level, Library, Message};
 use crate::project::load_imports;
@@ -56,8 +63,9 @@ use std::sync::atomic::AtomicBool;
 use temper_syntax::lex::{SourceKind, Synthetic, TokenKind, lex};
 use temper_syntax::tree::{NodeId, NodeKind};
 
-/// The directory the inputs' files are in, as their module's; never a
-/// real one, so it's no library's.
+/// The directory the inputs' files are in, as their module's; never read,
+/// so it's no library's. Their relative imports resolve from the current
+/// directory, as if they were there.
 const DIR: &str = "-repl-";
 
 /// How a session is set up.
@@ -206,6 +214,7 @@ impl ReplSession {
     pub fn new(options: ReplOptions, sink: Box<dyn FnMut(&ReplEvent)>) -> ReplSession {
         let mut library = Library::new();
         library.libraries = options.libraries;
+        library.relative_from = Some((DIR.into(), ".".into()));
         let sink: Sink = Rc::new(RefCell::new(sink));
         let logs = sink.clone();
         let log =
@@ -216,6 +225,7 @@ impl ReplSession {
             libraries: library.libraries.clone(),
             help_footer: options.help_footer,
             inputs: Vec::new(),
+            interrupt: options.interrupt.clone(),
             prelude: None,
             host: None,
         }));
@@ -259,7 +269,7 @@ impl ReplSession {
         let runner = &mut self.runner;
         self.settle.view(|s| {
             runner.add_module(s, scope);
-            runner.run_input(s, &round.input, root, false);
+            runner.run_input(s, &round.input, root, false, usize::MAX);
         });
         let host = (self.settle.scopes().get(scope).names.iter())
             .find(|&&(name, _)| name == hidden)
@@ -283,7 +293,7 @@ impl ReplSession {
             return None;
         }
         let specials = self.specials.clone();
-        self.settle.view(|s| Some(specials.borrow().module(s, n)))
+        self.settle.view(|s| specials.borrow().module(s, n).ok())
     }
 
     /// Inputs fed so far, which is the next one's number.
@@ -304,7 +314,22 @@ impl ReplSession {
                 let why = (payload.downcast_ref::<&str>().map(|s| s.to_string()))
                     .or_else(|| payload.downcast_ref::<String>().cloned())
                     .unwrap_or_else(|| "a panic".into());
-                self.settle.abandon_round(scopes_before);
+                // Settling panicked, if the input isn't registered: the
+                // round is abandoned, and the modules it loaded, never to
+                // run, get globals that say why when read. A panic as it
+                // ran leaves what's settled as it is.
+                if self.specials.borrow().inputs.len() <= input {
+                    let modules = self.settle.abandon_round(scopes_before);
+                    let runner = &mut self.runner;
+                    let unset = format!("loading it failed in interactive#{input}");
+                    self.settle.view(|s| {
+                        for scope in modules {
+                            runner.add_module(s, scope);
+                            runner.note_unset(s, scope, &unset);
+                        }
+                    });
+                    self.specials.borrow_mut().inputs.push(None);
+                }
                 self.runner.recover();
                 self.emit(&ReplEvent::InternalError(why));
                 None
@@ -334,7 +359,7 @@ impl ReplSession {
         }
         let round = self.settle.settle_input(file);
         self.segments.insert(round.input.scope, input);
-        (self.specials.borrow_mut().inputs).push((file, round.input.scope));
+        (self.specials.borrow_mut().inputs).push(Some((file, round.input.scope)));
         let errors = self.report_diagnostics(input, diagnostics_before);
         self.note_late_declarations(input, round.input.scope);
 
@@ -352,10 +377,32 @@ impl ReplSession {
         let latest = round.input.scope;
         let (runner, segments, sink) = (&mut self.runner, &self.segments, &self.sink);
         let emit = |event: ReplEvent| (*sink.borrow_mut())(&event);
+        let resumed = |runner: &mut Runner, s: &Settled| {
+            for (input, why) in runner.resumed_failures() {
+                let scope = (segments.iter())
+                    .find(|&(_, &i)| i == input)
+                    .map(|(&scope, _)| scope);
+                emit(ReplEvent::Failure(match why.strip_prefix("Failed: ") {
+                    _ if why == "Failed" => format!("interactive#{input} failed"),
+                    Some(why) => format!("interactive#{input} failed: {why}"),
+                    None => format!("interactive#{input} failed: {why}"),
+                }));
+                if let Some(scope) = scope {
+                    runner.note_unset(s, scope, &format!("interactive#{input} failed"));
+                }
+            }
+        };
         self.settle.view(|s| {
+            // Every global first, so a panic as one runs leaves none
+            // missing.
             for module in &round.modules {
                 runner.add_module(s, module.scope);
-                match runner.run_module(s, module) {
+            }
+            runner.add_module(s, latest);
+            for module in &round.modules {
+                let outcome = runner.run_module(s, module);
+                resumed(runner, s);
+                match outcome {
                     Outcome::Value(_) | Outcome::Unresolved => {}
                     Outcome::Interrupted => emit(ReplEvent::Interrupted),
                     Outcome::Failed(why) => {
@@ -364,8 +411,8 @@ impl ReplSession {
                     }
                 }
             }
-            runner.add_module(s, latest);
-            let outcome = runner.run_input(s, &round.input, root, keep);
+            let outcome = runner.run_input(s, &round.input, root, keep, input);
+            resumed(runner, s);
             let label = |class| class_label(s, segments, latest, class);
             match outcome {
                 Outcome::Value(value) if keep => Some(render(s, &value, &label)),
@@ -528,7 +575,7 @@ fn snippet(source: &str, start: usize, length: usize) -> (usize, usize, [String;
     let (mut from, mut to) = (0, 0);
     let mut shown = 0;
     let body = source[line_start..line_end].trim_end_matches('\r');
-    for (i, c) in body.char_indices() {
+    for ((i, _), (c, escape)) in body.char_indices().zip(escapes(body)) {
         let at = line_start + i;
         if at == start {
             from = shown;
@@ -539,7 +586,7 @@ fn snippet(source: &str, start: usize, length: usize) -> (usize, usize, [String;
         let before = text.len();
         match c {
             '\t' => text.push(' '),
-            c if needs_escape(c) => text.push_str(&format!("\\u{{{:x}}}", c as u32)),
+            c if escape => text.push_str(&format!("\\u{{{:x}}}", c as u32)),
             c => text.push(c),
         }
         shown += text[before..].chars().count();
@@ -550,36 +597,128 @@ fn snippet(source: &str, start: usize, length: usize) -> (usize, usize, [String;
     if end >= line_start + body.len() {
         to = shown;
     }
+    let (text, from, to) = clip(&text, shown, from, to);
     let marks = to.saturating_sub(from).max(1);
     let under = format!("{}{}", " ".repeat(from), "^".repeat(marks));
     (line, column, [text, under])
 }
 
+/// About how many characters of a source line a snippet shows.
+const SNIPPET_WIDTH: usize = 200;
+
+/// A snippet's line, `length` characters long, with the span from `from`
+/// to `to` in it, cut to a window of about [`SNIPPET_WIDTH`] characters
+/// around the span's start, `…` where it's cut; and the span in that.
+fn clip(text: &str, length: usize, from: usize, to: usize) -> (String, usize, usize) {
+    if length <= SNIPPET_WIDTH {
+        return (text.to_string(), from, to);
+    }
+    let lead = SNIPPET_WIDTH / 3;
+    let start = from.saturating_sub(lead).min(length - SNIPPET_WIDTH);
+    let end = start + SNIPPET_WIDTH;
+    let mut out = String::new();
+    let shift = match start > 0 {
+        true => {
+            out.push('…');
+            start - 1
+        }
+        false => 0,
+    };
+    out.extend(text.chars().skip(start).take(SNIPPET_WIDTH));
+    if end < length {
+        out.push('…');
+    }
+    (out, from - shift, to.min(end) - shift)
+}
+
 /// Whether a character would change the terminal, or how text around it
-/// reads, if printed as is: a C0 control other than a line break or tab,
-/// DEL, a C1 control, or a bidirectional control.
+/// reads, if printed as is, wherever it is: a C0 control other than a
+/// line break or tab, DEL, a C1 control, a bidirectional control, a line
+/// or paragraph separator, or an invisible character, as zero-width
+/// spaces, word joiners, invisible operators, and fillers. Joiners and
+/// tag characters depend on what's around them ([`escapes`]).
 fn needs_escape(c: char) -> bool {
     let n = c as u32;
     (n < 0x20 && c != '\n' && c != '\t')
         || (0x7f..=0x9f).contains(&n)
         || matches!(n, 0x61c | 0x200e | 0x200f | 0x202a..=0x202e | 0x2066..=0x2069)
+        || matches!(n, 0x2028 | 0x2029 | 0x200b | 0x2060..=0x2064 | 0x206a..=0x206f)
+        || matches!(
+            n,
+            0xad | 0x115f | 0x1160 | 0x180e | 0x3164 | 0xffa0 | 0xfeff
+        )
+        || matches!(n, 0xfff9..=0xfffb | 0xe0000..=0xe001f)
+}
+
+/// A zero-width joiner or non-joiner, which joins or parts the visible
+/// characters around it, as in emoji sequences.
+fn is_joiner(c: char) -> bool {
+    matches!(c, '\u{200c}' | '\u{200d}')
+}
+
+/// A tag character, invisible, which only an emoji tag sequence uses, as
+/// in a subdivision's flag.
+fn is_tag(c: char) -> bool {
+    (0xe0020..=0xe007f).contains(&(c as u32))
+}
+
+/// Each character of `text`, with whether it's escaped: those
+/// [`needs_escape`] says; a joiner unless it's between two visible
+/// characters, so an emoji sequence such as 👩🏽‍💻 stays whole; and
+/// tag characters unless they're an emoji tag sequence, after U+1F3F4
+/// and ended by U+E007F, so they can't hide text after a visible one.
+fn escapes(text: &str) -> Vec<(char, bool)> {
+    let chars: Vec<char> = text.chars().collect();
+    let visible = |d: Option<&char>| {
+        d.is_some_and(|&d| !d.is_whitespace() && !needs_escape(d) && !is_joiner(d) && !is_tag(d))
+    };
+    let mut out = Vec::with_capacity(chars.len());
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        if is_tag(c) {
+            let end = (i..chars.len())
+                .find(|&j| !is_tag(chars[j]))
+                .unwrap_or(chars.len());
+            let sequence = i > 0 && chars[i - 1] == '\u{1f3f4}' && chars[end - 1] == '\u{e007f}';
+            out.extend(chars[i..end].iter().map(|&t| (t, !sequence)));
+            i = end;
+            continue;
+        }
+        let escape = match is_joiner(c) {
+            true => {
+                !(visible(i.checked_sub(1).and_then(|p| chars.get(p))) && visible(chars.get(i + 1)))
+            }
+            false => needs_escape(c),
+        };
+        out.push((c, escape));
+        i += 1;
+    }
+    out
 }
 
 /// Text with the characters that could rewrite the terminal or hide text
-/// escaped as Temper writes them, `\u{1b}`: C0 controls but for line
-/// breaks and tabs, DEL, C1 controls, and bidirectional controls.
+/// escaped as Temper writes them, `\u{1b}` ([`escapes`]): C0 controls but
+/// for line breaks and tabs, DEL, C1 controls, bidirectional controls,
+/// line and paragraph separators, and invisible characters.
 pub fn escape_controls(text: &str) -> Cow<'_, str> {
-    if !text.chars().any(needs_escape) {
+    if !text
+        .chars()
+        .any(|c| needs_escape(c) || is_joiner(c) || is_tag(c))
+    {
         return Cow::Borrowed(text);
     }
     let mut out = String::with_capacity(text.len() + 8);
-    for c in text.chars() {
-        match needs_escape(c) {
+    for (c, escape) in escapes(text) {
+        match escape {
             true => out.push_str(&format!("\\u{{{:x}}}", c as u32)),
             false => out.push(c),
         }
     }
-    Cow::Owned(out)
+    match out == text {
+        true => Cow::Borrowed(text),
+        false => Cow::Owned(out),
+    }
 }
 
 /// Whether code's last token is `;`, which makes an input give `void`.
@@ -711,10 +850,20 @@ impl Chunker {
         has_code(&input).then_some(input)
     }
 
+    /// What's pending, without its trailing lines of only space: a line
+    /// break, or the indent an editor's Enter put on the blank line that
+    /// ended a multi-quoted string, so typed and piped inputs are alike.
     fn take(&mut self) -> String {
         let mut input = std::mem::take(&mut self.pending);
-        while input.ends_with(['\n', '\r']) {
-            input.pop();
+        loop {
+            while input.ends_with(['\n', '\r']) {
+                input.pop();
+            }
+            let last = input.rfind('\n').map_or(0, |i| i + 1);
+            if last == 0 || !input[last..].trim().is_empty() {
+                break;
+            }
+            input.truncate(last);
         }
         input
     }
@@ -812,6 +961,14 @@ mod tests {
             c.push_line("\n"),
             Some("let s = \"\"\"\n  \"two\n  \"lines".into())
         );
+        // Ended by a line of only space, as an editor's Enter indents it,
+        // the same as by a blank line.
+        assert_eq!(c.push_line("let s = \"\"\"\n"), None);
+        assert_eq!(c.push_line("  \"two\n"), None);
+        assert_eq!(
+            c.push_line("    \n"),
+            Some("let s = \"\"\"\n  \"two".into())
+        );
         assert_eq!(c.push_line("\"${ 1 +\n"), None);
         assert_eq!(c.push_line("2 }\"\n"), Some("\"${ 1 +\n2 }\"".into()));
         // A closer too many ends it, as an error.
@@ -848,6 +1005,37 @@ mod tests {
             escape_controls("a\u{1b}[2Jb\u{7f}\u{9b}c\u{202e}d\u{2066}\u{61c}"),
             "a\\u{1b}[2Jb\\u{7f}\\u{9b}c\\u{202e}d\\u{2066}\\u{61c}"
         );
+        // Separators and invisible characters.
+        assert_eq!(
+            escape_controls("a\u{2028}b\u{2029}c\u{200b}d\u{feff}e\u{2060}f\u{ad}"),
+            "a\\u{2028}b\\u{2029}c\\u{200b}d\\u{feff}e\\u{2060}f\\u{ad}"
+        );
+        // A joiner between visible characters stays, so emoji sequences
+        // print whole; alone, or at an edge, it's escaped.
+        let coder = "👩🏽\u{200d}💻";
+        assert_eq!(escape_controls(coder), coder);
+        assert_eq!(
+            escape_controls("🏳\u{fe0f}\u{200d}🌈"),
+            "🏳\u{fe0f}\u{200d}🌈"
+        );
+        assert_eq!(escape_controls("a\u{200c}b"), "a\u{200c}b");
+        assert_eq!(
+            escape_controls("\u{200d}a \u{200d} b\u{200d}\u{200d}c\u{200c}"),
+            "\\u{200d}a \\u{200d} b\\u{200d}\\u{200d}c\\u{200c}"
+        );
+        // Tags only as an emoji tag sequence, not hiding text after a
+        // visible character.
+        let scotland = "🏴\u{e0067}\u{e0062}\u{e0073}\u{e0063}\u{e0074}\u{e007f}";
+        assert_eq!(escape_controls(scotland), scotland);
+        assert_eq!(
+            escape_controls("ok\u{e0068}\u{e0069}"),
+            "ok\\u{e0068}\\u{e0069}"
+        );
+        let (_, _, lines) = snippet("x = \u{200d}y", 7, 1);
+        assert_eq!(
+            lines,
+            ["x = \\u{200d}y".to_string(), "            ^".to_string()]
+        );
         let (_, _, lines) = snippet("x = \u{1b}y", 5, 1);
         assert_eq!(
             lines,
@@ -883,6 +1071,56 @@ mod tests {
         assert_eq!(lines, [" cdé fg".to_string(), "   ^^^".to_string()]);
         let (_, _, lines) = snippet("x = 1", 0, 0);
         assert_eq!(lines[1], "^");
+        // A long line is cut to a window around the span.
+        let long = format!("{} nope {}", "a".repeat(5000), "b".repeat(5000));
+        let (line, column, lines) = snippet(&long, 5001, 4);
+        assert_eq!((line, column), (1, 5002));
+        assert_eq!(lines[0].chars().count(), SNIPPET_WIDTH + 2);
+        assert!(lines[0].starts_with('…') && lines[0].ends_with('…'));
+        let marks = lines[1].trim_start();
+        assert_eq!(marks, "^^^^");
+        let at = lines[1].len() - marks.len();
+        assert_eq!(
+            lines[0].chars().skip(at).take(4).collect::<String>(),
+            "nope"
+        );
+        // At the end of a long line.
+        let (_, _, lines) = snippet(&long, long.len(), 0);
+        assert!(lines[0].starts_with('…') && !lines[0].ends_with('…'));
+        assert_eq!(lines[1].len(), SNIPPET_WIDTH + 2);
+    }
+
+    /// Dropping a very deep value doesn't overflow the stack, on a test's
+    /// thread, whose stack is small (2 MiB unless RUST_MIN_STACK says).
+    #[test]
+    fn a_deep_value_drops() {
+        let out = transcript(&[
+            "class N(public next: N?) {}",
+            "var n: N? = null; for (var i = 0; i < 200000; ++i) { n = new N(n); }",
+            "n = null;",
+            "var l: List<AnyValue> = []; for (var i = 0; i < 200000; ++i) { l = [l]; }",
+            "l = [];",
+            "1",
+        ]);
+        assert_eq!(
+            out.last().map(String::as_str),
+            Some("interactive#5: 1"),
+            "{out:?}"
+        );
+    }
+
+    #[test]
+    fn a_huge_string_prints_cut() {
+        let out = transcript(&[
+            "let b = new StringBuilder(); for (var i = 0; i < 200000; ++i) { b.append(\"y\"); }; b.toString()",
+        ]);
+        let result = &out[0];
+        assert!(result.len() < (1 << 17), "{}", result.len());
+        assert!(
+            result.ends_with("yyy\"…"),
+            "{}",
+            &result[result.len() - 20..]
+        );
     }
 
     #[test]
@@ -907,6 +1145,142 @@ mod tests {
                 "interactive#2: 3",
             ]
         );
+    }
+
+    /// A panic while settling: the input's number stays its own, later
+    /// inputs follow the one before it, and what it loaded, never run,
+    /// says why when read.
+    #[test]
+    fn a_panic_while_settling_is_rolled_back() {
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let seen = events.clone();
+        let sink = Box::new(move |e: &ReplEvent| seen.borrow_mut().push(e.text()));
+        let mut session = ReplSession::new(ReplOptions::default(), sink);
+        session.feed("let x = 1");
+        session.settle.panic_next = true;
+        let hook = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        session.feed("let { Date } = import(\"std/temporal\"); let y = 2");
+        std::panic::set_hook(hook);
+        for input in [
+            "x + 2",
+            "describe(2, \"module\")",
+            "describe(1)",
+            "y",
+            "let { Date } = import(\"std/temporal\")",
+            "new Date(2020, 1, 2)",
+            "let z = x * 3",
+            "z",
+        ] {
+            session.feed(input);
+        }
+        assert_eq!(
+            events.take(),
+            [
+                "interactive#0: void",
+                "tempest: internal error (a bug in tempest, not in your code): as a test asked, \
+                 while settling",
+                "interactive#1: fail",
+                "interactive#2: 3",
+                "// interactive#0\nlet x = 1;\n// interactive#2\nx + 2;",
+                "interactive#3: void",
+                "Failed: input 1 failed as it was settled, a bug in tempest, so it has nothing \
+                 to show",
+                "interactive#4: fail",
+                "interactive#5:1:1: error: y has not been declared\n    y\n    ^",
+                "interactive#5: fail",
+                "Failed: Date has no value: loading it failed in interactive#1",
+                "interactive#6: fail",
+                "Failed: Date has no value: interactive#6 failed",
+                "interactive#7: fail",
+                "interactive#8: void",
+                "interactive#9: 3",
+            ]
+        );
+    }
+
+    /// Ctrl-C stops the REPL's own functions too: here, as `translate`
+    /// translates into the first of two languages.
+    #[test]
+    fn the_repls_functions_can_be_interrupted() {
+        struct Tools(Arc<AtomicBool>);
+        impl ReplTools for Tools {
+            fn symbol_help(&self, _: &Settled, _: crate::scope::SymbolId) -> Option<String> {
+                None
+            }
+            fn tmpl(
+                &self,
+                _: Library,
+                _: &Sources,
+                _: &dyn Fn() -> bool,
+            ) -> Result<String, String> {
+                Ok(String::new())
+            }
+            fn translate(
+                &self,
+                _: Library,
+                _: &Sources,
+                language: &str,
+                interrupted: &dyn Fn() -> bool,
+            ) -> Result<Vec<(String, String)>, String> {
+                // Ctrl-C, pressed as it works.
+                self.0.store(true, std::sync::atomic::Ordering::Relaxed);
+                assert!(interrupted());
+                Ok(vec![(format!("{language}.txt"), "code".into())])
+            }
+            fn languages(&self) -> Vec<String> {
+                vec!["a".into(), "b".into()]
+            }
+        }
+        let flag = Arc::new(AtomicBool::new(false));
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let seen = events.clone();
+        let sink = Box::new(move |e: &ReplEvent| seen.borrow_mut().push(e.text()));
+        let options = ReplOptions {
+            interrupt: Some(flag.clone()),
+            tools: Some(Rc::new(Tools(flag.clone()))),
+            ..ReplOptions::default()
+        };
+        let mut session = ReplSession::new(options, sink);
+        session.feed("let x = 1");
+        session.feed("translate(0)");
+        flag.store(false, std::sync::atomic::Ordering::Relaxed);
+        flag.store(true, std::sync::atomic::Ordering::Relaxed);
+        session.feed("describe(0, \"module\")");
+        flag.store(false, std::sync::atomic::Ordering::Relaxed);
+        session.feed("help(\"x\")");
+        assert_eq!(
+            events.take(),
+            [
+                "interactive#0: void",
+                "Interrupted",
+                "interactive#1: fail",
+                "Interrupted",
+                "interactive#2: fail",
+                "x: Int32",
+                "interactive#3: void",
+            ]
+        );
+    }
+
+    /// A multi-quoted string typed, its last line ended on an indented
+    /// line as a terminal's Enter leaves it, is the string piped.
+    #[test]
+    fn typed_and_piped_strings_are_alike() {
+        let lines = |text: &str| {
+            let mut chunker = Chunker::new(Separator::Newline);
+            let mut inputs: Vec<String> = text
+                .split_inclusive('\n')
+                .filter_map(|l| chunker.push_line(l))
+                .collect();
+            inputs.extend(chunker.finish());
+            inputs
+        };
+        let typed = lines("let s = \"\"\"\n  \"two\n  \ns\n");
+        let piped = lines("let s = \"\"\"\n  \"two\n\ns\n");
+        assert_eq!(typed, piped);
+        let inputs: Vec<&str> = typed.iter().map(String::as_str).collect();
+        assert_eq!(transcript(&inputs)[1], "interactive#1: \"two\"");
     }
 
     #[test]

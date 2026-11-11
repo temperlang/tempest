@@ -192,12 +192,48 @@ fn imports_from_the_work_root() {
         assert_eq!(out, expected);
         let (_, out, _) = repl(&["-w", &dir.to_string_lossy()], None, input);
         assert_eq!(out, expected);
-        // Outside a work root, there are none.
+        // Outside a work root, there are none; nor with --no-workroot.
         let (_, out, _) = repl(&[], Some(&std::env::temp_dir()), input);
         assert!(
             out.contains("error: Not supported yet: importing greeting"),
             "{out}"
         );
+        let (code, out, _) = repl(&["--no-workroot"], Some(&lib), input);
+        assert_eq!(code, 0);
+        assert!(
+            out.contains("error: Not supported yet: importing greeting"),
+            "{out}"
+        );
+        let (code, _, err) = repl(&["--no-workroot", "-w", "."], None, "");
+        assert_eq!(code, 2, "{err}");
+    });
+}
+
+/// A relative import is of a directory relative to the current one, as
+/// if the inputs were there, not to the inputs' own directory, which is
+/// never read; it runs that module's top level.
+#[test]
+fn relative_imports_from_the_current_directory() {
+    with_dir("relative", |dir| {
+        let write = |path: &str, text: &str| {
+            let path = dir.join(path);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, text).unwrap();
+        };
+        write(
+            "shapes/shapes.temper",
+            "console.log(\"ran shapes\");\nexport let sides = 4;\n",
+        );
+        write("-repl-/shapes/shapes.temper", "export let sides = 99;\n");
+        write("work/inner.temper", "export let inner = 2;\n");
+        let input = "let { sides } = import(\"./shapes\")\nsides\n";
+        let (code, out, err) = repl(&[], Some(dir), input);
+        assert_eq!((code, err.as_str()), (0, ""));
+        assert_eq!(out, "ran shapes\ninteractive#0: void\ninteractive#1: 4\n");
+        // From a directory below, `..` goes up from the current one.
+        let input = "let { sides } = import(\"../shapes\")\nlet { inner } = import(\"./\")\nsides + inner\n";
+        let (_, out, _) = repl(&[], Some(&dir.join("work")), input);
+        assert!(out.ends_with("interactive#2: 6\n"), "{out}");
     });
 }
 
@@ -420,11 +456,52 @@ fn control_characters_are_escaped() {
     assert!(!out.contains(['\x1b', '\u{9b}', '\u{202e}']), "{out:?}");
     assert!(out.contains("\"\\u{1b}[2J\\u{9b,202e}\""), "{out}");
     assert!(out.contains("let a = \"\\u{1b}[31m\" + nope"), "{out}");
+    // What's logged is written as is when piped, as `tempest run` does;
+    // on a terminal it's escaped (`edits_lines_on_a_terminal`).
+    let (_, out, _) = repl(&[], None, "console.log(\"\\u{1b}[1mbold\")\n");
+    assert_eq!(out, "\x1b[1mbold\ninteractive#0: void\n");
+}
+
+/// Terminal output as text: escape sequences (CSI, as colors, bracketed
+/// paste's `?2004h`, and synchronized output's `?2026h`; OSC; and others)
+/// and carriage returns dropped, so tests match what's shown, not how
+/// it's drawn.
+#[cfg(target_os = "linux")]
+fn shown(bytes: &[u8]) -> String {
+    let text = String::from_utf8_lossy(bytes);
+    let mut out = String::new();
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '\x1b' => match chars.next() {
+                Some('[') => {
+                    // Parameters, then a final byte in @ to ~.
+                    while chars.next().is_some_and(|c| !('@'..='~').contains(&c)) {}
+                }
+                Some(']') => {
+                    // To BEL, or ESC \.
+                    while let Some(c) = chars.next() {
+                        if c == '\x07' || c == '\x1b' && chars.next_if_eq(&'\\').is_some() {
+                            break;
+                        }
+                    }
+                }
+                _ => {}
+            },
+            '\r' => {}
+            c => out.push(c),
+        }
+    }
+    out
 }
 
 /// On a terminal, as `script` gives one: an input over lines, indented as
 /// it goes on, a signature hint, Ctrl-C at the prompt dropping what's
-/// typed, and history kept owner-only, a multi-line input as one entry.
+/// typed, a multi-quoted string typed as it would be piped, logs escaped,
+/// and history kept owner-only, a multi-line input as one entry. Each
+/// key waits for what it answers to be shown, so it holds on a slow,
+/// loaded machine: keys sent before the editor is ready are read by the
+/// terminal in its ordinary mode instead.
 #[cfg(target_os = "linux")]
 #[test]
 fn edits_lines_on_a_terminal() {
@@ -457,14 +534,28 @@ fn edits_lines_on_a_terminal() {
                 }
             }
         });
-        let start = Instant::now();
-        let mut out = Vec::new();
-        let wait_for = |text: &str, out: &mut Vec<u8>| {
-            while !String::from_utf8_lossy(out).contains(text) {
-                let shown = String::from_utf8_lossy(out).to_string();
+        let mut out: Vec<u8> = Vec::new();
+        // Waits until what's shown since byte `from` of the output
+        // contains each of `texts`, in order; gives where the output then
+        // ends.
+        let mut wait_for = |from: usize, texts: &[&str]| -> usize {
+            let start = Instant::now();
+            loop {
+                let since = shown(&out[from.min(out.len())..]);
+                let mut at = 0;
+                let found = texts.iter().all(|text| match since[at..].find(text) {
+                    Some(i) => {
+                        at += i + text.len();
+                        true
+                    }
+                    None => false,
+                });
+                if found {
+                    break out.len();
+                }
                 assert!(
-                    start.elapsed() < Duration::from_secs(60),
-                    "no {text:?} in {shown:?}"
+                    start.elapsed() < Duration::from_secs(120),
+                    "no {texts:?} in {since:?}"
                 );
                 if let Ok(bytes) = receive.recv_timeout(Duration::from_millis(50)) {
                     out.extend(bytes);
@@ -475,30 +566,44 @@ fn edits_lines_on_a_terminal() {
             stdin.write_all(keys.as_bytes()).unwrap();
             stdin.flush().unwrap();
         };
-        wait_for("$ ", &mut out);
+        let at = wait_for(0, &["$ "]);
         send_keys("let greet(name: String): String { \"hi ${name}\" }\r");
-        wait_for("interactive#0: void", &mut out);
+        // The next keys only once the result and the next prompt are up.
+        let at = wait_for(at, &["interactive#0: void", "$ "]);
         // Ctrl-C drops what's typed.
         send_keys("1 +");
-        wait_for("1 +", &mut out);
+        let at = wait_for(at, &["1 +"]);
         send_keys("\x03");
-        // Typed only once the next prompt is up, as keys typed between
-        // inputs may be dropped.
-        wait_for("1 +\x1b[?2004l\r\n\x1b[?2004h", &mut out);
-        let prompts = |out: &Vec<u8>| String::from_utf8_lossy(out).matches("$ ").count();
-        while prompts(&out) < 3 {
-            assert!(start.elapsed() < Duration::from_secs(60), "no prompt");
-            if let Ok(bytes) = receive.recv_timeout(Duration::from_millis(50)) {
-                out.extend(bytes);
-            }
-        }
+        // The line given up, and a new prompt.
+        let at = wait_for(at, &["\n$ "]);
         send_keys("greet(");
         // The hint, after what's typed.
-        wait_for("greet(  greet(name: String): String", &mut out);
+        let at = wait_for(at, &["greet(  greet(name: String): String"]);
         send_keys("\r");
-        wait_for("greet(\r\n    ", &mut out);
+        // A new line, indented, in the same input.
+        let at = wait_for(at, &["greet(\n    "]);
         send_keys("\"you\")\r");
-        wait_for("interactive#1: \"hi you\"", &mut out);
+        let at = wait_for(at, &["interactive#1: \"hi you\"", "$ "]);
+        // A multi-quoted string, ended by Enter on the line Enter
+        // indented, is what it would be piped: no space at its end.
+        send_keys("let s = \"\"\"\r");
+        let at = wait_for(at, &["\"\"\"\n  "]);
+        send_keys("\"two\r");
+        let at = wait_for(at, &["\"two\n  "]);
+        send_keys("\r");
+        let at = wait_for(at, &["interactive#2: void", "$ "]);
+        send_keys("s\r");
+        let at = wait_for(at, &["interactive#3: \"two\"", "$ "]);
+        // What's logged is escaped on a terminal.
+        let raw = at;
+        send_keys("console.log(\"\\u{1b}]52;c;SGVsbG8=\\u{7}after\")\r");
+        wait_for(at, &["interactive#4: void", "$ "]);
+        let logged = String::from_utf8_lossy(&out[raw..]).to_string();
+        assert!(!logged.contains("\x1b]52"), "{logged:?}");
+        assert!(
+            logged.contains("\\u{1b}]52;c;SGVsbG8=\\u{7}after"),
+            "{logged:?}"
+        );
         send_keys("\x04");
         drop(stdin);
         let status = child.wait().unwrap();

@@ -226,21 +226,21 @@ impl Interp<'_> {
                     Ok(())
                 }
                 Op::InitStatics => match frame.pop() {
-                    Val::Class(class) => self.init_statics(s, &class),
+                    Val::Class(ref class) => self.init_statics(s, class),
                     _ => Err(fail("Class not set")),
                 },
                 Op::Return => return Ok(frame.pop()),
                 // Kept here, the frame goes on after this op when resumed.
                 Op::Yield => return Err(Abrupt::Yield(frame.pop())),
                 Op::Await => match frame.pop() {
-                    Val::Promise(promise) => match promise.outcome() {
+                    Val::Promise(ref promise) => match promise.outcome() {
                         Some(outcome) => outcome.map(|value| frame.push(value)),
                         None => {
                             // Paused at this op, keeping the promise, to
                             // await it again when resumed.
                             frame.push(Val::Promise(promise.clone()));
                             frame.pc = at;
-                            return Err(Abrupt::Await(promise));
+                            return Err(Abrupt::Await(promise.clone()));
                         }
                     },
                     other => Err(fail(format!(

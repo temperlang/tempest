@@ -189,6 +189,8 @@ impl Session {
                 compile_time: true,
                 allowed_nodes: HashMap::new(),
                 host: None,
+                inputs_parked: Vec::new(),
+                inputs_failed: Vec::new(),
             },
             first_globals,
             ran: 0,

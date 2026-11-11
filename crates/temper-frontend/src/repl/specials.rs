@@ -18,6 +18,7 @@
 
 use super::{ReplEvent, Sink};
 use crate::core;
+use crate::interp::INTERRUPTED;
 use crate::interp::Val;
 use crate::interp::repl::{Arg, Host, arg};
 use crate::library::{FileId, Library};
@@ -29,6 +30,8 @@ use std::cell::RefCell;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::rc::Rc;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use temper_syntax::lex::{SourceKind, lex};
 use temper_syntax::tree::{NodeId, NodeKind};
 
@@ -79,15 +82,25 @@ pub trait ReplTools {
     /// A symbol's signature and docs, as hover shows them, for
     /// `help("name")`; `None` to say just its name and type.
     fn symbol_help(&self, s: &Settled, symbol: SymbolId) -> Option<String>;
-    /// A library, to settle, as tmpl's text, or why it can't be.
-    fn tmpl(&self, library: Library, sources: &Sources) -> Result<String, String>;
+    /// A library, to settle, as tmpl's text, or why it can't be: its
+    /// errors, if it has any. Between its steps, it stops with
+    /// [`INTERRUPTED`] once `interrupted` says so.
+    fn tmpl(
+        &self,
+        library: Library,
+        sources: &Sources,
+        interrupted: &dyn Fn() -> bool,
+    ) -> Result<String, String>;
     /// A library, to settle, translated into a language: the files of
-    /// its own code, each a path and its text, or why it can't be.
+    /// its own code, each a path and its text, or why it can't be: its
+    /// errors, if it has any. Between its steps, it stops with
+    /// [`INTERRUPTED`] once `interrupted` says so.
     fn translate(
         &self,
         library: Library,
         sources: &Sources,
         language: &str,
+        interrupted: &dyn Fn() -> bool,
     ) -> Result<Vec<(String, String)>, String>;
     /// The languages it translates into, alphabetically.
     fn languages(&self) -> Vec<String>;
@@ -101,8 +114,10 @@ pub(super) struct Specials {
     /// What the front end adds to `help()`: its keys and options.
     pub help_footer: String,
     /// Each input fed so far, the one running among them: its file and
-    /// scope.
-    pub inputs: Vec<(FileId, ScopeId)>,
+    /// scope; none for one whose settling panicked.
+    pub inputs: Vec<Option<(FileId, ScopeId)>>,
+    /// Set to stop what's running, as by Ctrl-C.
+    pub interrupt: Option<Arc<AtomicBool>>,
     /// The prelude's scope, and the declaration of the function the host
     /// implements.
     pub prelude: Option<ScopeId>,
@@ -117,10 +132,13 @@ pub(super) fn host(state: Rc<RefCell<Specials>>, sink: Sink) -> Host {
             return None;
         }
         let (which, args) = args.split_first()?;
-        let shown = catch_unwind(AssertUnwindSafe(|| match arg(which) {
-            Arg::Int(0) => state.help(s, args),
-            Arg::Int(1) => state.describe(s, args),
-            _ => state.translate(s, args),
+        let shown = catch_unwind(AssertUnwindSafe(|| {
+            state.check_interrupt()?;
+            match arg(which) {
+                Arg::Int(0) => state.help(s, args),
+                Arg::Int(1) => state.describe(s, args),
+                _ => state.translate(s, args),
+            }
         }));
         let shown = shown.unwrap_or_else(|_| {
             Err("tempest: internal error (a bug in tempest, not in your code)".into())
@@ -195,7 +213,7 @@ impl Specials {
             Some(Arg::Str(step)) => step,
             Some(_) => "",
         };
-        let file = self.inputs[n].0;
+        let file = self.input(n)?.0;
         let root = s.library.files[file.0 as usize].root;
         let mut out = String::new();
         match step {
@@ -207,10 +225,17 @@ impl Specials {
             }
             "settled" => crate::print::write_node(s, root, 80, &mut out),
             "types" => types(s, root, &mut out),
-            "module" => out = self.module(s, n),
+            "module" => out = self.module(s, n)?,
             "tmpl" => {
                 let tools = self.tools.as_ref().ok_or("describe: no tmpl here")?;
-                out = tools.tmpl(self.module_library(s, n), &self.sources)?;
+                let interrupted = || self.check_interrupt().is_err();
+                let library = self.module_library(s, n)?;
+                out = (tools.tmpl(library, &self.sources, &interrupted)).map_err(|why| {
+                    match why == INTERRUPTED {
+                        true => why,
+                        false => format!("describe: {why}"),
+                    }
+                })?;
             }
             _ => {
                 let steps: Vec<String> = STEPS.iter().map(|(s, _)| format!("\"{s}\"")).collect();
@@ -234,17 +259,25 @@ impl Specials {
             _ => return Err(format!("translate: the language is {}", or_list(&known))),
         };
         let mut out = String::new();
+        let interrupted = || self.check_interrupt().is_err();
         for language in &languages {
+            self.check_interrupt()?;
             let comment = match language.as_str() {
                 "py" => "#",
                 "lua" => "--",
                 _ => "//",
             };
-            match tools.translate(self.module_library(s, n), &self.sources, language) {
+            let module = self.module_library(s, n)?;
+            match tools.translate(module, &self.sources, language, &interrupted) {
                 Ok(files) => {
                     for (path, text) in files {
                         out.push_str(&format!("{comment} {path}\n{}\n", text.trim_end()));
                     }
+                }
+                Err(why) if why == INTERRUPTED => return Err(why),
+                // The same for every language, so said once.
+                Err(why) if why.starts_with(super::MODULE_ERRORS) => {
+                    return Err(format!("translate: {why}"));
                 }
                 Err(why) if languages.len() > 1 => {
                     out.push_str(&format!("{comment} {language}: {why}\n"))
@@ -257,7 +290,9 @@ impl Specials {
 
     /// The input number that's a function's first argument, checked.
     fn input_arg(&self, function: &str, args: &[Val]) -> Result<usize, String> {
-        let last = self.inputs.len() - 1;
+        let Some(last) = self.inputs.len().checked_sub(1) else {
+            return Err(format!("{function}: there are no inputs yet"));
+        };
         match args.first().map(arg) {
             Some(Arg::Int(n)) if n >= 0 && (n as usize) <= last => Ok(n as usize),
             Some(Arg::Int(n)) => Err(format!(
@@ -269,9 +304,13 @@ impl Specials {
 
     /// The scope a name is looked up from: the input running's.
     fn latest(&self) -> ScopeId {
-        (self.inputs.last().map(|&(_, scope)| scope))
-            .or(self.prelude)
-            .unwrap_or(BUILTINS)
+        (self
+            .inputs
+            .iter()
+            .rev()
+            .find_map(|input| input.map(|(_, scope)| scope)))
+        .or(self.prelude)
+        .unwrap_or(BUILTINS)
     }
 
     /// The symbol a name means from `scope`.
@@ -285,58 +324,96 @@ impl Specials {
 
     /// The module that input `n` makes, with what it uses, as a library
     /// to settle.
-    fn module_library(&self, s: &Settled, n: usize) -> Library {
+    fn module_library(&self, s: &Settled, n: usize) -> Result<Library, String> {
+        self.input(n)?;
         let mut library = Library::new();
         library.libraries = self.libraries.clone();
         library.add_file(
             "interactive.temper",
-            &self.module(s, n),
+            &self.module(s, n)?,
             SourceKind::Standalone,
         );
         load_imports(&self.sources, &mut library);
-        library
+        Ok(library)
     }
 
-    /// Input `n` as one Temper module ([module docs](self)).
-    pub(super) fn module(&self, s: &Settled, n: usize) -> String {
+    /// Input `n` as one Temper module ([module docs](self)), or
+    /// [`INTERRUPTED`] if it's interrupted.
+    pub(super) fn module(&self, s: &Settled, n: usize) -> Result<String, String> {
         let tree = &s.library.tree;
         let by_scope: HashMap<ScopeId, usize> = (self.inputs.iter().enumerate())
-            .map(|(i, &(_, scope))| (scope, i))
+            .filter_map(|(i, input)| input.map(|(_, scope)| (scope, i)))
             .collect();
-        let root = |i: usize| s.library.files[self.inputs[i].0.0 as usize].root;
-        // The inputs it uses, through names, transitively.
+        let input = |i: usize| self.inputs[i].expect("an input that's included was settled");
+        let root = |i: usize| s.library.files[input(i).0.0 as usize].root;
+        // The inputs it uses, through names, transitively, and the
+        // earlier inputs that change what those declare, until there are
+        // no more.
         let mut included = BTreeSet::from([n]);
         let mut todo = vec![n];
-        while let Some(i) = todo.pop() {
-            for node in descendants(s, root(i)) {
-                // A name, or an expression of a class's type, as an
-                // object literal is.
-                let class = s.typing.expr(node).and_then(|t| class_of(s, t));
-                for symbol in [s.scopes.resolved(node), class].into_iter().flatten() {
-                    let owner = s.scopes.symbol(symbol).owner;
-                    if let Some(&j) = by_scope.get(&owner) {
-                        if included.insert(j) {
-                            todo.push(j);
+        loop {
+            while let Some(i) = todo.pop() {
+                self.check_interrupt()?;
+                for node in descendants(s, root(i)) {
+                    // A name, or an expression of a class's type, as an
+                    // object literal is.
+                    let class = s.typing.expr(node).and_then(|t| class_of(s, t));
+                    for symbol in [s.scopes.resolved(node), class].into_iter().flatten() {
+                        let owner = s.scopes.symbol(symbol).owner;
+                        if let Some(&j) = by_scope.get(&owner) {
+                            if included.insert(j) {
+                                todo.push(j);
+                            }
                         }
                     }
                 }
             }
+            let mine = |symbol: SymbolId| {
+                (by_scope.get(&s.scopes.symbol(symbol).owner)).is_some_and(|j| included.contains(j))
+            };
+            for j in 0..n {
+                self.check_interrupt()?;
+                if !included.contains(&j) && self.inputs[j].is_some() && changes(s, root(j), &mine)
+                {
+                    todo.push(j);
+                }
+            }
+            if todo.is_empty() {
+                break;
+            }
+            included.extend(todo.iter().copied());
         }
-        // Names declared again among them, renamed after the first.
+        // Names declared again among them, renamed after the first; an
+        // import of what an earlier one imported under the same name is
+        // dropped, its uses meaning the earlier one.
         let mut taken: HashSet<String> = HashSet::new();
         for &i in &included {
-            for &(name, _) in &s.scopes.get(self.inputs[i].1).names {
+            for &(name, _) in &s.scopes.get(input(i).1).names {
                 taken.insert(s.library.names.get(name).to_string());
             }
         }
         let mut counts: HashMap<&str, usize> = HashMap::new();
         let mut renames: HashMap<SymbolId, String> = HashMap::new();
+        let mut latest: HashMap<&str, SymbolId> = HashMap::new();
+        let mut again: HashSet<SymbolId> = HashSet::new();
         for &i in &included {
-            for &(name, symbol) in &s.scopes.get(self.inputs[i].1).names {
+            for &(name, symbol) in &s.scopes.get(input(i).1).names {
                 if s.library.names.is_temporary(name) {
                     continue;
                 }
                 let text = s.library.names.get(name);
+                let imported = import_target(s, &by_scope, symbol);
+                let earlier = latest.get(text).copied();
+                if imported.is_some()
+                    && earlier.and_then(|e| import_target(s, &by_scope, e)) == imported
+                {
+                    if let Some(renamed) = earlier.and_then(|e| renames.get(&e)).cloned() {
+                        renames.insert(symbol, renamed);
+                    }
+                    again.insert(symbol);
+                    continue;
+                }
+                latest.insert(text, symbol);
                 let count = counts.entry(text).or_default();
                 *count += 1;
                 if *count > 1 {
@@ -352,8 +429,20 @@ impl Specials {
         }
         let mut out = String::new();
         for &i in &included {
-            let file = self.inputs[i].0;
+            self.check_interrupt()?;
+            let (file, scope) = input(i);
             let source = s.library.files[file.0 as usize].parsed.source();
+            // The imports dropped, as byte ranges.
+            let repeated: Vec<usize> = (s.scopes.get(scope).names.iter())
+                .filter(|(_, symbol)| again.contains(symbol))
+                .filter_map(|&(_, symbol)| s.scopes.symbol(symbol).decl)
+                .map(|decl| {
+                    let name = tree.children(decl)[0];
+                    s.library.locate(tree.span(name).start).1 as usize
+                })
+                .collect();
+            let drops = drop_imports(source, &repeated);
+            let dropped = |at: usize| drops.iter().any(|&(start, end)| (start..end).contains(&at));
             // Each use and declaration of a renamed name, by its offset.
             let mut edits: Vec<(usize, usize, &str)> = Vec::new();
             let mut names: Vec<(NodeId, SymbolId)> = Vec::new();
@@ -377,10 +466,14 @@ impl Specials {
                 let (at, start) = s.library.locate(tree.span(node).start);
                 let old = s.library.names.get(s.scopes.symbol(symbol).name);
                 let start = start as usize;
-                if at == file && source.get(start..).is_some_and(|t| t.starts_with(old)) {
+                if at == file
+                    && !dropped(start)
+                    && source.get(start..).is_some_and(|t| t.starts_with(old))
+                {
                     edits.push((start, start + old.len(), renamed));
                 }
             }
+            edits.extend(drops.iter().map(|&(start, end)| (start, end, "")));
             edits.sort();
             edits.dedup_by_key(|e| e.0);
             let mut text = source.to_string();
@@ -394,10 +487,181 @@ impl Specials {
                     text.insert(last.end as usize, ';');
                 }
             }
-            out.push_str(&format!("// interactive#{i}\n{}\n", text.trim_end()));
+            out.push_str(&format!("// interactive#{i}\n"));
+            if !text.trim().is_empty() {
+                out.push_str(&format!("{}\n", text.trim()));
+            }
         }
-        out
+        Ok(out)
     }
+
+    /// Fails with [`INTERRUPTED`] once the interrupt flag is set, as by
+    /// Ctrl-C, so the REPL's functions can be stopped as inputs are.
+    pub(super) fn check_interrupt(&self) -> Result<(), String> {
+        match self
+            .interrupt
+            .as_ref()
+            .is_some_and(|flag| flag.load(Ordering::Relaxed))
+        {
+            true => Err(INTERRUPTED.to_string()),
+            false => Ok(()),
+        }
+    }
+
+    /// Input `n`'s file and scope, or why there are none: settling it
+    /// failed.
+    fn input(&self, n: usize) -> Result<(FileId, ScopeId), String> {
+        self.inputs[n].ok_or_else(|| {
+            format!(
+                "input {n} failed as it was settled, a bug in tempest, so it has nothing to show"
+            )
+        })
+    }
+}
+
+/// Whether an input's top level has a statement, not a declaration, that
+/// assigns to one of `mine`'s symbols, or calls a method on one, as
+/// `v = 2;` or `list.add(x);`, changing what an earlier input declared.
+fn changes(s: &Settled, root: NodeId, mine: &dyn Fn(SymbolId) -> bool) -> bool {
+    let tree = &s.library.tree;
+    let resolved_mine = |node: NodeId| s.scopes.resolved(node).is_some_and(mine);
+    let top = tree.children(root).iter().copied();
+    top.filter(|&t| !matches!(tree.kind(t), NodeKind::Let | NodeKind::Class))
+        .flat_map(|t| descendants(s, t))
+        .any(|node| match tree.kind(node) {
+            NodeKind::Assign => (tree.children(node).first())
+                .is_some_and(|&target| descendants(s, target).into_iter().any(resolved_mine)),
+            // `receiver.method(…)`: a call of a member, `(. receiver \method)`.
+            NodeKind::Call => (tree.children(node).first().copied())
+                .filter(|&callee| tree.kind(callee) == NodeKind::Call)
+                .and_then(|callee| tree.children(callee).get(1).copied())
+                .is_some_and(resolved_mine),
+            _ => false,
+        })
+}
+
+/// What a symbol was imported as, if an input's import declared it: the
+/// module's symbol that its `Let` takes the value of.
+fn import_target(
+    s: &Settled,
+    inputs: &HashMap<ScopeId, usize>,
+    symbol: SymbolId,
+) -> Option<SymbolId> {
+    let tree = &s.library.tree;
+    let decl = s.scopes.symbol(symbol).decl?;
+    if tree.kind(decl) != NodeKind::Let {
+        return None;
+    }
+    let target = s.scopes.resolved(core::let_parts(tree, decl).2?)?;
+    let owner = s.scopes.symbol(target).owner;
+    (!inputs.contains_key(&owner) && owner != BUILTINS).then_some(target)
+}
+
+/// What to cut from an input's source to drop the bindings that start at
+/// `names`, each in an import, `let { a, b } = import("…");`: a binding
+/// with the comma after or before it, or the whole statement if all its
+/// bindings go. A binding that isn't in such an import stays.
+fn drop_imports(source: &str, names: &[usize]) -> Vec<(usize, usize)> {
+    if names.is_empty() {
+        return Vec::new();
+    }
+    let tokens: Vec<_> = (lex(source, SourceKind::Standalone).into_iter())
+        .filter(|t| !t.kind.is_ignorable())
+        .collect();
+    let text = |k: usize| tokens.get(k).map_or("", |t| &source[t.range()]);
+    // The token after the bracket that `open` opens closes.
+    let close = |open: usize| {
+        let mut depth = 0i32;
+        for k in open..tokens.len() {
+            match text(k) {
+                "(" | "[" | "{" | "${" => depth += 1,
+                ")" | "]" | "}" => depth -= 1,
+                _ => {}
+            }
+            if depth == 0 {
+                return Some(k);
+            }
+        }
+        None
+    };
+    // Each import's first and last tokens, and its bindings' tokens.
+    type Import = (usize, usize, Vec<(usize, usize)>);
+    let mut statements: Vec<Import> = Vec::new();
+    let mut doomed: HashMap<usize, Vec<usize>> = HashMap::new();
+    for &at in names {
+        let Some(k) = tokens.iter().position(|t| t.start as usize == at) else {
+            continue;
+        };
+        // Back to the pattern's `{`, after `let`.
+        let mut depth = 0i32;
+        let open = (0..k).rev().find(|&j| {
+            match text(j) {
+                ")" | "]" | "}" => depth += 1,
+                "(" | "[" | "{" | "${" => depth -= 1,
+                _ => {}
+            }
+            depth < 0
+        });
+        let Some(open) = open.filter(|&o| o > 0 && text(o) == "{" && text(o - 1) == "let") else {
+            continue;
+        };
+        let Some(shut) = close(open) else { continue };
+        if text(shut + 1) != "=" || text(shut + 2) != "import" || text(shut + 3) != "(" {
+            continue;
+        }
+        let Some(mut end) = close(shut + 3) else {
+            continue;
+        };
+        if text(end + 1) == ";" {
+            end += 1;
+        }
+        // The pattern's bindings, by their tokens, split at its commas.
+        let mut bindings = Vec::new();
+        let mut first = open + 1;
+        let mut j = open + 1;
+        while j < shut {
+            match text(j) {
+                "," => {
+                    bindings.push((first, j));
+                    first = j + 1;
+                }
+                "(" | "[" | "{" | "${" => j = close(j).unwrap_or(shut),
+                _ => {}
+            }
+            j += 1;
+        }
+        if first < shut {
+            bindings.push((first, shut));
+        }
+        let Some(b) = bindings.iter().position(|&(a, z)| (a..z).contains(&k)) else {
+            continue;
+        };
+        if !statements.iter().any(|st| st.0 == open - 1) {
+            statements.push((open - 1, end, bindings));
+        }
+        doomed.entry(open - 1).or_default().push(b);
+    }
+    let mut cuts = Vec::new();
+    for (start, end, bindings) in statements {
+        let gone = &doomed[&start];
+        if bindings.iter().enumerate().all(|(b, _)| gone.contains(&b)) {
+            cuts.push((tokens[start].start as usize, tokens[end].end as usize));
+            continue;
+        }
+        for &b in gone {
+            let (a, z) = bindings[b];
+            // The comma after it, or for the last, the one before.
+            let cut = match bindings.get(b + 1) {
+                Some(&(next, _)) => (tokens[a].start as usize, tokens[next].start as usize),
+                None => (
+                    tokens[bindings[b - 1].1].start as usize,
+                    tokens[z - 1].end as usize,
+                ),
+            };
+            cuts.push(cut);
+        }
+    }
+    cuts
 }
 
 /// Text after a lead, wrapped at `width` columns, later lines indented

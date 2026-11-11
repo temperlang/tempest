@@ -54,7 +54,7 @@ impl Interp<'_> {
                     out.push_str(&text[last..found.begin]);
                     let found_match = self.regex_match(s, regex, text, &found, refs)?;
                     match self.apply(s, format.clone(), vec![found_match])? {
-                        Val::Str(replacement) => out.push_str(&replacement),
+                        Val::Str(ref replacement) => out.push_str(replacement),
                         _ => return Err(fail("A replacement must be a String")),
                     }
                     last = found.end;
@@ -105,7 +105,7 @@ impl Interp<'_> {
         };
         Ok(match class {
             "Capture" => {
-                let Val::Str(name) = get(self, "name")? else {
+                let Val::Str(ref name) = get(self, "name")? else {
                     return Err(fail("Expected a String"));
                 };
                 let item = get(self, "item")?;
@@ -116,7 +116,7 @@ impl Interp<'_> {
                 }
             }
             "CodePoints" => match get(self, "value")? {
-                Val::Str(text) => Node::Chars(text.to_string()),
+                Val::Str(ref text) => Node::Chars(text.to_string()),
                 _ => return Err(fail("Expected a String")),
             },
             "CodeRange" => Node::Range(count(get(self, "min")?)?, count(get(self, "max")?)?),
@@ -174,7 +174,7 @@ impl Interp<'_> {
                 .find(field)
                 .ok_or_else(|| fail(format!("No member {field}")))?;
             match this.get_property(s, refs.clone(), name, None)? {
-                Val::Object(example) => Ok(example.class.clone()),
+                Val::Object(ref example) => Ok(example.class.clone()),
                 _ => Err(fail("Expected an object")),
             }
         };

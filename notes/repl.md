@@ -117,10 +117,51 @@ The user's answers to the open questions at the end:
   `control_characters_are_escaped`, `edits_lines_on_a_terminal` under
   `script`, on Linux).
 
+**Review fixes, done** (an independent review of chunks 1 and 2):
+
+- **History** is opened once and checked: on Unix, the directory must
+  be the user's and not a link, made 0700 if it's looser; the file is
+  opened by `openat` with `O_NOFOLLOW`, checked by `fstat` (regular,
+  the user's, one link), `fchmod`ed to 0600. tempest reads and appends
+  it (rustyline's V2 format) through that descriptor, and rustyline
+  keeps a `MemHistory`, so nothing reopens the path; `with-file-history`
+  is dropped (fd-lock, rustix, and their crates leave the build). On
+  Windows, reparse points are refused, the file opened with
+  `FILE_FLAG_OPEN_REPARSE_POINT` and checked through its handle.
+- **`translate`'s module** takes the earlier inputs that assign to, or
+  call a method on, what it includes, to a fixed point; drops an import
+  of what an earlier one imported under the same name, rather than
+  renaming it in the pattern; and refuses a module with errors, showing
+  them, a top-level `await` with how to translate it.
+- **Typed and piped alike:** `Chunker::take` drops trailing lines of
+  only space, as the indent Enter leaves.
+- **A parked input that fails when resumed** fails as itself,
+  `interactive#8 failed: …`, its globals noted unset; the input that
+  resumed it doesn't fail.
+- **Relative imports** resolve from the current directory
+  (`Library::relative_from`), not the inputs' `-repl-`.
+- **Deep values** drop without recursing (`Drop for Val`, a work list
+  of the containers only it owns), for `tempest run -b interp` too.
+- **Caps:** a huge string prints cut (`quote_within`); a snippet's line
+  is cut to 200 characters around the span.
+- **A panic while settling** rolls the round back: the latest segment
+  and the REPL module's scope go back, the input keeps its number
+  (`Specials::inputs` holds `None` for it), and the modules it loaded
+  get globals that say why when read. A panic as it runs leaves what's
+  settled; every global is made before anything runs.
+- **Escaping:** logs too, when stdout is a terminal; line and paragraph
+  separators and invisible characters, joiners only alone or at an
+  edge (emoji sequences stay whole), tag characters only outside an
+  emoji tag sequence.
+- **`--no-workroot`**, and **Ctrl-C** stops `help`, `describe`, and
+  `translate`, checked between their steps (`ReplTools` takes an
+  `interrupted` callback).
+
 **Left:** `-b`; the playground's console; suggestions from history as
 you type; `help`'s topics (Kotlin's `unresolved`, `available-imports`);
 a translation's module leaves out an earlier input it needs only through
-something without a name or a class type (rare); and contextual
+something without a name or a class type, or a change through a call
+that isn't a method's, as `f(list)` (rare); and contextual
 autoescaping's compile-time pass for REPL inputs (they run unfolded,
 which is always safe). Bad string escapes aren't reported anywhere in
 tempest yet (they fail when run), a gap outside the REPL.

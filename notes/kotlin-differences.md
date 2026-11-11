@@ -1113,12 +1113,17 @@ Other differences we won't copy:
     (`"parsed"`, `"settled"`, `"types"`, `"module"`, `"tmpl"`), not
     Kotlin's stage names. `translate(n, lang)` prints the code in the
     REPL, where Kotlin writes files and prints their paths, and
-    translates one module, input `n` after the earlier inputs it uses,
-    with a name an included input declares again renamed (`x__2`);
-    Kotlin translates input `n` alone, importing earlier exports.
+    translates one module, input `n` after the earlier inputs it uses
+    and those that change what they declare (`v = 2;`, `lb.add(1);`),
+    with a name an included input declares again renamed (`x__2`) and
+    an import repeated dropped; Kotlin translates input `n` alone,
+    importing earlier exports. A module with errors isn't translated:
+    its errors are shown, top-level `await` (REPL-only) among them,
+    where Kotlin translates what it can.
     `translate(n)` gives every language. `help("name")` shows hover's
     text; Kotlin's topics (`help("unresolved")`,
-    `help("available-imports")`) and `help(+)` aren't there.
+    `help("available-imports")`) and `help(+)` aren't there. Ctrl-C
+    stops them too.
     Test: temper-frontend/tests/repl/specials.cases;
     temper-driver/tests/repl/tools.cases.
   - **The terminal:** rustyline where Kotlin has JLine. A multi-line
@@ -1132,7 +1137,10 @@ Other differences we won't copy:
     honors `NO_COLOR` and `--color auto|always|never`, which Kotlin
     lacks; `TERM=dumb` and `CI` turn it off as in Kotlin (`TF_BUILD`
     doesn't). What the REPL prints of its own has control characters
-    escaped, so output can't rewrite the terminal.
+    escaped, so output can't rewrite the terminal, and so do logs when
+    standard output is a terminal (Kotlin prints them raw); piped, logs
+    stay raw. The history file is opened once, checked (its directory
+    the user's own, no links), and written through that descriptor.
     Test: tempest/src/repl/line.rs and color.rs (unit tests);
     tempest/tests/repl.rs, `edits_lines_on_a_terminal`, `color`, and
     `control_characters_are_escaped`.
@@ -1143,6 +1151,10 @@ Other differences we won't copy:
     Test: specials.cases, "test refuses with a clear message";
     basics.cases, "a forward reference to a later input fails; one input
     can recurse".
+  - **Imports:** relative ones resolve from the current directory, as
+    if the inputs were there; `--no-workroot` loads no work root.
+    Test: tempest/tests/repl.rs, `relative_imports_from_the_current_directory`
+    and `imports_from_the_work_root`.
   - **Not yet:** `-b`; and std's tutorial examples that Kotlin's REPL
     ran but tempest's language rejects are noted in
     docs/inconsistencies.md, I24.

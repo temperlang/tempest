@@ -6,7 +6,6 @@
 
 use super::frame::Frame;
 use super::lower::GeneratorKind;
-use super::promises::Promise;
 use super::{Abrupt, Generator, INTERRUPTED, Interp, Lowering, Output, SLICE, Val, describe};
 use crate::builtins::TYPES;
 use crate::core::{self, MEMBER_STATIC, ROLE_MASK, ROLE_PARAM};
@@ -105,6 +104,8 @@ impl Runner {
                 compile_time: false,
                 allowed_nodes: HashMap::new(),
                 host,
+                inputs_parked: Vec::new(),
+                inputs_failed: Vec::new(),
             },
             first_globals: HashMap::new(),
             fuel,
@@ -142,13 +143,16 @@ impl Runner {
     /// `keep`, then what's ready in the queue. At a top-level `await` of a
     /// promise not resolved yet, it runs the queue, then goes on if that
     /// resolved it; if not, the input is parked, as an `async` block
-    /// awaiting it, and goes on once a later input resolves it.
+    /// awaiting it, and goes on once a later input resolves it; if it
+    /// fails then, that's its own failure, input `number`'s
+    /// ([`Runner::resumed_failures`]).
     pub(crate) fn run_input(
         &mut self,
         s: &Settled,
         input: &SettledModule,
         root: NodeId,
         keep: bool,
+        number: usize,
     ) -> Outcome {
         self.start();
         let lowering = &mut self.interp.lowering;
@@ -162,7 +166,12 @@ impl Runner {
                         failure.get_or_insert(abrupt);
                     }
                     if promise.outcome().is_none() {
-                        park(&promise, frame);
+                        let generator = Rc::new(Generator {
+                            frame: RefCell::new(Some(frame)),
+                            kind: GeneratorKind::Safe,
+                        });
+                        self.interp.inputs_parked.push((generator.clone(), number));
+                        promise.park(generator);
                         return match failure {
                             Some(abrupt) => outcome(Err(abrupt)),
                             None => Outcome::Unresolved,
@@ -196,20 +205,19 @@ impl Runner {
         }
     }
 
+    /// The inputs parked at a top-level `await` that failed when a later
+    /// run resumed them, each by its number, with why, as [`describe`]
+    /// says it.
+    pub(crate) fn resumed_failures(&mut self) -> Vec<(usize, String)> {
+        (self.interp.inputs_failed.drain(..))
+            .map(|(input, abrupt)| (input, describe(abrupt)))
+            .collect()
+    }
+
     /// Drops what a panic may have left half done: calls in progress.
     pub(crate) fn recover(&mut self) {
         self.interp.depth = 0;
     }
-}
-
-/// Parks an input's frame, paused at a top-level `await`, as an `async`
-/// block awaiting the promise.
-fn park(promise: &Promise, frame: Frame) {
-    let generator = Rc::new(Generator {
-        frame: RefCell::new(Some(frame)),
-        kind: GeneratorKind::Safe,
-    });
-    promise.park(generator);
 }
 
 fn outcome(result: Result<Val, Abrupt>) -> Outcome {
@@ -263,7 +271,7 @@ impl Render<'_> {
         match value {
             Val::Void => self.out.push_str("void"),
             Val::Null => self.out.push_str("null"),
-            Val::Str(text) => quote(text, &mut self.out),
+            Val::Str(text) => quote_within(text, &mut self.out, RENDER_LENGTH),
             Val::Bool(_) | Val::Int(_) | Val::Int64(_) | Val::Float(_) => {
                 self.out.push_str(&super::to_string(value))
             }
@@ -304,7 +312,7 @@ impl Render<'_> {
             }),
             Val::StringBuilder(text) => {
                 self.out.push_str("{class: StringBuilder, content: ");
-                quote(&text.borrow(), &mut self.out);
+                quote_within(&text.borrow(), &mut self.out, RENDER_LENGTH);
                 self.out.push('}');
             }
             Val::Uninit => self.out.push_str("fail"),
@@ -383,13 +391,26 @@ impl Render<'_> {
     }
 }
 
+/// A string as [`quote_within`] writes it, however long.
+#[cfg(test)]
+pub(crate) fn quote(text: &str, out: &mut String) {
+    quote_within(text, out, usize::MAX)
+}
+
 /// A string as a Temper string literal, with Kotlin's `temperEscaper`'s
 /// escapes: `\"`, `\\`, `\n`, `\r`, `\t`, and `\u{…}` for `$` and for
-/// what isn't graphic, runs of them sharing one, as `\u{24,a0}`.
-pub(crate) fn quote(text: &str, out: &mut String) {
+/// what isn't graphic, runs of them sharing one, as `\u{24,a0}`. Once
+/// `out` is longer than `limit` bytes, the string ends there, its closing
+/// quote followed by `…`, so one huge string doesn't make a huge line.
+fn quote_within(text: &str, out: &mut String, limit: usize) {
     out.push('"');
     let mut run = false;
+    let mut cut = false;
     for c in text.chars() {
+        if out.len() > limit {
+            cut = true;
+            break;
+        }
         let fixed = match c {
             '"' => Some("\\\""),
             '\\' => Some("\\\\"),
@@ -418,6 +439,9 @@ pub(crate) fn quote(text: &str, out: &mut String) {
         out.push('}');
     }
     out.push('"');
+    if cut {
+        out.push('…');
+    }
 }
 
 /// Whether a character prints as itself: not a control, format,

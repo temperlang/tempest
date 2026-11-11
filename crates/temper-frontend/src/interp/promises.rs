@@ -76,8 +76,8 @@ impl Interp<'_> {
         let [block] =
             <[Val; 1]>::try_from(args).map_err(|_| fail("async takes a generator block"))?;
         match self.apply(s, block, Vec::new())? {
-            Val::Generator(generator) => {
-                self.ready.push_back(Task::Block(generator));
+            Val::Generator(ref generator) => {
+                self.ready.push_back(Task::Block(generator.clone()));
                 Ok(Val::Void)
             }
             other => Err(fail(format!(
@@ -120,13 +120,26 @@ impl Interp<'_> {
                     continue;
                 }
             };
-            match self.step(s, &task) {
-                Err(Abrupt::Await(promise)) => match &mut *promise.state.borrow_mut() {
-                    State::Pending(waiters) => waiters.push(task),
-                    _ => unreachable!("a block pauses only on a pending promise"),
-                },
-                Ok(_) | Err(Abrupt::Yield(_)) => {}
-                Err(abrupt) => result = result.and(Err(abrupt)),
+            let done = match self.step(s, &task) {
+                Err(Abrupt::Await(promise)) => {
+                    match &mut *promise.state.borrow_mut() {
+                        State::Pending(waiters) => waiters.push(task),
+                        _ => unreachable!("a block pauses only on a pending promise"),
+                    }
+                    continue;
+                }
+                done => done,
+            };
+            // A REPL input resumed: its failure is its own.
+            let parked = (self.inputs_parked.iter()).position(|(g, _)| Rc::ptr_eq(g, &task));
+            let input = parked.map(|i| self.inputs_parked.swap_remove(i).1);
+            match (done, input) {
+                (Ok(_) | Err(Abrupt::Yield(_)), _) => {}
+                (Err(Abrupt::Panic(why)), _) if why == super::INTERRUPTED => {
+                    result = result.and(Err(Abrupt::Panic(why)))
+                }
+                (Err(abrupt), Some(input)) => self.inputs_failed.push((input, abrupt)),
+                (Err(abrupt), None) => result = result.and(Err(abrupt)),
             }
         }
         result

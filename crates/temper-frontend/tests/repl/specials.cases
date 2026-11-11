@@ -165,3 +165,96 @@ class Point(public x: Int, public y: Int) {};
 // interactive#10
 [{ x: 3, y: 4 }].length;
 interactive#11: void
+
+=== the module includes earlier inputs that change what it uses
+var v = 1
+v = 2;
+let lb = new ListBuilder<Int>();
+lb.add(3);
+let unrelated = new ListBuilder<Int>();
+unrelated.add(4);
+if (v > 1) { lb.add(v); }
+lb.toList()
+describe(7, "module")
+describe(1, "module")
+--- transcript
+interactive#0: void
+interactive#1: void
+interactive#2: void
+interactive#3: void
+interactive#4: void
+interactive#5: void
+interactive#6: void
+interactive#7: [3,2]
+// interactive#0
+var v = 1;
+// interactive#1
+v = 2;
+// interactive#2
+let lb = new ListBuilder<Int>();
+// interactive#3
+lb.add(3);
+// interactive#6
+if (v > 1) { lb.add(v); };
+// interactive#7
+lb.toList();
+interactive#8: void
+// interactive#0
+var v = 1;
+// interactive#1
+v = 2;
+interactive#9: void
+
+=== the module drops an import repeated, rather than renaming it
+let { Date } = import("std/temporal")
+let d1 = new Date(2020, 1, 2)
+let { Date } = import("std/temporal")
+let d2(): Date { new Date(2021, 3, 4) }
+"${d2().toString()} ${d1.toString()}"
+describe(4, "module")
+let { CodePoints } = import("std/regex")
+let cp = new CodePoints("a")
+let { Capture, CodePoints } = import("std/regex")
+"${new Capture("x", new CodePoints("b")).name}${cp.value}"
+describe(9, "module")
+class Date(public x: Int) {}
+let { Date } = import("std/temporal")
+new Date(2022, 5, 6).toString()
+describe(13, "module")
+--- transcript
+interactive#0: void
+interactive#1: void
+interactive#2: void
+interactive#3: void
+interactive#4: "2021-03-04 2020-01-02"
+// interactive#0
+let { Date } = import("std/temporal");
+// interactive#1
+let d1 = new Date(2020, 1, 2);
+// interactive#2
+// interactive#3
+let d2(): Date { new Date(2021, 3, 4) };
+// interactive#4
+"${d2().toString()} ${d1.toString()}";
+interactive#5: void
+interactive#6: void
+interactive#7: void
+interactive#8: void
+interactive#9: "xa"
+// interactive#6
+let { CodePoints } = import("std/regex");
+// interactive#7
+let cp = new CodePoints("a");
+// interactive#8
+let { Capture } = import("std/regex");
+// interactive#9
+"${new Capture("x", new CodePoints("b")).name}${cp.value}";
+interactive#10: void
+interactive#11: Date
+interactive#12: void
+interactive#13: "2022-05-06"
+// interactive#12
+let { Date } = import("std/temporal");
+// interactive#13
+new Date(2022, 5, 6).toString();
+interactive#14: void

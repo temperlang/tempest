@@ -178,35 +178,31 @@ pub(crate) fn init() -> temper_core::Result<()> {
 }
 interactive#1: void
 
-=== translate classes, and inputs that failed
+=== translate classes, and inputs with errors
 class Point(public x: Int, public y: Int) {
   public sum(): Int { x + y }
 }
 let p = new Point(1, 2)
-let total = p.sum() + missing
+let total = p.sum() + 1
 translate(2, "java")
 translate(2, "cpp")
 translate(2, "rust")
 translate(2, "csharp")
+let more = p.sum() + missing
+translate(7, "java")
 --- transcript
 interactive#0: Point
 interactive#1: void
-interactive#2:1:23: error: missing has not been declared
-    let total = p.sum() + missing
-                          ^^^^^^^
-interactive#2: fail
+interactive#2: void
 // interactive/src/main/java/interactive/InteractiveGlobal.java
 package interactive;
-
-import temper.core.Core;
 
 public final class InteractiveGlobal {
     private InteractiveGlobal() {}
 
     static {
-        Object total;
         Point p = new Point(1, 2);
-        Core.throwBubble();
+        int total = p.sum() + 1;
     }
 }
 // interactive/src/main/java/interactive/Point.java
@@ -320,9 +316,9 @@ int32_t Point::get_y() const {
 
 void global_init_init() {
   core::init_once([] {
-    std::shared_ptr<core::AnyValueBase> total;
     std::shared_ptr<Point> p = Point::make(1, 2);
-    core::bubble();
+    int32_t total = core::Int::add(p->sum(), 1);
+    static_cast<void>(total);
   });
 }
 
@@ -335,8 +331,9 @@ pub(crate) fn init() -> temper_core::Result<()> {
     static INIT_ONCE: OnceLock<temper_core::Result<()>> = OnceLock::new();
     INIT_ONCE
         .get_or_init(|| {
-            let _p = Point::new(1, 2);
-            Err(temper_core::Error::new())
+            let p = Point::new(1, 2);
+            let _total = p.sum().wrapping_add(1);
+            Ok(())
         })
         .clone()
 }
@@ -360,25 +357,16 @@ impl Point {
 }
 
 temper_core::impl_any_value_trait!(Point, []);
-
-static _TOTAL: OnceLock<temper_core::AnyValue> = OnceLock::new();
-
-pub(crate) fn _total() -> temper_core::AnyValue {
-    crate::support::initialized(|| _TOTAL.get()).clone()
-}
 interactive#5: void
 // interactive/src/InteractiveGlobal.cs
-using TemperLang.Core;
-
 namespace Interactive;
 
 public static class InteractiveGlobal
 {
     static InteractiveGlobal()
     {
-        object total;
         Point p = new Point(1, 2);
-        Core.Bubble();
+        int total = p.Sum() + 1;
     }
 }
 // interactive/src/Point.cs
@@ -417,6 +405,13 @@ internal class Point
     }
 }
 interactive#6: void
+interactive#7:1:22: error: missing has not been declared
+    let more = p.sum() + missing
+                         ^^^^^^^
+interactive#7: fail
+Failed: translate: the module has errors, so it isn't translated:
+interactive.temper:8:22: error: missing has not been declared
+interactive#8: fail
 
 === describe at tmpl
 let twice(n: Int): Int { n * 2 }
@@ -465,3 +460,69 @@ _x: int = 1
 _x2: int = _int_add(_x, 1)
 _int_mul(_x2, 10)
 interactive#6: void
+
+=== translate shows the module's errors rather than code
+let q = new PromiseBuilder<Int>();
+let got = await q.promise
+translate(1, "py")
+translate(1)
+describe(1, "tmpl")
+let bad: Int = "many"
+translate(5, "js")
+--- transcript
+interactive#0: void
+1 promise is unresolved.
+interactive#1: fail
+Failed: translate: the module has errors, so it isn't translated:
+interactive.temper:4:11: error: await outside generator function body
+A top-level await runs only in the REPL; to translate it, put it in an async block, as async { (): GeneratorResult<Empty> extends GeneratorFn => … }
+interactive#2: fail
+Failed: translate: the module has errors, so it isn't translated:
+interactive.temper:4:11: error: await outside generator function body
+A top-level await runs only in the REPL; to translate it, put it in an async block, as async { (): GeneratorResult<Empty> extends GeneratorFn => … }
+interactive#3: fail
+Failed: describe: the module has errors, so it isn't translated:
+interactive.temper:4:11: error: await outside generator function body
+A top-level await runs only in the REPL; to translate it, put it in an async block, as async { (): GeneratorResult<Empty> extends GeneratorFn => … }
+interactive#4: fail
+interactive#5:1:16: error: Cannot assign to Int32 from String
+    let bad: Int = "many"
+                   ^^^^^^
+interactive#5: void
+Failed: translate: the module has errors, so it isn't translated:
+interactive.temper:2:16: error: Cannot assign to Int32 from String
+interactive#6: fail
+
+=== translate takes earlier changes and drops imports repeated
+var v = 1
+v = 2;
+v
+translate(2, "py")
+let { Date } = import("std/temporal")
+let d1 = new Date(2020, 1, 2)
+let { Date } = import("std/temporal")
+"${d1.toString()} ${new Date(2021, 3, 4).toString()}"
+translate(7, "py")
+--- transcript
+interactive#0: void
+interactive#1: void
+interactive#2: 2
+# interactive/interactive/interactive.py
+__all__ = ()
+
+_v: int = 1
+_v = 2
+interactive#3: void
+interactive#4: void
+interactive#5: void
+interactive#6: void
+interactive#7: "2020-01-02 2021-03-04"
+# interactive/interactive/interactive.py
+from datetime import date as _date
+from temper_core import date_to_string as _date_to_string
+
+__all__ = ()
+
+_d1: _date = _date(2020, 1, 2)
+f'{_date_to_string(_d1)} {_date_to_string(_date(2021, 3, 4))}'
+interactive#8: void

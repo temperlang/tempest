@@ -29,6 +29,13 @@ pub struct Incremental {
     /// Files and nodes settled by earlier rounds.
     files_settled: usize,
     nodes_settled: u32,
+    /// While a round settles: the modules before it, and the latest
+    /// input's scope before it, to go back to if it's abandoned.
+    round_start: Option<(usize, Option<ScopeId>)>,
+    /// Makes the next round panic once settled, to test that a panic
+    /// while settling is recovered from.
+    #[cfg(test)]
+    pub(crate) panic_next: bool,
 }
 
 /// What a round settled.
@@ -55,6 +62,9 @@ impl Incremental {
             last_segment: None,
             files_settled: 0,
             nodes_settled: 0,
+            round_start: None,
+            #[cfg(test)]
+            panic_next: false,
         }
     }
 
@@ -94,6 +104,7 @@ impl Incremental {
         let repl = s.lib.files[input.0 as usize].module;
         let root = s.lib.files[input.0 as usize].root;
         let first_new = s.modules.len();
+        self.round_start = Some((first_new, self.last_segment));
         let parent = self.last_segment.unwrap_or(BUILTINS);
         let segment = s.scopes.add(parent, ScopeKind::Module, root, false);
         s.repl_scopes.insert(segment);
@@ -112,6 +123,10 @@ impl Incremental {
         s.queue_root(root, segment);
         self.last_segment = Some(segment);
         s.settle_round();
+        #[cfg(test)]
+        if std::mem::take(&mut self.panic_next) {
+            panic!("as a test asked, while settling");
+        }
 
         let order = s.run_order();
         let loaded: Vec<ModuleId> = (order.into_iter())
@@ -143,6 +158,7 @@ impl Incremental {
         self.nodes_settled = s.lib.tree.len() as u32;
         self.modules.extend(modules.iter().cloned());
         self.modules.push(input.clone());
+        self.round_start = None;
         Round {
             modules,
             input,
@@ -152,9 +168,24 @@ impl Incremental {
 
     /// Ends a round that stopped partway, as when settling panicked: what
     /// it left waiting is dropped, and its scopes count as complete, so
-    /// the next round goes on without them.
-    pub fn abandon_round(&mut self, scopes_before: usize) {
+    /// the next round goes on without them. Its input's scope is dropped
+    /// from the chain, so the next input's follows the one before; the
+    /// modules it loaded stay loaded, never run, and their scopes are
+    /// returned, to give them globals that say so when read.
+    pub fn abandon_round(&mut self, scopes_before: usize) -> Vec<ScopeId> {
         let s = &mut self.s;
+        let mut loaded = Vec::new();
+        if let Some((first_module, segment_before)) = self.round_start.take() {
+            self.last_segment = segment_before;
+            let repl = (s.modules.iter()).position(|&m| s.repl_scopes.contains(&m));
+            if let (Some(repl), Some(before)) = (repl, segment_before) {
+                s.modules[repl] = before;
+            }
+            loaded = (first_module..s.modules.len())
+                .filter(|&m| Some(m) != repl)
+                .map(|m| s.modules[m])
+                .collect();
+        }
         s.engine.abandon();
         s.object_literals.clear();
         for i in scopes_before..s.scopes.scopes.len() {
@@ -164,6 +195,7 @@ impl Incremental {
         }
         self.files_settled = s.lib.files.len();
         self.nodes_settled = s.lib.tree.len() as u32;
+        loaded
     }
 
     /// Lends what's settled so far as a [`Settled`], for the

@@ -64,3 +64,26 @@ interactive#2: 2
 interactive#3: void
 interactive#4: "😀🎉"
 interactive#5: "😀🎉!"
+
+=== an input that fails when resumed says so, tagged with its number
+let r = new PromiseBuilder<Int>();
+let g2 = (await r.promise) / 0
+r.complete(1);
+g2
+let s = new PromiseBuilder<Int>();
+let g3 = (await s.promise) + 1
+s.complete(2);
+g3
+--- transcript
+interactive#0: void
+1 promise is unresolved.
+interactive#1: fail
+interactive#1 failed
+interactive#2: void
+Failed: g2 has no value: interactive#1 failed
+interactive#3: fail
+interactive#4: void
+1 promise is unresolved.
+interactive#5: fail
+interactive#6: void
+interactive#7: 3

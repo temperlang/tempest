@@ -32,6 +32,12 @@ pub struct Entries {
 }
 
 impl Entries {
+    /// The pairs, to take their values out of as the map is dropped
+    /// ([`super::Val`]'s `Drop`).
+    pub(super) fn pairs_mut(&mut self) -> &mut [(Val, Val)] {
+        &mut self.pairs
+    }
+
     /// Entries from a list of `Pair`s; a later pair's value replaces an
     /// earlier one's for the same key, keeping its place.
     pub(super) fn from_pairs(pairs: &[Val]) -> Result<Entries, Abrupt> {

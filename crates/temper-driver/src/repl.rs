@@ -6,7 +6,9 @@ use crate::{Registry, checked, translate, with_std};
 use std::cell::OnceCell;
 use temper_analysis::Analysis;
 use temper_frontend::library::Library;
+use temper_frontend::library::{Level, Message};
 use temper_frontend::print::write_diagnostics;
+use temper_frontend::repl::{INTERRUPTED, MODULE_ERRORS};
 use temper_frontend::scope::SymbolId;
 use temper_frontend::settle::{Settled, settle};
 use temper_frontend::sources::Sources;
@@ -32,16 +34,54 @@ impl Default for ReplTools {
 }
 
 impl ReplTools {
-    /// A library settled, as tmpl, or why not: its diagnostics, then what
-    /// tmpl doesn't cover.
-    fn program(library: Library) -> Result<Program, String> {
+    /// A library settled, as tmpl, or why not: its errors, first, as
+    /// tmpl may tolerate some, which would translate as code that fails;
+    /// or its diagnostics, then what tmpl doesn't cover.
+    fn program(library: Library, interrupted: &dyn Fn() -> bool) -> Result<Program, String> {
         let settled = settle(library);
+        if interrupted() {
+            return Err(INTERRUPTED.into());
+        }
+        errors(&settled)?;
         checked(&settled, NAME).map_err(|e| {
             let mut diagnostics = String::new();
             write_diagnostics(&settled, &mut diagnostics);
             format!("{diagnostics}{e}")
         })
     }
+}
+
+/// What a module with errors fails with: [`MODULE_ERRORS`], then each
+/// error, located in the module as `describe(n, "module")` shows it.
+fn errors(settled: &Settled) -> Result<(), String> {
+    let library = &settled.library;
+    let mut out = String::new();
+    let mut awaits = false;
+    for d in (library.diagnostics.iter()).filter(|d| d.level == Level::Error) {
+        let (file, start) = library.locate(d.span.start);
+        let file = &library.files[file.0 as usize];
+        let source = file.parsed.source();
+        let start = (start as usize).min(source.len());
+        let before = source.get(..start).unwrap_or_default();
+        let line = before.matches('\n').count() + 1;
+        let column = before.rsplit('\n').next().map_or(0, |l| l.chars().count()) + 1;
+        let message = d.message.text();
+        awaits |= matches!(d.message, Message::YieldingOutsideGeneratorFn("await"));
+        out.push_str(&format!(
+            "\n{}:{line}:{column}: error: {message}",
+            file.path
+        ));
+    }
+    if out.is_empty() {
+        return Ok(());
+    }
+    if awaits {
+        out.push_str(
+            "\nA top-level await runs only in the REPL; to translate it, put it in an \
+             async block, as async { (): GeneratorResult<Empty> extends GeneratorFn => … }",
+        );
+    }
+    Err(format!("{MODULE_ERRORS}:{out}"))
 }
 
 impl temper_frontend::repl::ReplTools for ReplTools {
@@ -57,8 +97,13 @@ impl temper_frontend::repl::ReplTools for ReplTools {
 
     /// Without its spans, which say where in the module's source each
     /// declaration and expression came from.
-    fn tmpl(&self, library: Library, _sources: &Sources) -> Result<String, String> {
-        let text = temper_tmpl::text::write(&ReplTools::program(library)?);
+    fn tmpl(
+        &self,
+        library: Library,
+        _sources: &Sources,
+        interrupted: &dyn Fn() -> bool,
+    ) -> Result<String, String> {
+        let text = temper_tmpl::text::write(&ReplTools::program(library, interrupted)?);
         Ok(match text.find("\nspans {") {
             Some(at) => text[..at].trim_end().to_string(),
             None => text,
@@ -70,10 +115,11 @@ impl temper_frontend::repl::ReplTools for ReplTools {
         library: Library,
         sources: &Sources,
         language: &str,
+        interrupted: &dyn Fn() -> bool,
     ) -> Result<Vec<(String, String)>, String> {
         let backend = (self.registry.get(language))
             .ok_or_else(|| format!("built without the {language} backend"))?;
-        let program = ReplTools::program(library)?;
+        let program = ReplTools::program(library, interrupted)?;
         let std = || {
             let std = self.std.get_or_init(|| {
                 temper_frontend::stdlib::program(sources).map_err(|e| format!("std: {e}"))
@@ -81,6 +127,9 @@ impl temper_frontend::repl::ReplTools for ReplTools {
             std.as_ref().map_err(String::clone)
         };
         let program = with_std(program, backend, std)?;
+        if interrupted() {
+            return Err(INTERRUPTED.into());
+        }
         let files = translate(&program, backend, None)?;
         Ok(files
             .into_iter()

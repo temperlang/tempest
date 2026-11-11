@@ -505,6 +505,9 @@ pub struct Library {
     /// `import("other-lib/sub")`, each a name and its root directory
     /// ([`crate::project`]).
     pub libraries: Vec<(String, String)>,
+    /// A module, by its directory, whose relative imports resolve from
+    /// another directory: the REPL's inputs', from the current one.
+    pub relative_from: Option<(String, String)>,
     /// Each `@connected` function and class, by its `Let` or `Class`.
     pub connected: std::collections::HashMap<NodeId, Connected>,
     /// Declarations marked `@keep`, which host code may use.
@@ -646,10 +649,12 @@ impl Library {
             let (_, root) = self.libraries.iter().find(|(name, _)| name == first)?;
             return Some(normalize(&format!("{root}/{rest}")));
         }
-        Some(normalize(&format!(
-            "{}/{path}",
-            self.modules[from.0 as usize].dir
-        )))
+        let dir = &self.modules[from.0 as usize].dir;
+        let dir = match &self.relative_from {
+            Some((module, base)) if module == dir => base,
+            _ => dir,
+        };
+        Some(normalize(&format!("{dir}/{path}")))
     }
 
     /// The directory std modules' directories are in, [`stdlib::DIR`],

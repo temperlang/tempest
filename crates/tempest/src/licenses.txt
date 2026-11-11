@@ -54,14 +54,6 @@ License: MIT
 Repository: https://github.com/Lolirofle/endian-type.git
 Copyright (c) 2015
 
---------------------
---- errno 0.3.14 ---
---------------------
-License: MIT OR Apache-2.0
-Repository: https://github.com/lambda-fairy/rust-errno
-Some platforms only
-Copyright (c) 2014 Chris Wong
-
 ------------------------
 --- error-code 3.4.0 ---
 ------------------------
@@ -94,14 +86,6 @@ SHALL THE COPYRIGHT HOLDERS OR ANYONE DISTRIBUTING THE SOFTWARE BE LIABLE
 FOR ANY DAMAGES OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
-
----------------------
---- fd-lock 4.0.4 ---
----------------------
-License: MIT OR Apache-2.0
-Repository: https://github.com/yoshuawuyts/fd-lock
-Copyright 2019 Yoshua Wuyts
-Copyright (c) 2019 Yoshua Wuyts
 
 ------------------------
 --- fluent-uri 0.1.4 ---
@@ -145,14 +129,6 @@ Repository: https://github.com/dtolnay/itoa
 License: MIT OR Apache-2.0
 Repository: https://github.com/rust-lang/libc
 Copyright (c) The Rust Project Developers
-
-----------------------------
---- linux-raw-sys 0.12.1 ---
-----------------------------
-License: Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT
-Repository: https://github.com/sunfishcode/linux-raw-sys
-Some platforms only
-Copyrights in the `linux-raw-sys` project are retained by their contributors.
 
 ------------------
 --- log 0.4.34 ---
@@ -519,14 +495,6 @@ WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
 OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
 CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
---------------------
---- rustix 1.1.6 ---
---------------------
-License: Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT
-Repository: https://github.com/bytecodealliance/rustix
-Some platforms only
-Copyrights in the `rustix` project are retained by their contributors.
-
 ----------------------
 --- rustls 0.23.46 ---
 ----------------------
@@ -808,14 +776,6 @@ Copyright (c) Microsoft Corporation.
 
 --------------------------
 --- windows-sys 0.60.2 ---
---------------------------
-License: MIT OR Apache-2.0
-Repository: https://github.com/microsoft/windows-rs
-Some platforms only
-Copyright (c) Microsoft Corporation.
-
---------------------------
---- windows-sys 0.61.2 ---
 --------------------------
 License: MIT OR Apache-2.0
 Repository: https://github.com/microsoft/windows-rs

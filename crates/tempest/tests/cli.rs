@@ -1375,6 +1375,7 @@ fn test_flags() {
 
 /// A library with a test that never ends, in `x/`, and one that passes,
 /// in `y/`.
+#[cfg(all(target_os = "linux", feature = "lua", feature = "py"))]
 const HANGING: [(&str, &str); 2] = [
     (
         "x/x.temper",
@@ -1385,7 +1386,7 @@ const HANGING: [(&str, &str); 2] = [
 
 /// The processes whose working directory is under `dir`, which are what
 /// tempest started there, by their ids.
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", feature = "lua", feature = "py"))]
 fn processes_in(dir: &Path) -> Vec<u32> {
     let dir = fs::canonicalize(dir).unwrap();
     let mut found = Vec::new();
@@ -1401,7 +1402,7 @@ fn processes_in(dir: &Path) -> Vec<u32> {
 }
 
 /// Whether a process is running: there, and not a zombie.
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", feature = "lua", feature = "py"))]
 fn alive(id: u32) -> bool {
     let stat = fs::read_to_string(format!("/proc/{id}/stat")).unwrap_or_default();
     // `ID (NAME) STATE …`, the name possibly holding spaces.
@@ -1410,7 +1411,7 @@ fn alive(id: u32) -> bool {
 }
 
 /// Waits up to `secs` for none of `ids` to be running.
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", feature = "lua", feature = "py"))]
 fn all_gone(ids: &[u32], secs: u64) -> bool {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(secs);
     while ids.iter().any(|&id| alive(id)) {
@@ -1440,7 +1441,7 @@ fn tools_missing(backend: &str, err: &str) -> bool {
 /// `dir`'s `temper.out` while it runs; once it's started one, `signal`,
 /// if given, is sent to tempest. Its status, stdout, stderr, and what it
 /// started.
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", feature = "lua", feature = "py"))]
 fn watch_tempest(
     args: &[&str],
     dir: &str,
