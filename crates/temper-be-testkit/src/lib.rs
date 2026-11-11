@@ -796,10 +796,21 @@ pub fn required() -> bool {
 }
 
 /// Something a test needs is missing: skipped, with a message, unless
-/// checkers are required, when it fails.
+/// checkers are required, when it fails; but for what
+/// `TEMPEST_ALLOW_MISSING` names (comma-separated, each found in `what`,
+/// as `LuaLS`), which CI sets where a tool can't be set up on a platform.
 pub fn missing(what: &str) {
-    assert!(!required(), "{what} (needed with TEMPEST_REQUIRE_CHECKERS)");
-    eprintln!("skipped: {what}");
+    let allowed = env::var("TEMPEST_ALLOW_MISSING").is_ok_and(|names| {
+        (names.split(',').map(str::trim)).any(|name| !name.is_empty() && what.contains(name))
+    });
+    assert!(
+        !required() || allowed,
+        "{what} (needed with TEMPEST_REQUIRE_CHECKERS)"
+    );
+    match allowed {
+        true => eprintln!("skipped: {what} (allowed by TEMPEST_ALLOW_MISSING)"),
+        false => eprintln!("skipped: {what}"),
+    }
 }
 
 /// A tool named by an environment variable, or found on `PATH` by

@@ -366,7 +366,10 @@ tests: [`temper-be-testkit`](../../../crates/temper-be-testkit/src/lib.rs).
 | Real libraries | Hrefine, Chromarite, Ordable, Kelpto, and Wherewith pass their tests on all seven locally; in CI, Chromarite and Ordable on C#, Java, JS, Lua, and Python | CI's `tempest test -b` steps |
 
 A missing tool skips its test with a message, unless
-`TEMPEST_REQUIRE_CHECKERS` is set, as in CI, where it fails.
+`TEMPEST_REQUIRE_CHECKERS` is set, as in CI, where it fails, except
+what `TEMPEST_ALLOW_MISSING` names (comma-separated words in the
+message, as `LuaLS`), which the weekly `platforms` job sets where a
+platform can't have a tool ([ci.md](../../contributing/ci.md)).
 
 `tempest test -b csharp` and `-b java` hide the compilers' warnings,
 as Kotlin's do, unless `TEMPEST_STRICT_WARNINGS` is set, as in CI's

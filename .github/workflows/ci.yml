@@ -1,31 +1,56 @@
-# Formatting, lints, tests (with and without default features, with
-# generated Python run and type checked by mypy and pyright, strict,
-# generated Rust built, run, and linted by clippy, generated JS run under
-# Node and type checked by TypeScript, strict,
-# generated Java compiled by javac with every lint an error, and run, and
-# generated C# compiled by csc with nullable reference types and every
-# warning and .NET analyzer an error, and run, and generated C++ compiled
-# by g++ with every warning an error, and run, also under AddressSanitizer,
-# UndefinedBehaviorSanitizer, and ThreadSanitizer, and compiled at -O2 by
-# g++ 12 and 14 (14 at -O3 too) and clang++, every warning an error, and
-# generated Lua run by Lua 5.4.6, parsed by luac, and type checked by LuaLS),
-# the wasm build and the playground (type checked, bundled, and smoke
-# tested in headless Chromium), the VS Code extension (type checked,
-# bundled, packaged, and tested in a real VS Code against the release
-# build), Temper's functional tests (copied
-# into vendor/temper/, which has its patches) on tempest's interpreter, the
-# docs' examples on the release build, the docs site (built, its Mermaid
-# diagrams drawn, and its links checked), and `tempest test` on Chromarite and Ordable,
-# on the interpreter and on Python, JS, Lua, Java, and C#.
-# The `platforms` job runs the code that differs by platform (the REPL's
-# and child processes') natively on the other platforms binaries.yml
-# releases for (Linux Arm64, macOS Arm64, and Windows x64 and Arm64),
-# with all of tempest's tests.
-# The checkers of generated code are at exact versions (.github/ci-tools/);
-# nightly.yml also tries each one's latest release. Every action is pinned
-# by commit SHA (docs/contributing/ci.md).
-# The checks against Kotlin Temper's own lexer and parser need a Kotlin
-# Temper install, so they run locally, not here.
+# Every push to main and every pull request, on Linux x64, in four
+# parallel jobs after a quick `changes` job, so the run takes about as
+# long as its slowest job, not the sum. Each job builds tempest's crates
+# from scratch (the cache keeps only third-party crates), so there are
+# few jobs, each running many checks, a step each:
+#
+# - `lint`: formatting, clippy (with and without default features), the
+#   workflows parsed as YAML, the vendored Temper and its patches, the
+#   docs' links, Temper's functional tests (copied into vendor/temper/,
+#   which has its patches) on tempest's interpreter, and the size and
+#   speed charts; then `core`'s tests: every crate's but the backends'
+#   and `tempest`'s, and again without default features (no backends,
+#   no `net`), `tempest`'s included;
+# - `cli`: `tempest`'s tests with every backend, so with every
+#   toolchain: `tempest test`, `build`, and `run` on small libraries;
+# - `backends`, two jobs, each with only its backends' toolchains
+#   (.github/actions/toolchains): generated Python run and type checked
+#   by mypy and pyright, strict; generated JS run under Node and type
+#   checked by TypeScript, strict; generated Lua run by Lua 5.4.6 and by
+#   LuaJIT, parsed by luac, and type checked by LuaLS; and generated Rust
+#   built, run, and linted by clippy; then generated Java compiled by
+#   javac with every lint an error, and run; generated C# compiled by csc
+#   with nullable reference types and every warning and .NET analyzer an
+#   error, and run; and generated C++ compiled by g++ with every warning
+#   an error, and run, also under AddressSanitizer,
+#   UndefinedBehaviorSanitizer, and ThreadSanitizer, and compiled at -O2
+#   by g++ 12 and 14 (14 at -O3 too) and clang++, every warning an error;
+# - `release`: tempest's release build, the VS Code extension (type
+#   checked, bundled, packaged, and tested in a real VS Code against
+#   that build), the docs' examples on it, and the docs site (built,
+#   its Mermaid diagrams drawn, and its links checked); and the wasm
+#   build and the playground (type checked, bundled, and smoke tested in
+#   headless Chromium).
+#
+# A change to notes/ alone runs only `lint`; one to docs/ or README.md
+# alone, `lint` (with `core`'s steps, for the docs' REPL transcripts)
+# and `release`, which test the docs; anything else, everything
+# (`changes` says why, and docs/contributing/ci.md). Skipped jobs pass,
+# as required checks.
+#
+# The other platforms tempest is released for (Linux Arm64, macOS
+# Arm64, and Windows x64 and Arm64) are tested by nightly.yml. The
+# checkers of generated code are at exact versions (.github/ci-tools/);
+# nightly.yml also tries each one's latest release. Every action is
+# pinned by commit SHA (docs/contributing/ci.md). The checks against
+# Kotlin Temper's own lexer and parser need a Kotlin Temper install, so
+# they run locally, not here.
+#
+# Each job is pinned to ubuntu-24.04, not ubuntu-latest, so the packages
+# from Ubuntu's archive can't change underneath the tests: noble's
+# lua5.4 is 5.4.6, its lua-socket 3.1.0, and its g++ 13. Each caches its
+# own build (Swatinem/rust-cache, keyed by job), saved only from main,
+# which pull requests read, so their caches don't crowd main's out.
 name: CI
 
 on:
@@ -37,301 +62,358 @@ on:
 permissions:
   contents: read
 
+# A newer push to the same pull request cancels the older run.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  check:
-    # Pinned, not ubuntu-latest, so the packages from Ubuntu's archive
-    # can't change underneath the tests: noble's lua5.4 is 5.4.6, its
-    # lua-socket 3.1.0, and its g++ 13 (the Lua step checks the first two).
+  # What changed, by path, against the pull request's base or the commit
+  # before the push, as two outputs, each "true" or "false":
+  #
+  # - `code`: anything but notes/, docs/, and README.md;
+  # - `docs`: `code`, or docs/ or README.md, which `core`'s REPL
+  #   transcripts test, and `release`'s docs' examples and docs site.
+  #
+  # notes/ is read only by `lint` (its links and charts), which always
+  # runs. With nothing to compare with (a new branch, or a base that
+  # can't be fetched), both are "true". The other jobs check for
+  # "false", not "true", so if this job fails they run.
+  changes:
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+      docs: ${{ steps.diff.outputs.docs }}
+    steps:
+      # Only .github/ and the top level checked out; the base commit's
+      # trees are fetched alone, without history or file contents, which
+      # `git diff --name-only` doesn't need.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          sparse-checkout: .github
+      - id: diff
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          code=true
+          docs=true
+          if [ -n "${BASE//0/}" ] &&
+            git fetch -q --no-tags --depth=1 --filter=blob:none origin "$BASE" &&
+            files=$(git diff --no-renames --name-only "$BASE" HEAD); then
+            code=false
+            docs=false
+            while IFS= read -r file; do
+              case "$file" in
+                "" | notes/*) ;;
+                docs/* | README.md) docs=true ;;
+                *) code=true; docs=true ;;
+              esac
+            done <<< "$files"
+            echo "Changed since $BASE:"
+            printf '%s\n' "$files"
+          else
+            echo "Nothing to compare with ($BASE), so everything runs."
+          fi
+          echo "code=$code, docs=$docs"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "docs=$docs" >> "$GITHUB_OUTPUT"
+
+  # Always runs; `core`'s steps only when `docs` is "true" (or unknown).
+  lint:
+    name: lint, core
+    needs: changes
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      TEMPEST_REQUIRE_CHECKERS: "1"
+      CORE: ${{ needs.changes.outputs.docs != 'false' }}
+      BACKENDS: >-
+        --exclude temper-be-cpp --exclude temper-be-csharp
+        --exclude temper-be-java --exclude temper-be-js
+        --exclude temper-be-lua --exclude temper-be-py
+        --exclude temper-be-rust
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: dtolnay/rust-toolchain@cfcaf53ba4c621917ec7f78a66bff7a8848ddad4 # 1.85.0 branch, 2026-10-16
         with:
           components: rustfmt, clippy
-          targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-      - name: Formatting
-        run: cargo fmt --check
-      - name: Lints
-        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
         # uv itself, checked against its SHA-256 for Linux x64 (from
         # setup-uv's known-checksums.json; docs/contributing/ci.md).
         with:
           version: "0.13.5"
           checksum: f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f
+      - name: Formatting
+        run: cargo fmt --check
+      - name: Lints
+        if: ${{ !cancelled() }}
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      # Without backends, as `core` tests `tempest`, and as nightly.yml
+      # builds it on the other platforms: helpers only backends' tests
+      # use must be gated by `cfg` too.
+      - name: Lints without default features
+        if: ${{ !cancelled() }}
+        run: cargo clippy --locked --workspace --all-targets --no-default-features -- -D warnings
+      # GitHub rejects a whole workflow over one bad line, so each must
+      # parse, the local action too.
+      - name: Workflows parse
+        if: ${{ !cancelled() }}
+        run: |
+          uv run --no-project -q --with pyyaml==6.0.2 python3 -c '
+          import sys, yaml
+          for f in sys.argv[1:]:
+              yaml.safe_load(open(f))
+              print("ok", f)
+          ' .github/workflows/*.yml .github/actions/*/action.yml
       # vendor/temper/ has every patch in vendor/temper-patches/, each
       # listed in its SOURCE.md. Locally, with a Temper checkout, this
       # also compares it file for file with its commit plus the patches.
       - name: Vendored Temper and its patches
+        if: ${{ !cancelled() }}
         run: uv run compat/sync_temper.py --check
-      # Each docs/ link leads to a file or heading that exists, and each
-      # link to code links a file that defines the item it names.
+      # Each docs/ and notes/ link leads to a file or heading that
+      # exists, and each link to code links a file that defines the item
+      # it names.
       - name: Docs' links
+        if: ${{ !cancelled() }}
         run: uv run compat/check_anchors.py
-      # The Rust backend's tests build generated crates offline against
-      # the vendored temper-core; this puts its one dependency, indexmap,
-      # at the versions its Cargo.lock pins, in cargo's cache, and the
-      # crates generated std depends on (regex), listed in
-      # compat/rust-std-deps.
-      - name: Crates for generated Rust
-        run: |
-          cargo fetch --locked --manifest-path vendor/temper/be-rust/temper-core/Cargo.toml
-          cargo fetch --locked --manifest-path compat/rust-std-deps/Cargo.toml
-      # The checkers of generated code, at exact versions
-      # (.github/ci-tools/install.py): the Python backend's tests check its
-      # output with both mypy and pyright, since they sometimes disagree;
-      # the JS backend's run generated packages under Node, check them with
-      # TypeScript's `tsc --checkJs --strict`, and run tests with Mocha 11;
-      # the Lua backend's check generated Lua with LuaLS's `--check`. npm's
-      # from a lockfile without install scripts, LuaLS against its SHA-256.
-      # nightly.yml tries each checker's latest release too.
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: 24
-      - name: Checkers for generated code, and Mocha
-        run: uv run .github/ci-tools/install.py
-      # The Java backend's tests compile the vendored temper-core and
-      # generated Java with javac (the runtime for Java 8, generated code
-      # for Java 17, as Kotlin's packages have them) and run it, without
-      # Maven; tests that run as tests use JUnit 5.9.2's jars, as
-      # Kotlin's pom.xml names them, which Maven puts in its cache.
-      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
-        with:
-          distribution: temurin
-          java-version: 21
-      - name: JUnit for generated Java's tests
-        run: |
-          mvn -q dependency:get -Dartifact=org.junit.jupiter:junit-jupiter-engine:5.9.2
-          mvn -q dependency:get -Dartifact=org.junit.platform:junit-platform-launcher:1.9.2
-      # The C# backend's tests compile the vendored TemperLang.Core and
-      # generated C# with Roslyn's csc from the .NET 6 SDK, as Kotlin's
-      # projects target .NET 6, and run it, without MSBuild. The restore,
-      # of a copy of the runtime's project (so vendor/ stays clean), puts
-      # its one dependency, Microsoft.Extensions.Logging 8.0.0, in NuGet's
-      # cache, where the tests read it, with MSTest.TestFramework 3.1.1,
-      # which std's `testing` and generated tests use, as Kotlin's.
-      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
-        with:
-          dotnet-version: 6.0.x
-      - name: Packages for generated C#
-        run: |
-          cp -r vendor/temper/be-csharp/temper-core "$RUNNER_TEMP/temper-core"
-          dotnet add "$RUNNER_TEMP/temper-core/TemperLang.Core.csproj" package MSTest.TestFramework --version 3.1.1 --no-restore
-          dotnet restore "$RUNNER_TEMP/temper-core/TemperLang.Core.csproj"
-        env:
-          DOTNET_CLI_TELEMETRY_OPTOUT: "1"
-      # The C++ backend's tests compile the vendored temper-core and
-      # generated C++ with the runner's g++ (C++14, as Kotlin's), and run
-      # it, also under sanitizers, without CMake. ThreadSanitizer can't
-      # place its shadow memory when the kernel randomizes mappings over
-      # 32 bits, as Ubuntu 24.04's does; 28, as before, suits it.
-      - name: Address randomization for ThreadSanitizer
-        run: sudo sysctl vm.mmap_rnd_bits=28
-      # libcurl's headers, for std `net`'s default C++ client, so the
-      # `netresponse` tests take the libcurl path, as they do locally.
-      # And the compilers that the C++ backend's `strict` test builds all
-      # generated C++ with at -O2, every warning an error, as other
-      # people's release builds might: the oldest and newest g++ (the
-      # runner's g++ is 13) and clang++, which the container lacks, so
-      # only CI checks it.
-      - name: libcurl for C++'s std net, and strict compilers
-        run: |
-          sudo apt-get -o Acquire::Retries=3 update
-          sudo apt-get -o Acquire::Retries=3 install -y libcurl4-openssl-dev g++-12 g++-14 clang
-      # The Lua backend's tests run generated Lua with the vendored
-      # temper-core under Lua 5.4.6, with luac, the version the tests use
-      # locally, and LuaSocket 3.1.0, std `net`'s default client on Lua,
-      # also as locally, so the `netresponse` tests send their requests
-      # (without it, they give Kotlin's expected failures; plain HTTP
-      # only, no LuaSec). Both from Ubuntu's archive, whose mirrors are
-      # near the runners (building Lua from lua.org's tarball, as an
-      # action did, failed on flaky downloads): ubuntu-24.04's lua5.4 is
-      # 5.4.6, and its lua-socket 3.1.0, which the tests find on Lua's own
-      # paths, so this job's runner is pinned to it. `lua` and `luac` are
-      # made 5.4's, and the versions checked, so a change fails here.
-      - name: Lua and LuaSocket
-        run: |
-          sudo apt-get -o Acquire::Retries=3 install -y lua5.4 lua-socket
-          sudo update-alternatives --set lua-interpreter /usr/bin/lua5.4
-          sudo update-alternatives --set lua-compiler /usr/bin/luac5.4
-          lua -v | grep -F "Lua 5.4.6"
-          luac -v | grep -F "Lua 5.4.6"
-          dpkg-query -W -f '${Version}' lua-socket | grep "^3\.1\.0-"
-          lua -e "require('socket.http')"
+      - name: Functional tests
+        if: ${{ !cancelled() }}
+        run: uv run compat/check_functional.py
+      - name: Size and speed charts are current
+        if: ${{ !cancelled() }}
+        run: uv run compat/size_speed_charts.py --check
+      # `core`: everything but the backends' crates, which `backends`
+      # tests, and `tempest` with backends, which `cli` tests. With the
+      # docs' REPL transcripts (temper-frontend's repl_docs).
       - name: Tests
-        run: cargo test --locked --workspace
+        if: ${{ !cancelled() && env.CORE == 'true' }}
+        run: cargo test --locked --workspace $BACKENDS --exclude tempest
+      # Without the `net` web client, and `tempest` and `temper-wasm`
+      # without their backend features. (The backends' crates have no
+      # features, and their tests leave `net` out, so `backends`' runs
+      # are the same as theirs here would be.)
+      - name: Tests without default features
+        if: ${{ !cancelled() && env.CORE == 'true' }}
+        run: cargo test --locked --workspace --no-default-features $BACKENDS
+
+  # `tempest`'s own tests with every backend built in, and so every
+  # backend's toolchain: `tempest test -b`, `build`, and `run` on small
+  # libraries, CMake's build of generated C++, and Kotlin's layout of
+  # `temper.out`.
+  cli:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@cfcaf53ba4c621917ec7f78a66bff7a8848ddad4 # 1.85.0 branch, 2026-10-16
+        # For `tempest test -b rust`, as the Rust backend's job.
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: ./.github/actions/toolchains
+        with:
+          backends: py js lua java csharp cpp rust
+      - name: Tests
+        run: cargo test --locked -p tempest
         env:
           TEMPEST_REQUIRE_CHECKERS: "1"
-          TEMPEST_STRICT_CXX: g++-12 g++-14 clang++
-      # The vendored Rust runtime's own unit tests, which the workspace
-      # (excluding vendor/) leaves out.
-      - name: Vendored Rust runtime's tests
-        run: cargo test --locked --manifest-path vendor/temper/be-rust/temper-core/Cargo.toml --target-dir target/vendor-temper-core
+
+  # Each backend's crate, its functional tests running generated code
+  # with only its group's toolchains set up (.github/actions/toolchains
+  # says why each tool), a step each, so a failure names its backend and
+  # doesn't stop the rest. Two groups, about even: the backends checked
+  # by checkers (Python, JS, and Lua) with Rust, and the compiled ones
+  # (Java, C#, and C++, the slowest), which share the C++ crate's build
+  # between its two steps.
+  backends:
+    name: ${{ matrix.name }}
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: py, js, lua, rust
+            backends: py js lua rust
+          - name: java, csharp, cpp
+            backends: java csharp cpp
+            apt: g++-12 g++-14 clang
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    env:
+      TEMPEST_REQUIRE_CHECKERS: "1"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@cfcaf53ba4c621917ec7f78a66bff7a8848ddad4 # 1.85.0 branch, 2026-10-16
+        # The Rust backend's tests lay out generated crates with
+        # rustfmt and lint them with clippy.
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: ${{ matrix.name }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: ./.github/actions/toolchains
+        with:
+          backends: ${{ matrix.backends }}
+          apt: ${{ matrix.apt }}
+      - name: Python
+        if: ${{ !cancelled() && contains(matrix.backends, 'py') }}
+        run: cargo test --locked -p temper-be-py
+      - name: JS
+        if: ${{ !cancelled() && contains(matrix.backends, 'js') }}
+        run: cargo test --locked -p temper-be-js
+      - name: Lua
+        if: ${{ !cancelled() && contains(matrix.backends, 'lua') }}
+        run: cargo test --locked -p temper-be-lua
       # Generated Lua again under LuaJIT 2.1 (Neovim's and OpenResty's
       # Lua), which has no integers, so temper-core's fallbacks are used.
       # LuaJIT is a rolling release with no binaries: built from a pinned
       # commit of its v2.1 branch.
-      - name: Lua tests under LuaJIT
+      - name: Lua under LuaJIT
+        if: ${{ !cancelled() && contains(matrix.backends, 'lua') }}
         run: |
           git clone -q https://github.com/LuaJIT/LuaJIT.git "$RUNNER_TEMP/luajit-src"
           git -C "$RUNNER_TEMP/luajit-src" checkout -q 8ca76297
           make -C "$RUNNER_TEMP/luajit-src" -j4 -s PREFIX="$RUNNER_TEMP/luajit"
           make -C "$RUNNER_TEMP/luajit-src" -s install PREFIX="$RUNNER_TEMP/luajit"
           LUA="$RUNNER_TEMP/luajit/bin/luajit" cargo test --locked -p temper-be-lua --test functional runs
+      # With the vendored Rust runtime's own unit tests, which the
+      # workspace (excluding vendor/) leaves out.
+      - name: Rust
+        if: ${{ !cancelled() && contains(matrix.backends, 'rust') }}
+        run: |
+          cargo test --locked -p temper-be-rust
+          cargo test --locked --manifest-path vendor/temper/be-rust/temper-core/Cargo.toml --target-dir target/vendor-temper-core
+      - name: Java
+        if: ${{ !cancelled() && contains(matrix.backends, 'java') }}
+        run: cargo test --locked -p temper-be-java
+      - name: C#
+        if: ${{ !cancelled() && contains(matrix.backends, 'csharp') }}
+        run: cargo test --locked -p temper-be-csharp
+      # All but `strict`, the next step.
+      - name: C++
+        if: ${{ !cancelled() && contains(matrix.backends, 'cpp') }}
+        run: cargo test --locked -p temper-be-cpp -- --exact --skip strict
+      # `strict`: all generated C++ built at -O2, every warning an
+      # error, as other people's release builds might, by the oldest
+      # and newest g++ (the runner's g++ is 13) and clang++, which the
+      # container lacks, so only CI checks it.
+      - name: C++, strict
+        if: ${{ !cancelled() && contains(matrix.backends, 'cpp') }}
+        run: cargo test --locked -p temper-be-cpp --test functional -- --exact strict
         env:
-          TEMPEST_REQUIRE_CHECKERS: "1"
-      # Without the `net` web client, and `tempest` and `temper-wasm`
-      # without their backend features; the backend crates' own tests
-      # still run.
-      - name: Tests without default features
-        run: cargo test --locked --workspace --no-default-features
-        env:
-          TEMPEST_REQUIRE_CHECKERS: "1"
-      # With every backend, as released.
-      - name: Wasm build
-        run: cargo build --locked --profile small-wasm --target wasm32-unknown-unknown -p temper-wasm
-      # The playground's TypeScript, type checked by its pinned tsc, and
-      # bundled by esbuild, on the wasm just built.
-      - name: Playground
-        run: uv run site/playground/build.py --skip-wasm
+          TEMPEST_STRICT_CXX: g++-12 g++-14 clang++
+
+  # tempest's release build (the small profile, as released), and what
+  # runs on it; and the wasm build, with every backend, as released, and
+  # the playground on it. A step that needs an earlier one's build is
+  # skipped when that build fails, so the failure names the build.
+  release:
+    name: release, playground
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.docs != 'false' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@cfcaf53ba4c621917ec7f78a66bff7a8848ddad4 # 1.85.0 branch, 2026-10-16
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        # As in `lint`.
+        with:
+          version: "0.13.5"
+          checksum: f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+      - id: small
+        name: Release build of tempest
+        run: cargo build --locked --profile small -p tempest
       # The VS Code extension, type checked by its pinned tsc and bundled
       # by esbuild, its search for tempest tested under Node, its TextMate
       # grammars checked (check_grammar.py), and packaged by vsce, as a
-      # universal .vsix and a Linux x64 one with tempest's release build
-      # (the small profile, as released); that one's tests run in a real
-      # VS Code (@vscode/test-electron), under xvfb, against its tempest.
-      - name: Release build of tempest
-        run: cargo build --locked --profile small -p tempest
-      # VS Code, cached by the version build.py pins (VSCODE_VERSION), so
-      # its update servers, which sometimes fail to answer, are needed
-      # only when that changes. test/run.ts retries a failed download.
+      # universal .vsix and a Linux x64 one with tempest's release build;
+      # that one's tests run in a real VS Code (@vscode/test-electron),
+      # under xvfb, against its tempest. VS Code is cached by the version
+      # build.py pins (VSCODE_VERSION), so its update servers, which
+      # sometimes fail to answer, are needed only when that changes.
+      # test/run.ts retries a failed download.
       - id: vscode
+        if: ${{ !cancelled() }}
         run: |
           version=$(sed -n 's/^VSCODE_VERSION = "\(.*\)"$/\1/p' editors/vscode/build.py)
           test -n "$version"
           echo "version=$version" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      - if: ${{ !cancelled() }}
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: editors/vscode/.vscode-test
           key: vscode-${{ runner.os }}-${{ steps.vscode.outputs.version }}
       - name: VS Code extension
+        if: ${{ !cancelled() && steps.small.outcome == 'success' }}
         run: uv run editors/vscode/build.py --tempest target/small/tempest --test
       # Each marked ```temper block in docs/ runs on the release build as its
       # marker says, or as its `<!-- known: In -->` comment says.
       - name: Docs' examples
+        if: ${{ !cancelled() && steps.small.outcome == 'success' }}
         run: uv run compat/check_doc_examples.py --tempest target/small/tempest
       # The docs site, as pages.yml builds it, Mermaid diagrams drawn, so
       # a broken link or diagram fails here, not at deploy. Links into the
       # playground are only listed.
       - id: kelpto
+        if: ${{ !cancelled() }}
         run: echo "ref=$(tr -d '[:space:]' < site/docs/kelpto-ref)" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - if: ${{ !cancelled() }}
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: temperlang/kelpto
           ref: ${{ steps.kelpto.outputs.ref }}
           path: .kelpto
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      # The diagram renderer's playwright-core and Chromium, which the
+      # playground's smoke test borrows.
+      - if: ${{ !cancelled() }}
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ hashFiles('site/docs/mermaid/package-lock.json') }}
-      - name: Diagram renderer
+      - id: renderer
+        name: Diagram renderer
+        if: ${{ !cancelled() }}
         working-directory: site/docs/mermaid
         run: |
           npm ci --ignore-scripts --no-audit --no-fund
           npx --no-install playwright-core install --with-deps --only-shell chromium
-      # The playground in headless Chromium (site/playground/smoke.mjs),
-      # with the diagram renderer's playwright-core and Chromium: each
-      # example compiles, fills every backend's tab without errors, and
-      # runs, and a hover, a permalink, and the Temper link work.
-      - name: Playground smoke test
-        run: node site/playground/smoke.mjs
       - name: Docs site
+        if: ${{ !cancelled() && steps.small.outcome == 'success' && steps.renderer.outcome == 'success' }}
         run: uv run site/docs/build.py --kelpto .kelpto --tempest target/small/tempest --out "$RUNNER_TEMP/site"
-      - name: Functional tests
-        run: uv run compat/check_functional.py
-      - name: Size and speed charts are current
-        run: uv run compat/size_speed_charts.py --check
-
-  # The code that differs by platform, on the platforms binaries.yml
-  # releases for but Linux x64, which `check` covers: the REPL's (Ctrl-C
-  # through SIGINT or the console's handler, ANSI color on Windows'
-  # console, and where history is kept) and children.rs's (process
-  # groups and time limits; on Windows, only time limits). Natively, on
-  # each OS and architecture's own runner (no Intel macOS binary is
-  # built). The REPL's tests and
-  # children.rs's are counted (tests-ran.sh), so a platform where
-  # they're all left out fails; then all of tempest's tests, built
-  # without backends, whose toolchains aren't set up here. Lean, as
-  # macOS and Windows minutes cost more: a debug build, no checkers or
-  # toolchains installed, and no clippy, though warnings are errors,
-  # for code that only these platforms compile (docs/contributing/ci.md).
-  platforms:
-    name: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        # Pinned, as `check`'s image is, so a new image's change shows
-        # up as a bump here. Each is the native runner for one of
-        # binaries.yml's targets: Linux Arm64, macOS on Apple silicon,
-        # and Windows x64 and Arm64. There's no Intel macOS binary
-        # (docs/contributing/ci.md).
-        os:
-          - ubuntu-24.04-arm
-          - macos-15
-          - windows-2025
-          - windows-11-arm
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
-    env:
-      RUSTFLAGS: -D warnings
-    defaults:
-      run:
-        shell: bash
-    steps:
-      # Windows images check text files out with CRLF line ends, which
-      # the tests' expected output and the docs' transcripts don't have.
-      - name: Line ends as committed
-        if: runner.os == 'Windows'
-        run: git config --global core.autocrlf false
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: dtolnay/rust-toolchain@cfcaf53ba4c621917ec7f78a66bff7a8848ddad4 # 1.85.0 branch, 2026-10-16
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          key: ${{ matrix.os }}
-      # ring (std `net`'s TLS) needs clang on Windows Arm64, as in
-      # binaries.yml.
-      - name: clang for ring on Windows Arm64
-        if: runner.os == 'Windows' && runner.arch == 'ARM64'
-        run: echo "C:\Program Files\LLVM\bin" >> "$GITHUB_PATH"
-      - name: Build
-        run: cargo build --locked -p tempest
-      # The line editor's, color's, and history's unit tests (on Windows,
-      # history's reparse-point check in place of Unix's modes, owners,
-      # and links), and `tempest repl` as a command: piped input, its
-      # flags, color, UTF-8 bytes through unchanged, relative imports,
-      # and Ctrl-C: SIGINT on Unix, Ctrl-Break on Windows. The terminal
-      # test needs Linux's `script`, so runs on Linux Arm64 too. At
-      # least 11 of each: all of them on Windows, so Windows' history
-      # and Ctrl-Break tests can't be left out.
-      - name: REPL
+      - id: wasm
+        name: Wasm build
         if: ${{ !cancelled() }}
-        run: |
-          bash .github/ci-tools/tests-ran.sh 11 cargo test --locked -p tempest --bin tempest repl::
-          bash .github/ci-tools/tests-ran.sh 11 cargo test --locked -p tempest --test repl
-      # What a session prints, and the docs' transcripts.
-      - name: REPL sessions
-        if: ${{ !cancelled() }}
-        run: bash .github/ci-tools/tests-ran.sh 2 cargo test --locked -p temper-frontend --test repl --test repl_docs
-      # Time limits, and on Unix, a command's process group killed.
-      - name: Child processes
-        if: ${{ !cancelled() }}
-        # Quoted: a plain YAML value can't end in a colon.
-        run: 'bash .github/ci-tools/tests-ran.sh 2 cargo test --locked -p temper-tmpl --lib children::'
-      # The rest of tempest's tests: the CLI's. Without the backends,
-      # whose tests would run each toolchain the image happens to have
-      # but not the setup `check` gives them (JUnit's jars, crates for
-      # generated Rust, .NET 6), so they'd fail, not skip.
-      - name: All of tempest's tests, without backends
-        if: ${{ !cancelled() }}
-        run: cargo test --locked -p tempest --no-default-features
+        run: cargo build --locked --profile small-wasm --target wasm32-unknown-unknown -p temper-wasm
+      # The playground's TypeScript, type checked by its pinned tsc, and
+      # bundled by esbuild, on the wasm just built.
+      - id: playground
+        name: Playground
+        if: ${{ !cancelled() && steps.wasm.outcome == 'success' }}
+        run: uv run site/playground/build.py --skip-wasm
+      # The playground in headless Chromium (site/playground/smoke.mjs):
+      # each example compiles, fills every backend's tab without errors,
+      # and runs, and a hover, a permalink, and the Temper link work.
+      - name: Playground smoke test
+        if: ${{ !cancelled() && steps.playground.outcome == 'success' && steps.renderer.outcome == 'success' }}
+        run: node site/playground/smoke.mjs

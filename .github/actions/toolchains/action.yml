@@ -1,0 +1,187 @@
+# The toolchains the backends' tests run generated code with, and the
+# checkers they check it with, for the backends named, on any runner
+# ci.yml and nightly.yml use: Linux x64 and Arm64, macOS Arm64, and
+# Windows x64 and Arm64. Each job sets up only its backends' tools, so a
+# backend's job doesn't wait on another's installs. After checkout, as a
+# local action:
+#
+#     - uses: ./.github/actions/toolchains
+#       with:
+#         backends: py js
+#
+# The tests run with TEMPEST_REQUIRE_CHECKERS, so a tool this leaves
+# out fails them, unless the job lets it be missing
+# (TEMPEST_ALLOW_MISSING); docs/contributing/ci.md lists what each
+# platform has.
+name: Toolchains for generated code
+description: Sets up the named backends' toolchains and checkers for their tests.
+inputs:
+  backends:
+    description: Space-separated backends, of py, js, lua, java, csharp, cpp, and rust.
+    required: true
+  apt:
+    description: More packages from Ubuntu's archive, on Linux (as the strict C++ compilers).
+    default: ""
+runs:
+  using: composite
+  steps:
+    - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+      # uv itself, checked against its SHA-256 for Linux x64 (from
+      # setup-uv's known-checksums.json; docs/contributing/ci.md); on
+      # the other platforms, setup-uv checks it against that same list,
+      # which it carries.
+      with:
+        version: "0.13.5"
+        checksum: ${{ (runner.os == 'Linux' && runner.arch == 'X64') && 'f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f' || '' }}
+
+    # Ubuntu's packages: libcurl's headers, for std `net`'s default C++
+    # client, so the `netresponse` tests take the libcurl path, as they do
+    # locally; and Lua 5.4.6, with luac, the version the tests use locally,
+    # and LuaSocket 3.1.0, std `net`'s default client on Lua (plain HTTP
+    # only, no LuaSec), so its `netresponse` tests send their requests.
+    # From Ubuntu's archive, whose mirrors are near the runners (building
+    # Lua from lua.org's tarball failed on flaky downloads): ubuntu-24.04's
+    # lua5.4 is 5.4.6, and its lua-socket 3.1.0, which the tests find on
+    # Lua's own paths, so jobs that use this are pinned to that image.
+    # `lua` and `luac` are made 5.4's, and the versions checked, so a
+    # change fails here.
+    - name: Packages from Ubuntu's archive
+      if: runner.os == 'Linux'
+      shell: bash
+      env:
+        BACKENDS: ${{ inputs.backends }}
+        APT: ${{ inputs.apt }}
+      run: |
+        packages="$APT"
+        case " $BACKENDS " in *" cpp "*) packages="$packages libcurl4-openssl-dev" ;; esac
+        case " $BACKENDS " in *" lua "*) packages="$packages lua5.4 lua-socket" ;; esac
+        if [ -n "${packages// /}" ]; then
+          sudo apt-get -o Acquire::Retries=3 update
+          sudo apt-get -o Acquire::Retries=3 install -y $packages
+        fi
+        case " $BACKENDS " in *" lua "*)
+          sudo update-alternatives --set lua-interpreter /usr/bin/lua5.4
+          sudo update-alternatives --set lua-compiler /usr/bin/luac5.4
+          lua -v | grep -F "Lua 5.4.6"
+          luac -v | grep -F "Lua 5.4.6"
+          dpkg-query -W -f '${Version}' lua-socket | grep "^3\.1\.0-"
+          lua -e "require('socket.http')"
+        ;; esac
+
+    # The C++ backend's tests compile generated C++ with g++, also under
+    # ThreadSanitizer, which can't place its shadow memory when the
+    # kernel randomizes mappings over 32 bits, as Ubuntu 24.04's does;
+    # 28, as before, suits it.
+    - name: Address randomization for ThreadSanitizer
+      if: runner.os == 'Linux' && contains(inputs.backends, 'cpp')
+      shell: bash
+      run: sudo sysctl vm.mmap_rnd_bits=28
+
+    # Python 3.12 from uv (python-build-standalone, checked against the
+    # hashes uv carries) where the image's own isn't a sure thing; Linux
+    # uses ubuntu-24.04's python3, 3.12.
+    - name: Python
+      if: runner.os != 'Linux' && contains(inputs.backends, 'py')
+      shell: bash
+      run: |
+        uv python install 3.12
+        echo "PYTHON=$(uv python find 3.12)" >> "$GITHUB_ENV"
+
+    # The checkers of generated code, at exact versions
+    # (.github/ci-tools/install.py): the Python backend's tests check its
+    # output with both mypy and pyright, since they sometimes disagree;
+    # the JS backend's run generated packages under Node, check them with
+    # TypeScript's `tsc --checkJs --strict`, and run tests with Mocha 11;
+    # the Lua backend's check generated Lua with LuaLS's `--check`. npm's
+    # from a lockfile without install scripts, LuaLS against its SHA-256.
+    # nightly.yml tries each checker's latest release too.
+    - if: contains(inputs.backends, 'py') || contains(inputs.backends, 'js') || contains(inputs.backends, 'lua')
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      with:
+        node-version: 24
+    - name: Checkers for generated code, and Mocha
+      if: contains(inputs.backends, 'py') || contains(inputs.backends, 'js') || contains(inputs.backends, 'lua')
+      shell: bash
+      run: uv run .github/ci-tools/install.py
+
+    # Lua off Linux: Homebrew's on macOS, whatever 5.4 or later it has;
+    # MSYS2's (UCRT) on Windows x64, named by LUA and LUAC, so its other
+    # tools stay off PATH. Without LuaSocket, so std `net`'s requests
+    # fail there as Kotlin's suite expects of a Lua without a client.
+    # Windows Arm64's image has no MSYS2: no Lua there.
+    - name: Lua on macOS
+      if: runner.os == 'macOS' && contains(inputs.backends, 'lua')
+      shell: bash
+      run: |
+        brew install lua
+        lua -v
+    - name: Lua on Windows
+      if: runner.os == 'Windows' && contains(inputs.backends, 'lua')
+      shell: bash
+      run: |
+        /c/msys64/usr/bin/bash -lc "pacman -Sy --noconfirm --needed mingw-w64-ucrt-x86_64-lua"
+        echo 'LUA=C:\msys64\ucrt64\bin\lua.exe' >> "$GITHUB_ENV"
+        echo 'LUAC=C:\msys64\ucrt64\bin\luac.exe' >> "$GITHUB_ENV"
+        /c/msys64/ucrt64/bin/lua.exe -v
+
+    # The Java backend's tests compile the vendored temper-core and
+    # generated Java with javac (the runtime for Java 8, generated code
+    # for Java 17, as Kotlin's packages have them) and run it, without
+    # Maven; tests that run as tests use JUnit 5.9.2's jars, as
+    # Kotlin's pom.xml names them, which Maven puts in its cache.
+    - if: contains(inputs.backends, 'java')
+      uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+      with:
+        distribution: temurin
+        java-version: 21
+    - name: JUnit for generated Java's tests
+      if: contains(inputs.backends, 'java')
+      shell: bash
+      run: |
+        mvn -q dependency:get -Dartifact=org.junit.jupiter:junit-jupiter-engine:5.9.2
+        mvn -q dependency:get -Dartifact=org.junit.platform:junit-platform-launcher:1.9.2
+
+    # The C# backend's tests compile the vendored TemperLang.Core and
+    # generated C# with Roslyn's csc from the .NET 6 SDK, as Kotlin's
+    # projects target .NET 6, and run it, without MSBuild. The restore,
+    # of a copy of the runtime's project (so vendor/ stays clean), puts
+    # its one dependency, Microsoft.Extensions.Logging 8.0.0, in NuGet's
+    # cache, where the tests read it, with MSTest.TestFramework 3.1.1,
+    # which std's `testing` and generated tests use, as Kotlin's.
+    - if: contains(inputs.backends, 'csharp')
+      uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+      with:
+        dotnet-version: 6.0.x
+    - name: Packages for generated C#
+      if: contains(inputs.backends, 'csharp')
+      shell: bash
+      env:
+        DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      run: |
+        # Forward slashes, which both Git Bash and dotnet take on Windows.
+        temp="${RUNNER_TEMP//\\//}"
+        cp -r vendor/temper/be-csharp/temper-core "$temp/temper-core"
+        dotnet add "$temp/temper-core/TemperLang.Core.csproj" package MSTest.TestFramework --version 3.1.1 --no-restore
+        dotnet restore "$temp/temper-core/TemperLang.Core.csproj"
+
+    # C++ on Windows: MSVC, through CMake, for `tempest test -b cpp` and
+    # `tempest build`'s CMake projects (.github/ci-tools/msvc_env.py).
+    # The C++ backend's own tests build with g++'s options, sanitizers
+    # included, so run on Linux only. macOS uses Apple's clang and the
+    # image's CMake as they are.
+    - name: MSVC
+      if: runner.os == 'Windows' && contains(inputs.backends, 'cpp')
+      shell: bash
+      run: uv run .github/ci-tools/msvc_env.py
+
+    # The Rust backend's tests build generated crates offline against
+    # the vendored temper-core; this puts its one dependency, indexmap,
+    # at the versions its Cargo.lock pins, in cargo's cache, and the
+    # crates generated std depends on (regex), listed in
+    # compat/rust-std-deps.
+    - name: Crates for generated Rust
+      if: contains(inputs.backends, 'rust')
+      shell: bash
+      run: |
+        cargo fetch --locked --manifest-path vendor/temper/be-rust/temper-core/Cargo.toml
+        cargo fetch --locked --manifest-path compat/rust-std-deps/Cargo.toml

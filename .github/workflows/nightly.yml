@@ -22,19 +22,62 @@
 # And an early warning for the checkers of generated code: the backends'
 # tests with the latest TypeScript, pyright, mypy, or LuaLS in place of
 # the version ci.yml pins, one job each, so a failure names its checker.
+#
+# And the platforms tempest is released for but Linux x64, which ci.yml
+# tests on every push: Linux Arm64, macOS Arm64, and Windows x64 and
+# Arm64, natively: every night, the code that differs by platform
+# (`platforms-quick`), and weekly (Sundays), every backend's tests with
+# its toolchain too (`platforms`) (docs/contributing/ci.md).
 name: Nightly
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "41 3 * * *"
+  # Scheduled runs are off for now, to save runner minutes; run it by
+  # hand. To turn them back on, uncomment the schedule: the Linux jobs
+  # and `platforms-quick` every night, and `platforms`, whose macOS and
+  # Windows minutes cost far more, weekly. Each job checks which one
+  # started the run; run by hand, every job runs.
+  # schedule:
+  #   - cron: "41 3 * * *"
+  #   - cron: "17 5 * * 0"
 
 # Read-only token: nothing here writes to the repository.
 permissions:
   contents: read
 
 jobs:
+  # Whether main has changed lately, so a scheduled run skips what an
+  # earlier one already tested on the same code: `day`, "true" if its
+  # latest commit is under 26 hours old (a day, with room for GitHub's
+  # delays in starting scheduled runs), for `cpp` and `platforms-quick`;
+  # and `week`, under 8 days, for `platforms`. The jobs check for
+  # "false", so if this fails they run. `libraries` and
+  # `latest-checkers` run every night regardless: they test other
+  # repositories' main branches and the checkers' latest releases.
+  recent:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      day: ${{ steps.age.outputs.day }}
+      week: ${{ steps.age.outputs.week }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          sparse-checkout: .github
+      - id: age
+        run: |
+          age=$(( $(date +%s) - $(git log -1 --format=%ct) ))
+          day=false
+          week=false
+          if [ "$age" -lt $(( 26 * 3600 )) ]; then day=true; fi
+          if [ "$age" -lt $(( 8 * 86400 )) ]; then week=true; fi
+          echo "Latest commit $(( age / 3600 )) hours old: day=$day, week=$week"
+          echo "day=$day" >> "$GITHUB_OUTPUT"
+          echo "week=$week" >> "$GITHUB_OUTPUT"
+
   cpp:
+    needs: recent
+    if: ${{ !cancelled() && (github.event_name != 'schedule' || (github.event.schedule == '41 3 * * *' && needs.recent.outputs.day != 'false')) }}
     strategy:
       fail-fast: false
       matrix:
@@ -86,6 +129,7 @@ jobs:
   # where to shard or rotate them (a slice per night), keeping each job
   # a library and its backends.
   plan:
+    if: github.event_name != 'schedule' || github.event.schedule == '41 3 * * *'
     runs-on: ubuntu-latest
     outputs:
       libraries: ${{ steps.list.outputs.libraries }}
@@ -169,6 +213,7 @@ jobs:
   # in generated code (or the tests need updating) before ci.yml's pin is
   # bumped. The job's name and summary give the versions.
   latest-checkers:
+    if: github.event_name != 'schedule' || github.event.schedule == '41 3 * * *'
     strategy:
       fail-fast: false
       matrix:
@@ -223,3 +268,226 @@ jobs:
           CHECKER: ${{ matrix.checker }}
           VERSIONS: ${{ steps.checkers.outputs.versions }}
           TEMPEST_REQUIRE_CHECKERS: "1"
+
+  # The platforms binaries.yml releases for but Linux x64, which ci.yml
+  # covers on every push, natively, on each OS and architecture's own
+  # runner (no Intel macOS binary is built), one job each, in two tiers.
+  #
+  # Every night, `platforms-quick`: the code that differs by platform,
+  # which needs no backend's toolchain: the REPL's (Ctrl-C through
+  # SIGINT or the console's handler, ANSI color on Windows' console, and
+  # where history is kept) and children.rs's (process groups and time
+  # limits; on Windows, only time limits), counted (tests-ran.sh), so a
+  # platform where they're all left out fails; and all of tempest's
+  # tests, built without backends. A debug build, warnings errors, as
+  # clippy only runs on Linux.
+  platforms-quick:
+    needs: recent
+    if: ${{ !cancelled() && (github.event_name != 'schedule' || (github.event.schedule == '41 3 * * *' && needs.recent.outputs.day != 'false')) }}
+    name: ${{ matrix.os }}, quick
+    strategy:
+      fail-fast: false
+      matrix:
+        # As `platforms`' below.
+        os: [ubuntu-24.04-arm, macos-15, windows-2025, windows-11-arm]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      RUSTFLAGS: -D warnings
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # As in `platforms`.
+      - name: Line ends as committed
+        if: runner.os == 'Windows'
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@cfcaf53ba4c621917ec7f78a66bff7a8848ddad4 # 1.85.0 branch, 2026-10-16
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: ${{ matrix.os }}
+      - name: clang for ring on Windows Arm64
+        if: runner.os == 'Windows' && runner.arch == 'ARM64'
+        run: echo "C:\Program Files\LLVM\bin" >> "$GITHUB_PATH"
+      - name: Build
+        run: cargo build --locked -p tempest
+      # The line editor's, color's, and history's unit tests (on Windows,
+      # history's reparse-point check in place of Unix's modes, owners,
+      # and links), and `tempest repl` as a command: piped input, its
+      # flags, color, UTF-8 bytes through unchanged, relative imports,
+      # and Ctrl-C: SIGINT on Unix, Ctrl-Break on Windows. The terminal
+      # test needs Linux's `script`, so runs on Linux Arm64 too. At
+      # least 11 of each: all of them on Windows, so Windows' history
+      # and Ctrl-Break tests can't be left out.
+      - name: REPL
+        if: ${{ !cancelled() }}
+        run: |
+          bash .github/ci-tools/tests-ran.sh 11 cargo test --locked -p tempest --bin tempest repl::
+          bash .github/ci-tools/tests-ran.sh 11 cargo test --locked -p tempest --test repl
+      # What a session prints, and the docs' transcripts.
+      - name: REPL sessions
+        if: ${{ !cancelled() }}
+        run: bash .github/ci-tools/tests-ran.sh 2 cargo test --locked -p temper-frontend --test repl --test repl_docs
+      # Time limits, and on Unix, a command's process group killed.
+      - name: Child processes
+        if: ${{ !cancelled() }}
+        # Quoted: a plain YAML value can't end in a colon.
+        run: 'bash .github/ci-tools/tests-ran.sh 2 cargo test --locked -p temper-tmpl --lib children::'
+      - name: All of tempest's tests, without backends
+        if: ${{ !cancelled() }}
+        run: cargo test --locked -p tempest --no-default-features
+
+  # Weekly, and on demand, `platforms`: the same, then every backend's
+  # tests, with its toolchain set up as on Linux
+  # (.github/actions/toolchains), and tempest's with those backends
+  # built in, checkers required (TEMPEST_REQUIRE_CHECKERS) but for what
+  # a platform lacks, which is named (TEMPEST_ALLOW_MISSING, or left out
+  # of `backends`) and listed in docs/contributing/ci.md. It repeats
+  # `platforms-quick`'s steps, which share its build, so every run of
+  # either tests the REPL and child processes. One job per platform, so
+  # its build is shared by its steps, as macOS and Windows minutes cost
+  # more.
+  platforms:
+    needs: recent
+    if: ${{ !cancelled() && (github.event_name != 'schedule' || (github.event.schedule == '17 5 * * 0' && needs.recent.outputs.week != 'false')) }}
+    name: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Pinned, as ci.yml's image is, so a new image's change shows up
+        # as a bump here. Each is the native runner for one of
+        # binaries.yml's targets.
+        include:
+          # As ci.yml: generated C++ by g++, sanitized, and `strict` by
+          # g++ 12 and 14 and clang++.
+          - os: ubuntu-24.04-arm
+            backends: py js lua java csharp cpp rust
+            apt: g++-12 g++-14 clang
+            strict-cxx: g++-12 g++-14 clang++
+            cpp: cargo test --locked -p temper-be-cpp
+          # C++ by Apple's clang through CMake (tempest's tests); the C++
+          # backend's own runs use g++'s options and sanitizers, so are
+          # skipped here and on Windows, by name.
+          - os: macos-15
+            backends: py js lua java csharp cpp rust
+            cpp: >-
+              cargo test --locked -p temper-be-cpp -- --exact
+              --skip runs --skip strict --skip co_await_interop --skip net_client_from_host
+          # C++ by MSVC through CMake.
+          - os: windows-2025
+            backends: py js lua java csharp cpp rust
+            cpp: >-
+              cargo test --locked -p temper-be-cpp -- --exact
+              --skip runs --skip strict --skip co_await_interop --skip net_client_from_host
+          # No Lua: the image has no MSYS2, and LuaLS has no Windows
+          # Arm64 build.
+          - os: windows-11-arm
+            backends: py js java csharp cpp rust
+            cpp: >-
+              cargo test --locked -p temper-be-cpp -- --exact
+              --skip runs --skip strict --skip co_await_interop --skip net_client_from_host
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    env:
+      RUSTFLAGS: -D warnings
+      TEMPEST_REQUIRE_CHECKERS: "1"
+      # LuaLS is checked against a SHA-256 recorded for each platform
+      # (.github/ci-tools/install.py), and only Linux x64's is recorded,
+      # so the Lua tests' type check is skipped here, with a message.
+      TEMPEST_ALLOW_MISSING: LuaLS
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # Windows images check text files out with CRLF line ends, which
+      # the tests' expected output and the docs' transcripts don't have.
+      - name: Line ends as committed
+        if: runner.os == 'Windows'
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@cfcaf53ba4c621917ec7f78a66bff7a8848ddad4 # 1.85.0 branch, 2026-10-16
+        # The Rust backend's tests lay out generated crates with rustfmt
+        # and lint them with clippy.
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: ${{ matrix.os }}
+      # ring (std `net`'s TLS) needs clang on Windows Arm64, as in
+      # binaries.yml.
+      - name: clang for ring on Windows Arm64
+        if: runner.os == 'Windows' && runner.arch == 'ARM64'
+        run: echo "C:\Program Files\LLVM\bin" >> "$GITHUB_PATH"
+      - name: Build
+        run: cargo build --locked -p tempest
+      # The line editor's, color's, and history's unit tests (on Windows,
+      # history's reparse-point check in place of Unix's modes, owners,
+      # and links), and `tempest repl` as a command: piped input, its
+      # flags, color, UTF-8 bytes through unchanged, relative imports,
+      # and Ctrl-C: SIGINT on Unix, Ctrl-Break on Windows. The terminal
+      # test needs Linux's `script`, so runs on Linux Arm64 too. At
+      # least 11 of each: all of them on Windows, so Windows' history
+      # and Ctrl-Break tests can't be left out.
+      - name: REPL
+        if: ${{ !cancelled() }}
+        run: |
+          bash .github/ci-tools/tests-ran.sh 11 cargo test --locked -p tempest --bin tempest repl::
+          bash .github/ci-tools/tests-ran.sh 11 cargo test --locked -p tempest --test repl
+      # What a session prints, and the docs' transcripts.
+      - name: REPL sessions
+        if: ${{ !cancelled() }}
+        run: bash .github/ci-tools/tests-ran.sh 2 cargo test --locked -p temper-frontend --test repl --test repl_docs
+      # Time limits, and on Unix, a command's process group killed.
+      - name: Child processes
+        if: ${{ !cancelled() }}
+        # Quoted: a plain YAML value can't end in a colon.
+        run: 'bash .github/ci-tools/tests-ran.sh 2 cargo test --locked -p temper-tmpl --lib children::'
+      - name: All of tempest's tests, without backends
+        if: ${{ !cancelled() }}
+        run: cargo test --locked -p tempest --no-default-features
+      - name: Toolchains
+        if: ${{ !cancelled() }}
+        uses: ./.github/actions/toolchains
+        with:
+          backends: ${{ matrix.backends }}
+          apt: ${{ matrix.apt }}
+      # Each backend's tests, a step each, so a failure names its
+      # backend, and one failing doesn't stop the rest.
+      - name: Python
+        if: ${{ !cancelled() && contains(matrix.backends, 'py') }}
+        run: cargo test --locked -p temper-be-py
+      - name: JS
+        if: ${{ !cancelled() && contains(matrix.backends, 'js') }}
+        run: cargo test --locked -p temper-be-js
+      - name: Lua
+        if: ${{ !cancelled() && contains(matrix.backends, 'lua') }}
+        run: cargo test --locked -p temper-be-lua
+      - name: Java
+        if: ${{ !cancelled() && contains(matrix.backends, 'java') }}
+        run: cargo test --locked -p temper-be-java
+      - name: C#
+        if: ${{ !cancelled() && contains(matrix.backends, 'csharp') }}
+        run: cargo test --locked -p temper-be-csharp
+      - name: Rust
+        if: ${{ !cancelled() && contains(matrix.backends, 'rust') }}
+        run: |
+          cargo test --locked -p temper-be-rust
+          cargo test --locked --manifest-path vendor/temper/be-rust/temper-core/Cargo.toml --target-dir target/vendor-temper-core
+      - name: C++
+        if: ${{ !cancelled() && contains(matrix.backends, 'cpp') }}
+        run: ${{ matrix.cpp }}
+        env:
+          TEMPEST_STRICT_CXX: ${{ matrix.strict-cxx }}
+      # tempest's tests with this platform's backends built in:
+      # `tempest test -b`, `build`, and `run` on small libraries, and
+      # CMake's build of generated C++. Without RUSTFLAGS, as on Linux,
+      # since `tempest test -b rust` runs cargo on generated crates, which
+      # would take them too; so tempest is built again here.
+      - name: All of tempest's tests, with this platform's backends
+        if: ${{ !cancelled() }}
+        run: cargo test --locked -p tempest --no-default-features --features "net $BACKENDS"
+        env:
+          BACKENDS: ${{ matrix.backends }}
+          RUSTFLAGS: ""

@@ -103,7 +103,10 @@ impl History {
         }
         line.push_str(&escape(entry));
         line.push('\n');
-        // The descriptor appends, wherever reading left it.
+        // At the end, wherever reading left it: Unix's descriptor appends
+        // anyway; Windows' is opened to write, not append, since an
+        // append-only handle can't be truncated by `read`.
+        self.file.seek(SeekFrom::End(0))?;
         self.file.write_all(line.as_bytes())?;
         self.file.flush()?;
         self.begun = true;
@@ -267,7 +270,9 @@ mod platform {
         }
         let file = OpenOptions::new()
             .read(true)
-            .append(true)
+            // Not `append`: Windows refuses `set_len` on an append-only
+            // handle (access denied), and `read` truncates to trim.
+            .write(true)
             .create(true)
             .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
             .open(dir.join(name))?;

@@ -9,7 +9,8 @@
 version: 2
 updates:
   - package-ecosystem: github-actions
-    directory: /
+    # The workflows, and the local action they share.
+    directories: ["/", "/.github/actions/toolchains"]
     schedule:
       interval: monthly
     cooldown:
