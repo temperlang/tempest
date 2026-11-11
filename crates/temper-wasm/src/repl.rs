@@ -25,10 +25,13 @@ use temper_frontend::repl::{
 };
 use temper_frontend::sources::Sources;
 
-/// What `help()` adds about the page: its keys.
+/// What `help()` adds about the page: its keys and limits.
 pub const HELP_FOOTER: &str = "Keys: Enter runs the input once it's whole, or else starts a new line in \
-     it;\nShift+Enter always starts a new line, and Ctrl+Enter always runs; Up and\n\
-     Down go through earlier inputs; Stop ends the input running.\n";
+     it;\nShift+Enter always starts a new line, and Ctrl+Enter (Cmd+Enter on a Mac)\n\
+     always runs; Up and Down, on the first or last line, go through earlier\n\
+     inputs; Escape or Stop ends the input running, and the inputs before it\n\
+     run again. On a touch screen, Enter starts a new line and Run runs.\n\
+     Each input may take 50 million steps; \"Keep going\" runs it again with more.\n";
 
 /// The session and what its inputs report.
 struct Repl {

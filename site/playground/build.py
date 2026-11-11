@@ -48,7 +48,7 @@ WASM = ROOT / "target/wasm32-unknown-unknown/small-wasm/temper_wasm.wasm"
 CORE = ROOT / "vendor/temper/be-js/temper-core/index.js"
 LOGO = ROOT / "docs/images/temper-logo-text-auto.svg"
 MERMAID = ROOT / "site/docs/mermaid"
-ENTRIES = ["src/main.ts", "src/compiler-worker.ts", "src/js-worker.ts", "src/main.css"]
+ENTRIES = ["src/main.ts", "src/compiler-worker.ts", "src/repl-worker.ts", "src/js-worker.ts", "src/main.css"]
 
 
 def run(*command: str | Path, cwd: Path = HERE) -> None:

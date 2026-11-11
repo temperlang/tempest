@@ -10,6 +10,11 @@
 // shows output, with the interpreter's and the JavaScript's runs
 // agreeing. Then a hover shows a type, an edit survives a reload in the
 // URL's fragment, and the top bar's Temper link leads to the site (../).
+// Then the REPL tab: `1 + 2`, a function typed over several lines with
+// Enter, a log streamed while its input runs, Stop with the session
+// restored (and the numbering kept), an input that runs out of steps and
+// then keeps going, and
+// `translate`.
 // Throughout, no console errors, page errors, or failed requests.
 // Chromium is PATH, else $TEMPEST_CHROMIUM, else Playwright's own
 // (`npx playwright-core install --only-shell chromium` in
@@ -177,6 +182,103 @@ try {
   await compiled(() => page.reload());
   const text = await page.$eval("#editor .cm-content", (e) => e.textContent ?? "");
   step("permalink survives a reload", text.includes(mark) ? quiet() : ["the edit was lost", ...quiet()]);
+
+  // The REPL tab: the editor's code is input 0; each input's answer
+  // ends in a result line, as `tempest repl` prints it.
+  await page.click("#view-repl");
+  const idle = () => page.waitForFunction(() => {
+    const t = document.querySelector("#repl-transcript");
+    return t?.getAttribute("aria-busy") === "false" && !document.querySelector("#repl-status")?.textContent;
+  });
+  await idle();
+  /** Types `lines` into the cell, Enter after each, and waits for an answer. */
+  async function run(...lines) {
+    const before = await page.$$eval("#repl-transcript .repl-result", (rs) => rs.length);
+    await page.click("#repl-cell .cm-content");
+    for (const line of lines) {
+      await page.keyboard.type(line);
+      await page.keyboard.press("Enter");
+    }
+    await page.waitForFunction((n) => document.querySelectorAll("#repl-transcript .repl-result").length > n, before);
+    await idle();
+    return page.$eval("#repl-transcript .repl-block:last-child", (b) => b.textContent ?? "");
+  }
+  const lastResult = () => page.$eval("#repl-transcript .repl-block:last-child .repl-result", (r) => r.textContent ?? "");
+  const replStep = async (name, check) => {
+    try {
+      step(name, [...(await check()), ...quiet()]);
+    } catch (e) {
+      step(name, [String(e.message ?? e).split("\n")[0], ...quiet()]);
+    }
+  };
+  const expect = (what, text, pattern) => (pattern.test(text) ? [] : [`${what}: ${JSON.stringify(text.slice(-300))}`]);
+
+  await replStep("REPL: 1 + 2", async () => {
+    await run("1 + 2");
+    return expect("result", await lastResult(), /^interactive#\d+: 3$/);
+  });
+  let sqInput = 0;
+  await replStep("REPL: a function over several lines", async () => {
+    // Enter inside the braces starts a new line; the closing one runs it.
+    await run("let sq(n: Int): Int {", "n * n", "}");
+    const declared = await page.$eval("#repl-transcript .repl-block:last-child", (b) => Number(b.dataset.input));
+    sqInput = declared;
+    await run("sq(7)");
+    return expect("result", await lastResult(), /: 49$/);
+  });
+  await replStep("REPL: logs stream while the input runs", async () => {
+    await page.click("#repl-cell .cm-content");
+    await page.keyboard.type('console.log("early"); var n = 0; while (n < 3000000) { n += 1 }; console.log("late"); n');
+    await page.keyboard.press("Enter");
+    // "early" shows while the loop still runs.
+    await page.waitForSelector("#repl-transcript .repl-streamed .repl-log");
+    const busy = await page.$eval("#repl-transcript", (t) => t.getAttribute("aria-busy"));
+    await page.waitForFunction(() => !document.querySelector("#repl-transcript .repl-streamed"));
+    await idle();
+    const logs = await page.$$eval("#repl-transcript .repl-block:last-child .repl-log", (ls) => ls.map((l) => l.textContent));
+    return [
+      ...(busy === "true" ? [] : ["the log showed only after the input finished"]),
+      ...(logs.join() === "early,late" ? [] : [`logs ${JSON.stringify(logs)}`]),
+      ...expect("result", await lastResult(), /: 3000000$/),
+    ];
+  });
+  await replStep("REPL: Stop restores the session", async () => {
+    await page.click("#repl-cell .cm-content");
+    // An empty loop runs out of its 50 million steps in well under a
+    // second; Stop it as it keeps going with more.
+    await page.keyboard.type("while (true) {}");
+    await page.keyboard.press("Enter");
+    await page.waitForSelector("#repl-transcript .repl-block:last-child .repl-more");
+    await idle();
+    await page.click("#repl-transcript .repl-block:last-child .repl-more");
+    await page.waitForFunction(() => document.querySelector("#repl-transcript")?.getAttribute("aria-busy") === "true");
+    await page.waitForTimeout(300);
+    await page.click("#repl-stop");
+    const stopped = await page.$eval("#repl-transcript .repl-block:last-child", (b) => b.textContent ?? "");
+    await idle();
+    const stoppedAt = Number(/interactive#(\d+): stopped/.exec(stopped)?.[1] ?? -1);
+    await run("sq(3)");
+    const after = await page.$eval("#repl-transcript .repl-block:last-child", (b) => Number(b.dataset.input));
+    return [
+      ...expect("stopped", stopped, /interactive#\d+: stopped/),
+      ...expect("after", await lastResult(), /: 9$/),
+      ...(after === stoppedAt + 1 ? [] : [`the next input is #${after}, not #${stoppedAt + 1}`]),
+    ];
+  });
+  await replStep("REPL: out of steps, then keep going", async () => {
+    await run("var m = 0; while (m < 15000000) { m += 1 }; m");
+    const first = await lastResult();
+    const more = await page.$("#repl-transcript .repl-block:last-child .repl-more");
+    if (!more) return [`no "Keep going" after ${JSON.stringify(first)}`];
+    await more.click();
+    await page.waitForFunction(() => document.querySelector("#repl-transcript .repl-block:last-child .repl-result"));
+    await idle();
+    return [...expect("first run", first, /: fail$/), ...expect("kept going", await lastResult(), /: 15000000$/)];
+  });
+  await replStep("REPL: translate", async () => {
+    const text = await run(`translate(${sqInput}, "py")`);
+    return [...expect("translation", text, /def _?sq\b/), ...expect("result", await lastResult(), /: void$/)];
+  });
 
   // The Temper link: to the site, one level up, with the logo.
   const link = await page.$eval("header .brand a", (a) => ({

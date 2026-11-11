@@ -287,3 +287,87 @@ export function toCompileResult(value: Json): CompileResult {
   }
   return { diagnostics, run: value.run === undefined ? null : toRun(value.run), backends };
 }
+
+// The REPL: crates/temper-wasm's `repl_*` answers, and the messages
+// between the page and the REPL's worker.
+
+/** What an input reported, with its text as `tempest repl` prints it. */
+export interface ReplEvent {
+  /**
+   * `diagnostic`, `log`, `failure`, `output` (the REPL's functions'),
+   * `note`, `unresolved`, `interrupted`, `internal`, `truncated`, or
+   * `result`, last.
+   */
+  kind: string;
+  text: string;
+  /** A diagnostic's: `error`, `warn`, or `hint`. */
+  level?: string;
+}
+
+/** One input's answer. */
+export interface ReplAnswer {
+  input: number;
+  events: ReplEvent[];
+  /** The result as printed, or null if it failed. */
+  value: string | null;
+  out_of_steps: boolean;
+}
+
+/** Enter's question: whether the cell's text is whole, and its inputs. */
+export interface ReplCompletion {
+  complete: boolean;
+  inputs: string[];
+  brackets: number;
+}
+
+/** An input to run again, quietly, with the steps it had. */
+export interface ReplReplay {
+  text: string;
+  fuel: number;
+}
+
+/** The page to the REPL's worker. */
+export type ToRepl =
+  | { type: "init"; module: WebAssembly.Module }
+  /** A new session, the editor's source as input 0, then `replay` quietly. */
+  | { type: "start"; id: number; source: string; fuel: number; replay: ReplReplay[] }
+  | { type: "input"; id: number; text: string; fuel: number }
+  | { type: "complete"; id: number; text: string };
+
+/** The REPL's worker to the page. */
+export type FromRepl =
+  /** A line an input logged, as it's logged. */
+  | { type: "log"; id: number; line: string }
+  /** `start`'s: input 0's answer (null if no code), and how many replayed. */
+  | { type: "started"; id: number; answer: ReplAnswer | null; replayed: number }
+  | { type: "answer"; id: number; answer: ReplAnswer }
+  | { type: "complete"; id: number; completion: ReplCompletion }
+  /**
+   * The wasm trapped (a panic, or the memory cap), so the instance is
+   * gone; `replaying` is the replayed input it trapped on, if any.
+   */
+  | { type: "trap"; id: number; message: string; replaying: number | null };
+
+export function toReplAnswer(value: Json): ReplAnswer {
+  if (!isRecord(value)) return fail("answer");
+  return {
+    input: num(value.input, "input"),
+    events: list(value.events, "events", (e) => {
+      if (!isRecord(e)) return fail("event");
+      const event: ReplEvent = { kind: str(e.kind, "kind"), text: str(e.text, "text") };
+      if (e.level !== undefined) event.level = str(e.level, "level");
+      return event;
+    }),
+    value: strOrNull(value.value, "value"),
+    out_of_steps: value.out_of_steps === true,
+  };
+}
+
+export function toReplCompletion(value: Json): ReplCompletion {
+  if (!isRecord(value)) return fail("completion");
+  return {
+    complete: value.complete === true,
+    inputs: toStrings(value.inputs),
+    brackets: num(value.brackets, "brackets"),
+  };
+}

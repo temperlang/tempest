@@ -3,5 +3,5 @@
   "compilerOptions": {
     "lib": ["ES2022", "WebWorker"]
   },
-  "files": ["src/compiler-worker.ts", "src/js-worker.ts", "src/modules.d.ts"]
+  "files": ["src/compiler-worker.ts", "src/repl-worker.ts", "src/js-worker.ts", "src/modules.d.ts"]
 }

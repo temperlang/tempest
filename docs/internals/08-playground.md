@@ -53,7 +53,7 @@ Every export, and why it's a plain C ABI with JSON rather than
 wasm-bindgen, is in [the wasm API, in detail](detail/08-playground.md#the-wasm-api)
 and [its decisions](detail/08-playground.md#a-plain-c-abi-not-wasm-bindgen).
 
-A REPL session lives there too, for a REPL tab:
+A REPL session lives there too, for the page's REPL tab:
 [`repl_start`, `repl_input`, `repl_complete`, and `repl_reset`](detail/08-playground.md#the-repls-api)
 settle and run one input at a time against what earlier ones declared,
 with `tempest repl`'s transcript text.
@@ -70,6 +70,10 @@ two very different ways of running a program agree.
 - [`compiler-worker.ts`](../../site/playground/src/compiler-worker.ts):
   holds the wasm, so typing never waits on it. Only the newest request
   waits; a run that takes too long gets its worker replaced.
+- [`repl.ts`](../../site/playground/src/repl.ts) and
+  [`repl-worker.ts`](../../site/playground/src/repl-worker.ts): the REPL
+  tab, with its own wasm instance holding the session; Stop replaces
+  that worker and replays the inputs before.
 - [`js-worker.ts`](../../site/playground/src/js-worker.ts): runs the
   generated JavaScript, with the runtime from `vendor/temper/be-js/`.
 - [`build.py`](../../site/playground/build.py): builds the wasm and bundles

@@ -253,6 +253,49 @@ pre { margin: 0; font: 0.95rem/1.5 var(--mono); white-space: pre-wrap; overflow-
 .status [data-kind="bad"] { color: var(--bad); }
 .grow { flex: 1; }
 
+/* The view switch: the editor and its tabs, or the REPL. */
+.views { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.bar .views .view { border: none; border-radius: 0; background: var(--surface); color: var(--muted); font-weight: 600; }
+.bar .views .view + .view { border-left: 1px solid var(--border); }
+.bar .views .view[aria-selected="true"] { background: var(--accent); color: var(--surface); }
+
+/* The REPL: the transcript, then the input cell pinned below it. */
+.repl-view main { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+.repl { display: flex; flex-direction: column; min-height: 0; background: var(--surface); }
+.repl .side-head { font-family: var(--sans); }
+.repl-status { flex: 1; text-align: right; font-size: 0.9rem; }
+.repl .side-head button { font-size: 0.9rem; padding: 0.15rem 0.6rem; }
+.repl-transcript { flex: 1; min-height: 0; overflow: auto; padding: 0.6rem var(--inset); font: 0.95rem/1.5 var(--mono); }
+.repl-transcript pre { font: inherit; }
+.repl-banner { margin: 0.2rem 0 0.6rem; font: 0.9rem/1.45 var(--sans); color: var(--muted); }
+.repl-banner.failure { padding: 0; color: var(--bad); }
+.repl-block { padding: 0.35rem 0; border-top: 1px solid var(--panel); }
+.repl-prompt { color: var(--muted); user-select: none; }
+/* The prompt hangs in the margin, so a long input's lines line up. */
+.repl-echo { padding-left: 1.2rem; }
+.repl-echo .repl-prompt { display: inline-block; width: 1.2rem; margin-left: -1.2rem; }
+.repl-event { padding-left: 1.2rem; }
+.repl-log { color: var(--text); border-left: 3px solid var(--border); padding-left: calc(1.2rem - 3px); margin-left: 0; background: var(--panel); }
+.repl-result { color: var(--accent); font-weight: 600; }
+.repl-failure, .repl-internal, .repl-interrupted { color: var(--bad); }
+.repl-diagnostic.error { color: var(--error); }
+.repl-diagnostic.warn { color: var(--warn); }
+.repl-diagnostic.hint, .repl-note, .repl-unresolved, .repl-truncated { color: var(--muted); }
+/* Translations keep their lines, scrolling sideways on their own. */
+.repl-output { color: var(--text); white-space: pre; overflow-wrap: normal; overflow-x: auto; }
+.repl-more { margin: 0.3rem 0 0 1.2rem; font-size: 0.9rem; }
+.repl-entry { display: flex; align-items: flex-start; gap: 0.5rem; padding: 0.5rem var(--inset); border-top: 1px solid var(--border); background: var(--surface); }
+.repl-entry > .repl-prompt { font: 16px/1.55 var(--mono); padding-top: 4px; }
+.repl-cell { flex: 1; min-width: 0; border: 1px solid var(--border); border-radius: 6px; font-size: 16px; }
+.repl-cell:focus-within { border-color: var(--accent); }
+.repl-cell .cm-editor { height: auto; max-height: 40vh; border-radius: 6px; }
+.repl-cell .cm-editor.cm-focused { outline: none; }
+.repl-cell .cm-scroller { overflow: auto; }
+.repl-cell .cm-placeholder { color: var(--muted); }
+.repl-buttons { display: flex; gap: 0.5rem; }
+.repl button:disabled { opacity: 0.5; cursor: default; border-color: var(--border); }
+#repl-run { background: var(--accent); color: var(--surface); border-color: var(--accent); }
+
 @media (max-width: 900px) {
   body { font-size: 15px; }
   main { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(16rem, 45vh) minmax(22rem, 1fr); }
@@ -260,4 +303,6 @@ pre { margin: 0; font: 0.95rem/1.5 var(--mono); white-space: pre-wrap; overflow-
   .editor { font-size: 14px; }
   .tabs { flex-wrap: wrap; }
   :root { --logo-h: 26px; }
+  .repl-view main { grid-template-rows: minmax(28rem, calc(100vh - 9rem)); }
+  .repl-buttons { flex-direction: column; }
 }

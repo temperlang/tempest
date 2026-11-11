@@ -36,8 +36,15 @@ home (`../`); served alone, that link just leads back to the playground.
   files. `std_library` gives std's own JavaScript, once. Their types are
   in `src/api.ts`, narrowed from the JSON where it comes in. The module
   imports the clock (`Date.now()`) and the REPL's log stream from the
-  page, in `env`; `repl_*` keep a REPL session, for a REPL tab
+  page, in `env`; `repl_*` keep a REPL session, for the REPL tab
   ([the REPL's API](../../docs/internals/detail/08-playground.md#the-repls-api)).
+- **The REPL tab** (`src/repl.ts`) swaps the editor for a REPL, with
+  the editor's code as input 0, in a worker of its own
+  (`src/repl-worker.ts`), started when the tab is first shown, whose
+  instance keeps the session. Logs stream from it as they're logged.
+  Stop, or a trap, replaces that worker and replays the earlier inputs,
+  which the page keeps
+  ([the REPL tab](../../docs/internals/detail/08-playground.md#the-repl-tab)).
 - **Run** shows the interpreter's results beside the generated
   JavaScript's, run in a worker of its own (`src/js-worker.ts`): each
   generated module becomes a blob URL, with imports rewritten to the
@@ -86,8 +93,10 @@ The worker keeps the source it last settled, and the wasm's `hover`,
   tiny static server and drives headless Chromium through it, with
   `site/docs/mermaid`'s playwright-core: each example fills every
   backend's tab, has no errors, and runs, with both runs agreeing; then
-  a hover, a permalink across a reload, and the Temper link. Console
-  errors and failed requests fail it. It takes 8 to 13 s.
+  a hover, a permalink across a reload, and the Temper link; then the
+  REPL tab: a sum, a function over several lines, a streamed log, Stop
+  with the session restored, "Keep going", and `translate`. Console
+  errors and failed requests fail it. It takes 20 to 30 s.
 
       node site/playground/smoke.mjs [DIR] [--chromium PATH]
 

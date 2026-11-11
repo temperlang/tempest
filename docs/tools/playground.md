@@ -11,6 +11,33 @@ Building it, and how it fits together, is in
 [site/playground](../../site/playground/README.md), and
 [how it works](../internals/08-playground.md) in the internals.
 
+## The REPL tab
+
+**REPL**, beside **Editor** in the top bar, swaps the editor for a
+REPL, as [`tempest repl`](repl.md) runs in a terminal: type an input,
+and see its result as `interactive#N: value`, with what it logged, its
+errors, and its warnings. The editor's code is input 0, so inputs can
+call what it declares; edit it, and the REPL starts again from it, with
+your inputs run again. Tests don't run in a REPL, so if the editor's
+code has any, input 0 fails, with an error for each, though what it
+declares still works.
+
+- **Enter** runs the input once it's whole, or else starts a new line,
+  so a function can be typed over several lines. **Shift+Enter** always
+  starts a new line, and **Ctrl+Enter** (Cmd+Enter on a Mac) or **Run**
+  always runs. On a touch screen, Enter starts a new line, and Run runs.
+- **Up** and **Down**, on the first or last line, go through earlier
+  inputs.
+- `help()` lists what the REPL offers, and `translate(n, "py")` shows
+  input `n` in Python (or `cpp`, `csharp`, `java`, `js`, `lua`, `rust`).
+- **Limits:** each input may take 50 million steps; one that runs out
+  offers **Keep going**, which runs it again, as the next input, with
+  ten times as many. **Stop** (or Escape) ends an input that's running;
+  the REPL then runs the inputs before it again, quietly, to restore
+  the session, which takes as long as they took. Memory is capped at
+  1 GiB. **Restart** starts over from the editor's code.
+- Nothing leaves your browser, and links don't share the REPL's inputs.
+
 > **Note:** these docs link only this playground, but Temper's own
 > README still links an older one, `play.temperlang.dev`, and the old
 > site's [terms of use](../legal/playground-terms.md) name

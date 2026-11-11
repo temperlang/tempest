@@ -14,6 +14,10 @@
     <a href="../" title="Temper: the docs">@@LOGO@@</a>
     <span>playground</span>
   </h1>
+  <div class="views" role="tablist" aria-label="View">
+    <button id="view-editor" class="view" type="button" role="tab" aria-selected="true" aria-controls="source output">Editor</button>
+    <button id="view-repl" class="view" type="button" role="tab" aria-selected="false" aria-controls="repl" tabindex="-1">REPL</button>
+  </div>
   <label class="field">
     <span>Example</span>
     <select id="example"></select>
@@ -24,11 +28,11 @@
   </div>
 </header>
 <main>
-  <section class="side source" aria-label="Temper source">
+  <section id="source" class="side source" aria-label="Temper source">
     <div class="side-head"><span>main.temper</span></div>
     <div id="editor" class="editor"></div>
   </section>
-  <section class="side output" aria-label="Output">
+  <section id="output" class="side output" aria-label="Output">
     <div id="tabs" class="tabs" role="tablist" aria-label="Backends and results"></div>
     <div id="code-pane" class="pane" role="tabpanel">
       <div class="side-head">
@@ -53,6 +57,22 @@
     <div id="errors-pane" class="pane errors" role="tabpanel" hidden>
       <p id="no-errors" class="note">No errors or warnings.</p>
       <ul id="errors"></ul>
+    </div>
+  </section>
+  <section id="repl" class="repl" aria-label="REPL" hidden>
+    <div class="side-head">
+      <span>REPL</span>
+      <span id="repl-status" class="repl-status" aria-live="polite"></span>
+      <button id="repl-restart" type="button" title="A new session from the editor's code">Restart</button>
+    </div>
+    <div id="repl-transcript" class="repl-transcript" role="log" aria-live="polite" aria-label="REPL transcript" tabindex="0"></div>
+    <div class="repl-entry">
+      <span class="repl-prompt" aria-hidden="true">$</span>
+      <div id="repl-cell" class="repl-cell"></div>
+      <div class="repl-buttons">
+        <button id="repl-run" type="button">Run</button>
+        <button id="repl-stop" type="button" disabled>Stop</button>
+      </div>
     </div>
   </section>
 </main>

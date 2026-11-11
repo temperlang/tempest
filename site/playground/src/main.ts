@@ -13,6 +13,8 @@
 //   click; into std, shown read-only on the right), completion, find
 //   references (Shift+F12), rename (F2), and signature help in a call's
 //   arguments, which wait for the current text to settle.
+// - The REPL tab (repl.ts) takes the page's place of the editor and
+//   its tabs, with the editor's code as its input 0.
 
 import {
   type Completion,
@@ -72,6 +74,7 @@ import type {
 } from "./api";
 import { toCompletions, toDefinition, toHover, toRename, toSignature, toSpans } from "./api";
 import { examples } from "./examples";
+import { createRepl } from "./repl";
 import { decode, encode } from "./share";
 import { temper } from "./temper-language";
 
@@ -1009,6 +1012,41 @@ function debounce(f: () => void, ms: number): () => void {
 function size(bytes: number): string {
   return bytes >= 1 << 20 ? `${(bytes / (1 << 20)).toFixed(1)} MiB` : `${Math.round(bytes / 1024)} KiB`;
 }
+
+// Views: the editor and its tabs, or the REPL, which starts when first
+// shown.
+
+const repl = createRepl({
+  source,
+  module: () => wasmModule,
+  extensions: [temper, syntaxHighlighting(highlight), looks],
+  highlight,
+  language: temper,
+});
+const views = { editor: $<HTMLButtonElement>("#view-editor"), repl: $<HTMLButtonElement>("#view-repl") };
+
+function showView(name: keyof typeof views): void {
+  for (const [key, tab] of Object.entries(views)) {
+    const on = key === name;
+    tab.setAttribute("aria-selected", String(on));
+    tab.tabIndex = on ? 0 : -1;
+  }
+  $("#source").hidden = name !== "editor";
+  $("#output").hidden = name !== "editor";
+  $("#repl").hidden = name !== "repl";
+  document.body.classList.toggle("repl-view", name === "repl");
+  if (name === "repl") repl.show();
+  else editor.focus();
+}
+
+views.editor.addEventListener("click", () => showView("editor"));
+views.repl.addEventListener("click", () => showView("repl"));
+views.editor.parentElement?.addEventListener("keydown", (event) => {
+  if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+  const next = views.editor.getAttribute("aria-selected") === "true" ? "repl" : "editor";
+  showView(next);
+  views[next].focus();
+});
 
 // Start: the source from the link or the first example, then the wasm.
 

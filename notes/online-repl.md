@@ -54,6 +54,42 @@ open questions it ended with are at the end, with their answers.
   replaying it, as for Stop. The REPL's tools settle std's tmpl apart
   from the compiler's copy, once per session's first `translate`.
 
+**Chunk 2, done:** the REPL tab
+([docs/tools/playground.md](../docs/tools/playground.md#the-repl-tab),
+[the internals](../docs/internals/detail/08-playground.md#the-repl-tab)).
+
+- **Editor** and **REPL** in the top bar swap the page's main area.
+  `repl-worker.ts` holds a second instance, started when the tab is
+  first shown; `repl.ts` has the cell, the transcript, and the replay.
+- **Keys:** Enter runs once `repl_complete` says the text is whole,
+  else adds a line indented by its open brackets; Shift+Enter a line;
+  Ctrl or Cmd+Enter and Run always run; Up and Down on the first and
+  last line walk history (`localStorage`); Escape stops. On a coarse
+  pointer, Enter only adds lines. Brackets don't close themselves in
+  the cell, or Enter would run `{}`.
+- **Transcript:** each event as the CLI prints it, by `textContent`,
+  styled by kind, in an `aria-live` log; logs stream, then the answer
+  replaces them.
+- **Steps:** 50M per input; "Keep going" runs the same text, as the
+  next input, with ten times as many.
+- **Stop and traps:** a new worker replays the earlier inputs quietly,
+  each with its steps, or 1 for one that ran out or was stopped, so it
+  fails at once and the numbering holds. An input that traps again as
+  it replays is left out. A changed editor restarts the session, with
+  replay, the next time the tab is used.
+- **`help()`'s footer** names the page's keys.
+- **Tests:** `smoke.mjs` runs a sum, a multi-line function, a streamed
+  log, Stop with replay and numbering, "Keep going", and `translate`.
+- **Left for chunk 3:** completion, hover, and signature help in the
+  cell need queries over the session (`repl_query`): the compiler
+  worker's analysis is of the editor's source alone, so it can't see
+  earlier inputs. Also `translate` in panes, links from
+  `interactive#N` labels, and folding long output.
+- **Open:** an editor whose code has tests fails as input 0 ("Tests
+  don't run in the REPL"), with five of the seven examples; what it
+  declares still works, but the first thing a visitor sees is an error.
+  Skipping tests in input 0 with a note would need a frontend change.
+
 The CLI REPL's decisions hold here too:
 
 - one growing REPL library of chained inputs, with shadowing for

@@ -33,6 +33,7 @@ functions, the tests, and what's weak or planned, including `watch`.
 - [The wasm API](#the-wasm-api)
   - [The REPL's API](#the-repls-api)
 - [The page's messages](#the-pages-messages)
+  - [The REPL tab](#the-repl-tab)
 - [Main types and functions](#main-types-and-functions)
 - [Sizes](#sizes)
 - [Watch (planned)](#watch-planned)
@@ -444,6 +445,60 @@ function for each JSON shape ([`toCompileResult`](../../../site/playground/src/a
 [`toDiagnostics`](../../../site/playground/src/api.ts),
 [`toHover`](../../../site/playground/src/api.ts), and the rest).
 
+### The REPL tab
+
+The REPL tab ([`repl.ts`](../../../site/playground/src/repl.ts)) takes
+the place of the editor and its tabs, and starts its own worker
+([`repl-worker.ts`](../../../site/playground/src/repl-worker.ts)) the
+first time it's shown, with the same compiled module and a second
+instance, which holds the session. The compiler's worker gets replaced
+as you type, which would throw a session away.
+
+```mermaid
+sequenceDiagram
+  participant P as REPL tab (repl.ts)
+  participant R as repl-worker.ts
+  participant M as temper-wasm
+  P->>R: init: the compiled module
+  P->>R: start: the editor's source, replay (none yet)
+  R->>M: repl_start, then repl_input for each replayed input, quietly
+  R-->>P: started: input 0's answer
+  Note over P: Enter
+  P->>R: complete: the cell's text
+  R->>M: repl_complete
+  R-->>P: complete: whole?, inputs, brackets
+  P->>R: input: id, text, 50M steps
+  R->>M: repl_input
+  M->>R: host_log, a line at a time
+  R-->>P: log: id, line
+  R-->>P: answer: id, events
+```
+
+- **One input at a time:** the page queues the inputs Enter splits
+  into and sends the next when an answer comes. Enter's question goes
+  straight to the worker, so it waits behind a running input, and is
+  dropped if the cell changed meanwhile.
+- **The page keeps the inputs**, with the steps to replay each: the
+  steps it had, or 1 if it ran out of them or was stopped, so it fails
+  again at once and keeps its number. Stop terminates the worker and
+  starts another, which replays them without posting their logs. A
+  trap (a panic, or the memory cap) does the same; one that traps again
+  as it replays is left out. A changed editor starts a new session,
+  replaying, the next time the tab is shown or an input runs.
+- **Rendering:** each event is a `<pre>` with its `textContent`, styled
+  by kind (and a diagnostic's level); the echoed input is highlighted
+  with `highlightCode` over the Temper stream language's tree. Lines
+  streamed while an input runs are replaced by its answer's, which
+  lists them again, in order.
+- **Keys:** Enter runs once `repl_complete` says the text is whole,
+  else adds a line, indented two spaces per open bracket (at the end;
+  elsewhere, as the line above). Shift+Enter adds a line; Ctrl or
+  Cmd+Enter, and Run, run the text as one input when it isn't whole.
+  Up and Down on the first and last line walk history, kept in
+  `localStorage`. On a coarse pointer, Enter only adds lines. Escape
+  stops a run. Brackets don't close themselves in the cell, since
+  Enter would then run `{}` as typed.
+
 ## Main types and functions
 
 Rust, in [`temper-wasm`](../../../crates/temper-wasm/src/lib.rs):
@@ -479,6 +534,11 @@ TypeScript, in `site/playground/src/`:
   [`compile`](../../../site/playground/src/compiler-worker.ts),
   [`query`](../../../site/playground/src/compiler-worker.ts), and
   [`sendStd`](../../../site/playground/src/compiler-worker.ts).
+- [`repl.ts`](../../../site/playground/src/repl.ts):
+  [`createRepl`](../../../site/playground/src/repl.ts), with `enter`
+  for Enter, `restart` and `stop` for the worker and replay, and
+  `render` for an answer; [`repl-worker.ts`](../../../site/playground/src/repl-worker.ts):
+  `start` (with replay), `input`, and `complete`.
 - [`js-worker.ts`](../../../site/playground/src/js-worker.ts): `run`,
   with the `Modules` that rewrite imports.
 - [`share.ts`](../../../site/playground/src/share.ts): permalinks.
@@ -565,12 +625,17 @@ with `--limit` on builds.
   example fills all seven backends' tabs, has no error diagnostics, and
   runs, with the interpreter's and the JavaScript's runs agreeing; a
   hover shows a type; an edit survives a reload through the permalink;
-  and the Temper link leads to `../`. Console errors and failed requests
-  fail it. CI runs it after the docs' Chromium is installed.
+  and the Temper link leads to `../`. Then the REPL tab: `1 + 2`, a
+  function typed over several lines with Enter, a log seen while its
+  input still runs, an input that runs out of steps and then keeps
+  going, Stop during a run with the session restored and its numbering
+  kept, and `translate`. Console errors and failed requests fail it.
+  CI runs it after the docs' Chromium is installed.
 
 Not covered: worker replacement, query waiting, and the other editor
 features (completion, rename, go to definition) are tested in the
-browser only by hand, though the wasm tests cover their answers.
+browser only by hand, though the wasm tests cover their answers; so are
+the REPL's history, Restart, the touch keys, and a trap's restore.
 
 ## Known weaknesses and planned changes
 
@@ -585,3 +650,7 @@ browser only by hand, though the wasm tests cover their answers.
   after each Pages deploy would catch a broken deploy too.
 - **Permalinks name no compiler version.**
 - **`watch`** is planned, as a loop first.
+- **The REPL tab** has no completion, hover, or signature help yet
+  (they need queries over the session, `repl_query`), shows
+  `translate` as the CLI's text rather than in panes, and stops a run
+  only by replacing its worker, which replays every earlier input.
