@@ -35,27 +35,20 @@ $ let tau = 2.0 * Float64.pi;
 interactive#1: void
 ```
 
-In Kotlin Temper's REPL, you can also get the internal description of a
-numbered input result after frontend processing has finished (tempest's REPL
-doesn't have `describe` yet):
+You can also ask the REPL how it sees a numbered input, at one of the compiler's
+steps, as the types it worked out:
 
-<!-- repl: skip -->
 ```console
-$ describe(1, "frontend.generateCodeStage.after")
-Describe interactive#1 @ frontend.generateCodeStage.after
-  let return__1 ⦂ Void, @implicit Rectangle__0 ⦂ Type;
-  Rectangle__0 = type (Rectangle__0);
-  @optionalImport let nym`-repl/i0001//chunk.temper`.tau ⦂ Float64;
-  getStatic(Float64, \pi);
-  nym`-repl/i0001//chunk.temper`.tau = 6.283185307179586;
-  return__1 = void
-
+$ describe(1, "types")
+tau: Float64
 interactive#2: void
 ```
 
-In all the above, `let interactive#1.tau ⦂ Float64;` shows that `tau`'s static type was inferred to be `Float64`. And while we're in the REPL for now, if you
-enter the same code in a Temper project with the Temper extension for Visual
-Studio Code, you can hover over a variable name to see the inferred type.
+That shows that `tau`'s static type was inferred to be `Float64`. Other steps
+are `"parsed"`, `"settled"`, `"module"`, and `"tmpl"`; `help()` lists them. And
+while we're in the REPL for now, if you enter the same code in a Temper project
+with the Temper extension for Visual Studio Code, you can hover over a variable
+name to see the inferred type.
 
 But oh yeah, we were going to make another class to go with `Rectangle`. Here it
 is:
@@ -151,17 +144,17 @@ And we can call this function on our shapes:
 
 ```console
 $ toStrings(shapes)
-interactive#10: ["Shape of area 0.75","Circle of radius 2.0"]
+interactive#11: ["Shape of area 0.75","Circle of radius 2.0"]
 ```
 
 Also, just to make a point, we can't actually construct instances of interfaces:
 
 ```console
 $ new Shape()
-interactive#11:1:5: error: Cannot instantiate abstract type Shape
+interactive#12:1:5: error: Cannot instantiate abstract type Shape
     new Shape()
         ^^^^^
-interactive#11: fail
+interactive#12: fail
 ```
 
 ## More on inheritance
@@ -179,16 +172,16 @@ $ class Square extends Rectangle {
       this.height = edgeLength;
     }
   }
-interactive#12:1:22: error: Cannot extend concrete type(s) Rectangle
+interactive#13:1:22: error: Cannot extend concrete type(s) Rectangle
     class Square extends Rectangle {
                          ^^^^^^^^^
-interactive#12:5:5: error: Member width defined in Rectangle incompatible with usage
+interactive#13:5:5: error: Member width defined in Rectangle incompatible with usage
         this.width = edgeLength;
         ^^^^^^^^^^
-interactive#12:6:5: error: Member height defined in Rectangle incompatible with usage
+interactive#13:6:5: error: Member height defined in Rectangle incompatible with usage
         this.height = edgeLength;
         ^^^^^^^^^^^
-interactive#12: Square
+interactive#13: Square
 ```
 
 Focus on that first message "Cannot extend concrete type(s) Rectangle".
@@ -252,7 +245,7 @@ in Java, JS, or Python, you might see something different than this:
 
 ```console
 $ boxes
-interactive#17: [{class: Square, width: 1.0},{class: Rectangle, width: 1.5, height: 0.5}]
+interactive#18: [{class: Square, width: 1.0},{class: Rectangle, width: 1.5, height: 0.5}]
 ```
 
 Our `boxes` are `Rectangular`, so we can use that abstraction:
@@ -269,12 +262,12 @@ And meanwhile, our list `toString` conversion function still works as before:
 
 ```console
 $ let shapes: List<Shape> = [boxes[0], boxes[1], { radius: 2.0 }];
-interactive#19: void
+interactive#20: void
 $ toStrings(shapes)
-interactive#20: ["Shape of area 1.0","Shape of area 0.75","Circle of radius 2.0"]
+interactive#21: ["Shape of area 1.0","Shape of area 0.75","Circle of radius 2.0"]
 // Temper `List` is immutable and so is covariant in its item type.
 $ toStrings(boxes)
-interactive#21: ["Shape of area 1.0","Shape of area 0.75"]
+interactive#22: ["Shape of area 1.0","Shape of area 0.75"]
 ```
 
 So for **hierarchies and abstractions of behavior**, use **interfaces**.

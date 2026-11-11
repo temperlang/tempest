@@ -19,7 +19,7 @@ pub struct DocSymbol {
     pub children: Vec<DocSymbol>,
 }
 
-impl Analysis {
+impl Analysis<'_> {
     /// The declarations in `file`, in source order, each class with its
     /// members.
     pub fn document_symbols(&self, file: FileId) -> Vec<DocSymbol> {
@@ -97,7 +97,7 @@ impl Analysis {
         if self.text_of_span(decl, selection) != Some(text) {
             return None;
         }
-        let symbol = self.decl_symbols.get(&decl).copied();
+        let symbol = self.decl_symbols().get(&decl).copied();
         let kind = match symbol {
             Some(s) => self.kind(s),
             None => self.decl_kind(decl, None),

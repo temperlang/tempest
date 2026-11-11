@@ -236,3 +236,160 @@ fn ctrl_c_stops_the_input_not_the_session() {
         "Interrupted\ninteractive#1: fail\ninteractive#2: true\ninteractive#3: 2\n"
     );
 }
+
+/// `--color`: `auto` colors only a terminal's output, so piped output is
+/// plain; `always` colors it whatever `NO_COLOR` says; `never` doesn't.
+#[test]
+fn color() {
+    let colored =
+        "\x1b[2minteractive#0:\x1b[0m 1\n\x1b[2minteractive#1:\x1b[0m \x1b[31mfail\x1b[0m\n";
+    let plain = "interactive#0: 1\ninteractive#1: fail\n";
+    for (args, expected) in [
+        (&[][..], plain),
+        (&["--color", "auto"], plain),
+        (&["--color", "never"], plain),
+        (&["--color", "always"], colored),
+    ] {
+        let (code, out, _) = repl(args, None, "1\n1 / 0\n");
+        assert_eq!((code, out.as_str()), (0, expected), "{args:?}");
+    }
+    let mut child = Command::new(env!("CARGO_BIN_EXE_tempest"))
+        .args(["repl", "--color", "always"])
+        .env("NO_COLOR", "1")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(b"1\n1 / 0\n")
+        .unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), colored);
+    assert_eq!(repl(&["--color", "sometimes"], None, "").0, 2);
+}
+
+/// The REPL's own functions, through the command: `help()` says what
+/// input isn't from a terminal means, and `translate` shows code.
+#[test]
+fn own_functions() {
+    let (code, out, _) = repl(&[], None, "help()\nlet x = 1\ntranslate(1, \"py\")\n");
+    assert_eq!(code, 0);
+    assert!(
+        out.contains("Input isn't from a terminal, so lines aren't edited."),
+        "{out}"
+    );
+    assert!(out.contains("History: none"), "{out}");
+    if cfg!(feature = "py") {
+        assert!(
+            out.contains("# interactive/interactive/interactive.py\n"),
+            "{out}"
+        );
+        assert!(out.contains("_x: int = 1\ninteractive#2: void\n"), "{out}");
+    }
+}
+
+/// Printed values and diagnostics can't move the terminal's cursor or
+/// reorder text: control characters, C1 controls, and bidirectional
+/// controls are escaped.
+#[test]
+fn control_characters_are_escaped() {
+    let input = "\"\\u{1b}[2J\\u{9b}\\u{202e}\"\nlet a = \"\x1b[31m\" + nope\n";
+    let (_, out, _) = repl(&[], None, input);
+    assert!(!out.contains(['\x1b', '\u{9b}', '\u{202e}']), "{out:?}");
+    assert!(out.contains("\"\\u{1b}[2J\\u{9b,202e}\""), "{out}");
+    assert!(out.contains("let a = \"\\u{1b}[31m\" + nope"), "{out}");
+}
+
+/// On a terminal, as `script` gives one: an input over lines, indented as
+/// it goes on, a signature hint, Ctrl-C at the prompt dropping what's
+/// typed, and history kept owner-only, a multi-line input as one entry.
+#[cfg(target_os = "linux")]
+#[test]
+fn edits_lines_on_a_terminal() {
+    use std::os::unix::fs::PermissionsExt;
+    use std::time::{Duration, Instant};
+    let has_script = Command::new("script").arg("--version").output();
+    if !has_script.is_ok_and(|o| o.status.success()) {
+        eprintln!("skipped: no `script` here to run tempest on a terminal");
+        return;
+    }
+    with_dir("terminal", |dir| {
+        let command = format!("{} repl --color never", env!("CARGO_BIN_EXE_tempest"));
+        let mut child = Command::new("script")
+            .args(["-qfec", &command, "/dev/null"])
+            .env("XDG_DATA_HOME", dir)
+            .env("TERM", "xterm")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let mut stdin = child.stdin.take().unwrap();
+        let mut stdout = child.stdout.take().unwrap();
+        let (send, receive) = std::sync::mpsc::channel();
+        let reader = std::thread::spawn(move || {
+            let mut buffer = [0; 1024];
+            while let Ok(n) = stdout.read(&mut buffer) {
+                if n == 0 || send.send(buffer[..n].to_vec()).is_err() {
+                    break;
+                }
+            }
+        });
+        let start = Instant::now();
+        let mut out = Vec::new();
+        let wait_for = |text: &str, out: &mut Vec<u8>| {
+            while !String::from_utf8_lossy(out).contains(text) {
+                let shown = String::from_utf8_lossy(out).to_string();
+                assert!(
+                    start.elapsed() < Duration::from_secs(60),
+                    "no {text:?} in {shown:?}"
+                );
+                if let Ok(bytes) = receive.recv_timeout(Duration::from_millis(50)) {
+                    out.extend(bytes);
+                }
+            }
+        };
+        let mut send_keys = |keys: &str| {
+            stdin.write_all(keys.as_bytes()).unwrap();
+            stdin.flush().unwrap();
+        };
+        wait_for("$ ", &mut out);
+        send_keys("let greet(name: String): String { \"hi ${name}\" }\r");
+        wait_for("interactive#0: void", &mut out);
+        // Ctrl-C drops what's typed.
+        send_keys("1 +");
+        wait_for("1 +", &mut out);
+        send_keys("\x03");
+        // Typed only once the next prompt is up, as keys typed between
+        // inputs may be dropped.
+        wait_for("1 +\x1b[?2004l\r\n\x1b[?2004h", &mut out);
+        let prompts = |out: &Vec<u8>| String::from_utf8_lossy(out).matches("$ ").count();
+        while prompts(&out) < 3 {
+            assert!(start.elapsed() < Duration::from_secs(60), "no prompt");
+            if let Ok(bytes) = receive.recv_timeout(Duration::from_millis(50)) {
+                out.extend(bytes);
+            }
+        }
+        send_keys("greet(");
+        // The hint, after what's typed.
+        wait_for("greet(  greet(name: String): String", &mut out);
+        send_keys("\r");
+        wait_for("greet(\r\n    ", &mut out);
+        send_keys("\"you\")\r");
+        wait_for("interactive#1: \"hi you\"", &mut out);
+        send_keys("\x04");
+        drop(stdin);
+        let status = child.wait().unwrap();
+        reader.join().unwrap();
+        assert!(status.success());
+        let history = dir.join("tempest").join("repl-history.txt");
+        let mode = fs::metadata(&history).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o600);
+        let kept = fs::read_to_string(&history).unwrap();
+        assert!(kept.contains("\ngreet(\\n    \"you\")\n"), "{kept:?}");
+        assert!(!kept.contains("1 +"), "{kept:?}");
+    });
+}

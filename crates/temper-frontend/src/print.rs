@@ -32,6 +32,20 @@ pub fn write_settled(s: &Settled, width: usize, out: &mut String) {
     write_diagnostics(s, out);
 }
 
+/// Appends one node's settled tree, as [`write_settled`] writes each
+/// file's, without diagnostics.
+pub fn write_node(s: &Settled, node: NodeId, width: usize, out: &mut String) {
+    let first_local = (s.scopes.symbols.iter())
+        .take_while(|b| matches!(b.kind, SymbolKind::Builtin(_)))
+        .count();
+    let printer = Printer {
+        s,
+        first_local: first_local as u32,
+    };
+    printer.node(node, 0, width, out);
+    out.push('\n');
+}
+
 /// Appends diagnostics as `level start..end: message`, with positions in
 /// their files.
 pub fn write_diagnostics(s: &Settled, out: &mut String) {

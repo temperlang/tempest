@@ -1107,9 +1107,44 @@ Other differences we won't copy:
     prints only `fail`, but other failures say why first.
     Test: tempest/tests/repl.rs, `imports_from_the_work_root` and
     `prompts`.
-  - **Not yet:** line editing, history, completion, color, `help`,
-    `describe`, `translate`, and `-b`; and std's tutorial examples
-    that Kotlin's REPL ran but tempest's language rejects are noted in
+  - **`help`, `describe`, and `translate`** stay Temper functions, as
+    Kotlin's, declared before the first input, so an input's own
+    `help` shadows them. `describe(n, step)` takes tempest's steps
+    (`"parsed"`, `"settled"`, `"types"`, `"module"`, `"tmpl"`), not
+    Kotlin's stage names. `translate(n, lang)` prints the code in the
+    REPL, where Kotlin writes files and prints their paths, and
+    translates one module, input `n` after the earlier inputs it uses,
+    with a name an included input declares again renamed (`x__2`);
+    Kotlin translates input `n` alone, importing earlier exports.
+    `translate(n)` gives every language. `help("name")` shows hover's
+    text; Kotlin's topics (`help("unresolved")`,
+    `help("available-imports")`) and `help(+)` aren't there.
+    Test: temper-frontend/tests/repl/specials.cases;
+    temper-driver/tests/repl/tools.cases.
+  - **The terminal:** rustyline where Kotlin has JLine. A multi-line
+    input is one buffer whose earlier lines stay editable, and one
+    history entry; Kotlin's auto-indent is there, as text in the
+    buffer. History is one file in the platform's data directory,
+    owner-only, appended as each input runs (Kotlin's, per version,
+    is saved at exit), with `--no-history`, and a line starting with a
+    space isn't kept. Fish-style suggestions from history are left
+    out; the hint is the signature of the call being typed. Color
+    honors `NO_COLOR` and `--color auto|always|never`, which Kotlin
+    lacks; `TERM=dumb` and `CI` turn it off as in Kotlin (`TF_BUILD`
+    doesn't). What the REPL prints of its own has control characters
+    escaped, so output can't rewrite the terminal.
+    Test: tempest/src/repl/line.rs and color.rs (unit tests);
+    tempest/tests/repl.rs, `edits_lines_on_a_terminal`, `color`, and
+    `control_characters_are_escaped`.
+  - **Also:** `test(…)` in an input says tests don't run in the REPL
+    (Kotlin reports `Test` undeclared too), and a name that an earlier
+    input used before a later one declared it gets a note on how to
+    declare things that use each other.
+    Test: specials.cases, "test refuses with a clear message";
+    basics.cases, "a forward reference to a later input fails; one input
+    can recurse".
+  - **Not yet:** `-b`; and std's tutorial examples that Kotlin's REPL
+    ran but tempest's language rejects are noted in
     docs/inconsistencies.md, I24.
 
 - **Code with errors** (2026-11-05): where Kotlin's TmpL has garbage

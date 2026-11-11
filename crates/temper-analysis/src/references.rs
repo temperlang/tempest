@@ -78,7 +78,7 @@ enum Ident {
     Builtin(String),
 }
 
-impl Analysis {
+impl Analysis<'_> {
     /// Every use of what the name at byte `offset` of `file` names, in
     /// the library's files, in file and position order, with its
     /// declaration's name too if `declaration`.

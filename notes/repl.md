@@ -28,7 +28,13 @@ The user's answers to the open questions at the end:
 - **Robustness:** Ctrl-C stops the input through the interpreter's step
   check; a panic is caught; errors never end the session.
 - **Async:** top-level `await`, and the task queue lasts across inputs.
-- **rustyline** for line editing (chunk 2).
+- **rustyline** for line editing (chunk 2), its transitive crates
+  too; any other crate is worked around. History in the platform's
+  data directory, owner-only, with a way to turn it off; `--color
+  auto|always|never` and `NO_COLOR`, with plain ANSI codes.
+- **`translate(n, lang)` prints in the REPL** one coherent module,
+  shadowed names renamed (`x`, `x__2`); a user's `help` may shadow the
+  REPL's, documented.
 
 **Chunk 1, done** ([docs/tools/repl.md](../docs/tools/repl.md)):
 
@@ -62,14 +68,62 @@ The user's answers to the open questions at the end:
   with markers for pasted blocks), `tempest/tests/repl.rs` (piped runs,
   flags, the work root, Ctrl-C).
 
-**Left:** rustyline (history, multi-line editing, completion from
-`temper-analysis`, highlighting, color, `NO_COLOR`), `help`,
-`describe`, `translate` (one coherent module, shadowed names renamed),
-`-b`, the playground's console, a hint for forward references to a
-later input, and contextual autoescaping's compile-time pass for REPL
-inputs (they run unfolded, which is always safe). Bad string escapes
-aren't reported anywhere in tempest yet (they fail when run), a gap
-outside the REPL.
+**Chunk 2, done** ([docs/tools/repl.md](../docs/tools/repl.md)):
+
+- **rustyline 17.0.2** in `tempest repl` when standard input and output
+  are terminals (piped input keeps chunk 1's plain path; so does
+  `--separator eof`). 18 and 19 don't build on Rust 1.85 (18 uses
+  `File::lock`, 1.89; 19 `cfg_select!`), and none declares an MSRV.
+  Features `with-file-history` and `custom-bindings` only.
+  `tempest/src/repl/line.rs` is the helper: the `Validator` asks
+  `Chunker::completes`, so typed and piped lines split alike; an Enter
+  binding inserts the line break and indent (two spaces, two more per
+  open bracket) since rustyline has no continuation prompt; the whole
+  buffer then goes through a `Chunker`, so pasted lines split as piped
+  ones. rustyline takes SIGINT when its editor is made, so the CLI
+  installs its own handler again after.
+- **Highlighting** by tempest's lexer in the playground's classes,
+  with bracket matching; **completion** and a **signature hint** from
+  `temper-analysis` over the session (`ReplSession::view` lends the
+  settled state and the latest segment): `Analysis` may now borrow a
+  `Settled` (`Analysis::of`), its parent and declaration indexes made
+  lazily, and `pending.rs` answers for text not settled yet, reading
+  it as signature help does and resolving names from the scope.
+- **Color** with plain SGR codes (`tempest/src/repl/color.rs`),
+  `--color auto|always|never`, `NO_COLOR`, `TERM=dumb`, `CI`; Windows'
+  console gets virtual terminal processing through its own calls.
+- **History** in the platform's data directory, worked out by hand
+  (`history.rs`), 0700 directory and 0600 file, a link refused,
+  appended per input, multi-line entries kept whole (rustyline's V2
+  format), `--no-history`, leading-space lines not kept.
+- **`help`, `describe`, `translate`** (`temper-frontend/src/repl/specials.rs`):
+  a prelude segment before input 0 declares them as Temper functions
+  calling one bodiless `@connected` function whose name is made a
+  temporary, so no input can name it; the interpreter's new `host`
+  hook runs it. Bodiless connected functions' defaults don't count
+  as optional, hence the bodies. What needs more than the frontend
+  comes through `ReplTools`, which `temper-driver/src/repl.rs`
+  implements (hover's text, tmpl, backends). `translate` and
+  `describe(n, "module")` build one module: input n after the inputs
+  it uses (names, and classes of expressions' types, transitively),
+  each whole, a name declared again among them renamed `x__2`.
+- **Security:** `escape_controls` for what the REPL prints of its own,
+  snippets included (marks under the escapes); logs pass through.
+- **Leftovers:** `test(...)` says tests don't run in the REPL; a name
+  used by an earlier input before a later one declares it gets a note.
+- Tests: `specials.cases` (frontend), `temper-driver/tests/repl/tools.cases`,
+  unit tests in `tempest/src/repl/{line,color,history}.rs`,
+  `tempest/tests/repl.rs` (`color`, `own_functions`,
+  `control_characters_are_escaped`, `edits_lines_on_a_terminal` under
+  `script`, on Linux).
+
+**Left:** `-b`; the playground's console; suggestions from history as
+you type; `help`'s topics (Kotlin's `unresolved`, `available-imports`);
+a translation's module leaves out an earlier input it needs only through
+something without a name or a class type (rare); and contextual
+autoescaping's compile-time pass for REPL inputs (they run unfolded,
+which is always safe). Bad string escapes aren't reported anywhere in
+tempest yet (they fail when run), a gap outside the REPL.
 
 ## 1. How Kotlin's REPL behaves
 

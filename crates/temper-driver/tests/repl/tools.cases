@@ -1,0 +1,467 @@
+# REPL sessions: the REPL's own functions with their tools: help with
+# hover's text, describe(n, "tmpl"), and translate.
+=== help lists what the REPL offers
+help()
+--- transcript
+tempest repl runs each Temper input against what earlier inputs declared,
+printing its result as interactive#N: value.
+
+The REPL's own functions:
+  help()              this
+  help("name")        a declaration's signature and docs, as help("greet");
+                      a function's or type's also as help(greet)
+  describe(n, step)   input n at one of tempest's steps ("settled" if none):
+      "parsed"  the parser's tree, before names are resolved
+      "settled" the tree once settled: macros expanded, names resolved
+      "types"   each declaration's type, and the result's
+      "module"  the module translate shows: input n after the inputs it uses
+      "tmpl"    that module as tmpl, what backends translate
+  translate(n, lang)  that module translated into lang, which is cpp, csharp,
+                      java, js, lua, py, or rust; translate(n) into each
+
+An input's own help, describe, or translate shadows the REPL's for later
+inputs.
+
+(The front end's keys and options.)
+interactive#0: void
+
+=== help shows a declaration's signature and docs
+/** Says hello to someone. */
+let greet(name: String): String { "Hello, ${name}!" }
+help("greet")
+help(greet)
+class Point(public x: Int, public y: Int) {}
+help(Point)
+help("Point")
+help("console")
+help(help)
+--- transcript
+interactive#0: void
+function greet(name: String): String
+
+Says hello to someone.
+interactive#1: void
+function greet(name: String): String
+
+Says hello to someone.
+interactive#2: void
+interactive#3: Point
+class Point
+interactive#4: void
+class Point
+interactive#5: void
+builtin console: ?
+
+The global default `Console` instance. It is designed to integrate with
+standard backend logging services. Frontend processing replaces references to
+the global console with a call to `getConsole` for the current module.
+interactive#6: void
+function help(about?: AnyValue?): Void
+
+What the REPL offers; or with a name, as `help("greet")`, or a
+function or type, as `help(greet)`, its signature and docs.
+interactive#7: void
+
+=== translate shows an input with what it uses, names renamed
+let x = 1
+let x = x + 1
+let twice(n: Int): Int { n * 2 }
+twice(x)
+translate(3, "py")
+translate(3, "js")
+translate(3, "nope")
+--- transcript
+interactive#0: void
+interactive#1: void
+interactive#2: void
+interactive#3: 4
+# interactive/interactive/interactive.py
+from temper_core import int_add as _int_add, int_mul as _int_mul
+
+__all__ = ()
+
+
+def _twice(n: int, /) -> int:
+    return _int_mul(n, 2)
+
+
+_x: int = 1
+_x2: int = _int_add(_x, 1)
+_twice(_x2)
+interactive#4: void
+// interactive/interactive.internal.js
+/**
+ * @param {number} n
+ * @returns {number}
+ */
+function twice(n) {
+  return Math.imul(n, 2);
+}
+
+const x = 1;
+const x__2 = (x + 1) | 0;
+twice(x__2);
+interactive#5: void
+Failed: translate: the language is cpp, csharp, java, js, lua, py, or rust
+interactive#6: fail
+
+=== translate into each language
+let answer = 42
+translate(0)
+--- transcript
+interactive#0: void
+// interactive/init.hpp
+#pragma once
+
+#include <temper-core/core.hpp>
+
+namespace interactive {
+
+// Runs the module's top level, once. Exported functions, constructors,
+// static functions, and accessors run it first, so calling it is
+// optional.
+void global_init_init();
+
+}  // namespace interactive
+// interactive/init.cpp
+#include <interactive/init.hpp>
+
+namespace interactive {
+
+namespace core = temper::core;
+
+void global_init_init() {
+  core::init_once([] {
+    int32_t answer = 42;
+    static_cast<void>(answer);
+  });
+}
+
+}  // namespace interactive
+// interactive/src/InteractiveGlobal.cs
+namespace Interactive;
+
+public static class InteractiveGlobal
+{
+}
+// interactive/src/main/java/interactive/InteractiveGlobal.java
+package interactive;
+
+public final class InteractiveGlobal {
+    private InteractiveGlobal() {}
+
+    static {
+        int answer = 42;
+    }
+}
+// interactive/interactive.internal.js
+const answer = 42;
+-- interactive/init.lua
+local answer = 42
+
+return {}
+# interactive/interactive/interactive.py
+__all__ = ()
+
+_answer: int = 42
+// interactive/src/mod.rs
+use std::sync::OnceLock;
+
+pub(crate) fn init() -> temper_core::Result<()> {
+    static INIT_ONCE: OnceLock<temper_core::Result<()>> = OnceLock::new();
+    INIT_ONCE
+        .get_or_init(|| {
+            let _answer: i32 = 42;
+            Ok(())
+        })
+        .clone()
+}
+interactive#1: void
+
+=== translate classes, and inputs that failed
+class Point(public x: Int, public y: Int) {
+  public sum(): Int { x + y }
+}
+let p = new Point(1, 2)
+let total = p.sum() + missing
+translate(2, "java")
+translate(2, "cpp")
+translate(2, "rust")
+translate(2, "csharp")
+--- transcript
+interactive#0: Point
+interactive#1: void
+interactive#2:1:23: error: missing has not been declared
+    let total = p.sum() + missing
+                          ^^^^^^^
+interactive#2: fail
+// interactive/src/main/java/interactive/InteractiveGlobal.java
+package interactive;
+
+import temper.core.Core;
+
+public final class InteractiveGlobal {
+    private InteractiveGlobal() {}
+
+    static {
+        Object total;
+        Point p = new Point(1, 2);
+        Core.throwBubble();
+    }
+}
+// interactive/src/main/java/interactive/Point.java
+package interactive;
+
+final class Point {
+    public final int x;
+    public final int y;
+
+    public Point(int x, int y) {
+        this.x = x;
+        this.y = y;
+    }
+
+    public int sum() {
+        return this.x + this.y;
+    }
+
+    public int getX() {
+        return this.x;
+    }
+
+    public int getY() {
+        return this.y;
+    }
+
+    public static final class Builder {
+        int x;
+        boolean x__set;
+
+        public Builder x(int x) {
+            x__set = true;
+            this.x = x;
+            return this;
+        }
+
+        int y;
+        boolean y__set;
+
+        public Builder y(int y) {
+            y__set = true;
+            this.y = y;
+            return this;
+        }
+
+        public Point build() {
+            if (!x__set || !y__set) {
+                StringBuilder _message = new StringBuilder("Missing required fields:");
+                if (!x__set) {
+                    _message.append(" x");
+                }
+                if (!y__set) {
+                    _message.append(" y");
+                }
+                throw new IllegalStateException(_message.toString());
+            }
+            return new Point(x, y);
+        }
+    }
+}
+interactive#3: void
+// interactive/init.hpp
+#pragma once
+
+#include <temper-core/core.hpp>
+
+namespace interactive {
+
+// Runs the module's top level, once. Exported functions, constructors,
+// static functions, and accessors run it first, so calling it is
+// optional.
+void global_init_init();
+
+struct Point;
+
+struct Point : public std::enable_shared_from_this<Point> {
+  int32_t x;
+  int32_t y;
+  static std::shared_ptr<Point> make(int32_t x, int32_t y);
+  int32_t sum() const;
+  int32_t get_x() const;
+  int32_t get_y() const;
+};
+
+}  // namespace interactive
+// interactive/init.cpp
+#include <interactive/init.hpp>
+
+namespace interactive {
+
+namespace core = temper::core;
+
+std::shared_ptr<Point> Point::make(int32_t x, int32_t y) {
+  std::shared_ptr<Point> self = std::make_shared<Point>();
+  self->x = x;
+  self->y = y;
+  return self;
+}
+
+int32_t Point::sum() const {
+  return core::Int::add(this->x, this->y);
+}
+
+int32_t Point::get_x() const {
+  return this->x;
+}
+
+int32_t Point::get_y() const {
+  return this->y;
+}
+
+void global_init_init() {
+  core::init_once([] {
+    std::shared_ptr<core::AnyValueBase> total;
+    std::shared_ptr<Point> p = Point::make(1, 2);
+    core::bubble();
+  });
+}
+
+}  // namespace interactive
+interactive#4: void
+// interactive/src/mod.rs
+use std::sync::{Arc, OnceLock};
+
+pub(crate) fn init() -> temper_core::Result<()> {
+    static INIT_ONCE: OnceLock<temper_core::Result<()>> = OnceLock::new();
+    INIT_ONCE
+        .get_or_init(|| {
+            let _p = Point::new(1, 2);
+            Err(temper_core::Error::new())
+        })
+        .clone()
+}
+
+struct PointStruct {
+    x: i32,
+    y: i32,
+}
+
+#[derive(Clone)]
+pub(crate) struct Point(Arc<PointStruct>);
+
+impl Point {
+    pub fn new(x: i32, y: i32) -> Point {
+        Point(Arc::new(PointStruct { x, y }))
+    }
+
+    pub fn sum(&self) -> i32 {
+        self.0.x.wrapping_add(self.0.y)
+    }
+}
+
+temper_core::impl_any_value_trait!(Point, []);
+
+static _TOTAL: OnceLock<temper_core::AnyValue> = OnceLock::new();
+
+pub(crate) fn _total() -> temper_core::AnyValue {
+    crate::support::initialized(|| _TOTAL.get()).clone()
+}
+interactive#5: void
+// interactive/src/InteractiveGlobal.cs
+using TemperLang.Core;
+
+namespace Interactive;
+
+public static class InteractiveGlobal
+{
+    static InteractiveGlobal()
+    {
+        object total;
+        Point p = new Point(1, 2);
+        Core.Bubble();
+    }
+}
+// interactive/src/Point.cs
+namespace Interactive;
+
+internal class Point
+{
+    private readonly int x;
+    private readonly int y;
+
+    public Point(int x, int y)
+    {
+        this.x = x;
+        this.y = y;
+    }
+
+    public int X
+    {
+        get
+        {
+            return this.x;
+        }
+    }
+
+    public int Y
+    {
+        get
+        {
+            return this.y;
+        }
+    }
+
+    public int Sum()
+    {
+        return this.x + this.y;
+    }
+}
+interactive#6: void
+
+=== describe at tmpl
+let twice(n: Int): Int { n * 2 }
+describe(0, "tmpl")
+--- transcript
+interactive#0: void
+tmpl 1 model 1 library interactive 0.0.0
+
+module interactive#0 {
+  fn twice#1(n#2: Int32): Int32 {
+    return %Int32.mul(n#2, 2);
+  }
+
+  init {}
+}
+interactive#1: void
+
+=== the REPL page's example (docs/tools/repl.md)
+let x = 1
+let x = x + 1
+let unused = 0
+x * 10
+describe(1, "types")
+describe(3, "module")
+translate(3, "py")
+--- transcript
+interactive#0: void
+interactive#1: void
+interactive#2: void
+interactive#3: 20
+x: Int32
+interactive#4: void
+// interactive#0
+let x = 1;
+// interactive#1
+let x__2 = x + 1;
+// interactive#3
+x__2 * 10;
+interactive#5: void
+# interactive/interactive/interactive.py
+from temper_core import int_add as _int_add, int_mul as _int_mul
+
+__all__ = ()
+
+_x: int = 1
+_x2: int = _int_add(_x, 1)
+_int_mul(_x2, 10)
+interactive#6: void

@@ -22,7 +22,7 @@ pub(crate) enum Receiver {
     },
 }
 
-impl Analysis {
+impl Analysis<'_> {
     /// What a value of type `t` has members of: its class's or builtin
     /// type's, through `?` and a type parameter's bound.
     pub(crate) fn receiver(&self, t: TypeId) -> Option<Receiver> {
@@ -123,7 +123,7 @@ impl Analysis {
         }
         // Supertypes, with their type parameters as this class names them.
         let types = &self.settled.typing.types;
-        let info = (self.decl_symbols.get(&class)).and_then(|&s| types.class_info(s));
+        let info = (self.decl_symbols().get(&class)).and_then(|&s| types.class_info(s));
         if let Some(info) = info {
             for &sup in &info.supers {
                 let (base, args) = match types.get(sup) {
@@ -183,7 +183,7 @@ impl Analysis {
                 }
             }
             let types = &self.settled.typing.types;
-            let info = (self.decl_symbols.get(&class)).and_then(|&s| types.class_info(s));
+            let info = (self.decl_symbols().get(&class)).and_then(|&s| types.class_info(s));
             for &sup in info.map_or(&[][..], |i| i.supers.as_slice()) {
                 let (base, args) = match types.get(sup) {
                     TypeData::Applied { base, args } => (*base, args.as_slice()),

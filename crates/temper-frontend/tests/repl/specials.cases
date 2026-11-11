@@ -1,0 +1,167 @@
+# REPL sessions: the REPL's own functions, without the tools that
+# hover's text, tmpl, and the backends need (temper-driver's tests
+# cover those).
+=== describe shows an input at tempest's steps
+let x = 1
+let twice(n: Int): Int { n * 2 }
+twice(x) + 1
+describe(2, "parsed")
+describe(2)
+describe(1, "types")
+describe(2, "types")
+describe(2, "module")
+describe(9, "parsed")
+describe(0, "nope")
+--- transcript
+interactive#0: void
+interactive#1: void
+interactive#2: 3
+(Call #desugarOperation + (Call twice x) 1)
+interactive#3: void
+(Block (Call + (Call twice:10 x:9) 1))
+interactive#4: void
+twice: fn (Int32): Int32
+interactive#5: void
+result: Int32
+interactive#6: void
+// interactive#0
+let x = 1;
+// interactive#1
+let twice(n: Int): Int { n * 2 };
+// interactive#2
+twice(x) + 1;
+interactive#7: void
+Failed: describe: there's no input 9; they're 0 to 8
+interactive#8: fail
+Failed: describe: the step is "parsed", "settled", "types", "module", or "tmpl"
+interactive#9: fail
+
+=== the module renames names declared again
+let x = 1
+let x = x + 1
+let x = x * 10
+class P(public a: Int) {}
+let p = new P(x)
+class P(public b: String) {}
+new P("${p.a}")
+describe(6, "module")
+describe(4, "module")
+--- transcript
+interactive#0: void
+interactive#1: void
+interactive#2: void
+interactive#3: P
+interactive#4: void
+interactive#5: P
+interactive#6: {class: P, b: "20"}
+// interactive#0
+let x = 1;
+// interactive#1
+let x__2 = x + 1;
+// interactive#2
+let x__3 = x__2 * 10;
+// interactive#3
+class P(public a: Int) {};
+// interactive#4
+let p = new P(x__3);
+// interactive#5
+class P__2(public b: String) {};
+// interactive#6
+new P__2("${p.a}");
+interactive#7: void
+// interactive#0
+let x = 1;
+// interactive#1
+let x__2 = x + 1;
+// interactive#2
+let x__3 = x__2 * 10;
+// interactive#3
+class P(public a: Int) {};
+// interactive#4
+let p = new P(x__3);
+interactive#8: void
+
+=== help without tools
+help(1)
+help("nope")
+help("x")
+let x = 5
+help("x")
+--- transcript
+Failed: help takes a name, as help("greet"), or a function or type, as help(greet), not an Int
+interactive#0: fail
+Failed: help: nothing named nope is declared; help() says what the REPL offers
+interactive#1: fail
+Failed: help: nothing named x is declared; help() says what the REPL offers
+interactive#2: fail
+interactive#3: void
+x: Int32
+interactive#4: void
+
+=== a user's help shadows the REPL's
+let help(): String { "mine" }
+help()
+--- transcript
+interactive#0: void
+interactive#1: "mine"
+
+=== test refuses with a clear message
+test("t") { assert(true) }
+--- transcript
+interactive#0:1:1: error: Tests don't run in the REPL: write them in a library's files, and run tempest test
+    test("t") { assert(true) }
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+interactive#0: fail
+
+=== control characters are escaped in diagnostics and values
+let a = "[2J‮" + nope
+"a\u{1b}[31mb\u{202e}c\u{9b}"
+--- transcript
+interactive#0:1:19: error: nope has not been declared
+    let a = "\u{1b}[2J\u{202e}" + nope
+                                  ^^^^
+interactive#0: fail
+interactive#1: "a\u{1b}[31mb\u{202e}c\u{9b}"
+
+=== the module has what an input uses: vars it assigns, imports, and object literals' classes
+var count = 0
+let { Date } = import("std/temporal")
+class Point(public x: Int, public y: Int) {}
+let unused = 1
+count = count + 1;
+describe(4, "module")
+let d = Date.today();
+describe(6, "module")
+let p: Point = { x: 1, y: 2 }
+describe(8, "module")
+[{ x: 3, y: 4 }].length
+describe(10, "module")
+--- transcript
+interactive#0: void
+interactive#1: void
+interactive#2: Point
+interactive#3: void
+interactive#4: void
+// interactive#0
+var count = 0;
+// interactive#4
+count = count + 1;
+interactive#5: void
+interactive#6: void
+// interactive#1
+let { Date } = import("std/temporal");
+// interactive#6
+let d = Date.today();
+interactive#7: void
+interactive#8: void
+// interactive#2
+class Point(public x: Int, public y: Int) {};
+// interactive#8
+let p: Point = { x: 1, y: 2 };
+interactive#9: void
+interactive#10: 1
+// interactive#2
+class Point(public x: Int, public y: Int) {};
+// interactive#10
+[{ x: 3, y: 4 }].length;
+interactive#11: void

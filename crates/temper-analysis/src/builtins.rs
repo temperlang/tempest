@@ -22,7 +22,7 @@ pub struct CoreLocation {
     pub span: Span,
 }
 
-impl Analysis {
+impl Analysis<'_> {
     /// Where core declares the builtin named at byte `offset` of `file`:
     /// a builtin type, function, or value, or a builtin type's member,
     /// through generic receivers and supertypes. None for anything else,

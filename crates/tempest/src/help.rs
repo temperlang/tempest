@@ -226,6 +226,12 @@ pub fn command(name: &str) -> Option<String> {
              bracket, a multi-quoted string, or a block comment is still open.\n\
              Ctrl-C stops the input running; Ctrl-D ends the session.\n\
              \n\
+             On a terminal, lines are edited, with history, Tab completion,\n\
+             a signature hint, and highlighting. The REPL's own functions:\n\
+             help() says what it offers, and help(\"name\") a declaration's\n\
+             docs; describe(n, step) shows input n at one of tempest's steps;\n\
+             translate(n, lang) prints it translated (docs/tools/repl.md).\n\
+             \n\
              Options:\n\
              \x20   -w, --workroot DIR\n\
              \x20           The work root whose libraries inputs can import, by name.\n\
@@ -242,6 +248,13 @@ pub fn command(name: &str) -> Option<String> {
              \x20   --prompt normal|hide\n\
              \x20           Whether to prompt with $; by default, only when standard\n\
              \x20           input is a terminal.\n\
+             \x20   --color auto|always|never\n\
+             \x20           Whether to color output: by default, only on a terminal,\n\
+             \x20           unless NO_COLOR is set, TERM is dumb, or CI is set.\n\
+             \x20   --no-history\n\
+             \x20           Neither read nor keep the history of what's typed, which\n\
+             \x20           is otherwise kept, owner-only, in the platform's data\n\
+             \x20           directory (tempest/repl-history.txt).\n\
              \x20   --fuel N|none\n\
              \x20           The steps each input may take (default none).\n\
              \x20   -b, --backend BACKEND\n\

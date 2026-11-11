@@ -34,14 +34,14 @@ pub(crate) struct Open {
 }
 
 /// What signature help knows of a callee.
-struct Callee {
-    label: String,
-    params: Vec<(String, Option<TypeId>)>,
-    doc: Option<String>,
+pub(crate) struct Callee {
+    pub(crate) label: String,
+    pub(crate) params: Vec<(String, Option<TypeId>)>,
+    pub(crate) doc: Option<String>,
     subst: Subst,
 }
 
-impl Analysis {
+impl Analysis<'_> {
     /// The signature of the call whose arguments byte `offset` of `file`
     /// is among, with the argument it's at.
     pub fn signature_help(&self, file: FileId, offset: u32) -> Option<SignatureHelp> {
@@ -72,23 +72,34 @@ impl Analysis {
             return None;
         }
         let ahead = before[..name_start].trim_end();
-        let tree = &self.settled.library.tree;
         if let Some(object) = ahead.strip_suffix('.') {
             let node = self.receiver_node(file, object.trim_end().len() as u32)?;
             let receiver = self.receiver(self.settled.typing.expr(node)?)?;
-            if let Some(m) = self.builtin_member(&receiver, name) {
-                return Some(Callee {
-                    label: m.detail,
-                    params: m.params.into_iter().map(|p| (p, None)).collect(),
-                    doc: None,
-                    subst: Subst::new(),
-                });
-            }
-            let (decl, subst) = self.find_member(&receiver, name)?;
-            return self.fn_callee(decl, name, subst);
+            return self.member_callee(&receiver, name);
         }
         let symbol = self.lookup(file, name_start as u32, name)?;
         let decl = self.settled.scopes.symbol(symbol).decl?;
+        self.decl_callee(decl, name)
+    }
+
+    /// A member's signature, by name: a builtin type's, or a class's.
+    pub(crate) fn member_callee(&self, receiver: &Receiver, name: &str) -> Option<Callee> {
+        if let Some(m) = self.builtin_member(receiver, name) {
+            return Some(Callee {
+                label: m.detail,
+                params: m.params.into_iter().map(|p| (p, None)).collect(),
+                doc: None,
+                subst: Subst::new(),
+            });
+        }
+        let (decl, subst) = self.find_member(receiver, name)?;
+        self.fn_callee(decl, name, subst)
+    }
+
+    /// A declaration's signature: a function's, or a class's
+    /// constructor's.
+    pub(crate) fn decl_callee(&self, decl: NodeId, name: &str) -> Option<Callee> {
+        let tree = &self.settled.library.tree;
         if tree.kind(decl) == NodeKind::Class {
             // `new C(…)`: its constructor's parameters.
             let params: Vec<(String, Option<TypeId>)> = (core::constructor_params(tree, decl)
@@ -114,7 +125,7 @@ impl Analysis {
     }
 
     /// A function's or method's signature, by its `Let`.
-    fn fn_callee(&self, decl: NodeId, name: &str, subst: Subst) -> Option<Callee> {
+    pub(crate) fn fn_callee(&self, decl: NodeId, name: &str, subst: Subst) -> Option<Callee> {
         let tree = &self.settled.library.tree;
         if tree.kind(decl) != NodeKind::Let {
             return None;
@@ -255,7 +266,7 @@ fn holds_properties(before: &str) -> bool {
 }
 
 /// Text before a call's `(` without its type arguments, as `f<T>`'s `f`.
-fn skip_type_args(text: &str) -> &str {
+pub(crate) fn skip_type_args(text: &str) -> &str {
     if !text.ends_with('>') {
         return text;
     }

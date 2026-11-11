@@ -305,7 +305,7 @@ fn finish_settled(settled: &Settled, options: u32, mask: u32, out: &mut String) 
 /// What [`analyze`] kept: the main file's analysis and its source, for
 /// converting UTF-16 offsets.
 struct Kept {
-    analysis: Analysis,
+    analysis: Analysis<'static>,
     source: String,
 }
 

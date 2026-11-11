@@ -25,13 +25,28 @@
 //! [`ReplEvent`]s; [`ReplEvent::text`] gives each as `tempest repl`
 //! prints it, the result in Kotlin's form, `interactive#N: value`.
 //! [`Chunker`] splits typed or piped lines into inputs.
+//!
+//! The REPL's own functions, `help`, `describe`, and `translate`, are
+//! declared before the first input ([`specials`]).
+//!
+//! What the REPL prints of its own, diagnostics, failures, and its
+//! functions' output, has control characters escaped
+//! ([`escape_controls`]), so it can't move the cursor, recolor the
+//! terminal, or reorder text; a value's strings are quoted, escaped as
+//! Temper's are. What an input logs is printed as it's logged.
+
+mod specials;
+
+pub use specials::{ReplTools, STEPS};
 
 use crate::interp::repl::{Outcome, Runner, render};
-use crate::library::{Level, Library};
+use crate::library::{Level, Library, Message};
 use crate::project::load_imports;
 use crate::scope::{Lookup, ScopeId};
 use crate::settle::{Incremental, Settled};
 use crate::sources::Sources;
+use specials::{HOST_NAME, PRELUDE, PRELUDE_PATH, Specials};
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -60,6 +75,11 @@ pub struct ReplOptions {
     pub interrupt: Option<Arc<AtomicBool>>,
     /// Reports hints too, not only errors and warnings.
     pub hints: bool,
+    /// What `help`, `describe`, and `translate` need beyond the
+    /// frontend; without them, they say what's missing.
+    pub tools: Option<Rc<dyn ReplTools>>,
+    /// What the front end adds to `help()`, as its keys and options.
+    pub help_footer: String,
 }
 
 impl Default for ReplOptions {
@@ -70,6 +90,8 @@ impl Default for ReplOptions {
             fuel: None,
             interrupt: None,
             hints: false,
+            tools: None,
+            help_footer: String::new(),
         }
     }
 }
@@ -90,6 +112,11 @@ pub enum ReplEvent {
     Unresolved,
     /// A bug in tempest, a panic, caught; the session goes on.
     InternalError(String),
+    /// What one of the REPL's functions shows, as `help()`.
+    Output(String),
+    /// Something the REPL notes, as that an earlier input used a name
+    /// before this one declared it.
+    Note(String),
     /// What the input gave, as Kotlin's REPL prints it: `fail` if it
     /// failed.
     Result {
@@ -115,22 +142,36 @@ pub struct ReplDiagnostic {
 impl ReplEvent {
     /// The event as `tempest repl` prints it, a line or more, without a
     /// final newline.
+    ///
+    /// All but logs have control characters escaped
+    /// ([`escape_controls`]).
     pub fn text(&self) -> String {
         match self {
             ReplEvent::Diagnostic(d) => {
                 let level = format!("{:?}", d.level).to_lowercase();
                 format!(
                     "{}:{}:{}: {level}: {}\n    {}\n    {}",
-                    d.location, d.line, d.column, d.message, d.snippet[0], d.snippet[1]
+                    escape_controls(&d.location),
+                    d.line,
+                    d.column,
+                    escape_controls(&d.message),
+                    d.snippet[0],
+                    d.snippet[1]
                 )
             }
-            ReplEvent::Log(line) | ReplEvent::Failure(line) => line.clone(),
+            ReplEvent::Log(line) => line.clone(),
+            ReplEvent::Failure(text) | ReplEvent::Output(text) | ReplEvent::Note(text) => {
+                escape_controls(text).into_owned()
+            }
             ReplEvent::Interrupted => "Interrupted".into(),
             ReplEvent::Unresolved => "1 promise is unresolved.".into(),
-            ReplEvent::InternalError(why) => {
-                format!("tempest: internal error (a bug in tempest, not in your code): {why}")
+            ReplEvent::InternalError(why) => format!(
+                "tempest: internal error (a bug in tempest, not in your code): {}",
+                escape_controls(why)
+            ),
+            ReplEvent::Result { input, value } => {
+                format!("interactive#{input}: {}", escape_controls(value))
             }
-            ReplEvent::Result { input, value } => format!("interactive#{input}: {value}"),
         }
     }
 }
@@ -142,13 +183,18 @@ type Sink = Rc<RefCell<Box<dyn FnMut(&ReplEvent)>>>;
 pub struct ReplSession {
     settle: Incremental,
     runner: Runner,
-    sources: Sources,
+    /// What the REPL's own functions read, shared with the interpreter's
+    /// host that runs them.
+    specials: Rc<RefCell<Specials>>,
     sink: Sink,
     hints: bool,
     /// Inputs fed so far.
     inputs: usize,
     /// Each input's scope, with its number.
     segments: HashMap<ScopeId, usize>,
+    /// Names an input found undeclared, with the first such input, so a
+    /// later input declaring one can note it.
+    undeclared: HashMap<String, usize>,
     /// Makes the next input panic, to test that a panic is caught.
     #[cfg(test)]
     panic_next: bool,
@@ -164,17 +210,80 @@ impl ReplSession {
         let logs = sink.clone();
         let log =
             Box::new(move |line: &str| (*logs.borrow_mut())(&ReplEvent::Log(line.to_string())));
-        ReplSession {
-            settle: Incremental::new(library),
-            runner: Runner::new(log, options.interrupt, options.fuel),
+        let specials = Rc::new(RefCell::new(Specials {
+            tools: options.tools,
             sources: options.sources,
+            libraries: library.libraries.clone(),
+            help_footer: options.help_footer,
+            inputs: Vec::new(),
+            prelude: None,
+            host: None,
+        }));
+        let host = specials::host(specials.clone(), sink.clone());
+        let mut session = ReplSession {
+            settle: Incremental::new(library),
+            runner: Runner::new(log, options.interrupt, options.fuel, Some(host)),
+            specials,
             sink,
             hints: options.hints,
             inputs: 0,
             segments: HashMap::new(),
+            undeclared: HashMap::new(),
             #[cfg(test)]
             panic_next: false,
+        };
+        session.settle_prelude();
+        session
+    }
+
+    /// Declares the REPL's own functions ([`specials`]) in a scope before
+    /// the first input's.
+    fn settle_prelude(&mut self) {
+        let library = self.settle.library_mut();
+        let file = library.add_file(PRELUDE_PATH, PRELUDE, SourceKind::Standalone);
+        let root = library.files[file.0 as usize].root;
+        // The host's function gets a name no input can write.
+        let host = library.names.find(HOST_NAME);
+        let hidden = library.names.temporary(HOST_NAME);
+        let mut stack = vec![root];
+        while let Some(node) = stack.pop() {
+            let tree = &library.tree;
+            stack.extend(tree.children(node));
+            if host.is_some() && library.name(node) == host {
+                let kind = tree.kind(node);
+                library.tree.replace(node, kind, hidden.0, &[]);
+            }
         }
+        let round = self.settle.settle_input(file);
+        let scope = round.input.scope;
+        let runner = &mut self.runner;
+        self.settle.view(|s| {
+            runner.add_module(s, scope);
+            runner.run_input(s, &round.input, root, false);
+        });
+        let host = (self.settle.scopes().get(scope).names.iter())
+            .find(|&&(name, _)| name == hidden)
+            .and_then(|&(_, symbol)| self.settle.scopes().symbol(symbol).decl);
+        let mut specials = self.specials.borrow_mut();
+        specials.prelude = Some(scope);
+        specials.host = host;
+    }
+
+    /// Lends what's settled so far, with the scope that the next input's
+    /// names are looked up from, as for completion.
+    pub fn view<R>(&mut self, f: impl FnOnce(&Settled, ScopeId) -> R) -> R {
+        let scope = self.settle.last_segment().unwrap_or(crate::scope::BUILTINS);
+        self.settle.view(|s| f(s, scope))
+    }
+
+    /// Input `n`, with the inputs it uses, as one Temper module, as
+    /// `describe(n, "module")` shows it; `None` if there's no input `n`.
+    pub fn module_source(&mut self, n: usize) -> Option<String> {
+        if n >= self.inputs {
+            return None;
+        }
+        let specials = self.specials.clone();
+        self.settle.view(|s| Some(specials.borrow().module(s, n)))
     }
 
     /// Inputs fed so far, which is the next one's number.
@@ -218,14 +327,16 @@ impl ReplSession {
         let library = self.settle.library_mut();
         let diagnostics_before = library.diagnostics.len();
         let file = library.add_file(&path, text, SourceKind::Standalone);
-        load_imports(&self.sources, library);
+        load_imports(&self.specials.borrow().sources, library);
         #[cfg(test)]
         if std::mem::take(&mut self.panic_next) {
             panic!("as a test asked");
         }
         let round = self.settle.settle_input(file);
         self.segments.insert(round.input.scope, input);
-        let errors = self.report_diagnostics(diagnostics_before);
+        (self.specials.borrow_mut().inputs).push((file, round.input.scope));
+        let errors = self.report_diagnostics(input, diagnostics_before);
+        self.note_late_declarations(input, round.input.scope);
 
         let root = self.settle.library().files[file.0 as usize].root;
         let semicolon = ends_with_semicolon(text);
@@ -285,10 +396,36 @@ impl ReplSession {
         })
     }
 
+    /// Notes names an earlier input found undeclared that input `input`
+    /// declares, as for mutual recursion over two inputs, once each.
+    fn note_late_declarations(&mut self, input: usize, scope: ScopeId) {
+        if self.undeclared.is_empty() {
+            return;
+        }
+        let library = self.settle.library();
+        let mut notes = Vec::new();
+        for &(name, _) in &self.settle.scopes().get(scope).names {
+            let name = library.names.get(name);
+            if let Some(earlier) = self.undeclared.remove(name).filter(|&e| e < input) {
+                notes.push(format!(
+                    "Note: interactive#{earlier} used {name} before this input declared it. \
+                     An input sees only what earlier inputs declared, so declarations that \
+                     use each other go in one input: on one line, or with \
+                     --separator semisemi, ended by ;;"
+                ));
+            }
+        }
+        for note in notes {
+            self.emit(&ReplEvent::Note(note));
+        }
+    }
+
     /// Reports the diagnostics made since `before`, each once, returning
-    /// the errors' messages.
-    fn report_diagnostics(&self, before: usize) -> HashSet<String> {
+    /// the errors' messages, and notes the names input `input` found
+    /// undeclared.
+    fn report_diagnostics(&mut self, input: usize, before: usize) -> HashSet<String> {
         let lib = self.settle.library();
+        let mut undeclared = Vec::new();
         let mut seen = HashSet::new();
         let mut errors = HashSet::new();
         for d in &lib.diagnostics[before..] {
@@ -301,6 +438,18 @@ impl ReplSession {
             }
             if d.level == Level::Error {
                 errors.insert(message.clone());
+            }
+            let mut message = message;
+            if let Message::UndeclaredName(name) = &d.message {
+                // A `test(…)` names std's `Test`, which only a library's
+                // tests import.
+                if name == "Test" && lib.source_text(d.span).starts_with("test") {
+                    message = "Tests don't run in the REPL: write them in a library's \
+                               files, and run tempest test"
+                        .into();
+                } else {
+                    undeclared.push(name.to_string());
+                }
             }
             let (file, start) = lib.locate(d.span.start);
             let file = &lib.files[file.0 as usize];
@@ -319,6 +468,9 @@ impl ReplSession {
                 column,
                 snippet,
             }));
+        }
+        for name in undeclared {
+            self.undeclared.entry(name).or_insert(input);
         }
         errors
     }
@@ -352,7 +504,9 @@ fn class_label(
 
 /// The 1-based line and column (in characters) of `start` in `source`,
 /// and the line with `^` under the span, at least one, up to the line's
-/// end; tabs are shown as spaces, so the marks line up.
+/// end; tabs are shown as spaces, so the marks line up, and control
+/// characters escaped ([`escape_controls`]), the marks under their
+/// escapes.
 fn snippet(source: &str, start: usize, length: usize) -> (usize, usize, [String; 2]) {
     let mut start = start.min(source.len());
     while !source.is_char_boundary(start) {
@@ -364,16 +518,68 @@ fn snippet(source: &str, start: usize, length: usize) -> (usize, usize, [String;
         .map_or(source.len(), |i| start + i);
     let line = source[..start].matches('\n').count() + 1;
     let column = source[line_start..start].chars().count() + 1;
-    let text: String = (source[line_start..line_end].trim_end_matches('\r').chars())
-        .map(|c| if c == '\t' { ' ' } else { c })
-        .collect();
     let mut end = (start + length).min(line_end);
     while !source.is_char_boundary(end) {
         end -= 1;
     }
-    let marks = source[start..end].chars().count().max(1);
-    let under = format!("{}{}", " ".repeat(column - 1), "^".repeat(marks));
+    // The line as shown, and where the span starts and ends in it, in
+    // characters.
+    let mut text = String::new();
+    let (mut from, mut to) = (0, 0);
+    let mut shown = 0;
+    let body = source[line_start..line_end].trim_end_matches('\r');
+    for (i, c) in body.char_indices() {
+        let at = line_start + i;
+        if at == start {
+            from = shown;
+        }
+        if at == end {
+            to = shown;
+        }
+        let before = text.len();
+        match c {
+            '\t' => text.push(' '),
+            c if needs_escape(c) => text.push_str(&format!("\\u{{{:x}}}", c as u32)),
+            c => text.push(c),
+        }
+        shown += text[before..].chars().count();
+    }
+    if start >= line_start + body.len() {
+        from = shown;
+    }
+    if end >= line_start + body.len() {
+        to = shown;
+    }
+    let marks = to.saturating_sub(from).max(1);
+    let under = format!("{}{}", " ".repeat(from), "^".repeat(marks));
     (line, column, [text, under])
+}
+
+/// Whether a character would change the terminal, or how text around it
+/// reads, if printed as is: a C0 control other than a line break or tab,
+/// DEL, a C1 control, or a bidirectional control.
+fn needs_escape(c: char) -> bool {
+    let n = c as u32;
+    (n < 0x20 && c != '\n' && c != '\t')
+        || (0x7f..=0x9f).contains(&n)
+        || matches!(n, 0x61c | 0x200e | 0x200f | 0x202a..=0x202e | 0x2066..=0x2069)
+}
+
+/// Text with the characters that could rewrite the terminal or hide text
+/// escaped as Temper writes them, `\u{1b}`: C0 controls but for line
+/// breaks and tabs, DEL, C1 controls, and bidirectional controls.
+pub fn escape_controls(text: &str) -> Cow<'_, str> {
+    if !text.chars().any(needs_escape) {
+        return Cow::Borrowed(text);
+    }
+    let mut out = String::with_capacity(text.len() + 8);
+    for c in text.chars() {
+        match needs_escape(c) {
+            true => out.push_str(&format!("\\u{{{:x}}}", c as u32)),
+            false => out.push(c),
+        }
+    }
+    Cow::Owned(out)
 }
 
 /// Whether code's last token is `;`, which makes an input give `void`.
@@ -437,6 +643,35 @@ impl Chunker {
     /// Drops the input begun so far.
     pub fn clear(&mut self) {
         self.pending.clear();
+    }
+
+    /// Whether `text`, its lines fed to a new chunker, leaves nothing
+    /// pending: what an editor's Enter asks before running a buffer of
+    /// one or more lines, so typed and piped lines split alike.
+    pub fn completes(separator: Separator, text: &str) -> bool {
+        let mut chunker = Chunker::new(separator);
+        for line in text.split('\n') {
+            chunker.push_line(line);
+        }
+        separator != Separator::Eof && !chunker.is_pending()
+    }
+
+    /// How many brackets (`(`, `[`, `{`, `${`) are open at the end of
+    /// `text`, as for indenting the line after it.
+    pub fn open_brackets(text: &str) -> usize {
+        let tokens = lex(text, SourceKind::Standalone);
+        let mut depth = 0usize;
+        for t in &tokens {
+            if t.kind != TokenKind::Punctuation || t.synthetic.is_some() {
+                continue;
+            }
+            match &text[t.range()] {
+                "(" | "[" | "{" | "${" => depth += 1,
+                ")" | "]" | "}" => depth = depth.saturating_sub(1),
+                _ => {}
+            }
+        }
+        depth
     }
 
     /// Adds a line, with or without its line break, giving the input it
@@ -586,6 +821,38 @@ mod tests {
         // Comments alone at the end aren't an input.
         assert_eq!(c.push_line("// done\n"), None);
         assert_eq!(c.finish(), None);
+    }
+
+    #[test]
+    fn says_whether_a_buffer_completes() {
+        let newline = Separator::Newline;
+        assert!(Chunker::completes(newline, "1 + 2"));
+        assert!(Chunker::completes(newline, "f(1,\n  2)"));
+        assert!(!Chunker::completes(newline, "f(1,"));
+        assert!(!Chunker::completes(newline, "// a doc comment"));
+        assert!(!Chunker::completes(newline, "let s = \"\"\"\n  \"text"));
+        assert!(Chunker::completes(newline, "let s = \"\"\"\n  \"text\n"));
+        assert!(Chunker::completes(newline, "1\n2"));
+        assert!(!Chunker::completes(Separator::SemiSemi, "1"));
+        assert!(Chunker::completes(Separator::SemiSemi, "1 ;;"));
+        assert!(!Chunker::completes(Separator::Eof, "1"));
+        assert_eq!(Chunker::open_brackets("f(["), 2);
+        assert_eq!(Chunker::open_brackets("\"${ {"), 2);
+        assert_eq!(Chunker::open_brackets("f(1)"), 0);
+    }
+
+    #[test]
+    fn escapes_controls() {
+        assert_eq!(escape_controls("plain\ttext\n"), "plain\ttext\n");
+        assert_eq!(
+            escape_controls("a\u{1b}[2Jb\u{7f}\u{9b}c\u{202e}d\u{2066}\u{61c}"),
+            "a\\u{1b}[2Jb\\u{7f}\\u{9b}c\\u{202e}d\\u{2066}\\u{61c}"
+        );
+        let (_, _, lines) = snippet("x = \u{1b}y", 5, 1);
+        assert_eq!(
+            lines,
+            ["x = \\u{1b}y".to_string(), "          ^".to_string()]
+        );
     }
 
     #[test]

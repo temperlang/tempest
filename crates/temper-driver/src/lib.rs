@@ -12,6 +12,7 @@
 
 pub mod build;
 pub mod init;
+pub mod repl;
 // Not in the wasm, which runs no tools.
 #[cfg(any(unix, windows))]
 pub mod run;

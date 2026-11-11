@@ -19,6 +19,40 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use temper_syntax::tree::NodeId;
 
+/// What implements bodiless `@connected` functions outside std, as the
+/// REPL's `help`: given a declaration and its arguments, its result, or
+/// why it failed; `None` if it's not one of the host's.
+pub(crate) type Host = Rc<dyn Fn(&Settled, NodeId, &[Val]) -> Option<Result<Val, String>>>;
+
+/// A host function's argument, as it cares about it.
+pub(crate) enum Arg<'a> {
+    Null,
+    Int(i64),
+    Str(&'a str),
+    /// A function or a class, by its declaration: a `Let`, or a `Class`.
+    Decl(NodeId),
+    /// A builtin function or type, by name.
+    Builtin(&'static str),
+    /// Anything else, by its type's name.
+    Other(&'static str),
+}
+
+/// An argument as [`Arg`].
+pub(crate) fn arg(value: &Val) -> Arg<'_> {
+    match value {
+        Val::Null | Val::Void => Arg::Null,
+        Val::Int(n) => Arg::Int(*n as i64),
+        Val::Int64(n) => Arg::Int(*n),
+        Val::Str(text) => Arg::Str(text),
+        Val::Fn(closure) => Arg::Decl(closure.node),
+        Val::Class(class) => Arg::Decl(class.node),
+        Val::Connected(decl) => Arg::Decl(*decl),
+        Val::Builtin(f) => Arg::Builtin(crate::builtins::Builtin::Function(*f).name()),
+        Val::BuiltinType(i) => Arg::Builtin(TYPES[*i as usize]),
+        other => Arg::Other(super::type_name(other)),
+    }
+}
+
 /// How running a module or an input ended.
 pub(crate) enum Outcome {
     /// It ran to the end, giving this.
@@ -48,6 +82,7 @@ impl Runner {
         sink: Box<dyn FnMut(&str)>,
         interrupt: Option<Arc<AtomicBool>>,
         fuel: Option<u64>,
+        host: Option<Host>,
     ) -> Runner {
         Runner {
             interp: Interp {
@@ -69,6 +104,7 @@ impl Runner {
                 cached: Vec::new(),
                 compile_time: false,
                 allowed_nodes: HashMap::new(),
+                host,
             },
             first_globals: HashMap::new(),
             fuel,

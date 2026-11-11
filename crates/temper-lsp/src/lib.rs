@@ -174,7 +174,7 @@ struct Unit {
     /// Its own source files, to publish diagnostics for; not std's or
     /// other libraries' it imports.
     files: Vec<String>,
-    analysis: Analysis,
+    analysis: Analysis<'static>,
     /// The files diagnostics were last published for.
     published: Vec<String>,
 }
@@ -857,16 +857,7 @@ fn hover(a: &Analysis, file: FileId, offset: u32) -> Option<lsp::Hover> {
         .get(file.0 as usize)?
         .parsed
         .source();
-    let ty = h.ty.as_deref().unwrap_or("?");
-    let shown = match (&h.name, h.kind) {
-        // A signature already starts with its name, as `twice(n: Int32)`.
-        (Some(name), Some(kind)) if ty.starts_with(name.as_str()) => {
-            format!("{} {ty}", kind.label())
-        }
-        (Some(name), Some(kind)) => format!("{} {name}: {ty}", kind.label()),
-        _ => ty.to_string(),
-    };
-    let mut value = format!("```temper\n{shown}\n```");
+    let mut value = format!("```temper\n{}\n```", h.headline());
     if let Some(doc) = &h.doc {
         value.push_str("\n\n");
         value.push_str(doc);

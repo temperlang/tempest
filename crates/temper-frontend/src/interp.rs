@@ -281,6 +281,7 @@ fn run_with(settled: &Settled, fuel: Option<u64>, tests: bool, sink: Option<Line
         cached: Vec::new(),
         compile_time: false,
         allowed_nodes: HashMap::new(),
+        host: None,
     };
     let mut result = Ok(Val::Void);
     for module in &settled.modules {
@@ -465,6 +466,9 @@ struct Interp<'a> {
     /// by their nodes, it may then run.
     compile_time: bool,
     allowed_nodes: HashMap<NodeId, bool>,
+    /// Implements bodiless `@connected` functions declared outside std,
+    /// as the REPL's own `help`, `describe`, and `translate` ([`repl::Host`]).
+    host: Option<repl::Host>,
 }
 
 fn fail(message: impl Into<String>) -> Abrupt {
@@ -1407,15 +1411,19 @@ impl Interp<'_> {
     }
 
     /// A bodiless `@connected` function that the interpreter implements:
-    /// so far std `net`'s `sendRequest`.
+    /// std `net`'s `sendRequest`, and what its host does, as the REPL's
+    /// own functions.
     fn connected_function(&mut self, s: &Settled, decl: NodeId, args: Vec<Val>) -> R {
         let name = core::let_parts(&s.library.tree, decl).0;
         match s.library.name(name).map(|n| s.library.names.get(n)) {
             Some("sendRequest") if in_std(s, decl, "net") => self.send_request(args),
-            name => Err(fail(format!(
-                "No connected implementation of {}",
-                name.unwrap_or("?")
-            ))),
+            name => match self.host.clone().and_then(|host| host(s, decl, &args)) {
+                Some(result) => result.map_err(fail),
+                None => Err(fail(format!(
+                    "No connected implementation of {}",
+                    name.unwrap_or("?")
+                ))),
+            },
         }
     }
 

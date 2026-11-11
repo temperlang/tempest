@@ -251,26 +251,26 @@ $ let areaPerPerimeter(rectangle: Rectangle): Float64 {
 interactive#6: void
 ```
 
-We can use that to get translations into different backends, in Kotlin
-Temper's REPL (tempest's doesn't have `translate` yet). For example:
+We can use that to get translations into different backends, printed right in
+the REPL:
 
 <!-- repl: skip -->
 ```console
 $ translate(6, "csharp")
-Translated csharp for interactive#6 ...
+// interactive/src/InteractiveGlobal.cs
+...
 $ translate(6, "java")
-Translated java for interactive#6 ...
-$ translate(6, "js")
-Translated js for interactive#6 ...
-$ translate(6, "lua")
-Translated lua for interactive#6 ...
+// interactive/src/main/java/interactive/InteractiveGlobal.java
+...
 $ translate(6, "py")
-Translated py for interactive#6 ...
+# interactive/interactive/interactive.py
+...
 ```
 
-The translations are rather messy, and the REPL does its best guess of what to
-include for context. Focus for now on just the definition of `areaPerPerimeter`
-for each of those backends. The translations look something like this:
+Each translation is of input 6 after the earlier inputs it uses, such as the one
+declaring `Rectangle`, so it makes sense on its own; `translate(6)` gives every
+language. Focus for now on just the definition of `areaPerPerimeter` for each of
+those backends. The translations look something like this:
 
 <details><summary>C#</summary>
 

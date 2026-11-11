@@ -190,12 +190,14 @@ struct Flags {
     exec: Vec<String>,
     separator: Option<String>,
     prompt: Option<String>,
+    color: Option<String>,
+    no_history: bool,
     positional: Vec<String>,
 }
 
 /// Each option: its long name, its short one if any, and whether it
 /// takes a value.
-const OPTIONS: [(&str, Option<&str>, bool); 16] = [
+const OPTIONS: [(&str, Option<&str>, bool); 18] = [
     ("std", None, true),
     ("workroot", Some("w"), true),
     ("ignorefile", Some("ign"), true),
@@ -212,6 +214,8 @@ const OPTIONS: [(&str, Option<&str>, bool); 16] = [
     ("exec-before", Some("e"), true),
     ("separator", None, true),
     ("prompt", None, true),
+    ("color", None, true),
+    ("no-history", None, false),
 ];
 
 /// Parses a command's arguments, allowing the options in `allowed` (by
@@ -272,6 +276,7 @@ fn parse(command: &str, args: &[String], allowed: &[&str], positional: usize) ->
             "timeout" => once(&mut flags.timeout)?,
             "separator" => once(&mut flags.separator)?,
             "prompt" => once(&mut flags.prompt)?,
+            "color" => once(&mut flags.color)?,
             "exec-before" => flags.exec.push(value),
             "backend" => {
                 if !flags.backends.contains(&value) {
@@ -279,6 +284,7 @@ fn parse(command: &str, args: &[String], allowed: &[&str], positional: usize) ->
                 }
             }
             "no-connected" => flags.no_connected = true,
+            "no-history" => flags.no_history = true,
             "verbose" => flags.verbose = true,
             "logformat" => match LogFormat::named(&value) {
                 Some(format) => flags.log = format,

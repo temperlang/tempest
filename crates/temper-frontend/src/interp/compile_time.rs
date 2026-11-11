@@ -188,6 +188,7 @@ impl Session {
                 cached: Vec::new(),
                 compile_time: true,
                 allowed_nodes: HashMap::new(),
+                host: None,
             },
             first_globals,
             ran: 0,

@@ -20,7 +20,9 @@ interactive#4: {class: Point, x: 1, y: 2}
 ```
 
 Ctrl-D (the end of input) ends the session, with exit code 0 whatever
-failed. Piped input works the same, without prompts:
+failed. On a terminal, lines are edited as in a shell, with history,
+completion, and color ([below](#on-a-terminal)). Piped input works the
+same, without prompts or editing:
 
 ```sh
 printf '1 + 2\nconsole.log("hi")\n' | tempest repl
@@ -32,7 +34,9 @@ A line ends an input unless something is still open: a bracket (`(`,
 `[`, `{`, or `${`), a multi-quoted string (`"""`, ended by a line that
 doesn't go on with it, such as a blank one), or a block comment. A line
 of only comments waits too, so a doc comment joins what it documents.
-Meanwhile the prompt is `  ` instead of `$ `. A `"` string never spans
+Meanwhile the next line, on a terminal, starts indented, two spaces and
+two more for each bracket open; piped in, the prompt is `  ` instead of
+`$ `. A `"` string never spans
 lines: one left open is an error at the end of its line, rather than
 swallowing the lines after it.
 
@@ -139,6 +143,159 @@ $ answer
 interactive#3: "yes"
 ```
 
+## The REPL's own functions
+
+Three functions are declared before the first input. They're Temper
+functions, so they complete and check as any other, and an input that
+declares its own `help`, `describe`, or `translate` hides the REPL's
+for the inputs after it, as any redefinition does; there's no other
+name to reach them by then.
+
+- **`help()`** says what the REPL offers: these functions, `describe`'s
+  steps, the keys, and where the history is. **`help("name")`** shows a
+  declaration's signature and doc comment, as hovering in an editor
+  does; a function or type also works as itself, `help(greet)`.
+- **`describe(n, step)`** shows input `n` at one of tempest's steps:
+  `"parsed"`, the parser's tree; `"settled"` (the default), the tree
+  with macros expanded and names resolved, a local as `x:3`;
+  `"types"`, each declaration's type, and the result's; `"module"`,
+  the Temper module that `translate` translates; and `"tmpl"`, that
+  module as tmpl, what the backends translate.
+- **`translate(n, lang)`** prints input `n` translated into `cpp`,
+  `csharp`, `java`, `js`, `lua`, `py`, or `rust`, each file of its own
+  code after a line with its path; `translate(n)` gives every
+  language.
+
+What `describe(n, "module")` and `translate(n)` show is one module:
+input `n` after the earlier inputs it uses, through the names they
+declare, transitively, each input whole. Where two of those inputs
+declare the same name, the later one's is renamed, `x__2`, as are the
+uses that meant it, so the module means what the inputs did:
+
+<!-- repl: restart -->
+```console
+$ let x = 1
+interactive#0: void
+$ let x = x + 1
+interactive#1: void
+$ let unused = 0
+interactive#2: void
+$ x * 10
+interactive#3: 20
+$ describe(1, "types")
+x: Int32
+interactive#4: void
+```
+
+Input 3 used inputs 0 and 1, and its module renames the second `x`:
+
+<!-- repl: skip -->
+```console
+$ describe(3, "module")
+// interactive#0
+let x = 1;
+// interactive#1
+let x__2 = x + 1;
+// interactive#3
+x__2 * 10;
+interactive#5: void
+$ translate(3, "py")
+# interactive/interactive/interactive.py
+from temper_core import int_add as _int_add, int_mul as _int_mul
+
+__all__ = ()
+
+_x: int = 1
+_x2: int = _int_add(_x, 1)
+_int_mul(_x2, 10)
+interactive#6: void
+```
+
+What they show is printed when they run, so an input's other output
+comes before or after it as the calls are. A failed call, as
+`describe(99)`, fails the input, saying why.
+
+## On a terminal
+
+When standard input and output are both a terminal, lines are edited
+with [rustyline](https://github.com/kkawakam/rustyline), Emacs-style:
+
+| Key | Does |
+|---|---|
+| Enter | Runs the input once it's whole; else starts a new line in it, indented |
+| Up, Down | Move between an input's lines, then through history |
+| Ctrl-R | Searches history |
+| Tab | Completes the name being typed |
+| Ctrl-C | Drops the input being typed; stops one that's running |
+| Ctrl-D | On an empty line, ends the session |
+
+- **Inputs over several lines** are one buffer: Enter runs it only once
+  it's whole, by the same rules as piped lines, so an earlier line can
+  be edited before it runs. Lines pasted at once split into inputs as
+  piped ones do.
+- **Text** is edited by what you see: the cursor moves over a
+  character with combining marks, an emoji, or a flag as one, and wide
+  characters take two columns. Where a terminal draws emoji sequences
+  joined by zero-width joiners differs; rustyline guesses from
+  `TERM_PROGRAM`.
+- **Completion** offers the names in scope, earlier inputs' and std's
+  among them, and keywords; after `x.`, the members of `x`'s type, or
+  after a type's name, its statics; and in the REPL functions' strings,
+  `describe`'s steps, `translate`'s languages, and `help`'s names.
+- **A hint** after the cursor, muted, shows the signature of the call
+  being typed, as `greet(name: String): String`. It's never inserted.
+- **Diagnostics** show as for piped input, colored, once Enter runs the
+  input.
+
+### Color
+
+`--color auto`, the default, colors only output to a terminal, and not
+when `NO_COLOR` is set (to anything but empty), `TERM` is `dumb`, or
+`CI` is set; `--color always` and `--color never` decide outright. Color
+applies to the prompt, results (`fail` in red), diagnostics (errors red,
+warnings yellow), and input as it's typed, by the classes the
+playground uses: keywords, `true`/`false`/`null`/`void`, numbers,
+strings (multi-quoted ones too) and their `${…}`, comments, types'
+names, decorators, and tokens the lexer rejects. The bracket at the
+cursor and its match are marked.
+
+### History
+
+Each input run is kept in a history file, one entry however many lines
+it has:
+
+| Platform | File |
+|---|---|
+| Linux and other Unix | `$XDG_DATA_HOME/tempest/repl-history.txt`, or `~/.local/share/tempest/repl-history.txt` |
+| macOS | `~/Library/Application Support/tempest/repl-history.txt` |
+| Windows | `%APPDATA%\tempest\repl-history.txt` |
+
+What's typed may be private, a token pasted into a string say, so on
+Unix the directory is made readable by its owner alone (0700) and the
+file too (0600); a file found readable by others is made owner-only
+again, and a path that isn't a plain file, as a link, isn't used. A
+line starting with a space isn't kept, and `--no-history` keeps none
+and reads none. `-e` inputs and piped input are never kept. `help()`
+says which file the session uses.
+
+## Security
+
+- What the REPL prints of its own, results, diagnostics, failures, and
+  its functions' output, has control characters escaped as Temper
+  writes them, `\u{1b}`: C0 controls other than line breaks and tabs,
+  DEL, C1 controls, and the bidirectional controls that reorder text
+  (U+061C, U+200E, U+200F, U+202A to U+202E, U+2066 to U+2069). So a
+  value or a pasted snippet can't move the cursor, recolor the
+  terminal, or hide text. Strings print quoted, every control and
+  format character escaped. What an input logs is printed as it's
+  logged, as `tempest run` prints it.
+- Importing one of the work root's libraries runs its top-level code,
+  as `tempest run` does, with the interpreter's access to the network
+  through std `net`. The work root is the one around the current
+  directory unless `-w` says otherwise, so start the REPL somewhere you
+  trust, or pass `-w` an empty directory.
+- History is kept owner-only ([above](#history)).
+
 ## Imports
 
 Inputs import std's modules, as `let { Date } = import("std/temporal");`,
@@ -149,8 +306,9 @@ it, if there is one.
 ## Stopping
 
 Ctrl-C stops the input running, and the session goes on. At the
-prompt, it drops the input begun so far, once the line is entered. If
-tempest itself is ever stuck, pressing Ctrl-C again ends it.
+prompt, it drops the input begun so far: at once on a terminal, or for
+piped input, once the line is entered. If tempest itself is ever stuck,
+pressing Ctrl-C again ends it.
 
 ## Options
 
@@ -161,6 +319,8 @@ tempest itself is ever stuck, pressing Ctrl-C again ends it.
 | `-e CODE`, `--exec-before CODE` | An input to run first; may be given more than once |
 | `--separator newline\|semisemi\|eof` | What ends an input ([above](#inputs)) |
 | `--prompt normal\|hide` | Whether to prompt; by default, only when standard input is a terminal |
+| `--color auto\|always\|never` | Whether to color output ([above](#color)); `auto` by default |
+| `--no-history` | Neither read nor keep history ([above](#history)) |
 | `--fuel N\|none` | The steps each input may take; none by default |
 | `-v`, `--verbose` | Report hints too |
 | `--std DIR` | Read std from DIR instead of the copy built in |
@@ -182,5 +342,12 @@ differences:
   running, and a crash in tempest is reported without ending the
   session.
 - **Piped input** gets no prompt, and nothing echoed.
-- **Not yet:** line editing, history, completion, and color; and the
-  REPL's own functions, `help`, `describe`, and `translate`.
+- **`describe`** takes tempest's steps, not Kotlin's stage names, and
+  **`translate`** prints the code, of input `n` after the inputs it
+  uses, rather than writing files; `help`'s topics, as
+  `help("available-imports")`, aren't there.
+- **The terminal:** a multi-line input is one buffer, and one history
+  entry; history is one owner-only file, written as each input runs;
+  `NO_COLOR` and `--color` are honored; and what the REPL prints has
+  control characters escaped.
+- **Not yet:** `-b`, and suggestions from history as you type.

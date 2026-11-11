@@ -18,6 +18,7 @@
 
 mod builtins;
 mod members;
+mod pending;
 mod references;
 mod signatures;
 mod symbols;
@@ -28,6 +29,7 @@ pub use signatures::SignatureHelp;
 pub use symbols::DocSymbol;
 
 use members::Subst;
+use std::cell::OnceCell;
 use std::collections::HashMap;
 use temper_frontend::core::{
     self, CLASS_INTERFACE, LET_VAR, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD,
@@ -110,6 +112,22 @@ pub struct Hover {
     pub doc: Option<String>,
 }
 
+impl Hover {
+    /// Its first line, as an editor's hover shows it: `function
+    /// greet(name: String): String`, or `let total: Int32`.
+    pub fn headline(&self) -> String {
+        let ty = self.ty.as_deref().unwrap_or("?");
+        match (&self.name, self.kind) {
+            // A signature already starts with its name, as `twice(n: Int32)`.
+            (Some(name), Some(kind)) if ty.starts_with(name.as_str()) => {
+                format!("{} {ty}", kind.label())
+            }
+            (Some(name), Some(kind)) => format!("{} {name}: {ty}", kind.label()),
+            _ => ty.to_string(),
+        }
+    }
+}
+
 /// A place in a file.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Location {
@@ -127,40 +145,87 @@ pub struct Completion {
     pub detail: Option<String>,
 }
 
-/// Queries over one settled library.
-pub struct Analysis {
-    pub settled: Settled,
-    /// Each node's parent, under the files' roots.
-    parents: Vec<Option<NodeId>>,
-    /// Each declaration's symbol, by its `Let` or `Class`.
-    decl_symbols: HashMap<NodeId, SymbolId>,
+/// Queries over one settled library, which it owns or borrows.
+pub struct Analysis<'a> {
+    pub settled: Held<'a>,
+    /// Each node's parent, under the files' roots, found when first
+    /// needed.
+    parents: OnceCell<Vec<Option<NodeId>>>,
+    /// Each declaration's symbol, by its `Let` or `Class`, found when
+    /// first needed.
+    decl_symbols: OnceCell<HashMap<NodeId, SymbolId>>,
 }
 
-impl Analysis {
-    pub fn new(settled: Settled) -> Analysis {
-        let tree = &settled.library.tree;
-        let mut parents = vec![None; tree.len()];
-        let mut stack: Vec<NodeId> = settled.library.files.iter().map(|f| f.root).collect();
-        let mut seen = vec![false; tree.len()];
-        while let Some(node) = stack.pop() {
-            if std::mem::replace(&mut seen[node.0 as usize], true) {
-                continue;
-            }
-            for &child in tree.children(node) {
-                if parents[child.0 as usize].is_none() {
-                    parents[child.0 as usize] = Some(node);
-                }
-                stack.push(child);
-            }
+/// A settled library, owned, as the language server and the playground
+/// keep one, or borrowed, as a REPL session lends its own
+/// ([`Analysis::of`]).
+pub enum Held<'a> {
+    Owned(Box<Settled>),
+    Borrowed(&'a Settled),
+}
+
+impl std::ops::Deref for Held<'_> {
+    type Target = Settled;
+
+    fn deref(&self) -> &Settled {
+        match self {
+            Held::Owned(settled) => settled,
+            Held::Borrowed(settled) => settled,
         }
-        let decl_symbols = (settled.scopes.symbols.iter().enumerate())
-            .filter_map(|(i, s)| Some((s.decl?, SymbolId(i as u32))))
-            .collect();
+    }
+}
+
+impl Analysis<'static> {
+    pub fn new(settled: Settled) -> Analysis<'static> {
+        Analysis::held(Held::Owned(Box::new(settled)))
+    }
+}
+
+impl<'a> Analysis<'a> {
+    /// Queries over a library borrowed for a while, as a REPL session's.
+    pub fn of(settled: &'a Settled) -> Analysis<'a> {
+        Analysis::held(Held::Borrowed(settled))
+    }
+
+    fn held(settled: Held<'a>) -> Analysis<'a> {
         Analysis {
             settled,
-            parents,
-            decl_symbols,
+            parents: OnceCell::new(),
+            decl_symbols: OnceCell::new(),
         }
+    }
+}
+
+impl Analysis<'_> {
+    fn parents(&self) -> &[Option<NodeId>] {
+        self.parents.get_or_init(|| {
+            let tree = &self.settled.library.tree;
+            let mut parents = vec![None; tree.len()];
+            let mut stack: Vec<NodeId> = (self.settled.library.files.iter())
+                .map(|f| f.root)
+                .collect();
+            let mut seen = vec![false; tree.len()];
+            while let Some(node) = stack.pop() {
+                if std::mem::replace(&mut seen[node.0 as usize], true) {
+                    continue;
+                }
+                for &child in tree.children(node) {
+                    if parents[child.0 as usize].is_none() {
+                        parents[child.0 as usize] = Some(node);
+                    }
+                    stack.push(child);
+                }
+            }
+            parents
+        })
+    }
+
+    fn decl_symbols(&self) -> &HashMap<NodeId, SymbolId> {
+        self.decl_symbols.get_or_init(|| {
+            (self.settled.scopes.symbols.iter().enumerate())
+                .filter_map(|(i, s)| Some((s.decl?, SymbolId(i as u32))))
+                .collect()
+        })
     }
 
     /// Every diagnostic, in the order found, with its span in its file.
@@ -576,7 +641,12 @@ impl Analysis {
                 }
                 (matches!(tree.kind(parent), NodeKind::Let | NodeKind::Class)
                     && tree.children(parent).first() == Some(&node))
-                .then(|| self.decl_symbols.get(&parent).copied().map(Target::Symbol))
+                .then(|| {
+                    self.decl_symbols()
+                        .get(&parent)
+                        .copied()
+                        .map(Target::Symbol)
+                })
                 .flatten()
             }
             NodeKind::Value => {
@@ -612,7 +682,7 @@ impl Analysis {
     }
 
     fn parent(&self, node: NodeId) -> Option<NodeId> {
-        self.parents.get(node.0 as usize).copied().flatten()
+        self.parents().get(node.0 as usize).copied().flatten()
     }
 
     /// What a symbol's declaration is.
