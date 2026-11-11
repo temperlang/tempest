@@ -325,7 +325,8 @@ jobs:
       # Time limits, and on Unix, a command's process group killed.
       - name: Child processes
         if: ${{ !cancelled() }}
-        run: bash .github/ci-tools/tests-ran.sh 2 cargo test --locked -p temper-tmpl --lib children::
+        # Quoted: a plain YAML value can't end in a colon.
+        run: 'bash .github/ci-tools/tests-ran.sh 2 cargo test --locked -p temper-tmpl --lib children::'
       # The rest of tempest's tests: the CLI's. Without the backends,
       # whose tests would run each toolchain the image happens to have
       # but not the setup `check` gives them (JUnit's jars, crates for
