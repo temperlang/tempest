@@ -77,6 +77,75 @@ public static class ContentTagsGlobal
     internal static string Each(IReadOnlyList<string> xs)
     {
         {
+            Buffer collector = Quoting.NewCollector();
+            {
+                {
+                    int length = xs.Count;
+                    int i = 0;
+                    while (i < length)
+                    {
+                        string x = xs[i];
+                        i = i + 1;
+                        collector.Append("'");
+                        collector.Append(quoteEscaperInstance.ApplyString(textEscaperInstance.ApplyString(x)));
+                        collector.Append("' ");
+                        collector.Append(textEscaperInstance.ApplyString(x));
+                        collector.Append(";");
+                    }
+                }
+            }
+            return Quoting.FromCollector(collector);
+        }
+    }
+
+    internal static string Counted(int n, string x)
+    {
+        {
+            Buffer collector = Quoting.NewCollector();
+            {
+                int i = 0;
+                while (i < n)
+                {
+                    i = i + 1;
+                    if (i == 2)
+                    {
+                        continue;
+                    }
+                    collector.Append("'");
+                    collector.Append(quoteEscaperInstance.ApplyString(textEscaperInstance.ApplyString(x)));
+                    collector.Append("'");
+                    if (i == 4)
+                    {
+                        break;
+                    }
+                    collector.Append(textEscaperInstance.ApplyString(x));
+                    collector.Append(",");
+                }
+            }
+            return Quoting.FromCollector(collector);
+        }
+    }
+
+    internal static string Attribute(bool c, string x)
+    {
+        {
+            Buffer collector = Quoting.NewCollector();
+            {
+                collector.Append("a='");
+                if (c)
+                {
+                    return "none";
+                }
+                collector.Append(quoteEscaperInstance.ApplyString(textEscaperInstance.ApplyString(x)));
+                collector.Append("'");
+            }
+            return Quoting.FromCollector(collector);
+        }
+    }
+
+    internal static string Opened(IReadOnlyList<string> xs)
+    {
+        {
             Quoting accumulator = new Quoting();
             {
                 {
@@ -88,9 +157,6 @@ public static class ContentTagsGlobal
                         i = i + 1;
                         accumulator.AppendSafe("'");
                         accumulator.Append(x);
-                        accumulator.AppendSafe("' ");
-                        accumulator.Append(x);
-                        accumulator.AppendSafe(";");
                     }
                 }
             }
@@ -107,5 +173,8 @@ public static class ContentTagsGlobal
         console.Log(Branch(true, "a"));
         console.Log(Branch(false, "b"));
         console.Log(Each(Listed.CreateReadOnlyList<string>("c", "d")));
+        console.Log(Counted(5, "e"));
+        console.Log(Attribute(false, "f") + " " + Attribute(true, "f"));
+        console.Log(Opened(Listed.CreateReadOnlyList<string>("g", "h", "i")));
     }
 }

@@ -133,6 +133,8 @@ pub(crate) struct Session {
     /// Whether a call failed since this was made, which may have left
     /// module state half updated.
     failed: bool,
+    /// Each module's top-level code, in run order, once lowered.
+    module_code: Vec<Rc<super::lower::Code>>,
 }
 
 /// A value that code can make again: what a constant, a list literal, or
@@ -187,22 +189,50 @@ impl Session {
             first_globals,
             ran: 0,
             failed: false,
+            module_code: Vec::new(),
         };
-        for module in s.modules.iter().take(modules) {
-            let code = (session.interp.lowering).module(s, module.scope, &module.top_levels);
-            session.interp.fuel = fuel;
-            session.interp.depth = 0;
+        session.run_modules(s, modules, fuel);
+        session
+    }
+
+    /// Starts again, after a call failed: module state is dropped, then
+    /// the modules' top-level code runs again, as [`Session::new`] runs
+    /// it. The code lowered so far is kept, as it comes from the tree
+    /// alone, which a session doesn't change, and holds no values that
+    /// change; so starting again costs only the top-level runs, and the
+    /// old state is gone before the new is made.
+    pub(crate) fn renew(&mut self, s: &Settled, modules: usize, fuel: u64) {
+        let globals = self.interp.globals.len();
+        self.interp.globals.clear();
+        self.interp.globals.resize(globals, Val::Uninit);
+        self.interp.ready.clear();
+        self.interp.output.lines.clear();
+        self.ran = 0;
+        self.failed = false;
+        self.run_modules(s, modules, fuel);
+    }
+
+    /// Runs the first `modules` modules' top-level code, as
+    /// [`Session::new`] says.
+    fn run_modules(&mut self, s: &Settled, modules: usize, fuel: u64) {
+        for (i, module) in s.modules.iter().take(modules).enumerate() {
+            if i == self.module_code.len() {
+                let lowering = &mut self.interp.lowering;
+                (self.module_code).push(lowering.module(s, module.scope, &module.top_levels));
+            }
+            let code = self.module_code[i].clone();
+            self.interp.fuel = fuel;
+            self.interp.depth = 0;
             // Not `run_top`: `async` blocks and native jobs never run at
             // compile time.
-            let result = session.interp.run_code(s, code, Rc::from([]), Vec::new());
-            session.interp.ready.clear();
-            session.interp.output.lines.clear();
+            let result = self.interp.run_code(s, code, Rc::from([]), Vec::new());
+            self.interp.ready.clear();
+            self.interp.output.lines.clear();
             if result.is_err() {
                 break;
             }
-            session.ran += 1;
+            self.ran += 1;
         }
-        session
     }
 
     /// How many modules, in run order, ran to the end.
@@ -211,8 +241,8 @@ impl Session {
     }
 
     /// Whether a call failed, or ran out of steps, since the session was
-    /// made: module state may then be half updated, so a pass makes a new
-    /// session before going on.
+    /// made or renewed: module state may then be half updated, so a pass
+    /// renews the session before going on ([`Session::renew`]).
     pub(crate) fn failed(&self) -> bool {
         self.failed
     }

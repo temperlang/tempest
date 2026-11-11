@@ -5,9 +5,10 @@ A content tag whose contexts are worked out at compile time
 `OptimizeContextualAutoescapingBlocks`): a toy tag following the
 conventions Kotlin's pass expects of a
 `ContextualAutoescapingAccumulator`, whose tagged strings call the
-escapers it picks directly, and one whose accumulator a closure uses,
-which propagates its contexts at run time as written. Both log what
-the tag's own methods would. The log is what tempest's interpreter
+escapers it picks directly, in branches, loops, and with jumps out
+of the string, and one whose loop changes the context, which
+propagates its contexts at run time as written. All log what the
+tag's own methods would. The log is what tempest's interpreter
 gives.
 
     // A toy content tag, following Kotlin's pass's conventions: a value
@@ -117,7 +118,7 @@ gives.
     }
     console.log(branch(true, "a"));
     console.log(branch(false, "b"));
-    // The accumulator is used in a closure, so contexts propagate at run time.
+    // Loops whose passes end in the context they start in, with jumps.
     let each(xs: List<String>): String {
       q"""
         : for (let x of xs) {
@@ -125,10 +126,41 @@ gives.
         : }
     }
     console.log(each(["c", "d"]));
+    let counted(n: Int, x: String): String {
+      q"""
+        : var i = 0;
+        : while (i < n) {
+        : i += 1;
+        : if (i == 2) { continue; }
+        ~'${x}'
+        : if (i == 4) { break; }
+        ~${x},
+        : }
+    }
+    console.log(counted(5, "e"));
+    // A `return` inside quotes leaves the string; the other path folds.
+    let attribute(c: Boolean, x: String): String {
+      q"""
+        ~a='
+        : if (c) { return "none"; }
+        ~${x}'
+    }
+    console.log("${attribute(false, "f")} ${attribute(true, "f")}");
+    // A loop that opens a quote each pass propagates at run time.
+    let opened(xs: List<String>): String {
+      q"""
+        : for (let x of xs) {
+        ~'${x}
+        : }
+    }
+    console.log(opened(["g", "h", "i"]));
 
 ```log
 say 'hi ([Ann])' to [Bob]{bang}
 [a]'' '([a])'
 [b] '([b])'
 '([c])' [c];'([d])' [d];
+'([e])'[e],'([e])'[e],'([e])'
+a='([f])' none
+'([g])'[h]'([i])
 ```

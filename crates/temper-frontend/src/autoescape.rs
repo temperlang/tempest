@@ -33,16 +33,24 @@
 //! and `second`. Problems the library reports through the callout it's
 //! given become diagnostics, hints in a test's body, as Kotlin's infos.
 //!
+//! The walk follows blocks, branches, loops, and jumps over the tree
+//! ([`Analysis::walk`]): where paths join, and where a loop comes back to
+//! its start, their states must be the same by `sameStatePredicate`. So
+//! the convention needs that predicate to be exact equality on
+//! everything later propagation and the picker read: states it calls the
+//! same must give the same effects, escapers, and states after.
+//!
 //! Where anything doesn't fit, the block is left as it is and propagates
 //! its contexts at run time, as before: an accumulator used other than by
-//! its appends and `.accumulated`, appends in loops, closures or
-//! conditions, a fixed part that isn't a constant, a value the
-//! interpreter fails on or that code can't make again, or a run past its
-//! steps.
+//! its appends and `.accumulated`, paths or loop passes that end in other
+//! contexts, appends in closures (but `for … of` bodies) or conditions,
+//! a fixed part that isn't a constant, a value the interpreter fails on
+//! or that code can't make again, or a run past its steps.
 
 use crate::builtins::{Builtin, Function};
 use crate::core::{
-    self, CLASS_INTERFACE, LET_INIT, LET_VAR, MEMBER_PUBLIC, MEMBER_STATIC, ROLE_MASK, ROLE_METHOD,
+    self, CLASS_INTERFACE, FN_LOOP_BODY, LET_INIT, LET_VAR, LOOP_EACH, LOOP_NEXT, MEMBER_PUBLIC,
+    MEMBER_STATIC, ROLE_MASK, ROLE_METHOD,
 };
 use crate::interp::Val;
 use crate::interp::compile_time::{self as ct, Callouts, Construction, Session};
@@ -84,6 +92,8 @@ struct Use {
     append_safe: NameId,
     /// In a test's body, where problems are hints.
     in_test: bool,
+    /// The top-level statement it's in.
+    top: NodeId,
 }
 
 /// What a fixed part leaves in the collector.
@@ -112,11 +122,12 @@ impl Settle {
     /// Works out the contexts of each tagged string whose accumulator
     /// fits ([`crate::autoescape`]), rewriting its block to call the
     /// escapers it picks. `modules` are in run order, with their sorted
-    /// top levels; true if any block changed.
-    pub(crate) fn optimize_autoescaping(&mut self, modules: &mut Vec<SettledModule>) -> bool {
+    /// top levels; those of a module with a block rewritten are sorted
+    /// again, for what the new code reads.
+    pub(crate) fn optimize_autoescaping(&mut self, modules: &mut Vec<SettledModule>) {
         let uses = self.autoescaped_uses(modules);
         if uses.is_empty() {
-            return false;
+            return;
         }
         let module_of = |s: &Settle, node: NodeId| {
             let name = core::class_parts(&s.lib.tree, node).0;
@@ -127,7 +138,7 @@ impl Settle {
             .map(|u| Some(module_of(self, u.class)?.max(module_of(self, u.interface)?)))
             .collect();
         let Some(through) = needs.iter().flatten().max().copied() else {
-            return false;
+            return;
         };
         let settled = Settled {
             library: std::mem::take(&mut self.lib),
@@ -145,7 +156,7 @@ impl Settle {
             });
             // A failed call may have left module state half updated.
             if session.failed() {
-                session = Session::new(&settled, through + 1, MODULE_FUEL);
+                session.renew(&settled, through + 1, MODULE_FUEL);
             }
         }
         drop(session);
@@ -153,13 +164,27 @@ impl Settle {
         self.scopes = settled.scopes;
         *modules = settled.modules;
         self.typing = settled.typing;
-        let mut changed = false;
+        let mut changed = Vec::new();
         for (u, plan) in uses.iter().zip(plans) {
-            if let Some(plan) = plan {
-                changed |= self.apply_plan(u, plan);
+            if plan.is_some_and(|plan| self.apply_plan(u, plan)) {
+                changed.extend(modules.iter().position(|m| m.top_levels.contains(&u.top)));
             }
         }
-        changed
+        changed.sort_unstable();
+        changed.dedup();
+        for m in changed {
+            let module = &mut modules[m];
+            let files = &self.lib.modules[module.id.0 as usize].files;
+            let roots: Vec<NodeId> = (files.iter())
+                .map(|f| self.lib.files[f.0 as usize].root)
+                .collect();
+            module.top_levels = crate::order::sort_top_levels(
+                &mut self.lib.tree,
+                &self.scopes,
+                module.scope,
+                &roots,
+            );
+        }
     }
 
     /// The blocks `do { let t = new C(); …; t.accumulated }` whose `C`
@@ -285,6 +310,7 @@ impl Settle {
             appends,
             append_safe,
             in_test,
+            top,
         })
     }
 
@@ -609,7 +635,18 @@ struct Analysis<'a> {
     /// Whether the walk stopped where compile-time contexts can't be
     /// trusted, reporting what it found so far but folding nothing.
     unfoldable: bool,
+    /// The states `break` and `continue` carry to targets inside the
+    /// region, by target and whether it's a `continue`, until the walk
+    /// reaches it. A `Loop` is both jumps' target.
+    exits: Vec<(Jump, Val)>,
 }
+
+/// A jump's target, and whether it's a `continue`.
+type Jump = (NodeId, bool);
+
+/// Where a statement leaves the walk: the state it completes with, or
+/// `None` where it never completes normally, as after `return`.
+type After = Option<Val>;
 
 impl<'a> Analysis<'a> {
     /// A use's plan, if everything fits.
@@ -682,21 +719,22 @@ impl<'a> Analysis<'a> {
             reads: 0,
             error: false,
             unfoldable: false,
+            exits: Vec::new(),
         };
         let statements = tree.children(u.block);
-        // A jump to where the accumulator is read would carry a state
-        // this walk doesn't follow.
-        let region = &statements[u.first + 1..u.end];
-        if region.iter().any(|&r| a.jumps_into_reads(r)) {
-            return None;
-        }
         // Every read of the accumulator is an append's, or the end's.
         if a.append_reads(u.block) + 1 != a.count_reads(u.block) {
             return None;
         }
-        let mut state = initial;
+        let mut state = Some(initial);
         for &statement in &statements[u.first + 1..u.end] {
-            match a.walk(statement, state) {
+            let walked = match state {
+                Some(before) => a.walk(statement, before),
+                // Unreachable: nothing there may append.
+                None if a.reads(statement) => None,
+                None => Some(None),
+            };
+            match walked {
                 Some(after) => state = after,
                 None if a.unfoldable => {
                     return Some(Plan {
@@ -708,6 +746,9 @@ impl<'a> Analysis<'a> {
                 None => return None,
             }
         }
+        // Every jump inside the region was followed to its target, and
+        // the region's end is reached.
+        let state = state.filter(|_| a.exits.is_empty())?;
         // Every read of the accumulator is an append's, or the end's.
         if a.reads + 1 != a.count_reads(u.block) {
             return None;
@@ -782,108 +823,245 @@ impl<'a> Analysis<'a> {
         count
     }
 
-    /// Whether a `break` or `continue` under a node, outside functions,
-    /// goes to a node that reads the accumulator.
-    fn jumps_into_reads(&self, node: NodeId) -> bool {
-        let tree = &self.s.library.tree;
-        let mut stack = vec![node];
-        while let Some(n) = stack.pop() {
-            match tree.kind(n) {
-                NodeKind::Fn => {}
-                NodeKind::Break | NodeKind::Continue => {
-                    let target = NodeId(tree.data(n));
-                    if (target.0 as usize) < tree.len() && self.reads(target) {
-                        return true;
-                    }
-                }
-                _ => stack.extend(tree.children(n)),
+    /// Whether `node` is `ancestor` or under it.
+    fn within(&self, node: NodeId, ancestor: NodeId) -> bool {
+        let mut at = Some(node);
+        while let Some(n) = at {
+            if n == ancestor {
+                return true;
             }
+            at = self.s.typing.parent(n);
         }
         false
     }
 
-    /// Whether running a node may leave it other than at its end: a
-    /// `return`, `break`, `continue`, failure (`bubble()`), `panic()`, or
-    /// an expression of type `Never`, outside functions declared in it.
-    fn exits_early(&self, node: NodeId) -> bool {
+    /// Notes the state a jump carries to `target`, if that's inside the
+    /// region, to be joined where the walk reaches it. A jump to a
+    /// target outside the region (as `return`, or `break` out of a loop
+    /// around the tagged string) leaves the region on a path that never
+    /// reads the accumulator again, since every read is an append's or
+    /// the end's and nothing else holds the accumulator; so its state
+    /// reaches no escaper, and isn't kept.
+    fn exit(&mut self, jump: Jump, state: &Val) {
+        if jump.0 != self.u.block && self.within(jump.0, self.u.block) {
+            self.exits.push((jump, ct::deep_copy(state)));
+        }
+    }
+
+    /// The states jumps carried to a target.
+    fn take_exits(&mut self, jump: Jump) -> Vec<Val> {
+        let (taken, kept) = std::mem::take(&mut self.exits)
+            .into_iter()
+            .partition(|(j, _)| *j == jump);
+        self.exits = kept;
+        taken.into_iter().map(|(_, state)| state).collect()
+    }
+
+    /// A statement that doesn't read the accumulator, so leaves the
+    /// state as it is: each `break` and `continue` in it to a target
+    /// outside it carries that state there ([`Analysis::exit`]), as do
+    /// those in `for … of` bodies, whose jumps leave the function; other
+    /// functions' can't reach out. It completes with the state, unless
+    /// it's a jump, `return`, `bubble()` or `panic()` itself, which never
+    /// complete. Anything else, as a call typed `Never`, is taken to
+    /// complete, which can only add a state to the joins after it.
+    fn pass(&mut self, node: NodeId, state: Val) -> After {
         let (s, tree) = (self.s, &self.s.library.tree);
         let mut stack = vec![node];
         while let Some(n) = stack.pop() {
-            let jumps = matches!(
-                tree.kind(n),
-                NodeKind::Return | NodeKind::Break | NodeKind::Continue | NodeKind::Fail
-            );
-            let panics = tree.kind(n) == NodeKind::Call
-                && (tree.children(n).first()).is_some_and(|&c| {
-                    s.scopes.resolved_builtin(c) == Some(Builtin::Function(Function::Panic))
-                });
-            if jumps || panics || s.typing.expr(n) == Some(crate::types::NEVER) {
-                return true;
+            match tree.kind(n) {
+                NodeKind::Fn if tree.data(n) & FN_LOOP_BODY == 0 => continue,
+                NodeKind::Break | NodeKind::Continue => {
+                    let target = NodeId(tree.data(n));
+                    if !self.within(target, node) {
+                        let jump = (target, tree.kind(n) == NodeKind::Continue);
+                        self.exit(jump, &state);
+                    }
+                }
+                _ => {}
             }
-            if tree.kind(n) != NodeKind::Fn {
-                stack.extend(tree.children(n));
-            }
+            stack.extend(tree.children(n));
         }
-        false
+        let panics = tree.kind(node) == NodeKind::Call
+            && (tree.children(node).first()).is_some_and(|&c| {
+                s.scopes.resolved_builtin(c) == Some(Builtin::Function(Function::Panic))
+            });
+        let never = matches!(
+            tree.kind(node),
+            NodeKind::Return | NodeKind::Break | NodeKind::Continue | NodeKind::Fail
+        );
+        (!never && !panics).then_some(state)
     }
 
-    /// The state after a statement, from the state before it.
-    fn walk(&mut self, node: NodeId, state: Val) -> Option<Val> {
+    /// Where the region's paths join, the state after: with none, the
+    /// join is never reached; with one, it's that state. With more, they
+    /// fold only if `sameStatePredicate` holds for each and the first, as
+    /// a library's merge may keep one path's state for all, as one may
+    /// where only nested languages' states differ; `mergeStates` still
+    /// runs, for what it reports at `at`. Otherwise the use isn't folded.
+    fn join(&mut self, states: Vec<Val>, at: Span) -> Option<After> {
+        let mut states = states.into_iter();
+        let Some(first) = states.next() else {
+            return Some(None);
+        };
+        let mut merged = first.clone();
+        let mut same = true;
+        for state in states {
+            same &= self.same(&first, &state)?;
+            let merge = self.names.merge_states;
+            let args = vec![merged, state, self.callout.clone()];
+            merged = (self.ev.call_member(self.s, &self.class, merge, args)).ok()?;
+        }
+        self.drain(at);
+        if !same {
+            self.unfoldable = true;
+            return None;
+        }
+        Some(Some(merged))
+    }
+
+    /// Whether `sameStatePredicate` holds for two states.
+    fn same(&mut self, a: &Val, b: &Val) -> Option<bool> {
+        let args = vec![a.clone(), b.clone()];
+        let same = self.ev.call(self.s, self.same_state.clone(), args).ok()?;
+        Some(matches!(same, Val::Bool(true)))
+    }
+
+    /// A node's end, where diagnostics about its joins go.
+    fn end_of(&self, node: NodeId) -> Span {
+        let end = self.s.library.tree.span(node).end;
+        Span { start: end, end }
+    }
+
+    /// The state after a statement, from the state before it; `None` to
+    /// leave the use to run time.
+    fn walk(&mut self, node: NodeId, state: Val) -> Option<After> {
         if !self.reads(node) {
-            return Some(state);
+            return Some(self.pass(node, state));
         }
         let tree = &self.s.library.tree;
         match (tree.kind(node), tree.children(node)) {
             (NodeKind::Block, children) => {
-                let mut state = state;
+                let mut after = Some(state);
                 for &child in children {
-                    state = self.walk(child, state)?;
+                    after = match after {
+                        Some(state) => self.walk(child, state)?,
+                        // Unreachable: nothing there may append.
+                        None if self.reads(child) => return None,
+                        None => None,
+                    };
                 }
-                Some(state)
+                // A labeled block, where `break` joins what falls through.
+                let mut states: Vec<Val> = after.into_iter().collect();
+                let breaks = self.take_exits((node, false));
+                if breaks.is_empty() {
+                    return Some(states.pop());
+                }
+                self.flush();
+                states.extend(breaks);
+                self.join(states, self.end_of(node))
             }
             (NodeKind::If, &[condition, then, otherwise]) => {
                 if self.reads(condition) {
                     return None;
                 }
-                // A branch that may not reach the join, as by `return`,
-                // `break`, `panic()` or `bubble()`, would bring a state
-                // there that no run does.
-                if [then, otherwise]
-                    .iter()
-                    .any(|&b| self.reads(b) && self.exits_early(b))
-                {
-                    self.unfoldable = true;
-                    return None;
-                }
+                let state = self.pass(condition, state)?;
                 self.flush();
                 let a = self.walk(then, ct::deep_copy(&state))?;
                 self.flush();
                 let b = self.walk(otherwise, ct::deep_copy(&state))?;
                 self.flush();
-                let at = tree.span(node);
-                let at = Span {
-                    start: at.end,
-                    end: at.end,
-                };
-                // `mergeStates` for what it reports; but only branches that
-                // end in the same state fold, since a library's merge may
-                // keep one branch's state for both, as one may where only
-                // nested languages' states differ.
-                let same = vec![a.clone(), b.clone()];
-                let same = self.ev.call(self.s, self.same_state.clone(), same).ok()?;
-                let merge = self.names.merge_states;
-                let args = vec![a, b, self.callout.clone()];
-                let merged = self.ev.call_member(self.s, &self.class, merge, args).ok()?;
-                self.drain(at);
-                if !matches!(same, Val::Bool(true)) {
-                    self.unfoldable = true;
-                    return None;
-                }
-                Some(merged)
+                // A branch that never ends, as by `return` or `break`,
+                // brings no state to the join.
+                self.join(a.into_iter().chain(b).collect(), self.end_of(node))
             }
-            (NodeKind::Call, &[callee, arg]) => self.append(node, callee, arg, state),
+            (NodeKind::Loop, _) => self.looping(node, state),
+            (NodeKind::Call, &[callee, arg]) => self.append(node, callee, arg, state).map(Some),
             _ => None,
         }
+    }
+
+    /// A loop, walked once from the state before it, on a copy. If every
+    /// state that comes back to its start (from the body's end, each
+    /// `continue`, and then the part run after each pass) is the same as
+    /// that state by `sameStatePredicate`, each pass sees the contexts
+    /// the first did, so the body folds once; and the states its `break`s
+    /// carry out join as an `if`'s branches do. The state before the loop
+    /// is among them where the loop may end before a pass, as a `while`'s
+    /// check. Otherwise it's left to run time: no unrolling.
+    ///
+    /// `for … of` is a loop too, `Loop({ xs.forEach(fn (x) { body });
+    /// break })`, when `forEach` is core's, on a `List` or `String`,
+    /// which calls the body for each item in order, before it returns:
+    /// `continue` ends the body's function, and the state after the
+    /// last pass, or before any, leaves the loop.
+    fn looping(&mut self, node: NodeId, state: Val) -> Option<After> {
+        let (s, tree) = (self.s, &self.s.library.tree);
+        let data = tree.data(node);
+        let (body, next, head) = if data & LOOP_EACH != 0 {
+            let &[block] = tree.children(node) else {
+                return None;
+            };
+            let &[call, done] = tree.children(block) else {
+                return None;
+            };
+            let &[callee, f] = tree.children(call) else {
+                return None;
+            };
+            let core_each = matches!(
+                s.typing.resolved(call),
+                Some(crate::typing::Resolved::Builtin(key))
+                    if key == "List.forEach" || key == "String.forEach"
+            );
+            let body = *tree.children(f).last()?;
+            let fn_parts = &tree.children(f)[..tree.children(f).len() - 1];
+            if !core_each
+                || tree.kind(done) != NodeKind::Break
+                || tree.data(done) != node.0
+                || tree.kind(f) != NodeKind::Fn
+                || tree.data(f) & FN_LOOP_BODY == 0
+                || self.reads(callee)
+                || fn_parts.iter().any(|&p| self.reads(p))
+                || self.pass(callee, state.clone()).is_none()
+            {
+                return None;
+            }
+            (body, None, f)
+        } else {
+            match *tree.children(node) {
+                [body] if data & LOOP_NEXT == 0 => (body, None, node),
+                [body, next] if data & LOOP_NEXT != 0 => (body, Some(next), node),
+                _ => return None,
+            }
+        };
+        self.flush();
+        let end = self.walk(body, ct::deep_copy(&state))?;
+        // What comes back to the start: the body's end and `continue`s.
+        let mut back: Vec<Val> = end.into_iter().collect();
+        back.extend(self.take_exits((head, true)));
+        for b in &back {
+            if !self.same(&state, b)? {
+                return None;
+            }
+        }
+        if let Some(next) = next {
+            if back.is_empty() {
+                // Never reached.
+                if self.reads(next) {
+                    return None;
+                }
+            } else if let Some(after) = self.walk(next, ct::deep_copy(&state))? {
+                if !self.same(&state, &after)? {
+                    return None;
+                }
+            }
+        }
+        self.flush();
+        let mut leaving = self.take_exits((node, false));
+        if data & LOOP_EACH != 0 {
+            leaving.push(ct::deep_copy(&state));
+        }
+        self.join(leaving, self.end_of(node))
     }
 
     /// `t.appendSafe("…")` or `t.append(x)`: the state after it.
@@ -902,6 +1080,11 @@ impl<'a> Analysis<'a> {
         {
             return None;
         }
+        // The value is worked out before the append runs, so a jump in
+        // it, as `${if (c) { break } else { x }}`, carries the state from
+        // before the append to its target. A value that never completes
+        // leaves the use to run time.
+        self.pass(arg, state.clone())?;
         let safe = method == self.u.append_safe;
         if !safe && !self.u.appends.contains(&method) {
             return None;

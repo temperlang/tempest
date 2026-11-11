@@ -190,10 +190,9 @@ pub fn settle(library: Library) -> Settled {
     s.check_reads();
     let mut modules = s.settled_modules();
     // Tagged strings' contexts worked out at compile time, once the tree
-    // is typed and ordered so it can run; then the top levels are sorted
-    // again, for what the rewritten code reads.
-    if typed && s.optimize_autoescaping(&mut modules) {
-        modules = s.settled_modules();
+    // is typed and ordered so it can run.
+    if typed {
+        s.optimize_autoescaping(&mut modules);
     }
     Settled {
         steps: s.engine.steps(),

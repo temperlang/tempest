@@ -65,6 +65,63 @@ public final class ContentTagsGlobal {
 
     static String each(List<String> xs) {
         {
+            Buffer collector = Quoting.newCollector();
+            {
+                int length = xs.size();
+                int i = 0;
+                while (i < length) {
+                    String x = Core.listGet(xs, i);
+                    i = i + 1;
+                    collector.append("'");
+                    collector.append(QuoteEscaper.instance.applyString(TextEscaper.instance.applyString(x)));
+                    collector.append("' ");
+                    collector.append(TextEscaper.instance.applyString(x));
+                    collector.append(";");
+                }
+            }
+            return Quoting.fromCollector(collector);
+        }
+    }
+
+    static String counted(int n, String x) {
+        {
+            Buffer collector = Quoting.newCollector();
+            {
+                int i = 0;
+                while (i < n) {
+                    i = i + 1;
+                    if (i == 2) {
+                        continue;
+                    }
+                    collector.append("'");
+                    collector.append(QuoteEscaper.instance.applyString(TextEscaper.instance.applyString(x)));
+                    collector.append("'");
+                    if (i == 4) {
+                        break;
+                    }
+                    collector.append(TextEscaper.instance.applyString(x));
+                    collector.append(",");
+                }
+            }
+            return Quoting.fromCollector(collector);
+        }
+    }
+
+    static String attribute(boolean c, String x) {
+        {
+            Buffer collector = Quoting.newCollector();
+            collector.append("a='");
+            if (c) {
+                return "none";
+            }
+            collector.append(QuoteEscaper.instance.applyString(TextEscaper.instance.applyString(x)));
+            collector.append("'");
+            return Quoting.fromCollector(collector);
+        }
+    }
+
+    static String opened(List<String> xs) {
+        {
             Quoting accumulator = new Quoting();
             {
                 int length = xs.size();
@@ -74,9 +131,6 @@ public final class ContentTagsGlobal {
                     i = i + 1;
                     accumulator.appendSafe("'");
                     accumulator.append(x);
-                    accumulator.appendSafe("' ");
-                    accumulator.append(x);
-                    accumulator.appendSafe(";");
                 }
             }
             return accumulator.getAccumulated();
@@ -89,5 +143,8 @@ public final class ContentTagsGlobal {
         console.log(branch(true, "a"));
         console.log(branch(false, "b"));
         console.log(each(List.of("c", "d")));
+        console.log(counted(5, "e"));
+        console.log(attribute(false, "f") + " " + attribute(true, "f"));
+        console.log(opened(List.of("g", "h", "i")));
     }
 }

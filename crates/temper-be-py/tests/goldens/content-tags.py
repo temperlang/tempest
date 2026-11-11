@@ -312,6 +312,48 @@ def _branch(c: bool, x: str, /) -> str:
 
 
 def _each(xs: _Sequence[str], /) -> str:
+    collector = Quoting.new_collector()
+    length = len(xs)
+    i = 0
+    while i < length:
+        x = _list_get(xs, i)
+        i = _int_add(i, 1)
+        collector.append("'")
+        collector.append(QuoteEscaper.instance.apply_string(TextEscaper.instance.apply_string(x)))
+        collector.append("' ")
+        collector.append(TextEscaper.instance.apply_string(x))
+        collector.append(';')
+    return Quoting.from_collector(collector)
+
+
+def _counted(n: int, x: str, /) -> str:
+    collector = Quoting.new_collector()
+    i = 0
+    while i < n:
+        i = _int_add(i, 1)
+        if i == 2:
+            continue
+        collector.append("'")
+        collector.append(QuoteEscaper.instance.apply_string(TextEscaper.instance.apply_string(x)))
+        collector.append("'")
+        if i == 4:
+            break
+        collector.append(TextEscaper.instance.apply_string(x))
+        collector.append(',')
+    return Quoting.from_collector(collector)
+
+
+def _attribute(c: bool, x: str, /) -> str:
+    collector = Quoting.new_collector()
+    collector.append("a='")
+    if c:
+        return 'none'
+    collector.append(QuoteEscaper.instance.apply_string(TextEscaper.instance.apply_string(x)))
+    collector.append("'")
+    return Quoting.from_collector(collector)
+
+
+def _opened(xs: _Sequence[str], /) -> str:
     accumulator = Quoting()
     length = len(xs)
     i = 0
@@ -320,9 +362,6 @@ def _each(xs: _Sequence[str], /) -> str:
         i = _int_add(i, 1)
         accumulator.append_safe("'")
         accumulator.append(x)
-        accumulator.append_safe("' ")
-        accumulator.append(x)
-        accumulator.append_safe(';')
     return accumulator.accumulated
 
 
@@ -333,3 +372,6 @@ _console.log(_greet('Ann', 'Bob'))
 _console.log(_branch(True, 'a'))
 _console.log(_branch(False, 'b'))
 _console.log(_each(('c', 'd')))
+_console.log(_counted(5, 'e'))
+_console.log(f"{_attribute(False, 'f')} {_attribute(True, 'f')}")
+_console.log(_opened(('g', 'h', 'i')))

@@ -21,6 +21,16 @@ pub(crate) fn init() -> temper_core::Result<()> {
                     Arc::new("d".to_string()),
                 ]))
             );
+            println!("{}", counted(5, "e"));
+            println!("{} {}", attribute(false, "f"), attribute(true, "f"));
+            println!(
+                "{}",
+                opened(Arc::new(vec![
+                    Arc::new("g".to_string()),
+                    Arc::new("h".to_string()),
+                    Arc::new("i".to_string()),
+                ]))
+            );
             Ok(())
         })
         .clone()
@@ -659,6 +669,72 @@ pub(crate) fn branch(c: bool, x: impl ToArcString) -> Arc<String> {
 
 pub(crate) fn each(xs: impl temper_core::ToList<Arc<String>>) -> Arc<String> {
     let xs = xs.to_list();
+    let collector = Quoting::new_collector();
+    {
+        {
+            let length = temper_core::ListedTrait::len(&xs);
+            let mut i: i32 = 0;
+            while i < length {
+                let x = temper_core::ListedTrait::get(&xs, i);
+                i = i.wrapping_add(1);
+                collector.append("'");
+                collector.append(
+                    QuoteEscaper::instance()
+                        .apply_string(TextEscaper::instance().apply_string(x.clone())),
+                );
+                collector.append("' ");
+                collector.append(TextEscaper::instance().apply_string(x.clone()));
+                collector.append(";");
+            }
+        }
+    }
+    Quoting::from_collector(collector.clone())
+}
+
+pub(crate) fn counted(n: i32, x: impl ToArcString) -> Arc<String> {
+    let x = x.to_arc_string();
+    let collector = Quoting::new_collector();
+    {
+        let mut i: i32 = 0;
+        while i < n {
+            i = i.wrapping_add(1);
+            if i == 2 {
+                continue;
+            }
+            collector.append("'");
+            collector.append(
+                QuoteEscaper::instance()
+                    .apply_string(TextEscaper::instance().apply_string(x.clone())),
+            );
+            collector.append("'");
+            if i == 4 {
+                break;
+            }
+            collector.append(TextEscaper::instance().apply_string(x.clone()));
+            collector.append(",");
+        }
+    }
+    Quoting::from_collector(collector.clone())
+}
+
+pub(crate) fn attribute(c: bool, x: impl ToArcString) -> Arc<String> {
+    let x = x.to_arc_string();
+    let collector = Quoting::new_collector();
+    {
+        collector.append("a='");
+        if c {
+            return Arc::new("none".to_string());
+        }
+        collector.append(
+            QuoteEscaper::instance().apply_string(TextEscaper::instance().apply_string(x.clone())),
+        );
+        collector.append("'");
+    }
+    Quoting::from_collector(collector.clone())
+}
+
+pub(crate) fn opened(xs: impl temper_core::ToList<Arc<String>>) -> Arc<String> {
+    let xs = xs.to_list();
     let accumulator = Quoting::new();
     {
         {
@@ -669,9 +745,6 @@ pub(crate) fn each(xs: impl temper_core::ToList<Arc<String>>) -> Arc<String> {
                 i = i.wrapping_add(1);
                 accumulator.append_safe("'");
                 accumulator.append(x.clone());
-                accumulator.append_safe("' ");
-                accumulator.append(x.clone());
-                accumulator.append_safe(";");
             }
         }
     }

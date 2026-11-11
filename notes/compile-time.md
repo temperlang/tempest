@@ -171,9 +171,9 @@ interface documents; it has no annotations or macros of its own. The pass:
 Anything that doesn't fit (a failed interpretation, a value it can't
 rebuild as code) leaves the block as written. In practice, on a real
 library with HTML and SQL tags, Kotlin optimizes most of the HTML
-uses, leaving a `for … of` template (a closure, which tempest leaves
-too), and none of the SQL ones; why it gives up on those isn't
-confirmed.
+uses, leaving a `for … of` template (a closure, which tempest
+follows as a loop), and none of the SQL ones; why it gives up on
+those isn't confirmed.
 
 **In tempest** (`crates/temper-frontend/src/autoescape.rs`), the same
 pass runs at the end of `settle`, once typing is done and the modules
@@ -187,24 +187,68 @@ run time, path by path, and is always safe:
   class's and the interface's), with what they log dropped, then lets
   the pass call functions, statics, and getters on the values made,
   each use with ten million steps. After a call fails or runs out of
-  steps, the session is made again, so half-updated module state
-  can't reach the next use. Only what the allowlist below permits
+  steps, the session starts again (`Session::renew`), so half-updated
+  module state can't reach the next use: its module state is dropped
+  first, then the top levels run again, keeping the code lowered so
+  far, which comes from the tree alone. So a failure costs only the
+  top-level runs, and never holds two sessions at once. Only what the allowlist below permits
   runs. A `Val::Callout` collects what the library reports. Values
   come back as owned data (`Construction`): constants,
   `String.begin`, lists, and `new C(…)` of classes without their own
   constructor.
-- **Walk:** structured rather than over paths: blocks in order, an
-  `if` as two branches on deep copies. A join folds only when
-  `sameStatePredicate` holds for the branches' states; `mergeStates`
-  still runs, for what it reports. (A library's `mergeStates` may
-  keep the first branch's state, as when only nested languages' states
-  differ, which would give the second branch's values the wrong
-  escaper.) A branch that reads
-  the accumulator and may leave early (`return`, `break`, `continue`,
-  `bubble()`, `panic()`, or a `Never` expression) stops the walk.
-  Loops, closures (a `for … of` template), `orelse`, a `break` into the
-  region, an append in a condition, a fixed part that isn't a constant,
-  or any other read of the accumulator leave the use as written.
+- **Walk:** structured, over the tree, as abstract interpretation,
+  rather than over paths or a control-flow graph: blocks in order, an
+  `if` as two branches on deep copies, a loop once (below). Where
+  paths join (after an `if`, at a labeled block's end, after a loop),
+  they fold only when `sameStatePredicate` holds for each state
+  arriving and the first; `mergeStates` still runs, for what it
+  reports. (A library's `mergeStates` may keep the first branch's
+  state, as when only nested languages' states differ, which would
+  give the second branch's values the wrong escaper.) Folding past a
+  join or around a loop takes states the predicate calls the same to
+  propagate alike, as Kotlin's does: so the convention needs
+  `sameStatePredicate` to be exact equality on everything later
+  propagation and the picker read (a library's HTML and SQL predicates
+  compare every context field, and nested languages' states by
+  identity). A looser predicate would fold with another state's
+  escapers.
+  - **Jumps:** a `break` or `continue` notes the state it carries, by
+    its target and kind, and the walk joins them there: a labeled
+    block's `break`s with what falls through its end, a loop's
+    `continue`s with its body's end, and its `break`s as the state
+    after it. A jump, `return`, `bubble()`, or `panic()` never
+    completes, so brings nothing to the join after it. A jump inside an
+    appended value, as `${if (c) { break } else { x }}`, carries the
+    state from before the append, since the value is worked out first.
+  - **Leaving the string:** a path that leaves the region between
+    `let t` and `t.accumulated` (by `return`, `bubble()`, `panic()`, or
+    a `break` or `continue` to a loop around the tagged string) is
+    dropped rather than joined. That's safe: every read of the
+    accumulator is an append's or the end's, and nothing else holds
+    it, so no later append runs on that path, and its state reaches no
+    escaper, while each append before it was walked with that path's
+    own state. Kotlin's walk over paths doesn't join them either.
+    Anything else that might not complete, as a call typed `Never`, is
+    taken to complete, which can only add a state to a join, so only
+    makes folding less likely.
+  - **Loops** (`while`, `for`, `do … while`, and `for … of` on a
+    `List` or `String`, whose core `forEach` calls the body for each
+    item in order before it returns): the body is walked once, on a
+    copy of the state before the loop. If every state that comes back
+    to its start (the body's end, each `continue`, and after them the
+    part run after each pass, as `for`'s step or `do … while`'s check)
+    is the same as that state by `sameStatePredicate`, each pass starts
+    in the contexts the first did, so the body folds once, and the
+    loop's `break`s, its check among them, join as the state after it.
+    Otherwise the whole use is left to run time, with nothing
+    reported; there's no unrolling. So a loop whose body opens a quote
+    or a `<script>`, or a `continue` that skips closing one, is left to
+    run time, and a `break` from inside a string brings a state unlike
+    the loop's end to the join after it, reported as a branch's would
+    be.
+  - Closures other than `for … of` bodies, `orelse`, an append in a
+    condition, a fixed part that isn't a constant, or any other read of
+    the accumulator leave the use as written.
 - **Escapers:** each picked escaper must be alike its class's static
   `instance` (that object, or one of the same class whose fields are
   alike), since the folded code calls `instance`; a composed one,
@@ -217,6 +261,9 @@ run time, path by path, and is always safe:
   rewrite is undone (old children, parents, name, and type back; the
   new nodes emptied and detached), so the pass never adds an error.
   The accumulator's temporary is renamed `collector`, as Kotlin's.
+  Only the new nodes are typed, and only the modules with a use
+  rewritten have their top levels sorted again, for what the new code
+  reads.
 - **Diagnostics:** `Message::ContentTag`, at Kotlin's positions, at
   the level the library gives, hints in a test's body (Kotlin's
   infos). A use the library reports an error for isn't folded: the
@@ -227,7 +274,7 @@ run time, path by path, and is always safe:
   (`Library::constant_regexes`), which took one real library's uses
   from seconds to a fraction of a second in a release build.
 - **On a real library** with HTML and SQL tags, all but a few uses
-  fold, the SQL ones included; the `for … of` template and uses in
+  fold, the SQL ones and a `for … of` template included; uses in
   corner-case tests the library reports errors for are left to run
   time. Kotlin folds most of the HTML uses and none of the SQL ones;
   why it skips those isn't confirmed (its member lookup does see
@@ -264,9 +311,8 @@ at compile time.
 **Not done yet:** `exportAnalyses`' data files, since tempest has no
 `dataFile` or `data` backend (`foldAnalyses` still runs, for its
 diagnostics); events are built where they're used rather than hoisted
-to module-level temporaries; paths with loops or jumps aren't
-followed, where Kotlin follows forward edges only; a branch inside a
-nested language (`<script>`, `<style>`, URL or CSS attribute values)
+to module-level temporaries; a branch or loop inside a nested
+language (`<script>`, `<style>`, URL or CSS attribute values)
 doesn't fold until the library compares delegates by value. The
 general mechanism Kotlin's doc points to, a user-space macro in the
 library, needs macros written in Temper, which neither compiler has

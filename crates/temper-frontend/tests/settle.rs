@@ -1051,6 +1051,30 @@ fn content_tags_out_of_steps() {
     });
 }
 
+/// A use whose propagation fails partway, after changing module state,
+/// is left to run time, and the session starts again before the next use,
+/// whose propagation would fail on that state: so it folds.
+#[test]
+fn content_tags_renew_after_failure() {
+    with_stack(|| {
+        let hook = "var poisoned = false;\n\
+                    let hook(k: String?): Void {\n\
+                      if (k == \"poison\") { poisoned = true; panic(); }\n\
+                      if (poisoned) { panic(); }\n\
+                    }\n\
+                    let bad(x: String): String { q\"poison${x}\" }";
+        let (_, settled) = toy_settled(hook, &[]);
+        let mut tree = String::new();
+        write_settled(&settled, 100, &mut tree);
+        let bad = &tree[tree.find("^bad:").unwrap()..];
+        let bad = &bad[..bad.find("\n  (Let").unwrap_or(bad.len())];
+        assert!(bad.contains("accumulator#"), "bad folded:\n{bad}");
+        let greet = &tree[tree.find("^greet:").unwrap()..];
+        let greet = &greet[..greet.find("\n  (Let").unwrap_or(greet.len())];
+        assert!(greet.contains("collector#"), "greet didn't fold:\n{greet}");
+    });
+}
+
 /// What compile-time runs may use is listed in one place, so additions
 /// are deliberate: printed here, and checked against what's expected.
 #[test]

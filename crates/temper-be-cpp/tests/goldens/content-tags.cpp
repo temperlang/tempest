@@ -457,6 +457,67 @@ static core::Str branch(bool c, core::Str const & x) {
 
 static core::Str each(std::shared_ptr<std::vector<core::Str>> const & xs) {
   {
+    std::shared_ptr<Buffer> collector = Quoting::newCollector();
+    {
+      {
+        int32_t length = core::List::length<core::Str>(xs);
+        int32_t i = 0;
+        while (i < length) {
+          core::Str x = core::List::get<core::Str>(xs, i);
+          i = core::Int::add(i, 1);
+          collector->append(TEMPER_STR("'"));
+          collector->append(QuoteEscaper::temper_statics::instance.value->applyString(TextEscaper::temper_statics::instance.value->applyString(x)));
+          collector->append(TEMPER_STR("' "));
+          collector->append(TextEscaper::temper_statics::instance.value->applyString(x));
+          collector->append(TEMPER_STR(";"));
+        }
+      }
+    }
+    return Quoting::fromCollector(collector);
+  }
+}
+
+static core::Str counted(int32_t n, core::Str const & x) {
+  {
+    std::shared_ptr<Buffer> collector = Quoting::newCollector();
+    {
+      int32_t i = 0;
+      while (i < n) {
+        i = core::Int::add(i, 1);
+        if (i == 2) {
+          continue;
+        }
+        collector->append(TEMPER_STR("'"));
+        collector->append(QuoteEscaper::temper_statics::instance.value->applyString(TextEscaper::temper_statics::instance.value->applyString(x)));
+        collector->append(TEMPER_STR("'"));
+        if (i == 4) {
+          break;
+        }
+        collector->append(TextEscaper::temper_statics::instance.value->applyString(x));
+        collector->append(TEMPER_STR(","));
+      }
+    }
+    return Quoting::fromCollector(collector);
+  }
+}
+
+static core::Str attribute(bool c, core::Str const & x) {
+  {
+    std::shared_ptr<Buffer> collector = Quoting::newCollector();
+    {
+      collector->append(TEMPER_STR("a='"));
+      if (c) {
+        return TEMPER_STR("none");
+      }
+      collector->append(QuoteEscaper::temper_statics::instance.value->applyString(TextEscaper::temper_statics::instance.value->applyString(x)));
+      collector->append(TEMPER_STR("'"));
+    }
+    return Quoting::fromCollector(collector);
+  }
+}
+
+static core::Str opened(std::shared_ptr<std::vector<core::Str>> const & xs) {
+  {
     std::shared_ptr<Quoting> accumulator = Quoting::make();
     {
       {
@@ -467,9 +528,6 @@ static core::Str each(std::shared_ptr<std::vector<core::Str>> const & xs) {
           i = core::Int::add(i, 1);
           accumulator->appendSafe(TEMPER_STR("'"));
           accumulator->append(x);
-          accumulator->appendSafe(TEMPER_STR("' "));
-          accumulator->append(x);
-          accumulator->appendSafe(TEMPER_STR(";"));
         }
       }
     }
@@ -489,6 +547,10 @@ void global_init_init() {
     core::Console::log(temper_globals::console.value, content_tags::branch(true, TEMPER_STR("a")));
     core::Console::log(temper_globals::console.value, content_tags::branch(false, TEMPER_STR("b")));
     core::Console::log(temper_globals::console.value, content_tags::each(core::List::make<core::Str>(TEMPER_STR("c"), TEMPER_STR("d"))));
+    core::Console::log(temper_globals::console.value, content_tags::counted(5, TEMPER_STR("e")));
+    core::Str string = content_tags::attribute(false, TEMPER_STR("f"));
+    core::Console::log(temper_globals::console.value, string + " " + content_tags::attribute(true, TEMPER_STR("f")));
+    core::Console::log(temper_globals::console.value, content_tags::opened(core::List::make<core::Str>(TEMPER_STR("g"), TEMPER_STR("h"), TEMPER_STR("i"))));
   });
 }
 

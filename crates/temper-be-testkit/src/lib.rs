@@ -265,8 +265,9 @@ pub fn without_net(cases: &mut [Case]) {
 /// (type errors, undeclared names and types, misspelled members, a
 /// missing bracket), whose errors each fail where they run and whose
 /// good parts run as written; `triple` the architecture docs' running
-/// example; `content-tags` a tagged string whose contexts are worked out
-/// at compile time, so its escapers are called directly.
+/// example; `content-tags` tagged strings whose contexts are worked out
+/// at compile time, so their escapers are called directly, in branches
+/// and loops, and one left to run time.
 pub const PROGRAMS: [&str; 18] = [
     "classes",
     "nullables",

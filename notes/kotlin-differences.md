@@ -921,8 +921,13 @@ Other differences we won't copy:
     states inside `<script>`, Kotlin's pass, by its code (not run),
     escapes the second branch's value for the first's context, with no
     diagnostic.
-  - A branch that may leave early isn't merged (tempest's walk would
-    otherwise have; Kotlin's paths don't reach the join).
+  - A path that leaves the tagged string (`return`, `bubble()`,
+    `panic()`, or a jump to a loop around it) joins nothing, as
+    Kotlin's paths don't reach the join; jumps inside it join at their
+    targets, as branches do.
+  - A loop folds only when each pass ends in the state it started in,
+    by `sameStatePredicate`, its body folded once; otherwise the use is
+    left to run time. Kotlin follows forward edges only.
   - A picked escaper must be alike its class's `instance`; Kotlin
     calls `instance` whatever the picker gave.
   - A use the library reports an error for isn't folded, and the error
@@ -931,8 +936,8 @@ Other differences we won't copy:
     runs at compile time"); a use that needs more is left to run time.
   - It runs where Kotlin's gives up for reasons not confirmed: on a
     real library with HTML and SQL tags, its SQL uses fold too, where
-    Kotlin folds only HTML ones. It doesn't follow loops or jumps (Kotlin
-    follows forward edges); it builds an `EventParseEffect`'s event
+    Kotlin folds only HTML ones, and a `for … of` template, which
+    Kotlin leaves, folds as a loop. It builds an `EventParseEffect`'s event
     where it's used rather than hoisting it to a module-level
     temporary; it writes no `exportAnalyses` data files, having no
     `dataFile`.
@@ -943,8 +948,8 @@ Other differences we won't copy:
   The interpreter also keeps a regex literal without interpolations
   once compiled, which the library's propagation functions rebuild on
   every call.
-  Test: settle/autoescape.cases, "content tags" and "content tags left
-  to run time"; tests/settle.rs, `content_tags_reach_nothing_at_compile_time`,
+  Test: settle/autoescape.cases, "content tags", "content tags left
+  to run time", and "content tags in loops and jumps"; tests/settle.rs, `content_tags_reach_nothing_at_compile_time`,
   `content_tags_out_of_steps`, `compile_time_allowlist`;
   programs/content-tags.
 

@@ -82,6 +82,81 @@ function branch(c, x) {
  */
 function each(xs) {
   {
+    const collector = Quoting.newCollector();
+    {
+      {
+        const length = xs.length;
+        let i = 0;
+        while (i < length) {
+          const x = listedGet(/** @type {string[]} */ (xs), i);
+          i = (i + 1) | 0;
+          collector.append("'");
+          collector.append(QuoteEscaper.instance.applyString(TextEscaper.instance.applyString(x)));
+          collector.append("' ");
+          collector.append(TextEscaper.instance.applyString(x));
+          collector.append(";");
+        }
+      }
+    }
+    return Quoting.fromCollector(collector);
+  }
+}
+
+/**
+ * @param {number} n
+ * @param {string} x
+ * @returns {string}
+ */
+function counted(n, x) {
+  {
+    const collector = Quoting.newCollector();
+    {
+      let i = 0;
+      while (i < n) {
+        i = (i + 1) | 0;
+        if (i === 2) {
+          continue;
+        }
+        collector.append("'");
+        collector.append(QuoteEscaper.instance.applyString(TextEscaper.instance.applyString(x)));
+        collector.append("'");
+        if (i === 4) {
+          break;
+        }
+        collector.append(TextEscaper.instance.applyString(x));
+        collector.append(",");
+      }
+    }
+    return Quoting.fromCollector(collector);
+  }
+}
+
+/**
+ * @param {boolean} c
+ * @param {string} x
+ * @returns {string}
+ */
+function attribute(c, x) {
+  {
+    const collector = Quoting.newCollector();
+    {
+      collector.append("a='");
+      if (c) {
+        return "none";
+      }
+      collector.append(QuoteEscaper.instance.applyString(TextEscaper.instance.applyString(x)));
+      collector.append("'");
+    }
+    return Quoting.fromCollector(collector);
+  }
+}
+
+/**
+ * @param {readonly string[]} xs
+ * @returns {string}
+ */
+function opened(xs) {
+  {
     const accumulator = new Quoting();
     {
       {
@@ -92,9 +167,6 @@ function each(xs) {
           i = (i + 1) | 0;
           accumulator.appendSafe("'");
           accumulator.append(x);
-          accumulator.appendSafe("' ");
-          accumulator.append(x);
-          accumulator.appendSafe(";");
         }
       }
     }
@@ -463,3 +535,6 @@ console.log(greet("Ann", "Bob"));
 console.log(branch(true, "a"));
 console.log(branch(false, "b"));
 console.log(each(Object.freeze(["c", "d"])));
+console.log(counted(5, "e"));
+console.log(`${attribute(false, "f")} ${attribute(true, "f")}`);
+console.log(opened(Object.freeze(["g", "h", "i"])));

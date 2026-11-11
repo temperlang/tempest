@@ -418,6 +418,72 @@ end
 ---@return string
 local function each(xs)
   do
+    local collector = Quoting.newCollector()
+    do
+      local length = temper.list_length(xs)
+      local i = 0
+      while i < length do
+        local x = temper.list_get(xs, i)
+        i = temper.int32_add(i, 1)
+        collector:append("'")
+        collector:append(QuoteEscaper.instance:applyString(TextEscaper.instance:applyString(x)))
+        collector:append("' ")
+        collector:append(TextEscaper.instance:applyString(x))
+        collector:append(";")
+      end
+    end
+    return Quoting.fromCollector(collector)
+  end
+end
+
+---@param n integer
+---@param x string
+---@return string
+local function counted(n, x)
+  do
+    local collector = Quoting.newCollector()
+    do
+      local i = 0
+      while i < n do
+        i = temper.int32_add(i, 1)
+        if i == 2 then
+          goto continue
+        end
+        collector:append("'")
+        collector:append(QuoteEscaper.instance:applyString(TextEscaper.instance:applyString(x)))
+        collector:append("'")
+        if i == 4 then
+          break
+        end
+        collector:append(TextEscaper.instance:applyString(x))
+        collector:append(",")
+        ::continue::
+      end
+    end
+    return Quoting.fromCollector(collector)
+  end
+end
+
+---@param c boolean
+---@param x string
+---@return string
+local function attribute(c, x)
+  do
+    local collector = Quoting.newCollector()
+    collector:append("a='")
+    if c then
+      return "none"
+    end
+    collector:append(QuoteEscaper.instance:applyString(TextEscaper.instance:applyString(x)))
+    collector:append("'")
+    return Quoting.fromCollector(collector)
+  end
+end
+
+---@param xs string[]
+---@return string
+local function opened(xs)
+  do
     local accumulator = Quoting()
     do
       local length = temper.list_length(xs)
@@ -427,9 +493,6 @@ local function each(xs)
         i = temper.int32_add(i, 1)
         accumulator:appendSafe("'")
         accumulator:append(x)
-        accumulator:appendSafe("' ")
-        accumulator:append(x)
-        accumulator:appendSafe(";")
       end
     end
     return accumulator.accumulated
@@ -442,6 +505,9 @@ print(greet("Ann", "Bob"))
 print(branch(true, "a"))
 print(branch(false, "b"))
 print(each({ "c", "d" }))
+print(counted(5, "e"))
+print(attribute(false, "f") .. " " .. attribute(true, "f"))
+print(opened({ "g", "h", "i" }))
 
 return {
   Mark = Mark,

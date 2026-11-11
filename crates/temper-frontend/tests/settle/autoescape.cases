@@ -109,7 +109,7 @@ let branch(c: Boolean, x: String): String {
 }
 console.log(branch(true, "a"));
 console.log(branch(false, "b"));
-// The accumulator is used in a closure, so contexts propagate at run time.
+// A `for … of` loop whose passes end in the context they start in.
 let each(xs: List<String>): String {
   q"""
     : for (let x of xs) {
@@ -459,7 +459,7 @@ console.log(each(["c", "d"]));
       String
       (Block
         (Block
-          (Let ^accumulator#115 (Call new q:17))
+          (Let ^collector#115 (Call (Call . Quoting:16 \newCollector)))
           (Block
             (Loop
               (Block
@@ -468,15 +468,34 @@ console.log(each(["c", "d"]));
                   (Fn
                     (Let ^x:116)
                     (Block
-                      (Call (Call . accumulator#115 \appendSafe) "'")
-                      (Call (Call . accumulator#115 \append) x:116)
-                      (Call (Call . accumulator#115 \appendSafe) "' ")
-                      (Call (Call . accumulator#115 \append) x:116)
-                      (Call (Call . accumulator#115 \appendSafe) ";")
+                      (Call (Call . collector#115 \append) "'")
+                      (Call
+                        (Call . collector#115 \append)
+                        (Call
+                          (Call
+                            .
+                            (Call . QuoteEscaper:11 \instance)
+                            \applyString)
+                          (Call
+                            (Call
+                              .
+                              (Call . TextEscaper:10 \instance)
+                              \applyString)
+                            x:116)))
+                      (Call (Call . collector#115 \append) "' ")
+                      (Call
+                        (Call . collector#115 \append)
+                        (Call
+                          (Call
+                            .
+                            (Call . TextEscaper:10 \instance)
+                            \applyString)
+                          x:116))
+                      (Call (Call . collector#115 \append) ";")
                       #void)))
-                (Break @4689)))
+                (Break @4683)))
             #void)
-          (Call . accumulator#115 \accumulated)))))
+          (Call (Call . Quoting:16 \fromCollector) collector#115)))))
   (Call (Call . console \log) (Call each:20 (Call list "c" "d")))
   #void)
 warn 4447..4448: content tag reported:angle bracket in fixed text
@@ -654,67 +673,6 @@ let underRt(c: Boolean, x: String): String {
 }
 console.log("under ${under(true, "f")} ${underRt(true, "f")}");
 
-// A branch that leaves early, by `return`, `break`, `continue`, or
-// `bubble()`, never reaches the join.
-let early(c: Boolean, x: String): String {
-  silent"""
-    : if (c) {
-    ~'
-    : return "none";
-    : }
-    ~${x}
-}
-let earlyRt(c: Boolean, x: String): String {
-  do {
-    let t = new Silent();
-    if (c) { t.appendSafe("'"); return "none"; }
-    t.append(x);
-    let u = t;
-    t.accumulated
-  }
-}
-console.log("return ${early(false, "g")} ${earlyRt(false, "g")}");
-let broken(c: Boolean, x: String): String {
-  var r = "none";
-  while (true) {
-    r = silent"""
-      : if (c) {
-      ~'
-      : break;
-      : }
-      ~${x}
-    ;
-    break;
-  }
-  r
-}
-console.log("break ${broken(false, "h")} ${broken(true, "h")}");
-let continued(x: String): String {
-  var r = "none";
-  var i = 0;
-  while (i < 2) {
-    i += 1;
-    r = silent"""
-      : if (i == 1) {
-      ~'
-      : continue;
-      : }
-      ~${x}
-    ;
-  }
-  r
-}
-console.log("continue ${continued("i")}");
-let bubbled(c: Boolean, x: String): String throws Bubble {
-  silent"""
-    : if (c) {
-    ~'
-    : bubble();
-    : }
-    ~${x}
-}
-console.log("bubble ${bubbled(false, "j") orelse "failed"} ${bubbled(true, "j") orelse "failed"}");
-
 // An escaper with settings of its own isn't its class's `instance`.
 class Wrap(public mark: String) extends Escaper {
   public static instance: Wrap = new Wrap("default");
@@ -789,77 +747,77 @@ let texting = Texting;
 console.log("undone ${texting"n=${3}"}");
 --- settled
 (Block
-  (Class ^Mark:3 (Param ^label:47 String))
+  (Class ^Mark:3 (Param ^label:42 String))
   (Class
     ^Buffer:14
-    (Let private ^sb:84 StringBuilder (Call new StringBuilder))
+    (Let private ^sb:79 StringBuilder (Call new StringBuilder))
     (Method
-      ^append:85
-      (Fn (Let ^x:88 String) Void (Block (Call (Call . sb:84 \append) x:88))))
+      ^append:80
+      (Fn (Let ^x:83 String) Void (Block (Call (Call . sb:79 \append) x:83))))
     (Method
-      ^mark:86
+      ^mark:81
       (Fn
-        (Let ^m:89 Mark:3)
+        (Let ^m:84 Mark:3)
         Void
         (Block
-          (Call (Call . sb:84 \append) (Call cat "{" (Call . m:89 \label) "}")))))
-    (Method ^toString:87 (Fn String (Block (Call (Call . sb:84 \toString))))))
+          (Call (Call . sb:79 \append) (Call cat "{" (Call . m:84 \label) "}")))))
+    (Method ^toString:82 (Fn String (Block (Call (Call . sb:79 \toString))))))
   (Interface
     ^Effect:0
-    (Method ^enactOn:36 (Signature (Let ^c:37 Buffer:14) Void)))
+    (Method ^enactOn:31 (Signature (Let ^c:32 Buffer:14) Void)))
   (Class
     ^AppendParseEffect:1
     Effect:0
-    (Param ^text:39 String)
+    (Param ^text:34 String)
     (Method
-      ^enactOn:40
+      ^enactOn:35
       (Fn
-        (Let ^c:41 Buffer:14)
+        (Let ^c:36 Buffer:14)
         Void
-        (Block (Call (Call . c:41 \append) text:39)))))
+        (Block (Call (Call . c:36 \append) text:34)))))
   (Class
     ^EventParseEffect:2
     Effect:0
-    (Param ^event:43 Mark:3)
+    (Param ^event:38 Mark:3)
     (Method
-      ^enactOn:44
+      ^enactOn:39
       (Fn
-        (Let ^c:45 Buffer:14)
+        (Let ^c:40 Buffer:14)
         Void
-        (Block (Call (Call . c:45 \mark) event:43)))))
+        (Block (Call (Call . c:40 \mark) event:38)))))
   (Class
     ^After:4
-    (Param ^effects:49 (Call <> List Effect:0))
-    (Param ^stateAfter:50 Boolean))
-  (Class ^Propagator:5 (Param ^quote:52 String))
+    (Param ^effects:44 (Call <> List Effect:0))
+    (Param ^stateAfter:45 Boolean))
+  (Class ^Propagator:5 (Param ^quote:47 String))
   (Let ^Callout:6 (Call FnType String Boolean Void))
   (Let
     ^ignore:7
     (Fn
-      (Let ^problem:53 String)
-      (Let ^isError:54 Boolean)
+      (Let ^problem:48 String)
+      (Let ^isError:49 Boolean)
       Void
       (Block
         (If
-          isError:54
-          (Block (Call (Call . console \log) problem:53) #void)
+          isError:49
+          (Block (Call (Call . console \log) problem:48) #void)
           (Block)))))
   (Let
     ^propagateOver:8
     (Fn
-      (Let ^p:55 Propagator:5)
-      (Let ^before:56 Boolean)
-      (Let ^known:57 (Call ? String))
-      (Let ^same:58 (Call FnType Boolean Boolean Boolean))
-      (Let ^callout:59 Callout:6)
+      (Let ^p:50 Propagator:5)
+      (Let ^before:51 Boolean)
+      (Let ^known:52 (Call ? String))
+      (Let ^same:53 (Call FnType Boolean Boolean Boolean))
+      (Let ^callout:54 Callout:6)
       After:4
       (Block
         (If
-          (Call == known:57 null)
-          (Block (Return @776 (Call new After:4 (Call list) before:56)) #void)
+          (Call == known:52 null)
+          (Block (Return @776 (Call new After:4 (Call list) before:51)) #void)
           (Block))
         (If
-          (Call == known:57 "!")
+          (Call == known:52 "!")
           (Block
             (Return @776
               (Call
@@ -868,82 +826,82 @@ console.log("undone ${texting"n=${3}"}");
                 (Call
                   list
                   (Call new EventParseEffect:2 (Call new Mark:3 "bang")))
-                before:56))
+                before:51))
             #void)
           (Block))
-        (Let ^angles:60 (Call . (Call (Call . known:57 \split) "<") \length))
+        (Let ^angles:55 (Call . (Call (Call . known:52 \split) "<") \length))
         (If
-          (Call > angles:60 1)
-          (Block (Call callout:59 "angle bracket in fixed text" false) #void)
+          (Call > angles:55 1)
+          (Block (Call callout:54 "angle bracket in fixed text" false) #void)
           (Block))
         (If
-          (Call ! (Call same:58 before:56 before:56))
-          (Block (Call callout:59 "states differ from themselves" true) #void)
+          (Call ! (Call same:53 before:51 before:51))
+          (Block (Call callout:54 "states differ from themselves" true) #void)
           (Block))
         (Let
-          ^quotes:61
+          ^quotes:56
           (Call
             -
             (Call
               .
-              (Call (Call . known:57 \split) (Call . p:55 \quote))
+              (Call (Call . known:52 \split) (Call . p:50 \quote))
               \length)
             1))
         (Call
           new
           After:4
-          (Call list (Call new AppendParseEffect:1 known:57))
+          (Call list (Call new AppendParseEffect:1 known:52))
           (If
-            (Call == (Call % quotes:61 2) 1)
-            (Block (Call ! before:56))
-            (Block before:56))))))
+            (Call == (Call % quotes:56 2) 1)
+            (Block (Call ! before:51))
+            (Block before:51))))))
   (Interface
     ^Escaper:9
-    (Method ^applyString:63 (Signature (Let ^x:64 String) String)))
+    (Method ^applyString:58 (Signature (Let ^x:59 String) String)))
   (Class
     ^TextEscaper:10
     Escaper:9
-    (Let static ^instance:66 TextEscaper:10 (Call new TextEscaper:10))
+    (Let static ^instance:61 TextEscaper:10 (Call new TextEscaper:10))
     (Method
-      ^applyString:67
-      (Fn (Let ^x:68 String) String (Block (Call cat "[" x:68 "]")))))
+      ^applyString:62
+      (Fn (Let ^x:63 String) String (Block (Call cat "[" x:63 "]")))))
   (Class
     ^QuoteEscaper:11
     Escaper:9
-    (Let static ^instance:70 QuoteEscaper:11 (Call new QuoteEscaper:11))
+    (Let static ^instance:65 QuoteEscaper:11 (Call new QuoteEscaper:11))
     (Method
-      ^applyString:71
-      (Fn (Let ^x:72 String) String (Block (Call cat "(" x:72 ")")))))
+      ^applyString:66
+      (Fn (Let ^x:67 String) String (Block (Call cat "(" x:67 ")")))))
   (Class
     ^Both:12
     Escaper:9
-    (Param ^first:74 Escaper:9)
-    (Param ^second:75 Escaper:9)
+    (Param ^first:69 Escaper:9)
+    (Param ^second:70 Escaper:9)
     (Method
-      ^applyString:76
+      ^applyString:71
       (Fn
-        (Let ^x:77 String)
+        (Let ^x:72 String)
         String
         (Block
           (Call
-            (Call . second:75 \applyString)
-            (Call (Call . first:74 \applyString) x:77))))))
+            (Call . second:70 \applyString)
+            (Call (Call . first:69 \applyString) x:72))))))
   (Class
     ^Picker:13
-    (Param ^strict:79 Boolean)
+    (Param ^strict:74 Boolean)
     (Method
-      ^escaperFor:80
+      ^escaperFor:75
       (Fn
-        (Let ^inQuote:81 Boolean)
-        (Let ^callout:82 Callout:6)
+        (Let ^inQuote:76 Boolean)
+        (Let ^callout:77 Callout:6)
         Escaper:9
         (Block
           (If
-            (If strict:79 inQuote:81 #false)
-            (Block (Call callout:82 "a value in quotes" false) #void)
+            (If strict:74 inQuote:76 #false)
+            (Block (Call callout:77 "a value in quotes" false) #void)
             (Block))
           (If
-            inQuote:81
+            inQuote:76
             (Block
               (Call
                 new
@@ -953,141 +911,141 @@ console.log("undone ${texting"n=${3}"}");
             (Block (Call . TextEscaper:10 \instance)))))))
   (Interface
     ^ContextualAutoescapingAccumulator:15
-    (Get ^accumulated:91 (Signature String)))
+    (Get ^accumulated:86 (Signature String)))
   (Class
     ^Quoting:16
     ContextualAutoescapingAccumulator:15
-    (Method static ^newCollector:93 (Fn Buffer:14 (Block (Call new Buffer:14))))
-    (Method static ^initialState:94 (Fn Boolean (Block false)))
+    (Method static ^newCollector:88 (Fn Buffer:14 (Block (Call new Buffer:14))))
+    (Method static ^initialState:89 (Fn Boolean (Block false)))
     (Method static
-      ^propagator:95
+      ^propagator:90
       (Fn Propagator:5 (Block (Call new Propagator:5 "'"))))
-    (Method static ^picker:96 (Fn Picker:13 (Block (Call new Picker:13 false))))
+    (Method static ^picker:91 (Fn Picker:13 (Block (Call new Picker:13 false))))
     (Method static
-      ^sameStatePredicate:97
+      ^sameStatePredicate:92
       (Fn
         (Call FnType Boolean Boolean Boolean)
         (Block
           (Fn
-            (Let ^a:107 Boolean)
-            (Let ^b:108 Boolean)
+            (Let ^a:102 Boolean)
+            (Let ^b:103 Boolean)
             Boolean
-            (Block (Call == a:107 b:108))))))
+            (Block (Call == a:102 b:103))))))
     (Method static
-      ^mergeStates:98
+      ^mergeStates:93
       (Fn
-        (Let ^a:109 Boolean)
-        (Let ^b:110 Boolean)
-        (Let ^callout:111 Callout:6)
+        (Let ^a:104 Boolean)
+        (Let ^b:105 Boolean)
+        (Let ^callout:106 Callout:6)
         Boolean
         (Block
           (If
-            (Call != a:109 b:110)
+            (Call != a:104 b:105)
             (Block
-              (Call callout:111 "branches end in different contexts" true)
+              (Call callout:106 "branches end in different contexts" true)
               #void)
             (Block))
-          a:109)))
+          a:104)))
     (Method static
-      ^checkEndState:99
+      ^checkEndState:94
       (Fn
-        (Let ^inQuote:112 Boolean)
-        (Let ^callout:113 Callout:6)
+        (Let ^inQuote:107 Boolean)
+        (Let ^callout:108 Callout:6)
         Void
         (Block
           (If
-            inQuote:112
-            (Block (Call callout:113 "ends inside quotes" true) #void)
+            inQuote:107
+            (Block (Call callout:108 "ends inside quotes" true) #void)
             (Block)))))
     (Method static
-      ^fromCollector:100
-      (Fn (Let ^c:114 Buffer:14) String (Block (Call (Call . c:114 \toString)))))
+      ^fromCollector:95
+      (Fn (Let ^c:109 Buffer:14) String (Block (Call (Call . c:109 \toString)))))
     (Method static
-      ^enact:101
+      ^enact:96
       (Fn
-        (Let ^m:115 Mark:3)
-        (Let ^c:116 Buffer:14)
+        (Let ^m:110 Mark:3)
+        (Let ^c:111 Buffer:14)
         Void
-        (Block (Call (Call . c:116 \mark) m:115))))
-    (Var private ^inQuote:102 Boolean false)
-    (Let private ^collector:103 Buffer:14 (Call new Buffer:14))
+        (Block (Call (Call . c:111 \mark) m:110))))
+    (Var private ^inQuote:97 Boolean false)
+    (Let private ^collector:98 Buffer:14 (Call new Buffer:14))
     (Method
-      ^appendSafe:104
+      ^appendSafe:99
       (Fn
-        (Let ^x:117 String)
+        (Let ^x:112 String)
         Void
         (Block
           (Let
-            ^after:118
+            ^after:113
             (Call
               propagateOver:8
               (Call (Call . Quoting:16 \propagator))
-              inQuote:102
-              x:117
+              inQuote:97
+              x:112
               (Call (Call . Quoting:16 \sameStatePredicate))
               ignore:7))
-          (Assign inQuote:102 (Call . after:118 \stateAfter))
+          (Assign inQuote:97 (Call . after:113 \stateAfter))
           (Loop
             (Block
               (Call
-                (Call . (Call . after:118 \effects) \forEach)
+                (Call . (Call . after:113 \effects) \forEach)
                 (Fn
-                  (Let ^e:119)
-                  (Block (Call (Call . e:119 \enactOn) collector:103) #void)))
+                  (Let ^e:114)
+                  (Block (Call (Call . e:114 \enactOn) collector:98) #void)))
               (Break @3816))))))
     (Method
-      ^append:105
+      ^append:100
       (Fn
-        (Let ^x:120 String)
+        (Let ^x:115 String)
         Void
         (Block
           (Let
-            ^escaped:121
+            ^escaped:116
             (Call
               (Call
                 .
                 (Call
                   (Call . (Call (Call . Quoting:16 \picker)) \escaperFor)
-                  inQuote:102
+                  inQuote:97
                   ignore:7)
                 \applyString)
-              x:120))
-          (Call (Call . collector:103 \append) escaped:121)
+              x:115))
+          (Call (Call . collector:98 \append) escaped:116)
           #void)))
     (Get
-      ^accumulated:106
-      (Fn String (Block (Call (Call . collector:103 \toString))))))
+      ^accumulated:101
+      (Fn String (Block (Call (Call . collector:98 \toString))))))
   (Let ^q:17 Quoting:16)
   (Let
     ^mixed:18
     (Fn
-      (Let ^c:122 Boolean)
-      (Let ^x:123 String)
+      (Let ^c:117 Boolean)
+      (Let ^x:118 String)
       String
       (Block
         (Block
-          (Let ^accumulator#124 (Call new q:17))
+          (Let ^accumulator#119 (Call new q:17))
           (Block
             (If
-              c:122
-              (Block (Call (Call . accumulator#124 \appendSafe) "'") #void)
+              c:117
+              (Block (Call (Call . accumulator#119 \appendSafe) "'") #void)
               (Block))
-            (Call (Call . accumulator#124 \append) x:123)
+            (Call (Call . accumulator#119 \append) x:118)
             #void)
-          (Call . accumulator#124 \accumulated)))))
+          (Call . accumulator#119 \accumulated)))))
   (Let
     ^mixedRt:19
     (Fn
-      (Let ^c:125 Boolean)
-      (Let ^x:126 String)
+      (Let ^c:120 Boolean)
+      (Let ^x:121 String)
       String
       (Block
         (Block
-          (Let ^t:127 (Call new Quoting:16))
-          (If c:125 (Block (Call (Call . t:127 \appendSafe) "'") #void) (Block))
-          (Call (Call . t:127 \append) x:126)
-          (Let ^u:128 t:127)
-          (Call . t:127 \accumulated)))))
+          (Let ^t:122 (Call new Quoting:16))
+          (If c:120 (Block (Call (Call . t:122 \appendSafe) "'") #void) (Block))
+          (Call (Call . t:122 \append) x:121)
+          (Let ^u:123 t:122)
+          (Call . t:122 \accumulated)))))
   (Call
     (Call . console \log)
     (Call
@@ -1100,516 +1058,2252 @@ console.log("undone ${texting"n=${3}"}");
     ^Silent:20
     ContextualAutoescapingAccumulator:15
     (Method static
-      ^newCollector:130
+      ^newCollector:125
       (Fn Buffer:14 (Block (Call new Buffer:14))))
-    (Method static ^initialState:131 (Fn Boolean (Block false)))
+    (Method static ^initialState:126 (Fn Boolean (Block false)))
     (Method static
-      ^propagator:132
+      ^propagator:127
       (Fn Propagator:5 (Block (Call new Propagator:5 "'"))))
     (Method static
-      ^picker:133
+      ^picker:128
       (Fn Picker:13 (Block (Call new Picker:13 false))))
     (Method static
-      ^sameStatePredicate:134
+      ^sameStatePredicate:129
       (Fn
         (Call FnType Boolean Boolean Boolean)
         (Block
           (Fn
-            (Let ^a:144 Boolean)
-            (Let ^b:145 Boolean)
+            (Let ^a:139 Boolean)
+            (Let ^b:140 Boolean)
             Boolean
-            (Block (Call == a:144 b:145))))))
+            (Block (Call == a:139 b:140))))))
     (Method static
-      ^mergeStates:135
+      ^mergeStates:130
       (Fn
-        (Let ^a:146 Boolean)
-        (Let ^b:147 Boolean)
-        (Let ^callout:148 Callout:6)
+        (Let ^a:141 Boolean)
+        (Let ^b:142 Boolean)
+        (Let ^callout:143 Callout:6)
         Boolean
-        (Block a:146)))
+        (Block a:141)))
     (Method static
-      ^checkEndState:136
-      (Fn (Let ^inQuote:149 Boolean) (Let ^callout:150 Callout:6) Void (Block)))
+      ^checkEndState:131
+      (Fn (Let ^inQuote:144 Boolean) (Let ^callout:145 Callout:6) Void (Block)))
     (Method static
-      ^fromCollector:137
-      (Fn (Let ^c:151 Buffer:14) String (Block (Call (Call . c:151 \toString)))))
+      ^fromCollector:132
+      (Fn (Let ^c:146 Buffer:14) String (Block (Call (Call . c:146 \toString)))))
     (Method static
-      ^enact:138
+      ^enact:133
       (Fn
-        (Let ^m:152 Mark:3)
-        (Let ^c:153 Buffer:14)
+        (Let ^m:147 Mark:3)
+        (Let ^c:148 Buffer:14)
         Void
-        (Block (Call (Call . c:153 \mark) m:152))))
-    (Var private ^inQuote:139 Boolean false)
-    (Let private ^collector:140 Buffer:14 (Call new Buffer:14))
+        (Block (Call (Call . c:148 \mark) m:147))))
+    (Var private ^inQuote:134 Boolean false)
+    (Let private ^collector:135 Buffer:14 (Call new Buffer:14))
     (Method
-      ^appendSafe:141
+      ^appendSafe:136
       (Fn
-        (Let ^x:154 String)
+        (Let ^x:149 String)
         Void
         (Block
           (Let
-            ^after:155
+            ^after:150
             (Call
               propagateOver:8
               (Call (Call . Silent:20 \propagator))
-              inQuote:139
-              x:154
+              inQuote:134
+              x:149
               (Call (Call . Silent:20 \sameStatePredicate))
               ignore:7))
-          (Assign inQuote:139 (Call . after:155 \stateAfter))
+          (Assign inQuote:134 (Call . after:150 \stateAfter))
           (Loop
             (Block
               (Call
-                (Call . (Call . after:155 \effects) \forEach)
+                (Call . (Call . after:150 \effects) \forEach)
                 (Fn
-                  (Let ^e:156)
-                  (Block (Call (Call . e:156 \enactOn) collector:140) #void)))
+                  (Let ^e:151)
+                  (Block (Call (Call . e:151 \enactOn) collector:135) #void)))
               (Break @5758))))))
     (Method
-      ^append:142
+      ^append:137
       (Fn
-        (Let ^x:157 String)
+        (Let ^x:152 String)
         Void
         (Block
           (Let
-            ^escaped:158
+            ^escaped:153
             (Call
               (Call
                 .
                 (Call
                   (Call . (Call (Call . Silent:20 \picker)) \escaperFor)
-                  inQuote:139
+                  inQuote:134
                   ignore:7)
                 \applyString)
-              x:157))
-          (Call (Call . collector:140 \append) escaped:158)
+              x:152))
+          (Call (Call . collector:135 \append) escaped:153)
           #void)))
     (Get
-      ^accumulated:143
-      (Fn String (Block (Call (Call . collector:140 \toString))))))
+      ^accumulated:138
+      (Fn String (Block (Call (Call . collector:135 \toString))))))
   (Let ^silent:21 Silent:20)
   (Let
     ^under:22
     (Fn
-      (Let ^c:159 Boolean)
-      (Let ^x:160 String)
+      (Let ^c:154 Boolean)
+      (Let ^x:155 String)
       String
       (Block
         (Block
-          (Let ^accumulator#161 (Call new silent:21))
+          (Let ^accumulator#156 (Call new silent:21))
           (Block
             (If
-              c:159
-              (Block (Call (Call . accumulator#161 \appendSafe) "a") #void)
-              (Block (Call (Call . accumulator#161 \appendSafe) "'") #void))
-            (Call (Call . accumulator#161 \append) x:160)
+              c:154
+              (Block (Call (Call . accumulator#156 \appendSafe) "a") #void)
+              (Block (Call (Call . accumulator#156 \appendSafe) "'") #void))
+            (Call (Call . accumulator#156 \append) x:155)
             #void)
-          (Call . accumulator#161 \accumulated)))))
+          (Call . accumulator#156 \accumulated)))))
   (Let
     ^underRt:23
     (Fn
-      (Let ^c:162 Boolean)
-      (Let ^x:163 String)
+      (Let ^c:157 Boolean)
+      (Let ^x:158 String)
       String
       (Block
         (Block
-          (Let ^t:164 (Call new Silent:20))
+          (Let ^t:159 (Call new Silent:20))
           (If
-            c:162
-            (Block (Call (Call . t:164 \appendSafe) "a") #void)
-            (Block (Call (Call . t:164 \appendSafe) "'") #void))
-          (Call (Call . t:164 \append) x:163)
-          (Let ^u:165 t:164)
-          (Call . t:164 \accumulated)))))
+            c:157
+            (Block (Call (Call . t:159 \appendSafe) "a") #void)
+            (Block (Call (Call . t:159 \appendSafe) "'") #void))
+          (Call (Call . t:159 \append) x:158)
+          (Let ^u:160 t:159)
+          (Call . t:159 \accumulated)))))
   (Call
     (Call . console \log)
     (Call cat "under " (Call under:22 true "f") " " (Call underRt:23 true "f")))
-  (Let
-    ^early:24
-    (Fn
-      (Let ^c:166 Boolean)
-      (Let ^x:167 String)
-      String
-      (Block
-        (Block
-          (Let ^accumulator#168 (Call new silent:21))
-          (Block
-            (If
-              c:166
-              (Block
-                (Call (Call . accumulator#168 \appendSafe) "'")
-                (Return @6529 "none")
-                #void)
-              (Block))
-            (Call (Call . accumulator#168 \append) x:167)
-            #void)
-          (Call . accumulator#168 \accumulated)))))
-  (Let
-    ^earlyRt:25
-    (Fn
-      (Let ^c:169 Boolean)
-      (Let ^x:170 String)
-      String
-      (Block
-        (Block
-          (Let ^t:171 (Call new Silent:20))
-          (If
-            c:169
-            (Block
-              (Call (Call . t:171 \appendSafe) "'")
-              (Return @6647 "none")
-              #void)
-            (Block))
-          (Call (Call . t:171 \append) x:170)
-          (Let ^u:172 t:171)
-          (Call . t:171 \accumulated)))))
-  (Call
-    (Call . console \log)
-    (Call
-      cat
-      "return "
-      (Call early:24 false "g")
-      " "
-      (Call earlyRt:25 false "g")))
-  (Let
-    ^broken:26
-    (Fn
-      (Let ^c:173 Boolean)
-      (Let ^x:174 String)
-      String
-      (Block
-        (Var ^r:175 "none")
-        (Loop
-          (If
-            true
-            (Block
-              (Assign
-                r:175
-                (Block
-                  (Let ^accumulator#176 (Call new silent:21))
-                  (Block
-                    (If
-                      c:173
-                      (Block
-                        (Call (Call . accumulator#176 \appendSafe) "'")
-                        (Break @6961)
-                        #void)
-                      (Block))
-                    (Call (Call . accumulator#176 \append) x:174)
-                    #void)
-                  (Call . accumulator#176 \accumulated)))
-              (Break @6961)
-              #void)
-            (Break @6961)))
-        r:175)))
-  (Call
-    (Call . console \log)
-    (Call cat "break " (Call broken:26 false "h") " " (Call broken:26 true "h")))
-  (Let
-    ^continued:27
-    (Fn
-      (Let ^x:177 String)
-      String
-      (Block
-        (Var ^r:178 "none")
-        (Var ^i:179 0)
-        (Loop
-          (If
-            (Call < i:179 2)
-            (Block
-              (Assign i:179 (Call + i:179 1))
-              (Assign
-                r:178
-                (Block
-                  (Let ^accumulator#180 (Call new silent:21))
-                  (Block
-                    (If
-                      (Call == i:179 1)
-                      (Block
-                        (Call (Call . accumulator#180 \appendSafe) "'")
-                        (Continue @7217)
-                        #void)
-                      (Block))
-                    (Call (Call . accumulator#180 \append) x:177)
-                    #void)
-                  (Call . accumulator#180 \accumulated)))
-              #void)
-            (Break @7217)))
-        r:178)))
-  (Call (Call . console \log) (Call cat "continue " (Call continued:27 "i")))
-  (Let
-    ^bubbled:28
-    (Fn
-      (Let ^c:181 Boolean)
-      (Let ^x:182 String)
-      (Call throws String Bubble)
-      (Block
-        (Block
-          (Let ^accumulator#183 (Call new silent:21))
-          (Block
-            (If
-              c:181
-              (Block
-                (Call (Call . accumulator#183 \appendSafe) "'")
-                (Fail)
-                #void)
-              (Block))
-            (Call (Call . accumulator#183 \append) x:182)
-            #void)
-          (Call . accumulator#183 \accumulated)))))
-  (Call
-    (Call . console \log)
-    (Call
-      cat
-      "bubble "
-      (Orelse (Call bubbled:28 false "j") "failed")
-      " "
-      (Orelse (Call bubbled:28 true "j") "failed")))
   (Class
-    ^Wrap:29
+    ^Wrap:24
     Escaper:9
-    (Param ^mark:185 String)
-    (Let static ^instance:186 Wrap:29 (Call new Wrap:29 "default"))
+    (Param ^mark:162 String)
+    (Let static ^instance:163 Wrap:24 (Call new Wrap:24 "default"))
     (Method
-      ^applyString:187
-      (Fn (Let ^x:188 String) String (Block (Call cat mark:185 ":" x:188)))))
+      ^applyString:164
+      (Fn (Let ^x:165 String) String (Block (Call cat mark:162 ":" x:165)))))
   (Class
-    ^Picker2:30
+    ^Picker2:25
     (Method
-      ^escaperFor:190
+      ^escaperFor:167
       (Fn
-        (Let ^inQuote:191 Boolean)
-        (Let ^callout:192 Callout:6)
+        (Let ^inQuote:168 Boolean)
+        (Let ^callout:169 Callout:6)
         Escaper:9
-        (Block (Call new Wrap:29 "quoted")))))
+        (Block (Call new Wrap:24 "quoted")))))
   (Class
-    ^Wrapping:31
+    ^Wrapping:26
     ContextualAutoescapingAccumulator:15
     (Method static
-      ^newCollector:194
+      ^newCollector:171
       (Fn Buffer:14 (Block (Call new Buffer:14))))
-    (Method static ^initialState:195 (Fn Boolean (Block false)))
+    (Method static ^initialState:172 (Fn Boolean (Block false)))
     (Method static
-      ^propagator:196
+      ^propagator:173
       (Fn Propagator:5 (Block (Call new Propagator:5 "'"))))
-    (Method static ^picker:197 (Fn Picker2:30 (Block (Call new Picker2:30))))
+    (Method static ^picker:174 (Fn Picker2:25 (Block (Call new Picker2:25))))
     (Method static
-      ^sameStatePredicate:198
+      ^sameStatePredicate:175
       (Fn
         (Call FnType Boolean Boolean Boolean)
         (Block
           (Fn
-            (Let ^a:209 Boolean)
-            (Let ^b:210 Boolean)
+            (Let ^a:186 Boolean)
+            (Let ^b:187 Boolean)
             Boolean
-            (Block (Call == a:209 b:210))))))
+            (Block (Call == a:186 b:187))))))
     (Method static
-      ^mergeStates:199
+      ^mergeStates:176
       (Fn
-        (Let ^a:211 Boolean)
-        (Let ^b:212 Boolean)
-        (Let ^callout:213 Callout:6)
+        (Let ^a:188 Boolean)
+        (Let ^b:189 Boolean)
+        (Let ^callout:190 Callout:6)
         Boolean
-        (Block a:211)))
+        (Block a:188)))
     (Method static
-      ^checkEndState:200
-      (Fn (Let ^inQuote:214 Boolean) (Let ^callout:215 Callout:6) Void (Block)))
+      ^checkEndState:177
+      (Fn (Let ^inQuote:191 Boolean) (Let ^callout:192 Callout:6) Void (Block)))
     (Method static
-      ^fromCollector:201
-      (Fn (Let ^c:216 Buffer:14) String (Block (Call (Call . c:216 \toString)))))
+      ^fromCollector:178
+      (Fn (Let ^c:193 Buffer:14) String (Block (Call (Call . c:193 \toString)))))
     (Method static
-      ^enact:202
+      ^enact:179
       (Fn
-        (Let ^m:217 Mark:3)
-        (Let ^c:218 Buffer:14)
+        (Let ^m:194 Mark:3)
+        (Let ^c:195 Buffer:14)
         Void
-        (Block (Call (Call . c:218 \mark) m:217))))
-    (Var private ^inQuote:203 Boolean false)
-    (Let private ^collector:204 Buffer:14 (Call new Buffer:14))
+        (Block (Call (Call . c:195 \mark) m:194))))
+    (Var private ^inQuote:180 Boolean false)
+    (Let private ^collector:181 Buffer:14 (Call new Buffer:14))
     (Method
-      ^appendSafe:205
+      ^appendSafe:182
       (Fn
-        (Let ^x:219 String)
+        (Let ^x:196 String)
         Void
         (Block
           (Let
-            ^after:220
+            ^after:197
             (Call
               propagateOver:8
-              (Call (Call . Wrapping:31 \propagator))
-              inQuote:203
-              x:219
-              (Call (Call . Wrapping:31 \sameStatePredicate))
+              (Call (Call . Wrapping:26 \propagator))
+              inQuote:180
+              x:196
+              (Call (Call . Wrapping:26 \sameStatePredicate))
               ignore:7))
-          (Assign inQuote:203 (Call . after:220 \stateAfter))
+          (Assign inQuote:180 (Call . after:197 \stateAfter))
           (Loop
             (Block
               (Call
-                (Call . (Call . after:220 \effects) \forEach)
+                (Call . (Call . after:197 \effects) \forEach)
                 (Fn
-                  (Let ^e:221)
-                  (Block (Call (Call . e:221 \enactOn) collector:204) #void)))
-              (Break @8924))))))
+                  (Let ^e:198)
+                  (Block (Call (Call . e:198 \enactOn) collector:181) #void)))
+              (Break @7723))))))
     (Method
-      ^appendStr:206
+      ^appendStr:183
       (Fn
-        (Let ^x:222 String)
+        (Let ^x:199 String)
         Void
         (Block
           (Let
-            ^escaped:223
+            ^escaped:200
             (Call
               (Call
                 .
                 (Call
-                  (Call . (Call (Call . Wrapping:31 \picker)) \escaperFor)
-                  inQuote:203
+                  (Call . (Call (Call . Wrapping:26 \picker)) \escaperFor)
+                  inQuote:180
                   ignore:7)
                 \applyString)
-              x:222))
-          (Call (Call . collector:204 \append) escaped:223)
+              x:199))
+          (Call (Call . collector:181 \append) escaped:200)
           #void)))
     (Method
-      ^appendInt:207
+      ^appendInt:184
       (Fn
-        (Let ^x:224 Int)
+        (Let ^x:201 Int)
         Void
         (Block
           (Let
-            ^escaped:225
+            ^escaped:202
             (Call
               (Call . (Call . TextEscaper:10 \instance) \applyString)
-              (Call (Call . x:224 \toString))))
-          (Call (Call . collector:204 \append) escaped:225)
+              (Call (Call . x:201 \toString))))
+          (Call (Call . collector:181 \append) escaped:202)
           #void)))
     (Get
-      ^accumulated:208
-      (Fn String (Block (Call (Call . collector:204 \toString))))))
-  (Let ^wrapping:32 Wrapping:31)
+      ^accumulated:185
+      (Fn String (Block (Call (Call . collector:181 \toString))))))
+  (Let ^wrapping:27 Wrapping:26)
   (Call
     (Call . console \log)
     (Call
       cat
       "settings "
       (Block
-        (Let ^accumulator#226 (Call new wrapping:32))
+        (Let ^accumulator#203 (Call new wrapping:27))
         (Block
-          (Call (Call . accumulator#226 \appendSafe) "'")
-          (Call (Call . accumulator#226 \appendStr) "k")
-          (Call (Call . accumulator#226 \appendSafe) "'"))
-        (Call . accumulator#226 \accumulated))))
+          (Call (Call . accumulator#203 \appendSafe) "'")
+          (Call (Call . accumulator#203 \appendStr) "k")
+          (Call (Call . accumulator#203 \appendSafe) "'"))
+        (Call . accumulator#203 \accumulated))))
   (Class
-    ^Texting:33
+    ^Texting:28
     ContextualAutoescapingAccumulator:15
     (Method static
-      ^newCollector:228
+      ^newCollector:205
       (Fn Buffer:14 (Block (Call new Buffer:14))))
-    (Method static ^initialState:229 (Fn Boolean (Block false)))
+    (Method static ^initialState:206 (Fn Boolean (Block false)))
     (Method static
-      ^propagator:230
+      ^propagator:207
       (Fn Propagator:5 (Block (Call new Propagator:5 "'"))))
     (Method static
-      ^picker:231
+      ^picker:208
       (Fn Picker:13 (Block (Call new Picker:13 false))))
     (Method static
-      ^sameStatePredicate:232
+      ^sameStatePredicate:209
       (Fn
         (Call FnType Boolean Boolean Boolean)
         (Block
           (Fn
-            (Let ^a:242 Boolean)
-            (Let ^b:243 Boolean)
+            (Let ^a:219 Boolean)
+            (Let ^b:220 Boolean)
             Boolean
-            (Block (Call == a:242 b:243))))))
+            (Block (Call == a:219 b:220))))))
     (Method static
-      ^mergeStates:233
+      ^mergeStates:210
       (Fn
-        (Let ^a:244 Boolean)
-        (Let ^b:245 Boolean)
-        (Let ^callout:246 Callout:6)
+        (Let ^a:221 Boolean)
+        (Let ^b:222 Boolean)
+        (Let ^callout:223 Callout:6)
         Boolean
-        (Block a:244)))
+        (Block a:221)))
     (Method static
-      ^checkEndState:234
-      (Fn (Let ^inQuote:247 Boolean) (Let ^callout:248 Callout:6) Void (Block)))
+      ^checkEndState:211
+      (Fn (Let ^inQuote:224 Boolean) (Let ^callout:225 Callout:6) Void (Block)))
     (Method static
-      ^fromCollector:235
-      (Fn (Let ^c:249 Buffer:14) String (Block (Call (Call . c:249 \toString)))))
+      ^fromCollector:212
+      (Fn (Let ^c:226 Buffer:14) String (Block (Call (Call . c:226 \toString)))))
     (Method static
-      ^enact:236
+      ^enact:213
       (Fn
-        (Let ^m:250 Mark:3)
-        (Let ^c:251 Buffer:14)
+        (Let ^m:227 Mark:3)
+        (Let ^c:228 Buffer:14)
         Void
-        (Block (Call (Call . c:251 \mark) m:250))))
-    (Var private ^inQuote:237 Boolean false)
-    (Let private ^collector:238 Buffer:14 (Call new Buffer:14))
+        (Block (Call (Call . c:228 \mark) m:227))))
+    (Var private ^inQuote:214 Boolean false)
+    (Let private ^collector:215 Buffer:14 (Call new Buffer:14))
     (Method
-      ^appendSafe:239
+      ^appendSafe:216
       (Fn
-        (Let ^x:252 String)
+        (Let ^x:229 String)
         Void
         (Block
           (Let
-            ^after:253
+            ^after:230
             (Call
               propagateOver:8
-              (Call (Call . Texting:33 \propagator))
-              inQuote:237
-              x:252
-              (Call (Call . Texting:33 \sameStatePredicate))
+              (Call (Call . Texting:28 \propagator))
+              inQuote:214
+              x:229
+              (Call (Call . Texting:28 \sameStatePredicate))
               ignore:7))
-          (Assign inQuote:237 (Call . after:253 \stateAfter))
+          (Assign inQuote:214 (Call . after:230 \stateAfter))
           (Loop
             (Block
               (Call
-                (Call . (Call . after:253 \effects) \forEach)
+                (Call . (Call . after:230 \effects) \forEach)
                 (Fn
-                  (Let ^e:254)
-                  (Block (Call (Call . e:254 \enactOn) collector:238) #void)))
-              (Break @10493))))))
+                  (Let ^e:231)
+                  (Block (Call (Call . e:231 \enactOn) collector:215) #void)))
+              (Break @9292))))))
     (Method
-      ^appendInt:240
+      ^appendInt:217
       (Fn
-        (Let ^x:255 Int)
+        (Let ^x:232 Int)
         Void
         (Block
           (Let
-            ^escaped:256
+            ^escaped:233
             (Call
               (Call
                 .
                 (Call
-                  (Call . (Call (Call . Texting:33 \picker)) \escaperFor)
-                  inQuote:237
+                  (Call . (Call (Call . Texting:28 \picker)) \escaperFor)
+                  inQuote:214
                   ignore:7)
                 \applyString)
-              (Call (Call . x:255 \toString))))
-          (Call (Call . collector:238 \append) escaped:256)
+              (Call (Call . x:232 \toString))))
+          (Call (Call . collector:215 \append) escaped:233)
           #void)))
     (Get
-      ^accumulated:241
-      (Fn String (Block (Call (Call . collector:238 \toString))))))
-  (Let ^texting:34 Texting:33)
+      ^accumulated:218
+      (Fn String (Block (Call (Call . collector:215 \toString))))))
+  (Let ^texting:29 Texting:28)
   (Call
     (Call . console \log)
     (Call
       cat
       "undone "
       (Block
-        (Let ^accumulator#257 (Call new texting:34))
+        (Let ^accumulator#234 (Call new texting:29))
         (Block
-          (Call (Call . accumulator#257 \appendSafe) "n=")
-          (Call (Call . accumulator#257 \appendInt) 3))
-        (Call . accumulator#257 \accumulated))))
+          (Call (Call . accumulator#234 \appendSafe) "n=")
+          (Call (Call . accumulator#234 \appendInt) 3))
+        (Call . accumulator#234 \accumulated))))
   #void)
 error 4452..4452: content tag reported:branches end in different contexts
 log mixed [e] [e]
 log under a[f] a[f]
-log return [g] [g]
-log break [h] none
-log continue [i]
-log bubble [j] failed
 log settings 'quoted:k'
 log undone n=[3]
+
+=== content tags in loops and jumps
+// A toy content tag, following Kotlin's pass's conventions: a value
+// is escaped as [x], and inside single quotes as ([x]), and a fixed "!"
+// becomes a mark.
+export interface Effect { enactOn(c: Buffer): Void; }
+export class AppendParseEffect(public text: String) extends Effect {
+  public enactOn(c: Buffer): Void { c.append(text) }
+}
+export class EventParseEffect(public event: Mark) extends Effect {
+  public enactOn(c: Buffer): Void { c.mark(event) }
+}
+export class Mark(public label: String) {}
+export class After(public effects: List<Effect>, public stateAfter: Boolean) {}
+export class Propagator(public quote: String) {}
+export let Callout = fn (String, Boolean): Void;
+let ignore(problem: String, isError: Boolean): Void { if (isError) { console.log(problem); } }
+export let propagateOver(
+  p: Propagator, before: Boolean, known: String?,
+  same: fn (Boolean, Boolean): Boolean, callout: Callout,
+): After {
+  if (known == null) { return new After([], before); }
+  if (known == "!") { return new After([new EventParseEffect(new Mark("bang"))], before); }
+  let angles = known.split("<").length;
+  if (angles > 1) { callout("angle bracket in fixed text", false); }
+  if (!same(before, before)) { callout("states differ from themselves", true); }
+  let quotes = known.split(p.quote).length - 1;
+  new After([new AppendParseEffect(known)], if (quotes % 2 == 1) { !before } else { before })
+}
+// Escapers' overrides answer to `apply`, as their interface marks it.
+export interface Escaper {
+  @overload("apply")
+  applyString(x: String): String;
+}
+export class TextEscaper extends Escaper {
+  public static instance: TextEscaper = new TextEscaper();
+  public applyString(x: String): String { "[${x}]" }
+}
+export class QuoteEscaper extends Escaper {
+  public static instance: QuoteEscaper = new QuoteEscaper();
+  public applyString(x: String): String { "(${x})" }
+}
+// Composed escapers apply `first`, then `second`.
+export class Both(public first: Escaper, public second: Escaper) extends Escaper {
+  public applyString(x: String): String { second.applyString(first.applyString(x)) }
+}
+export class Picker(public strict: Boolean) {
+  public escaperFor(inQuote: Boolean, callout: Callout): Escaper {
+    if (strict && inQuote) { callout("a value in quotes", false); }
+    if (inQuote) { new Both(TextEscaper.instance, QuoteEscaper.instance) } else { TextEscaper.instance }
+  }
+}
+export class Buffer {
+  private sb: StringBuilder = new StringBuilder();
+  public append(x: String): Void { sb.append(x) }
+  public mark(m: Mark): Void { sb.append("{${m.label}}") }
+  public toString(): String { sb.toString() }
+}
+export interface ContextualAutoescapingAccumulator {
+  public get accumulated(): String;
+}
+export class Quoting extends ContextualAutoescapingAccumulator {
+  public static newCollector(): Buffer { new Buffer() }
+  public static initialState(): Boolean { false }
+  public static propagator(): Propagator { new Propagator("'") }
+  public static picker(): Picker { new Picker(false) }
+  public static sameStatePredicate(): fn (Boolean, Boolean): Boolean {
+    fn (a: Boolean, b: Boolean): Boolean { a == b }
+  }
+  public static mergeStates(a: Boolean, b: Boolean, callout: Callout): Boolean {
+    if (a != b) { callout("branches end in different contexts", true); }
+    a
+  }
+  public static checkEndState(inQuote: Boolean, callout: Callout): Void {
+    if (inQuote) { callout("ends inside quotes", true); }
+  }
+  public static fromCollector(c: Buffer): String { c.toString() }
+  public static enact(m: Mark, c: Buffer): Void { c.mark(m) }
+  private var inQuote: Boolean = false;
+  private collector: Buffer = new Buffer();
+  public appendSafe(x: String): Void {
+    let after = propagateOver(Quoting.propagator(), inQuote, x, Quoting.sameStatePredicate(), ignore);
+    inQuote = after.stateAfter;
+    for (let e of after.effects) { e.enactOn(collector); }
+  }
+  public append(x: String): Void {
+    let escaped = Quoting.picker().escaperFor(inQuote, ignore).apply(x);
+    collector.append(escaped);
+  }
+  public get accumulated(): String { collector.toString() }
+}
+let q = Quoting;
+
+// Each use below is logged beside the same calls written out by hand
+// with one more read of the accumulator, which no fold takes, so it
+// propagates at run time: the two agree.
+
+// Loops whose passes end in the context they start in fold once; the
+// state after them is the state before.
+let listed(xs: List<String>): String {
+  q"""
+    ~(
+    : for (let x of xs) {
+    ~ '${x}' ${x}
+    : }
+    ~)
+}
+let listedRt(xs: List<String>): String {
+  do {
+    let t = new Quoting();
+    t.appendSafe("(");
+    for (let x of xs) { t.appendSafe(" '"); t.append(x); t.appendSafe("' "); t.append(x); }
+    t.appendSafe(")");
+    let u = t;
+    t.accumulated
+  }
+}
+console.log("for of ${listed(["a", "b"])} ${listedRt(["a", "b"])}");
+// `break` and `continue` in the context the loop starts in.
+let counted(n: Int, x: String): String {
+  q"""
+    : var i = 0;
+    : while (i < n) {
+    : i += 1;
+    : if (i == 2) { continue; }
+    ~'${x}'
+    : if (i == 4) { break; }
+    ~${x},
+    : }
+    ~.
+}
+let countedRt(n: Int, x: String): String {
+  do {
+    let t = new Quoting();
+    var i = 0;
+    while (i < n) {
+      i += 1;
+      if (i == 2) { continue; }
+      t.appendSafe("'"); t.append(x); t.appendSafe("'");
+      if (i == 4) { break; }
+      t.append(x); t.appendSafe(",");
+    }
+    t.appendSafe(".");
+    let u = t;
+    t.accumulated
+  }
+}
+console.log("while ${counted(5, "c")} ${countedRt(5, "c")}");
+let stepped(n: Int, x: String): String {
+  q"""
+    : for (var i = 0; i < n; i++) {
+    ~(${x})
+    : }
+    : var j = 0;
+    : do {
+    ~'${x}';
+    : j += 1;
+    : } while (j < n);
+}
+let steppedRt(n: Int, x: String): String {
+  do {
+    let t = new Quoting();
+    for (var i = 0; i < n; i++) { t.appendSafe("("); t.append(x); t.appendSafe(")"); }
+    var j = 0;
+    do { t.appendSafe("'"); t.append(x); t.appendSafe("';"); j += 1; } while (j < n);
+    let u = t;
+    t.accumulated
+  }
+}
+console.log("for, do ${stepped(2, "d")} ${steppedRt(2, "d")} ${stepped(0, "d")} ${steppedRt(0, "d")}");
+// Nested loops, and labeled jumps, that agree. Logic lines don't take
+// labels, so these blocks are written as tagged strings settle, which
+// folds alike.
+let grid(n: Int, x: String): String {
+  do {
+    let t = new Quoting();
+    outer: for (var i = 0; i < n; i++) {
+      for (var j = 0; j < n; j++) {
+        if (j > i) { continue outer; }
+        if (i == 2) { break outer; }
+        t.appendSafe("'"); t.append(x); t.appendSafe("'"); t.append(j.toString());
+      }
+      t.appendSafe(";");
+    }
+    t.accumulated
+  }
+}
+let gridRt(n: Int, x: String): String {
+  do {
+    let t = new Quoting();
+    outer: for (var i = 0; i < n; i++) {
+      for (var j = 0; j < n; j++) {
+        if (j > i) { continue outer; }
+        if (i == 2) { break outer; }
+        t.appendSafe("'"); t.append(x); t.appendSafe("'"); t.append(j.toString());
+      }
+      t.appendSafe(";");
+    }
+    let u = t;
+    t.accumulated
+  }
+}
+console.log("nested ${grid(3, "e")} ${gridRt(3, "e")}");
+
+// A path that leaves the tagged string, by `return`, `bubble()`, or a
+// jump to a loop around it, never reads the accumulator again, so the
+// state it leaves in joins nothing, even inside quotes.
+let attribute(c: Boolean, x: String): String {
+  q"""
+    ~a='
+    : if (c) { return "none"; }
+    ~${x}'
+}
+let attributeRt(c: Boolean, x: String): String {
+  do {
+    let t = new Quoting();
+    t.appendSafe("a='");
+    if (c) { return "none"; }
+    t.append(x);
+    t.appendSafe("'");
+    let u = t;
+    t.accumulated
+  }
+}
+console.log("return ${attribute(false, "f")} ${attributeRt(false, "f")} ${attribute(true, "f")} ${attributeRt(true, "f")}");
+let bubbled(c: Boolean, x: String): String throws Bubble {
+  q"""
+    : if (c) {
+    ~'
+    : bubble();
+    : }
+    ~${x}
+}
+let bubbledRt(c: Boolean, x: String): String throws Bubble {
+  do {
+    let t = new Quoting();
+    if (c) { t.appendSafe("'"); bubble(); }
+    t.append(x);
+    let u = t;
+    t.accumulated
+  }
+}
+console.log("bubble ${bubbled(false, "g") orelse "failed"} ${bubbledRt(false, "g") orelse "failed"} ${bubbled(true, "g") orelse "failed"}");
+let around(n: Int, x: String): String {
+  var r = "";
+  for (var i = 0; i < n; i++) {
+    let s = q"""
+      ~'
+      : if (i == 0) { continue; }
+      : if (i == 2) { break; }
+      ~${x}'
+    ;
+    r = "${r}${s}";
+  }
+  r
+}
+let aroundRt(n: Int, x: String): String {
+  var r = "";
+  for (var i = 0; i < n; i++) {
+    let s = do {
+      let t = new Quoting();
+      t.appendSafe("'");
+      if (i == 0) { continue; }
+      if (i == 2) { break; }
+      t.append(x);
+      t.appendSafe("'");
+      let u = t;
+      t.accumulated
+    };
+    r = "${r}${s}";
+  }
+  r
+}
+console.log("around ${around(3, "h")} ${aroundRt(3, "h")}");
+
+// Left to run time: a loop whose body changes the context, as by
+// opening a quote, or a `continue` that skips closing one.
+let opened(xs: List<String>): String {
+  q"""
+    : for (let x of xs) {
+    ~'${x}
+    : }
+}
+let openedRt(xs: List<String>): String {
+  do {
+    let t = new Quoting();
+    for (let x of xs) { t.appendSafe("'"); t.append(x); }
+    let u = t;
+    t.accumulated
+  }
+}
+console.log("opened ${opened(["i", "j", "k"])} ${openedRt(["i", "j", "k"])}");
+let skipped(n: Int, x: String): String {
+  q"""
+    : for (var i = 0; i < n; i++) {
+    ~'${x}
+    : if (i == 0) { continue; }
+    ~'
+    : }
+    ~${x}
+}
+let skippedRt(n: Int, x: String): String {
+  do {
+    let t = new Quoting();
+    for (var i = 0; i < n; i++) {
+      t.appendSafe("'"); t.append(x);
+      if (i == 0) { continue; }
+      t.appendSafe("'");
+    }
+    t.append(x);
+    let u = t;
+    t.accumulated
+  }
+}
+console.log("skipped ${skipped(3, "l")} ${skippedRt(3, "l")}");
+// The inner loop of two changes the context.
+let nested(n: Int, x: String): String {
+  q"""
+    : for (var i = 0; i < n; i++) {
+    : for (var j = 0; j < i; j++) {
+    ~'${x}
+    : }
+    ~;
+    : }
+}
+let nestedRt(n: Int, x: String): String {
+  do {
+    let t = new Quoting();
+    for (var i = 0; i < n; i++) {
+      for (var j = 0; j < i; j++) { t.appendSafe("'"); t.append(x); }
+      t.appendSafe(";");
+    }
+    let u = t;
+    t.accumulated
+  }
+}
+console.log("nested ${nested(3, "m")} ${nestedRt(3, "m")}");
+// A labeled `continue` inside quotes.
+let resumed(n: Int, x: String): String {
+  do {
+    let t = new Quoting();
+    outer: for (var i = 0; i < n; i++) {
+      for (var j = 0; j < n; j++) {
+        t.appendSafe("'");
+        if (j == 1) { continue outer; }
+        t.append(x); t.appendSafe("'");
+      }
+    }
+    t.append(x);
+    t.accumulated
+  }
+}
+let resumedRt(n: Int, x: String): String {
+  do {
+    let t = new Quoting();
+    outer: for (var i = 0; i < n; i++) {
+      for (var j = 0; j < n; j++) {
+        t.appendSafe("'");
+        if (j == 1) { continue outer; }
+        t.append(x); t.appendSafe("'");
+      }
+    }
+    t.append(x);
+    let u = t;
+    t.accumulated
+  }
+}
+console.log("resumed ${resumed(2, "n")} ${resumedRt(2, "n")}");
+// Jumps out of a loop in other contexts than its end's: the joins
+// differ, which the tag reports, as for branches.
+let cut(n: Int, x: String): String {
+  q"""
+    : for (var i = 0; i < n; i++) {
+    ~'${x}
+    : if (i == 1) { break; }
+    ~'
+    : }
+    ~${x}
+}
+let cutRt(n: Int, x: String): String {
+  do {
+    let t = new Quoting();
+    for (var i = 0; i < n; i++) {
+      t.appendSafe("'"); t.append(x);
+      if (i == 1) { break; }
+      t.appendSafe("'");
+    }
+    t.append(x);
+    let u = t;
+    t.accumulated
+  }
+}
+console.log("cut ${cut(3, "o")} ${cutRt(3, "o")} ${cut(1, "o")} ${cutRt(1, "o")}");
+let left(n: Int, x: String): String {
+  do {
+    let t = new Quoting();
+    outer: for (var i = 0; i < n; i++) {
+      for (var j = 0; j < n; j++) {
+        t.appendSafe("'");
+        if (j == 1) { break outer; }
+        t.append(x); t.appendSafe("'");
+      }
+    }
+    t.append(x);
+    t.accumulated
+  }
+}
+let leftRt(n: Int, x: String): String {
+  do {
+    let t = new Quoting();
+    outer: for (var i = 0; i < n; i++) {
+      for (var j = 0; j < n; j++) {
+        t.appendSafe("'");
+        if (j == 1) { break outer; }
+        t.append(x); t.appendSafe("'");
+      }
+    }
+    t.append(x);
+    let u = t;
+    t.accumulated
+  }
+}
+console.log("left ${left(2, "p")} ${leftRt(2, "p")}");
+// `for … of` on a class's own `forEach`, which might call the body
+// at another time, isn't taken for a loop.
+class Later {
+  private xs: List<String>;
+  public constructor(xs: List<String>) { this.xs = xs; }
+  public forEach(f: fn (String): Void): Void { for (let x of xs) { f(x); } }
+}
+let later(xs: List<String>): String {
+  q"""
+    : for (let x of new Later(xs)) {
+    ~'${x}'
+    : }
+}
+console.log("later ${later(["q"])}");
+// A jump inside an appended value carries the state from before the
+// append: out of a labeled block inside quotes, which the tag reports as
+// for branches, and a `continue` inside quotes, so neither folds.
+let valued(c: Boolean, x: String): String {
+  do {
+    let t = new Quoting();
+    lbl: do {
+      t.appendSafe("'");
+      t.append(if (c) { break lbl; } else { x });
+      t.appendSafe("'");
+    }
+    t.append(x);
+    t.accumulated
+  }
+}
+let valuedRt(c: Boolean, x: String): String {
+  do {
+    let t = new Quoting();
+    lbl: do {
+      t.appendSafe("'");
+      t.append(if (c) { break lbl; } else { x });
+      t.appendSafe("'");
+    }
+    t.append(x);
+    let u = t;
+    t.accumulated
+  }
+}
+console.log("valued ${valued(true, "r")} ${valuedRt(true, "r")} ${valued(false, "r")} ${valuedRt(false, "r")}");
+let passed(n: Int, x: String): String {
+  do {
+    let t = new Quoting();
+    for (var i = 0; i < n; i++) {
+      t.appendSafe("'");
+      t.append(if (i == 0) { continue; } else { x });
+      t.appendSafe("'");
+    }
+    t.append(x);
+    t.accumulated
+  }
+}
+let passedRt(n: Int, x: String): String {
+  do {
+    let t = new Quoting();
+    for (var i = 0; i < n; i++) {
+      t.appendSafe("'");
+      t.append(if (i == 0) { continue; } else { x });
+      t.appendSafe("'");
+    }
+    t.append(x);
+    let u = t;
+    t.accumulated
+  }
+}
+console.log("passed ${passed(2, "s")} ${passedRt(2, "s")}");
+--- settled
+(Block
+  (Class ^Mark:3 (Param ^label:62 String))
+  (Class
+    ^Buffer:14
+    (Let private ^sb:99 StringBuilder (Call new StringBuilder))
+    (Method
+      ^append:100
+      (Fn (Let ^x:103 String) Void (Block (Call (Call . sb:99 \append) x:103))))
+    (Method
+      ^mark:101
+      (Fn
+        (Let ^m:104 Mark:3)
+        Void
+        (Block
+          (Call (Call . sb:99 \append) (Call cat "{" (Call . m:104 \label) "}")))))
+    (Method ^toString:102 (Fn String (Block (Call (Call . sb:99 \toString))))))
+  (Interface
+    ^Effect:0
+    (Method ^enactOn:51 (Signature (Let ^c:52 Buffer:14) Void)))
+  (Class
+    ^AppendParseEffect:1
+    Effect:0
+    (Param ^text:54 String)
+    (Method
+      ^enactOn:55
+      (Fn
+        (Let ^c:56 Buffer:14)
+        Void
+        (Block (Call (Call . c:56 \append) text:54)))))
+  (Class
+    ^EventParseEffect:2
+    Effect:0
+    (Param ^event:58 Mark:3)
+    (Method
+      ^enactOn:59
+      (Fn
+        (Let ^c:60 Buffer:14)
+        Void
+        (Block (Call (Call . c:60 \mark) event:58)))))
+  (Class
+    ^After:4
+    (Param ^effects:64 (Call <> List Effect:0))
+    (Param ^stateAfter:65 Boolean))
+  (Class ^Propagator:5 (Param ^quote:67 String))
+  (Let ^Callout:6 (Call FnType String Boolean Void))
+  (Let
+    ^ignore:7
+    (Fn
+      (Let ^problem:68 String)
+      (Let ^isError:69 Boolean)
+      Void
+      (Block
+        (If
+          isError:69
+          (Block (Call (Call . console \log) problem:68) #void)
+          (Block)))))
+  (Let
+    ^propagateOver:8
+    (Fn
+      (Let ^p:70 Propagator:5)
+      (Let ^before:71 Boolean)
+      (Let ^known:72 (Call ? String))
+      (Let ^same:73 (Call FnType Boolean Boolean Boolean))
+      (Let ^callout:74 Callout:6)
+      After:4
+      (Block
+        (If
+          (Call == known:72 null)
+          (Block (Return @776 (Call new After:4 (Call list) before:71)) #void)
+          (Block))
+        (If
+          (Call == known:72 "!")
+          (Block
+            (Return @776
+              (Call
+                new
+                After:4
+                (Call
+                  list
+                  (Call new EventParseEffect:2 (Call new Mark:3 "bang")))
+                before:71))
+            #void)
+          (Block))
+        (Let ^angles:75 (Call . (Call (Call . known:72 \split) "<") \length))
+        (If
+          (Call > angles:75 1)
+          (Block (Call callout:74 "angle bracket in fixed text" false) #void)
+          (Block))
+        (If
+          (Call ! (Call same:73 before:71 before:71))
+          (Block (Call callout:74 "states differ from themselves" true) #void)
+          (Block))
+        (Let
+          ^quotes:76
+          (Call
+            -
+            (Call
+              .
+              (Call (Call . known:72 \split) (Call . p:70 \quote))
+              \length)
+            1))
+        (Call
+          new
+          After:4
+          (Call list (Call new AppendParseEffect:1 known:72))
+          (If
+            (Call == (Call % quotes:76 2) 1)
+            (Block (Call ! before:71))
+            (Block before:71))))))
+  (Interface
+    ^Escaper:9
+    (Method ^applyString:78 (Signature (Let ^x:79 String) String)))
+  (Class
+    ^TextEscaper:10
+    Escaper:9
+    (Let static ^instance:81 TextEscaper:10 (Call new TextEscaper:10))
+    (Method
+      ^applyString:82
+      (Fn (Let ^x:83 String) String (Block (Call cat "[" x:83 "]")))))
+  (Class
+    ^QuoteEscaper:11
+    Escaper:9
+    (Let static ^instance:85 QuoteEscaper:11 (Call new QuoteEscaper:11))
+    (Method
+      ^applyString:86
+      (Fn (Let ^x:87 String) String (Block (Call cat "(" x:87 ")")))))
+  (Class
+    ^Both:12
+    Escaper:9
+    (Param ^first:89 Escaper:9)
+    (Param ^second:90 Escaper:9)
+    (Method
+      ^applyString:91
+      (Fn
+        (Let ^x:92 String)
+        String
+        (Block
+          (Call
+            (Call . second:90 \applyString)
+            (Call (Call . first:89 \applyString) x:92))))))
+  (Class
+    ^Picker:13
+    (Param ^strict:94 Boolean)
+    (Method
+      ^escaperFor:95
+      (Fn
+        (Let ^inQuote:96 Boolean)
+        (Let ^callout:97 Callout:6)
+        Escaper:9
+        (Block
+          (If
+            (If strict:94 inQuote:96 #false)
+            (Block (Call callout:97 "a value in quotes" false) #void)
+            (Block))
+          (If
+            inQuote:96
+            (Block
+              (Call
+                new
+                Both:12
+                (Call . TextEscaper:10 \instance)
+                (Call . QuoteEscaper:11 \instance)))
+            (Block (Call . TextEscaper:10 \instance)))))))
+  (Interface
+    ^ContextualAutoescapingAccumulator:15
+    (Get ^accumulated:106 (Signature String)))
+  (Class
+    ^Quoting:16
+    ContextualAutoescapingAccumulator:15
+    (Method static
+      ^newCollector:108
+      (Fn Buffer:14 (Block (Call new Buffer:14))))
+    (Method static ^initialState:109 (Fn Boolean (Block false)))
+    (Method static
+      ^propagator:110
+      (Fn Propagator:5 (Block (Call new Propagator:5 "'"))))
+    (Method static
+      ^picker:111
+      (Fn Picker:13 (Block (Call new Picker:13 false))))
+    (Method static
+      ^sameStatePredicate:112
+      (Fn
+        (Call FnType Boolean Boolean Boolean)
+        (Block
+          (Fn
+            (Let ^a:122 Boolean)
+            (Let ^b:123 Boolean)
+            Boolean
+            (Block (Call == a:122 b:123))))))
+    (Method static
+      ^mergeStates:113
+      (Fn
+        (Let ^a:124 Boolean)
+        (Let ^b:125 Boolean)
+        (Let ^callout:126 Callout:6)
+        Boolean
+        (Block
+          (If
+            (Call != a:124 b:125)
+            (Block
+              (Call callout:126 "branches end in different contexts" true)
+              #void)
+            (Block))
+          a:124)))
+    (Method static
+      ^checkEndState:114
+      (Fn
+        (Let ^inQuote:127 Boolean)
+        (Let ^callout:128 Callout:6)
+        Void
+        (Block
+          (If
+            inQuote:127
+            (Block (Call callout:128 "ends inside quotes" true) #void)
+            (Block)))))
+    (Method static
+      ^fromCollector:115
+      (Fn (Let ^c:129 Buffer:14) String (Block (Call (Call . c:129 \toString)))))
+    (Method static
+      ^enact:116
+      (Fn
+        (Let ^m:130 Mark:3)
+        (Let ^c:131 Buffer:14)
+        Void
+        (Block (Call (Call . c:131 \mark) m:130))))
+    (Var private ^inQuote:117 Boolean false)
+    (Let private ^collector:118 Buffer:14 (Call new Buffer:14))
+    (Method
+      ^appendSafe:119
+      (Fn
+        (Let ^x:132 String)
+        Void
+        (Block
+          (Let
+            ^after:133
+            (Call
+              propagateOver:8
+              (Call (Call . Quoting:16 \propagator))
+              inQuote:117
+              x:132
+              (Call (Call . Quoting:16 \sameStatePredicate))
+              ignore:7))
+          (Assign inQuote:117 (Call . after:133 \stateAfter))
+          (Loop
+            (Block
+              (Call
+                (Call . (Call . after:133 \effects) \forEach)
+                (Fn
+                  (Let ^e:134)
+                  (Block (Call (Call . e:134 \enactOn) collector:118) #void)))
+              (Break @3816))))))
+    (Method
+      ^append:120
+      (Fn
+        (Let ^x:135 String)
+        Void
+        (Block
+          (Let
+            ^escaped:136
+            (Call
+              (Call
+                .
+                (Call
+                  (Call . (Call (Call . Quoting:16 \picker)) \escaperFor)
+                  inQuote:117
+                  ignore:7)
+                \applyString)
+              x:135))
+          (Call (Call . collector:118 \append) escaped:136)
+          #void)))
+    (Get
+      ^accumulated:121
+      (Fn String (Block (Call (Call . collector:118 \toString))))))
+  (Let ^q:17 Quoting:16)
+  (Let
+    ^listed:18
+    (Fn
+      (Let ^xs:137 (Call <> List String))
+      String
+      (Block
+        (Block
+          (Let ^collector#138 (Call (Call . Quoting:16 \newCollector)))
+          (Block
+            (Call (Call . collector#138 \append) "(")
+            (Loop
+              (Block
+                (Call
+                  (Call . xs:137 \forEach)
+                  (Fn
+                    (Let ^x:139)
+                    (Block
+                      (Call (Call . collector#138 \append) " '")
+                      (Call
+                        (Call . collector#138 \append)
+                        (Call
+                          (Call
+                            .
+                            (Call . QuoteEscaper:11 \instance)
+                            \applyString)
+                          (Call
+                            (Call
+                              .
+                              (Call . TextEscaper:10 \instance)
+                              \applyString)
+                            x:139)))
+                      (Call (Call . collector#138 \append) "' ")
+                      (Call
+                        (Call . collector#138 \append)
+                        (Call
+                          (Call
+                            .
+                            (Call . TextEscaper:10 \instance)
+                            \applyString)
+                          x:139))
+                      #void)))
+                (Break @4450)))
+            (Call (Call . collector#138 \append) ")")
+            #void)
+          (Call (Call . Quoting:16 \fromCollector) collector#138)))))
+  (Let
+    ^listedRt:19
+    (Fn
+      (Let ^xs:140 (Call <> List String))
+      String
+      (Block
+        (Block
+          (Let ^t:141 (Call new Quoting:16))
+          (Call (Call . t:141 \appendSafe) "(")
+          (Loop
+            (Block
+              (Call
+                (Call . xs:140 \forEach)
+                (Fn
+                  (Let ^x:143)
+                  (Block
+                    (Call (Call . t:141 \appendSafe) " '")
+                    (Call (Call . t:141 \append) x:143)
+                    (Call (Call . t:141 \appendSafe) "' ")
+                    (Call (Call . t:141 \append) x:143)
+                    #void)))
+              (Break @4607)))
+          (Call (Call . t:141 \appendSafe) ")")
+          (Let ^u:142 t:141)
+          (Call . t:141 \accumulated)))))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      "for of "
+      (Call listed:18 (Call list "a" "b"))
+      " "
+      (Call listedRt:19 (Call list "a" "b"))))
+  (Let
+    ^counted:20
+    (Fn
+      (Let ^n:144 Int)
+      (Let ^x:145 String)
+      String
+      (Block
+        (Block
+          (Let ^collector#146 (Call (Call . Quoting:16 \newCollector)))
+          (Block
+            (Var ^i:147 0)
+            (Loop
+              (If
+                (Call < i:147 n:144)
+                (Block
+                  (Assign i:147 (Call + i:147 1))
+                  (If (Call == i:147 2) (Block (Continue @4958) #void) (Block))
+                  (Call (Call . collector#146 \append) "'")
+                  (Call
+                    (Call . collector#146 \append)
+                    (Call
+                      (Call . (Call . QuoteEscaper:11 \instance) \applyString)
+                      (Call
+                        (Call . (Call . TextEscaper:10 \instance) \applyString)
+                        x:145)))
+                  (Call (Call . collector#146 \append) "'")
+                  (If (Call == i:147 4) (Block (Break @4958) #void) (Block))
+                  (Call
+                    (Call . collector#146 \append)
+                    (Call
+                      (Call . (Call . TextEscaper:10 \instance) \applyString)
+                      x:145))
+                  (Call (Call . collector#146 \append) ",")
+                  #void)
+                (Break @4958)))
+            (Call (Call . collector#146 \append) ".")
+            #void)
+          (Call (Call . Quoting:16 \fromCollector) collector#146)))))
+  (Let
+    ^countedRt:21
+    (Fn
+      (Let ^n:148 Int)
+      (Let ^x:149 String)
+      String
+      (Block
+        (Block
+          (Let ^t:150 (Call new Quoting:16))
+          (Var ^i:151 0)
+          (Loop
+            (If
+              (Call < i:151 n:148)
+              (Block
+                (Assign i:151 (Call + i:151 1))
+                (If (Call == i:151 2) (Block (Continue @5185) #void) (Block))
+                (Call (Call . t:150 \appendSafe) "'")
+                (Call (Call . t:150 \append) x:149)
+                (Call (Call . t:150 \appendSafe) "'")
+                (If (Call == i:151 4) (Block (Break @5185) #void) (Block))
+                (Call (Call . t:150 \append) x:149)
+                (Call (Call . t:150 \appendSafe) ",")
+                #void)
+              (Break @5185)))
+          (Call (Call . t:150 \appendSafe) ".")
+          (Let ^u:152 t:150)
+          (Call . t:150 \accumulated)))))
+  (Call
+    (Call . console \log)
+    (Call cat "while " (Call counted:20 5 "c") " " (Call countedRt:21 5 "c")))
+  (Let
+    ^stepped:22
+    (Fn
+      (Let ^n:153 Int)
+      (Let ^x:154 String)
+      String
+      (Block
+        (Block
+          (Let ^collector#155 (Call (Call . Quoting:16 \newCollector)))
+          (Block
+            (Block
+              (Var ^i:157 0)
+              (Loop
+                (If
+                  (Call < i:157 n:153)
+                  (Block
+                    (Call (Call . collector#155 \append) "(")
+                    (Call
+                      (Call . collector#155 \append)
+                      (Call
+                        (Call . (Call . TextEscaper:10 \instance) \applyString)
+                        x:154))
+                    (Call (Call . collector#155 \append) ")")
+                    #void)
+                  (Break @5555))
+                (Block (Let ^t#158 i:157) (Assign i:157 (Call + t#158 1)) t#158)))
+            (Var ^j:156 0)
+            (Loop
+              (Block
+                (Call (Call . collector#155 \append) "'")
+                (Call
+                  (Call . collector#155 \append)
+                  (Call
+                    (Call . (Call . QuoteEscaper:11 \instance) \applyString)
+                    (Call
+                      (Call . (Call . TextEscaper:10 \instance) \applyString)
+                      x:154)))
+                (Call (Call . collector#155 \append) "';")
+                (Assign j:156 (Call + j:156 1))
+                #void)
+              (If (Call < j:156 n:153) (Block) (Break @5628)))
+            #void)
+          (Call (Call . Quoting:16 \fromCollector) collector#155)))))
+  (Let
+    ^steppedRt:23
+    (Fn
+      (Let ^n:159 Int)
+      (Let ^x:160 String)
+      String
+      (Block
+        (Block
+          (Let ^t:161 (Call new Quoting:16))
+          (Block
+            (Var ^i:164 0)
+            (Loop
+              (If
+                (Call < i:164 n:159)
+                (Block
+                  (Call (Call . t:161 \appendSafe) "(")
+                  (Call (Call . t:161 \append) x:160)
+                  (Call (Call . t:161 \appendSafe) ")")
+                  #void)
+                (Break @5766))
+              (Block (Let ^t#165 i:164) (Assign i:164 (Call + t#165 1)) t#165)))
+          (Var ^j:162 0)
+          (Loop
+            (Block
+              (Call (Call . t:161 \appendSafe) "'")
+              (Call (Call . t:161 \append) x:160)
+              (Call (Call . t:161 \appendSafe) "';")
+              (Assign j:162 (Call + j:162 1))
+              #void)
+            (If (Call < j:162 n:159) (Block) (Break @5868)))
+          (Let ^u:163 t:161)
+          (Call . t:161 \accumulated)))))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      "for, do "
+      (Call stepped:22 2 "d")
+      " "
+      (Call steppedRt:23 2 "d")
+      " "
+      (Call stepped:22 0 "d")
+      " "
+      (Call steppedRt:23 0 "d")))
+  (Let
+    ^grid:24
+    (Fn
+      (Let ^n:166 Int)
+      (Let ^x:167 String)
+      String
+      (Block
+        (Block
+          (Let ^collector#168 (Call (Call . Quoting:16 \newCollector)))
+          (Block
+            (Block
+              (Var ^i:169 0)
+              (Loop
+                (If
+                  (Call < i:169 n:166)
+                  (Block
+                    (Block
+                      (Var ^j:171 0)
+                      (Loop
+                        (If
+                          (Call < j:171 n:166)
+                          (Block
+                            (If
+                              (Call > j:171 i:169)
+                              (Block (Continue @6334) #void)
+                              (Block))
+                            (If
+                              (Call == i:169 2)
+                              (Block (Break @6327) #void)
+                              (Block))
+                            (Call (Call . collector#168 \append) "'")
+                            (Call
+                              (Call . collector#168 \append)
+                              (Call
+                                (Call
+                                  .
+                                  (Call . QuoteEscaper:11 \instance)
+                                  \applyString)
+                                (Call
+                                  (Call
+                                    .
+                                    (Call . TextEscaper:10 \instance)
+                                    \applyString)
+                                  x:167)))
+                            (Call (Call . collector#168 \append) "'")
+                            (Call
+                              (Call . collector#168 \append)
+                              (Call
+                                (Call
+                                  .
+                                  (Call . TextEscaper:10 \instance)
+                                  \applyString)
+                                (Call (Call . j:171 \toString))))
+                            #void)
+                          (Break @6370))
+                        (Block
+                          (Let ^t#172 j:171)
+                          (Assign j:171 (Call + t#172 1))
+                          t#172)))
+                    (Call (Call . collector#168 \append) ";")
+                    #void)
+                  (Break @6334))
+                (Block (Let ^t#170 i:169) (Assign i:169 (Call + t#170 1)) t#170))))
+          (Call (Call . Quoting:16 \fromCollector) collector#168)))))
+  (Let
+    ^gridRt:25
+    (Fn
+      (Let ^n:173 Int)
+      (Let ^x:174 String)
+      String
+      (Block
+        (Block
+          (Let ^t:175 (Call new Quoting:16))
+          (Block
+            (Block
+              (Var ^i:177 0)
+              (Loop
+                (If
+                  (Call < i:177 n:173)
+                  (Block
+                    (Block
+                      (Var ^j:179 0)
+                      (Loop
+                        (If
+                          (Call < j:179 n:173)
+                          (Block
+                            (If
+                              (Call > j:179 i:177)
+                              (Block (Continue @6707) #void)
+                              (Block))
+                            (If
+                              (Call == i:177 2)
+                              (Block (Break @6700) #void)
+                              (Block))
+                            (Call (Call . t:175 \appendSafe) "'")
+                            (Call (Call . t:175 \append) x:174)
+                            (Call (Call . t:175 \appendSafe) "'")
+                            (Call
+                              (Call . t:175 \append)
+                              (Call (Call . j:179 \toString)))
+                            #void)
+                          (Break @6743))
+                        (Block
+                          (Let ^t#180 j:179)
+                          (Assign j:179 (Call + t#180 1))
+                          t#180)))
+                    (Call (Call . t:175 \appendSafe) ";")
+                    #void)
+                  (Break @6707))
+                (Block (Let ^t#178 i:177) (Assign i:177 (Call + t#178 1)) t#178))))
+          (Let ^u:176 t:175)
+          (Call . t:175 \accumulated)))))
+  (Call
+    (Call . console \log)
+    (Call cat "nested " (Call grid:24 3 "e") " " (Call gridRt:25 3 "e")))
+  (Let
+    ^attribute:26
+    (Fn
+      (Let ^c:181 Boolean)
+      (Let ^x:182 String)
+      String
+      (Block
+        (Block
+          (Let ^collector#183 (Call (Call . Quoting:16 \newCollector)))
+          (Block
+            (Call (Call . collector#183 \append) "a='")
+            (If c:181 (Block (Return @7267 "none") #void) (Block))
+            (Call
+              (Call . collector#183 \append)
+              (Call
+                (Call . (Call . QuoteEscaper:11 \instance) \applyString)
+                (Call
+                  (Call . (Call . TextEscaper:10 \instance) \applyString)
+                  x:182)))
+            (Call (Call . collector#183 \append) "'")
+            #void)
+          (Call (Call . Quoting:16 \fromCollector) collector#183)))))
+  (Let
+    ^attributeRt:27
+    (Fn
+      (Let ^c:184 Boolean)
+      (Let ^x:185 String)
+      String
+      (Block
+        (Block
+          (Let ^t:186 (Call new Quoting:16))
+          (Call (Call . t:186 \appendSafe) "a='")
+          (If c:184 (Block (Return @7375 "none") #void) (Block))
+          (Call (Call . t:186 \append) x:185)
+          (Call (Call . t:186 \appendSafe) "'")
+          (Let ^u:187 t:186)
+          (Call . t:186 \accumulated)))))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      "return "
+      (Call attribute:26 false "f")
+      " "
+      (Call attributeRt:27 false "f")
+      " "
+      (Call attribute:26 true "f")
+      " "
+      (Call attributeRt:27 true "f")))
+  (Let
+    ^bubbled:28
+    (Fn
+      (Let ^c:188 Boolean)
+      (Let ^x:189 String)
+      (Call throws String Bubble)
+      (Block
+        (Block
+          (Let ^collector#190 (Call (Call . Quoting:16 \newCollector)))
+          (Block
+            (If
+              c:188
+              (Block (Call (Call . collector#190 \append) "'") (Fail) #void)
+              (Block))
+            (Call
+              (Call . collector#190 \append)
+              (Call
+                (Call . (Call . TextEscaper:10 \instance) \applyString)
+                x:189))
+            #void)
+          (Call (Call . Quoting:16 \fromCollector) collector#190)))))
+  (Let
+    ^bubbledRt:29
+    (Fn
+      (Let ^c:191 Boolean)
+      (Let ^x:192 String)
+      (Call throws String Bubble)
+      (Block
+        (Block
+          (Let ^t:193 (Call new Quoting:16))
+          (If
+            c:191
+            (Block (Call (Call . t:193 \appendSafe) "'") (Fail) #void)
+            (Block))
+          (Call (Call . t:193 \append) x:192)
+          (Let ^u:194 t:193)
+          (Call . t:193 \accumulated)))))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      "bubble "
+      (Orelse (Call bubbled:28 false "g") "failed")
+      " "
+      (Orelse (Call bubbledRt:29 false "g") "failed")
+      " "
+      (Orelse (Call bubbled:28 true "g") "failed")))
+  (Let
+    ^around:30
+    (Fn
+      (Let ^n:195 Int)
+      (Let ^x:196 String)
+      String
+      (Block
+        (Var ^r:197 "")
+        (Block
+          (Var ^i:198 0)
+          (Loop
+            (If
+              (Call < i:198 n:195)
+              (Block
+                (Let
+                  ^s:200
+                  (Block
+                    (Let
+                      ^collector#201
+                      (Call (Call . Quoting:16 \newCollector)))
+                    (Block
+                      (Call (Call . collector#201 \append) "'")
+                      (If
+                        (Call == i:198 0)
+                        (Block (Continue @8233) #void)
+                        (Block))
+                      (If (Call == i:198 2) (Block (Break @8233) #void) (Block))
+                      (Call
+                        (Call . collector#201 \append)
+                        (Call
+                          (Call
+                            .
+                            (Call . QuoteEscaper:11 \instance)
+                            \applyString)
+                          (Call
+                            (Call
+                              .
+                              (Call . TextEscaper:10 \instance)
+                              \applyString)
+                            x:196)))
+                      (Call (Call . collector#201 \append) "'")
+                      #void)
+                    (Call (Call . Quoting:16 \fromCollector) collector#201)))
+                (Assign r:197 (Call cat r:197 s:200))
+                #void)
+              (Break @8233))
+            (Block (Let ^t#199 i:198) (Assign i:198 (Call + t#199 1)) t#199)))
+        r:197)))
+  (Let
+    ^aroundRt:31
+    (Fn
+      (Let ^n:202 Int)
+      (Let ^x:203 String)
+      String
+      (Block
+        (Var ^r:204 "")
+        (Block
+          (Var ^i:205 0)
+          (Loop
+            (If
+              (Call < i:205 n:202)
+              (Block
+                (Let
+                  ^s:207
+                  (Block
+                    (Let ^t:208 (Call new Quoting:16))
+                    (Call (Call . t:208 \appendSafe) "'")
+                    (If
+                      (Call == i:205 0)
+                      (Block (Continue @8461) #void)
+                      (Block))
+                    (If (Call == i:205 2) (Block (Break @8461) #void) (Block))
+                    (Call (Call . t:208 \append) x:203)
+                    (Call (Call . t:208 \appendSafe) "'")
+                    (Let ^u:209 t:208)
+                    (Call . t:208 \accumulated)))
+                (Assign r:204 (Call cat r:204 s:207))
+                #void)
+              (Break @8461))
+            (Block (Let ^t#206 i:205) (Assign i:205 (Call + t#206 1)) t#206)))
+        r:204)))
+  (Call
+    (Call . console \log)
+    (Call cat "around " (Call around:30 3 "h") " " (Call aroundRt:31 3 "h")))
+  (Let
+    ^opened:32
+    (Fn
+      (Let ^xs:210 (Call <> List String))
+      String
+      (Block
+        (Block
+          (Let ^accumulator#211 (Call new q:17))
+          (Block
+            (Loop
+              (Block
+                (Call
+                  (Call . xs:210 \forEach)
+                  (Fn
+                    (Let ^x:212)
+                    (Block
+                      (Call (Call . accumulator#211 \appendSafe) "'")
+                      (Call (Call . accumulator#211 \append) x:212)
+                      #void)))
+                (Break @8981)))
+            #void)
+          (Call . accumulator#211 \accumulated)))))
+  (Let
+    ^openedRt:33
+    (Fn
+      (Let ^xs:213 (Call <> List String))
+      String
+      (Block
+        (Block
+          (Let ^t:214 (Call new Quoting:16))
+          (Loop
+            (Block
+              (Call
+                (Call . xs:213 \forEach)
+                (Fn
+                  (Let ^x:216)
+                  (Block
+                    (Call (Call . t:214 \appendSafe) "'")
+                    (Call (Call . t:214 \append) x:216)
+                    #void)))
+              (Break @9101)))
+          (Let ^u:215 t:214)
+          (Call . t:214 \accumulated)))))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      "opened "
+      (Call opened:32 (Call list "i" "j" "k"))
+      " "
+      (Call openedRt:33 (Call list "i" "j" "k"))))
+  (Let
+    ^skipped:34
+    (Fn
+      (Let ^n:217 Int)
+      (Let ^x:218 String)
+      String
+      (Block
+        (Block
+          (Let ^accumulator#219 (Call new q:17))
+          (Block
+            (Block
+              (Var ^i:220 0)
+              (Loop
+                (If
+                  (Call < i:220 n:217)
+                  (Block
+                    (Call (Call . accumulator#219 \appendSafe) "'")
+                    (Call (Call . accumulator#219 \append) x:218)
+                    (If
+                      (Call == i:220 0)
+                      (Block (Continue @9327) #void)
+                      (Block))
+                    (Call (Call . accumulator#219 \appendSafe) "'")
+                    #void)
+                  (Break @9327))
+                (Block (Let ^t#221 i:220) (Assign i:220 (Call + t#221 1)) t#221)))
+            (Call (Call . accumulator#219 \append) x:218)
+            #void)
+          (Call . accumulator#219 \accumulated)))))
+  (Let
+    ^skippedRt:35
+    (Fn
+      (Let ^n:222 Int)
+      (Let ^x:223 String)
+      String
+      (Block
+        (Block
+          (Let ^t:224 (Call new Quoting:16))
+          (Block
+            (Var ^i:226 0)
+            (Loop
+              (If
+                (Call < i:226 n:222)
+                (Block
+                  (Call (Call . t:224 \appendSafe) "'")
+                  (Call (Call . t:224 \append) x:223)
+                  (If (Call == i:226 0) (Block (Continue @9508) #void) (Block))
+                  (Call (Call . t:224 \appendSafe) "'")
+                  #void)
+                (Break @9508))
+              (Block (Let ^t#227 i:226) (Assign i:226 (Call + t#227 1)) t#227)))
+          (Call (Call . t:224 \append) x:223)
+          (Let ^u:225 t:224)
+          (Call . t:224 \accumulated)))))
+  (Call
+    (Call . console \log)
+    (Call cat "skipped " (Call skipped:34 3 "l") " " (Call skippedRt:35 3 "l")))
+  (Let
+    ^nested:36
+    (Fn
+      (Let ^n:228 Int)
+      (Let ^x:229 String)
+      String
+      (Block
+        (Block
+          (Let ^accumulator#230 (Call new q:17))
+          (Block
+            (Block
+              (Var ^i:231 0)
+              (Loop
+                (If
+                  (Call < i:231 n:228)
+                  (Block
+                    (Block
+                      (Var ^j:233 0)
+                      (Loop
+                        (If
+                          (Call < j:233 i:231)
+                          (Block
+                            (Call (Call . accumulator#230 \appendSafe) "'")
+                            (Call (Call . accumulator#230 \append) x:229)
+                            #void)
+                          (Break @9894))
+                        (Block
+                          (Let ^t#234 j:233)
+                          (Assign j:233 (Call + t#234 1))
+                          t#234)))
+                    (Call (Call . accumulator#230 \appendSafe) ";")
+                    #void)
+                  (Break @9858))
+                (Block (Let ^t#232 i:231) (Assign i:231 (Call + t#232 1)) t#232)))
+            #void)
+          (Call . accumulator#230 \accumulated)))))
+  (Let
+    ^nestedRt:37
+    (Fn
+      (Let ^n:235 Int)
+      (Let ^x:236 String)
+      String
+      (Block
+        (Block
+          (Let ^t:237 (Call new Quoting:16))
+          (Block
+            (Var ^i:239 0)
+            (Loop
+              (If
+                (Call < i:239 n:235)
+                (Block
+                  (Block
+                    (Var ^j:241 0)
+                    (Loop
+                      (If
+                        (Call < j:241 i:239)
+                        (Block
+                          (Call (Call . t:237 \appendSafe) "'")
+                          (Call (Call . t:237 \append) x:236)
+                          #void)
+                        (Break @10076))
+                      (Block
+                        (Let ^t#242 j:241)
+                        (Assign j:241 (Call + t#242 1))
+                        t#242)))
+                  (Call (Call . t:237 \appendSafe) ";")
+                  #void)
+                (Break @10040))
+              (Block (Let ^t#240 i:239) (Assign i:239 (Call + t#240 1)) t#240)))
+          (Let ^u:238 t:237)
+          (Call . t:237 \accumulated)))))
+  (Call
+    (Call . console \log)
+    (Call cat "nested " (Call nested:36 3 "m") " " (Call nestedRt:37 3 "m")))
+  (Let
+    ^resumed:38
+    (Fn
+      (Let ^n:243 Int)
+      (Let ^x:244 String)
+      String
+      (Block
+        (Block
+          (Let ^t:245 (Call new Quoting:16))
+          (Block
+            (Block
+              (Var ^i:246 0)
+              (Loop
+                (If
+                  (Call < i:246 n:243)
+                  (Block
+                    (Block
+                      (Var ^j:248 0)
+                      (Loop
+                        (If
+                          (Call < j:248 n:243)
+                          (Block
+                            (Call (Call . t:245 \appendSafe) "'")
+                            (If
+                              (Call == j:248 1)
+                              (Block (Continue @10396) #void)
+                              (Block))
+                            (Call (Call . t:245 \append) x:244)
+                            (Call (Call . t:245 \appendSafe) "'")
+                            #void)
+                          (Break @10432))
+                        (Block
+                          (Let ^t#249 j:248)
+                          (Assign j:248 (Call + t#249 1))
+                          t#249))))
+                  (Break @10396))
+                (Block (Let ^t#247 i:246) (Assign i:246 (Call + t#247 1)) t#247))))
+          (Call (Call . t:245 \append) x:244)
+          (Call . t:245 \accumulated)))))
+  (Let
+    ^resumedRt:39
+    (Fn
+      (Let ^n:250 Int)
+      (Let ^x:251 String)
+      String
+      (Block
+        (Block
+          (Let ^t:252 (Call new Quoting:16))
+          (Block
+            (Block
+              (Var ^i:254 0)
+              (Loop
+                (If
+                  (Call < i:254 n:250)
+                  (Block
+                    (Block
+                      (Var ^j:256 0)
+                      (Loop
+                        (If
+                          (Call < j:256 n:250)
+                          (Block
+                            (Call (Call . t:252 \appendSafe) "'")
+                            (If
+                              (Call == j:256 1)
+                              (Block (Continue @10712) #void)
+                              (Block))
+                            (Call (Call . t:252 \append) x:251)
+                            (Call (Call . t:252 \appendSafe) "'")
+                            #void)
+                          (Break @10748))
+                        (Block
+                          (Let ^t#257 j:256)
+                          (Assign j:256 (Call + t#257 1))
+                          t#257))))
+                  (Break @10712))
+                (Block (Let ^t#255 i:254) (Assign i:254 (Call + t#255 1)) t#255))))
+          (Call (Call . t:252 \append) x:251)
+          (Let ^u:253 t:252)
+          (Call . t:252 \accumulated)))))
+  (Call
+    (Call . console \log)
+    (Call cat "resumed " (Call resumed:38 2 "n") " " (Call resumedRt:39 2 "n")))
+  (Let
+    ^cut:40
+    (Fn
+      (Let ^n:258 Int)
+      (Let ^x:259 String)
+      String
+      (Block
+        (Block
+          (Let ^accumulator#260 (Call new q:17))
+          (Block
+            (Block
+              (Var ^i:261 0)
+              (Loop
+                (If
+                  (Call < i:261 n:258)
+                  (Block
+                    (Call (Call . accumulator#260 \appendSafe) "'")
+                    (Call (Call . accumulator#260 \append) x:259)
+                    (If (Call == i:261 1) (Block (Break @11187) #void) (Block))
+                    (Call (Call . accumulator#260 \appendSafe) "'")
+                    #void)
+                  (Break @11187))
+                (Block (Let ^t#262 i:261) (Assign i:261 (Call + t#262 1)) t#262)))
+            (Call (Call . accumulator#260 \append) x:259)
+            #void)
+          (Call . accumulator#260 \accumulated)))))
+  (Let
+    ^cutRt:41
+    (Fn
+      (Let ^n:263 Int)
+      (Let ^x:264 String)
+      String
+      (Block
+        (Block
+          (Let ^t:265 (Call new Quoting:16))
+          (Block
+            (Var ^i:267 0)
+            (Loop
+              (If
+                (Call < i:267 n:263)
+                (Block
+                  (Call (Call . t:265 \appendSafe) "'")
+                  (Call (Call . t:265 \append) x:264)
+                  (If (Call == i:267 1) (Block (Break @11361) #void) (Block))
+                  (Call (Call . t:265 \appendSafe) "'")
+                  #void)
+                (Break @11361))
+              (Block (Let ^t#268 i:267) (Assign i:267 (Call + t#268 1)) t#268)))
+          (Call (Call . t:265 \append) x:264)
+          (Let ^u:266 t:265)
+          (Call . t:265 \accumulated)))))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      "cut "
+      (Call cut:40 3 "o")
+      " "
+      (Call cutRt:41 3 "o")
+      " "
+      (Call cut:40 1 "o")
+      " "
+      (Call cutRt:41 1 "o")))
+  (Let
+    ^left:42
+    (Fn
+      (Let ^n:269 Int)
+      (Let ^x:270 String)
+      String
+      (Block
+        (Block
+          (Let ^t:271 (Call new Quoting:16))
+          (Block
+            (Block
+              (Var ^i:272 0)
+              (Loop
+                (If
+                  (Call < i:272 n:269)
+                  (Block
+                    (Block
+                      (Var ^j:274 0)
+                      (Loop
+                        (If
+                          (Call < j:274 n:269)
+                          (Block
+                            (Call (Call . t:271 \appendSafe) "'")
+                            (If
+                              (Call == j:274 1)
+                              (Block (Break @11705) #void)
+                              (Block))
+                            (Call (Call . t:271 \append) x:270)
+                            (Call (Call . t:271 \appendSafe) "'")
+                            #void)
+                          (Break @11748))
+                        (Block
+                          (Let ^t#275 j:274)
+                          (Assign j:274 (Call + t#275 1))
+                          t#275))))
+                  (Break @11712))
+                (Block (Let ^t#273 i:272) (Assign i:272 (Call + t#273 1)) t#273))))
+          (Call (Call . t:271 \append) x:270)
+          (Call . t:271 \accumulated)))))
+  (Let
+    ^leftRt:43
+    (Fn
+      (Let ^n:276 Int)
+      (Let ^x:277 String)
+      String
+      (Block
+        (Block
+          (Let ^t:278 (Call new Quoting:16))
+          (Block
+            (Block
+              (Var ^i:280 0)
+              (Loop
+                (If
+                  (Call < i:280 n:276)
+                  (Block
+                    (Block
+                      (Var ^j:282 0)
+                      (Loop
+                        (If
+                          (Call < j:282 n:276)
+                          (Block
+                            (Call (Call . t:278 \appendSafe) "'")
+                            (If
+                              (Call == j:282 1)
+                              (Block (Break @12015) #void)
+                              (Block))
+                            (Call (Call . t:278 \append) x:277)
+                            (Call (Call . t:278 \appendSafe) "'")
+                            #void)
+                          (Break @12058))
+                        (Block
+                          (Let ^t#283 j:282)
+                          (Assign j:282 (Call + t#283 1))
+                          t#283))))
+                  (Break @12022))
+                (Block (Let ^t#281 i:280) (Assign i:280 (Call + t#281 1)) t#281))))
+          (Call (Call . t:278 \append) x:277)
+          (Let ^u:279 t:278)
+          (Call . t:278 \accumulated)))))
+  (Call
+    (Call . console \log)
+    (Call cat "left " (Call left:42 2 "p") " " (Call leftRt:43 2 "p")))
+  (Class
+    ^Later:44
+    (Let private ^xs:285 (Call <> List String))
+    (Constructor
+      ^constructor:286
+      (Fn
+        (Let ^xs:288 (Call <> List String))
+        (Block (Assign (Call . this#284 \xs) xs:288) #void)))
+    (Method
+      ^forEach:287
+      (Fn
+        (Let ^f:289 (Call FnType String Void))
+        Void
+        (Block
+          (Loop
+            (Block
+              (Call
+                (Call . xs:285 \forEach)
+                (Fn (Let ^x:290) (Block (Call f:289 x:290) #void)))
+              (Break @12577)))))))
+  (Let
+    ^later:45
+    (Fn
+      (Let ^xs:291 (Call <> List String))
+      String
+      (Block
+        (Block
+          (Let ^accumulator#292 (Call new q:17))
+          (Block
+            (Loop
+              (Block
+                (Call
+                  (Call . (Call new Later:44 xs:291) \forEach)
+                  (Fn
+                    (Let ^x:293)
+                    (Block
+                      (Call (Call . accumulator#292 \appendSafe) "'")
+                      (Call (Call . accumulator#292 \append) x:293)
+                      (Call (Call . accumulator#292 \appendSafe) "'")
+                      #void)))
+                (Break @12660)))
+            #void)
+          (Call . accumulator#292 \accumulated)))))
+  (Call
+    (Call . console \log)
+    (Call cat "later " (Call later:45 (Call list "q"))))
+  (Let
+    ^valued:46
+    (Fn
+      (Let ^c:294 Boolean)
+      (Let ^x:295 String)
+      String
+      (Block
+        (Block
+          (Let ^t:296 (Call new Quoting:16))
+          (Block
+            (Block
+              (Call (Call . t:296 \appendSafe) "'")
+              (Call
+                (Call . t:296 \append)
+                (If c:294 (Block (Break @13043) #void) (Block x:295)))
+              (Call (Call . t:296 \appendSafe) "'")
+              #void))
+          (Call (Call . t:296 \append) x:295)
+          (Call . t:296 \accumulated)))))
+  (Let
+    ^valuedRt:47
+    (Fn
+      (Let ^c:297 Boolean)
+      (Let ^x:298 String)
+      String
+      (Block
+        (Block
+          (Let ^t:299 (Call new Quoting:16))
+          (Block
+            (Block
+              (Call (Call . t:299 \appendSafe) "'")
+              (Call
+                (Call . t:299 \append)
+                (If c:297 (Block (Break @13284) #void) (Block x:298)))
+              (Call (Call . t:299 \appendSafe) "'")
+              #void))
+          (Call (Call . t:299 \append) x:298)
+          (Let ^u:300 t:299)
+          (Call . t:299 \accumulated)))))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      "valued "
+      (Call valued:46 true "r")
+      " "
+      (Call valuedRt:47 true "r")
+      " "
+      (Call valued:46 false "r")
+      " "
+      (Call valuedRt:47 false "r")))
+  (Let
+    ^passed:48
+    (Fn
+      (Let ^n:301 Int)
+      (Let ^x:302 String)
+      String
+      (Block
+        (Block
+          (Let ^t:303 (Call new Quoting:16))
+          (Block
+            (Var ^i:304 0)
+            (Loop
+              (If
+                (Call < i:304 n:301)
+                (Block
+                  (Call (Call . t:303 \appendSafe) "'")
+                  (Call
+                    (Call . t:303 \append)
+                    (If
+                      (Call == i:304 0)
+                      (Block (Continue @13647) #void)
+                      (Block x:302)))
+                  (Call (Call . t:303 \appendSafe) "'")
+                  #void)
+                (Break @13647))
+              (Block (Let ^t#305 i:304) (Assign i:304 (Call + t#305 1)) t#305)))
+          (Call (Call . t:303 \append) x:302)
+          (Call . t:303 \accumulated)))))
+  (Let
+    ^passedRt:49
+    (Fn
+      (Let ^n:306 Int)
+      (Let ^x:307 String)
+      String
+      (Block
+        (Block
+          (Let ^t:308 (Call new Quoting:16))
+          (Block
+            (Var ^i:310 0)
+            (Loop
+              (If
+                (Call < i:310 n:306)
+                (Block
+                  (Call (Call . t:308 \appendSafe) "'")
+                  (Call
+                    (Call . t:308 \append)
+                    (If
+                      (Call == i:310 0)
+                      (Block (Continue @13908) #void)
+                      (Block x:307)))
+                  (Call (Call . t:308 \appendSafe) "'")
+                  #void)
+                (Break @13908))
+              (Block (Let ^t#311 i:310) (Assign i:310 (Call + t#311 1)) t#311)))
+          (Call (Call . t:308 \append) x:307)
+          (Let ^u:309 t:308)
+          (Call . t:308 \accumulated)))))
+  (Call
+    (Call . console \log)
+    (Call cat "passed " (Call passed:48 2 "s") " " (Call passedRt:49 2 "s")))
+  #void)
+error 11895..11895: content tag reported:branches end in different contexts
+error 13158..13158: content tag reported:branches end in different contexts
+error 11271..11271: content tag reported:branches end in different contexts
+log for of ( '([a])' [a] '([b])' [b]) ( '([a])' [a] '([b])' [b])
+log while '([c])'[c],'([c])'[c],'([c])'. '([c])'[c],'([c])'[c],'([c])'.
+log for, do ([d])([d])'([d])';'([d])'; ([d])([d])'([d])';'([d])'; '([d])'; '([d])';
+log nested '([e])'[0]'([e])'[0]'([e])'[1] '([e])'[0]'([e])'[0]'([e])'[1]
+log return a='([f])' a='([f])' none none
+log bubble [g] [g] failed
+log around '([h])' '([h])'
+log opened '([i])'[j]'([k]) '([i])'[j]'([k])
+log skipped '([l])'[l]''[l]'([l]) '([l])'[l]''[l]'([l])
+log nested ;'([m]);'[m]'([m]); ;'([m]);'[m]'([m]);
+log resumed '([n])'''[n]''[n] '([n])'''[n]''[n]
+log cut '([o])''([o])([o]) '([o])''([o])([o]) '([o])'[o] '([o])'[o]
+log left '([p])''([p]) '([p])''([p])
+log later '([q])'
+log valued '([r]) '([r]) '([r])'[r] '([r])'[r]
+log passed ''[s]'([s]) ''[s]'([s])
