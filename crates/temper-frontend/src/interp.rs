@@ -480,7 +480,7 @@ fn describe(abrupt: Abrupt) -> String {
 }
 
 /// What a run that ran out of steps says, before any budget.
-const OUT_OF_STEPS: &str = "Panicked: ran out of steps";
+pub(crate) const OUT_OF_STEPS: &str = "Panicked: ran out of steps";
 
 /// A JUnit report, as std's `reportTestResults` writes it, of one test
 /// that failed without a report of its own.

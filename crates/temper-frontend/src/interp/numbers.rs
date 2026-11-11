@@ -217,11 +217,15 @@ pub(super) fn int_method(n: i64, is_64: bool, name: &str, args: &[Val]) -> Optio
 }
 
 /// Today's date in UTC, as year, month and day, from the system clock,
-/// by Howard Hinnant's `civil_from_days`.
+/// or on wasm the page's ([`temper_os::host::now_ms`]), by Howard
+/// Hinnant's `civil_from_days`.
 pub fn today_utc() -> (i32, i32, i32) {
-    let secs = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs() as i64);
+    let ms = temper_os::host::now_ms();
+    let secs = if ms.is_finite() {
+        (ms / 1000.0).floor() as i64
+    } else {
+        0
+    };
     let z = secs.div_euclid(86_400) + 719_468;
     let era = z.div_euclid(146_097);
     let doe = z - era * 146_097;

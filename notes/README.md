@@ -56,6 +56,8 @@ This folder holds the plan in parts:
   design with one file per topic.
 - [repl.md](repl.md): the REPL: Kotlin's `temper repl` studied, and
   tempest's design and plan, by chunks.
+- [online-repl.md](online-repl.md): the REPL in the browser, beside
+  the playground: design, decisions, and plan, by chunks.
 - [kotlin-differences.md](kotlin-differences.md): where tempest differs
   from Kotlin Temper on purpose, and Kotlin Temper's known bugs.
 

@@ -23,6 +23,11 @@ const INVENTORY: &[(&str, usize, &str)] = &[
         3,
         "geteuid, and openat's descriptor",
     ),
+    (
+        "crates/temper-os/src/host.rs",
+        3,
+        "the web page's functions the wasm build imports: a log line, the clock",
+    ),
     ("crates/temper-os/src/interrupt.rs", 4, "Ctrl-C handlers"),
     (
         "crates/temper-os/src/process.rs",
@@ -33,6 +38,11 @@ const INVENTORY: &[(&str, usize, &str)] = &[
         "crates/temper-wasm/src/lib.rs",
         17,
         "#[unsafe(no_mangle)] on the playground's exports, and nothing else",
+    ),
+    (
+        "crates/temper-wasm/src/repl.rs",
+        4,
+        "#[unsafe(no_mangle)] on the REPL's exports, and nothing else",
     ),
     (
         "vendor/temper/be-rust/temper-core/src/lib.rs",

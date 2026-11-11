@@ -31,6 +31,8 @@ unsafe_code = "deny"
 [dependencies]
 # Without `net`: std `net` requests fail with "web client not supported here".
 temper-frontend = { path = "../temper-frontend", default-features = false }
+# The page's imports, on wasm (`host`).
+temper-os = { path = "../temper-os" }
 temper-analysis = { path = "../temper-analysis" }
 temper-syntax = { path = "../temper-syntax" }
 temper-tmpl = { path = "../temper-tmpl" }

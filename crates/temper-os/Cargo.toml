@@ -8,7 +8,8 @@ publish.workspace = true
 license.workspace = true
 
 # No dependencies on wasm or other platforms; the platforms' own
-# bindings where it calls them, rather than hand-written declarations.
+# bindings where it calls them, rather than hand-written declarations,
+# but for the web page's imports on wasm (src/host.rs), which have none.
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.191"
 

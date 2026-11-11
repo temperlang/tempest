@@ -10,11 +10,13 @@
 //!   for tests.
 //! - [`fs`]: on Unix, opening a file relative to a directory's
 //!   descriptor, and the effective user ID.
+//! - [`host`]: on wasm, the web page's functions the module imports, a
+//!   log line's stream and the clock.
 //!
 //! It calls the platforms through `libc` on Unix and `windows-sys` on
-//! Windows. Elsewhere, as on wasm, there's nothing to call, and each
-//! function does what tempest did before it had the call, as each one
-//! says.
+//! Windows, and on wasm the page's imports, declared by hand. Elsewhere,
+//! there's nothing to call, and each function does what tempest did
+//! before it had the call, as each one says.
 //!
 //! Each unsafe block does one unsafe thing and says, in a safety
 //! comment above it, why it's sound; clippy checks both. Signal and
@@ -26,5 +28,6 @@
 
 pub mod console;
 pub mod fs;
+pub mod host;
 pub mod interrupt;
 pub mod process;

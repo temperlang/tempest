@@ -53,6 +53,11 @@ Every export, and why it's a plain C ABI with JSON rather than
 wasm-bindgen, is in [the wasm API, in detail](detail/08-playground.md#the-wasm-api)
 and [its decisions](detail/08-playground.md#a-plain-c-abi-not-wasm-bindgen).
 
+A REPL session lives there too, for a REPL tab:
+[`repl_start`, `repl_input`, `repl_complete`, and `repl_reset`](detail/08-playground.md#the-repls-api)
+settle and run one input at a time against what earlier ones declared,
+with `tempest repl`'s transcript text.
+
 Run shows the interpreter's results beside the generated JavaScript's,
 run in a worker of its own. So the playground is also a quick check that
 two very different ways of running a program agree.

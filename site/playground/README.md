@@ -34,7 +34,10 @@ home (`../`); served alone, that link just leads back to the playground.
   editors count, plus line and column), what the interpreter logged and
   its tests' results, as `tempest test` reports them, and each backend's
   files. `std_library` gives std's own JavaScript, once. Their types are
-  in `src/api.ts`, narrowed from the JSON where it comes in.
+  in `src/api.ts`, narrowed from the JSON where it comes in. The module
+  imports the clock (`Date.now()`) and the REPL's log stream from the
+  page, in `env`; `repl_*` keep a REPL session, for a REPL tab
+  ([the REPL's API](../../docs/internals/detail/08-playground.md#the-repls-api)).
 - **Run** shows the interpreter's results beside the generated
   JavaScript's, run in a worker of its own (`src/js-worker.ts`): each
   generated module becomes a blob URL, with imports rewritten to the

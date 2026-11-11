@@ -46,8 +46,20 @@ let exports: Exports | null = null;
 let backends: string[] = [];
 let stdSent = false;
 
+/**
+ * What the module imports (crates/temper-os/src/host.rs): the clock, for
+ * std's `temporal`, and the REPL's stream of logged lines, which the
+ * compiler never uses.
+ */
+const HOST_IMPORTS = {
+  env: {
+    host_now: (): number => Date.now(),
+    host_log: (): void => {},
+  },
+};
+
 function instantiate(m: WebAssembly.Module): Exports {
-  const instance = new WebAssembly.Instance(m, {});
+  const instance = new WebAssembly.Instance(m, HOST_IMPORTS);
   const e = instance.exports;
   const fn = (name: string): ((...args: number[]) => number) => {
     const f = e[name];

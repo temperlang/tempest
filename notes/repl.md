@@ -157,8 +157,9 @@ The user's answers to the open questions at the end:
   `translate`, checked between their steps (`ReplTools` takes an
   `interrupted` callback).
 
-**Left:** `-b`; the playground's console; suggestions from history as
-you type; `help`'s topics (Kotlin's `unresolved`, `available-imports`);
+**Left:** `-b`; the playground's REPL tab
+([online-repl.md](online-repl.md)); suggestions from history as you
+type; `help`'s topics (Kotlin's `unresolved`, `available-imports`);
 a translation's module leaves out an earlier input it needs only through
 something without a name or a class type, or a change through a call
 that isn't a method's, as `f(list)` (rare); and contextual

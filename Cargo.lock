@@ -465,6 +465,7 @@ name = "temper-frontend"
 version = "0.0.0"
 dependencies = [
  "temper-funtests",
+ "temper-os",
  "temper-syntax",
  "temper-tmpl",
  "ureq",
@@ -515,6 +516,7 @@ dependencies = [
  "temper-driver",
  "temper-frontend",
  "temper-funtests",
+ "temper-os",
  "temper-syntax",
  "temper-tmpl",
 ]

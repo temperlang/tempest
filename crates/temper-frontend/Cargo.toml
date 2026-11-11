@@ -18,6 +18,8 @@ default = ["net"]
 net = ["dep:ureq"]
 
 [dependencies]
+# The clock: the page's, on wasm (`host`), for std's `temporal`.
+temper-os = { path = "../temper-os" }
 temper-syntax = { path = "../temper-syntax" }
 temper-tmpl = { path = "../temper-tmpl" }
 # As Kotlin Temper's Rust backend for std `net`, but without gzip; rustls

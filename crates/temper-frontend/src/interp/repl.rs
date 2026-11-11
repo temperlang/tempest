@@ -112,6 +112,11 @@ impl Runner {
         }
     }
 
+    /// Sets the steps each later input may take; `None` for no limit.
+    pub(crate) fn set_fuel(&mut self, fuel: Option<u64>) {
+        self.fuel = fuel;
+    }
+
     /// Makes room for a module's declarations among the globals.
     pub(crate) fn add_module(&mut self, s: &Settled, scope: ScopeId) {
         let first = self.interp.globals.len() as u32;

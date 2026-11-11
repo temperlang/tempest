@@ -31,6 +31,7 @@ functions, the tests, and what's weak or planned, including `watch`.
   - [Permalinks in the URL fragment](#permalinks-in-the-url-fragment)
   - [One build script, published by Pages](#one-build-script-published-by-pages)
 - [The wasm API](#the-wasm-api)
+  - [The REPL's API](#the-repls-api)
 - [The page's messages](#the-pages-messages)
 - [Main types and functions](#main-types-and-functions)
 - [Sizes](#sizes)
@@ -106,13 +107,15 @@ reads the result as UTF-8 from [`output_ptr`](../../../crates/temper-wasm/src/li
 and [`output_len`](../../../crates/temper-wasm/src/lib.rs). Input and
 output live in two thread-locals, `INPUT` and `OUTPUT`;
 [`with_source`](../../../crates/temper-wasm/src/lib.rs) accepts only
-the buffer `alloc` gave out. The module imports nothing.
+the buffer `alloc` gave out. The module imports two functions from the
+page, the clock and the REPL's log stream ([below](#the-repls-api)).
 
 **Alternatives:** wasm-bindgen and its generated glue; the component
 model.
 
 **Pros:** no dependency and no generated JavaScript; the module loads
-with `new WebAssembly.Instance(m, {})`; the ABI is a dozen functions,
+with `new WebAssembly.Instance(m, imports)`, two functions in `env`;
+the ABI is about twenty functions,
 easy to read in [`compiler-worker.ts`](../../../site/playground/src/compiler-worker.ts),
 and also what `compat/measure_size.py` loads.
 
@@ -214,7 +217,9 @@ The library cache would fix both.
 **Plus a big stack:** [`build.rs`](../../../crates/temper-wasm/build.rs)
 links the module with a 16 MiB stack instead of 1 MiB, for the settle
 loop's and the interpreter's recursion, as the native binaries use a
-64 MiB thread.
+64 MiB thread; **and a memory cap** of 1 GiB rather than wasm32's
+4 GiB, so a runaway allocation traps, as a panic does, rather than
+taking a phone's tab down.
 
 **Cons:** a slow compile with nothing waiting runs to the end; the stale
 timer can't tell slow from stuck.
@@ -349,6 +354,59 @@ and [`TESTS`](../../../crates/temper-wasm/src/lib.rs). Positions are
 UTF-16 code units, with line and column from 1 for diagnostics;
 diagnostics in std's files carry no position.
 
+### The REPL's API
+
+[`repl`](../../../crates/temper-wasm/src/repl.rs) keeps one
+[`ReplSession`](../../../crates/temper-frontend/src/repl.rs) in the
+instance, for the playground's REPL tab
+([notes/online-repl.md](../../../notes/online-repl.md)), with the CLI
+REPL's transcript text:
+
+| Export | Takes | Gives |
+|---|---|---|
+| `repl_start(ptr, len, fuel)` | source for input 0 (the editor's), steps | a new session; input 0's answer, or `null` if the source has no code |
+| `repl_input(ptr, len, fuel)` | one input, steps | its answer, below; starts a session if there's none |
+| `repl_complete(ptr, len) -> u32` | the input cell's text | 1 if it's whole, so Enter runs it; `{"complete": true, "inputs": [...], "brackets": 0}` |
+| `repl_reset()` | | drops the session |
+
+An input's answer lists what it reported, in order, each with the
+text `tempest repl` prints, then its value (`null` if it failed):
+
+```json
+{"input": 2,
+ "events": [{"kind": "diagnostic", "level": "error", "message": "...",
+             "location": "interactive#2", "line": 1, "column": 7, "text": "..."},
+            {"kind": "log", "text": "hi"},
+            {"kind": "result", "text": "interactive#2: fail"}],
+ "value": null, "out_of_steps": false}
+```
+
+Kinds are `diagnostic`, `log`, `failure`, `output` (the REPL's
+functions'), `note`, `unresolved`, `interrupted`, `internal`,
+`truncated`, and `result`. `repl_complete` splits a typed or pasted
+buffer into inputs as the CLI splits piped lines
+([`Chunker`](../../../crates/temper-frontend/src/repl.rs)); the page
+feeds each to `repl_input` in turn, and uses `brackets` for the next
+line's indent.
+
+**Limits:** `fuel` is the steps one input may take (less than 1 for
+none); the page gives 50 million, as for a compile, and when an answer
+says `out_of_steps`, "keep going" runs the same text again, as the next
+input, with more. Logs past 64 KiB per input are dropped, with a
+`truncated` event where they were cut. Memory is the module's cap. A
+panic traps, as everywhere in the module, so the page restores a
+session by replaying its inputs into a new instance, as Stop does.
+
+**Imports**, in `env`, which every instance needs
+([temper-os's host module](../../../crates/temper-os/src/host.rs), the only
+unsafe code they take):
+
+- `host_log(ptr, len)`: a line an input logged, UTF-8 in the module's
+  memory, as it's logged, so a long run's output shows while it runs.
+  The answer lists it again, in order.
+- `host_now() -> f64`: `Date.now()`, for std's `temporal`, as
+  `SystemTime::now()` panics on wasm32-unknown-unknown.
+
 Two numberings live here: `compile`'s mask and `std_library` count by
 the backends built in (`backends`), but `generate` counts by
 [`KNOWN`](../../../crates/temper-driver/src/lib.rs), all seven. They
@@ -481,7 +539,16 @@ with `--limit` on builds.
   `)` is one error, and the rest is still typed), `answers_queries_in_utf16`
   (past an emoji and an error), `answers_editing_queries` (references,
   rename, signature help, a definition in std), `compiles_runs_and_tests`,
-  `generates_std`, and `runs_with_built_in_std`.
+  `generates_std`, and `runs_with_built_in_std`; and in its `repl`
+  module, the REPL's exports: a session with the editor's source as
+  input 0, logs streamed, a reset, running out of steps then keeping
+  going, long logs cut, and Enter's answer.
+- **The CLI REPL's transcripts**, temper-frontend's and
+  temper-driver's `tests/repl/*.cases`, in
+  [`repl.rs`](../../../crates/temper-wasm/tests/repl.rs): typed into
+  an input cell a line at a time, as the page will, split by
+  `repl_complete`, and fed to `repl_input`; each event's text must be
+  the CLI's, and each logged line streamed.
 - **The queries** themselves:
   [`analysis.rs`](../../../crates/temper-analysis/tests/analysis.rs)
   ([page 9's detail](09-language-server.md#tests)).

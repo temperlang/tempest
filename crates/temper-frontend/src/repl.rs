@@ -46,6 +46,11 @@ pub const MODULE_ERRORS: &str = "the module has errors, so it isn't translated";
 /// What [`ReplTools`]' functions fail with when they're interrupted.
 pub const INTERRUPTED: &str = crate::interp::INTERRUPTED;
 
+/// What an input that ran out of its steps ([`ReplOptions::fuel`]) fails
+/// with, as a [`ReplEvent::Failure`], so a front end can offer to run it
+/// again with more.
+pub const OUT_OF_STEPS: &str = crate::interp::OUT_OF_STEPS;
+
 use crate::interp::repl::{Outcome, Runner, render};
 use crate::library::{Level, Library, Message};
 use crate::project::load_imports;
@@ -294,6 +299,12 @@ impl ReplSession {
         }
         let specials = self.specials.clone();
         self.settle.view(|s| specials.borrow().module(s, n).ok())
+    }
+
+    /// Sets the steps each later input may take, as
+    /// [`ReplOptions::fuel`] does from the start; `None` for no limit.
+    pub fn set_fuel(&mut self, fuel: Option<u64>) {
+        self.runner.set_fuel(fuel);
     }
 
     /// Inputs fed so far, which is the next one's number.

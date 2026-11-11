@@ -29,6 +29,14 @@
 //! console.log(new TextDecoder().decode(out));
 //! ```
 //!
+//! [`repl`] keeps a REPL session for the playground's REPL tab:
+//! `repl_start`, `repl_input`, `repl_complete`, and `repl_reset`.
+//!
+//! The module imports two functions from the page, in `env`
+//! ([`temper_os::host`]): `host_log`, which the REPL streams logged
+//! lines through, and `host_now`, the clock, for std's `temporal`.
+//! Instantiating it needs both, for every export.
+//!
 //! Settling aside, it compiles as `tempest` does, through
 //! `temper-driver` ([`temper_driver::checked`], [`temper_driver::with_std`],
 //! [`temper_driver::translate`]). Each backend is a cargo feature, all on
@@ -58,6 +66,8 @@ use temper_syntax::{
     lex::SourceKind, parse::parse as parse_source, print::write_ast, print::write_tree,
 };
 use temper_tmpl::Program;
+
+pub mod repl;
 
 thread_local! {
     static INPUT: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
@@ -424,10 +434,7 @@ pub extern "C" fn references(at: u32) {
 #[allow(unsafe_code)]
 #[unsafe(no_mangle)]
 pub extern "C" fn rename(at: u32, ptr: *const u8, len: usize) {
-    let new_name = INPUT.with_borrow(|input| match ptr == input.as_ptr() && len <= input.len() {
-        true => String::from_utf8_lossy(&input[..len]).into_owned(),
-        false => String::new(),
-    });
+    let new_name = input_text(ptr, len);
     query(|kept, out| {
         let offset = byte_offset(&kept.source, at as usize) as u32;
         let analysis = &kept.analysis;
@@ -661,6 +668,15 @@ fn json_string(s: &str) -> String {
     }
     out.push('"');
     out
+}
+
+/// The input buffer's first `len` bytes as text, if `ptr` is the buffer
+/// `alloc` gave, or else nothing. Invalid UTF-8 is replaced.
+fn input_text(ptr: *const u8, len: usize) -> String {
+    INPUT.with_borrow(|input| match ptr == input.as_ptr() && len <= input.len() {
+        true => String::from_utf8_lossy(&input[..len]).into_owned(),
+        false => String::new(),
+    })
 }
 
 /// Reads the input buffer as source and fills the output.
