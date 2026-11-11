@@ -4,7 +4,9 @@
 //! tutorial's transcripts, in `tests/repl_docs.rs`.
 
 use std::fs;
-use std::io::{Read, Write};
+#[cfg(unix)]
+use std::io::Read;
+use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Stdio};
 

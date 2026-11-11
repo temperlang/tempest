@@ -468,4 +468,25 @@ mod tests {
         // The background sleep held the pipe open; it's gone too.
         assert!(started.elapsed() < Duration::from_secs(10));
     }
+
+    /// On Windows, a command past its limit is killed, and fails, saying
+    /// so, with what it printed; what it started isn't, yet, so this
+    /// one starts nothing: `ping`, which prints at once, then waits a
+    /// second between pings.
+    #[cfg(windows)]
+    #[test]
+    fn times_out() {
+        let started = std::time::Instant::now();
+        let mut command = std::process::Command::new("ping");
+        command
+            .args(["-n", "30", "127.0.0.1"])
+            .stdout(std::process::Stdio::piped());
+        let limit = Some(Duration::from_secs(3));
+        let (_, stdout, _, out_of_time) =
+            super::run(&mut command, "ping", limit).expect("ping runs");
+        assert_eq!(out_of_time, limit);
+        let stdout = String::from_utf8_lossy(&stdout);
+        assert!(stdout.contains("127.0.0.1"), "{stdout}");
+        assert!(started.elapsed() < Duration::from_secs(20));
+    }
 }

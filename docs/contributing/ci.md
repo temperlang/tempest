@@ -6,6 +6,69 @@ compromised release can't reach our builds, or our release token,
 unnoticed; and each pin moves only on purpose, to a release at least two
 weeks old, so a bad release has time to be caught first.
 
+## What runs where
+
+[ci.yml](../../.github/workflows/ci.yml) runs on every push and pull
+request, in two jobs:
+
+- **`check`, on Linux** (`ubuntu-24.04`): formatting, clippy, every
+  crate's tests with every backend's toolchain and checker, the wasm
+  build, the playground, the VS Code extension, the docs, and the
+  functional tests. Nearly all of tempest is the same on every
+  platform, so this is where it's tested.
+- **`platforms`, on every other platform tempest is released for:**
+  the code that differs by platform, natively, on each OS and
+  architecture's own GitHub runner, one job each from one definition:
+
+  | Target                      | Runner             |
+  | --------------------------- | ------------------ |
+  | `aarch64-unknown-linux-gnu` | `ubuntu-24.04-arm` |
+  | `aarch64-apple-darwin`      | `macos-15`         |
+  | `x86_64-apple-darwin`       | `macos-15-intel`   |
+  | `x86_64-pc-windows-msvc`    | `windows-2025`     |
+  | `aarch64-pc-windows-msvc`   | `windows-11-arm`   |
+
+  `x86_64-unknown-linux-gnu` is `check`'s, which runs these tests
+  among the workspace's. The code: the REPL's Ctrl-C (SIGINT on Unix,
+  the console's handler on Windows), ANSI color on Windows' console,
+  and where history is kept (`~/Library/Application Support` on macOS,
+  `%APPDATA%` on Windows); and child processes' (`temper-tmpl`'s
+  `children.rs`): process groups and time limits on Unix, and time
+  limits alone on Windows, which has no process groups yet. Each job
+  builds `tempest` with every backend, runs the REPL's tests and
+  `children.rs`'s, and then all of `tempest`'s, built without backends
+  (`--no-default-features`): their tests would run whatever toolchains
+  the image has, without the setup `check` gives them (JUnit's jars,
+  crates for generated Rust, .NET 6), and fail rather than skip.
+  Testing the backends on these platforms is a job of its own, for
+  later.
+
+  Tests that need Linux or Unix skip by `cfg`: the terminal test needs
+  Linux's `script` (so it runs on Linux Arm64 too), and the Ctrl-C test
+  sends SIGINT, so Windows' Ctrl-C isn't tested. So that a platform
+  can't pass by leaving them all out, [tests-ran.sh](../../.github/ci-tools/tests-ran.sh) fails a step
+  unless at least a given number of tests passed; raise its counts as
+  tests are added. Windows checks text files out with CRLF line ends,
+  so the job turns that off (`core.autocrlf false`) before checking
+  out. Warnings are errors (`RUSTFLAGS`), so code only these platforms
+  compile stays as clean as clippy keeps Linux's.
+
+  It's lean, as runners' minutes cost differently: on GitHub's
+  standard runners, a Windows minute counts as about twice a Linux
+  one, and a macOS minute about ten times, while Arm64 Linux is
+  cheaper than x64 (check GitHub's current billing page before adding
+  macOS jobs). So: a debug build, cached by rust-cache, with no
+  checkers, toolchains, or clippy, and a 30-minute limit. Should
+  GitHub stop offering an image (Intel macOS images are being
+  retired), drop its row and keep building that target in
+  binaries.yml.
+
+[binaries.yml](../../.github/workflows/binaries.yml) builds the released
+binaries nightly, cross-compiling Intel macOS on Apple silicon and
+Windows Arm64 on x64, and runs nothing on them; `platforms` is where
+they're tested. [nightly.yml](../../.github/workflows/nightly.yml)
+runs on Linux.
+
 ## What's pinned
 
 - **Actions,** GitHub's own and third parties', by full commit SHA with
@@ -36,6 +99,10 @@ weeks old, so a bad release has time to be caught first.
   versions, so a change fails there, not in the tests.
 - **VS Code,** for the extension's tests, by `VSCODE_VERSION` in
   [editors/vscode/build.py](../../editors/vscode/build.py).
+
+- **Runner images:** `check` is pinned to `ubuntu-24.04`, for Lua
+  (above); `platforms` to the images in its table above, so a new image
+  arrives as a deliberate bump, not a surprise.
 
 Not pinned: the other jobs' runner images, and what the images and
 `apt` install besides Lua; Node, Java, and .NET by major version; and
@@ -76,6 +143,8 @@ is the cue to fix the backend or the tests before bumping that pin.
 - **Ubuntu, for Lua:** moving a pinned job to a newer image changes
   `lua5.4` and `lua-socket`; update the versions its Lua step checks,
   and the tests' local versions, together.
+- **macOS and Windows images:** `platforms`' matrix in ci.yml, once
+  GitHub offers the newer image; its cache starts afresh.
 - **VS Code:** `VSCODE_VERSION` in build.py; CI's cache key follows it.
 - **The Rust toolchain:** take the SHA of the new version's branch
   (`git ls-remote https://github.com/dtolnay/rust-toolchain

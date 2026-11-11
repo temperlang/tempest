@@ -17,6 +17,10 @@
 # docs' examples on the release build, the docs site (built, its Mermaid
 # diagrams drawn, and its links checked), and `tempest test` on Chromarite and Ordable,
 # on the interpreter and on Python, JS, Lua, Java, and C#.
+# The `platforms` job runs the code that differs by platform (the REPL's
+# and child processes') natively on each other platform binaries.yml
+# releases for (Linux Arm64, macOS Arm64 and x64, and Windows x64 and
+# Arm64), with all of tempest's tests.
 # The checkers of generated code are at exact versions (.github/ci-tools/);
 # nightly.yml also tries each one's latest release. Every action is pinned
 # by commit SHA (docs/contributing/ci.md).
@@ -248,3 +252,81 @@ jobs:
         run: uv run compat/check_functional.py
       - name: Size and speed charts are current
         run: uv run compat/size_speed_charts.py --check
+
+  # The code that differs by platform, on every platform binaries.yml
+  # releases for but Linux x64, which `check` covers: the REPL's (Ctrl-C
+  # through SIGINT or the console's handler, ANSI color on Windows'
+  # console, and where history is kept) and children.rs's (process
+  # groups and time limits; on Windows, only time limits). Natively, on
+  # each OS and architecture's own runner. The REPL's tests and
+  # children.rs's are counted (tests-ran.sh), so a platform where
+  # they're all left out fails; then all of tempest's tests, built
+  # without backends, whose toolchains aren't set up here. Lean, as
+  # macOS and Windows minutes cost more: a debug build, no checkers or
+  # toolchains installed, and no clippy, though warnings are errors,
+  # for code that only these platforms compile (docs/contributing/ci.md).
+  platforms:
+    name: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Pinned, as `check`'s image is, so a new image's change shows
+        # up as a bump here. Each is the native runner for one of
+        # binaries.yml's targets: Linux Arm64, macOS on Apple silicon
+        # and Intel, and Windows x64 and Arm64.
+        os:
+          - ubuntu-24.04-arm
+          - macos-15
+          - macos-15-intel
+          - windows-2025
+          - windows-11-arm
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      RUSTFLAGS: -D warnings
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # Windows images check text files out with CRLF line ends, which
+      # the tests' expected output and the docs' transcripts don't have.
+      - name: Line ends as committed
+        if: runner.os == 'Windows'
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@cfcaf53ba4c621917ec7f78a66bff7a8848ddad4 # 1.85.0 branch, 2026-10-16
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: ${{ matrix.os }}
+      # ring (std `net`'s TLS) needs clang on Windows Arm64, as in
+      # binaries.yml.
+      - name: clang for ring on Windows Arm64
+        if: runner.os == 'Windows' && runner.arch == 'ARM64'
+        run: echo "C:\Program Files\LLVM\bin" >> "$GITHUB_PATH"
+      - name: Build
+        run: cargo build --locked -p tempest
+      # The line editor's, color's, and history's unit tests (on Windows,
+      # all but history's file modes), and `tempest repl` as a command:
+      # piped input, its flags, color, and, on Unix, Ctrl-C (SIGINT).
+      # The terminal test needs Linux's `script`, so runs on Linux Arm64
+      # too; Windows' Ctrl-C isn't tested yet.
+      - name: REPL
+        if: ${{ !cancelled() }}
+        run: |
+          bash .github/ci-tools/tests-ran.sh 9 cargo test --locked -p tempest --bin tempest repl::
+          bash .github/ci-tools/tests-ran.sh 9 cargo test --locked -p tempest --test repl
+      # What a session prints, and the docs' transcripts.
+      - name: REPL sessions
+        if: ${{ !cancelled() }}
+        run: bash .github/ci-tools/tests-ran.sh 2 cargo test --locked -p temper-frontend --test repl --test repl_docs
+      # Time limits, and on Unix, a command's process group killed.
+      - name: Child processes
+        if: ${{ !cancelled() }}
+        run: bash .github/ci-tools/tests-ran.sh 2 cargo test --locked -p temper-tmpl --lib children::
+      # The rest of tempest's tests: the CLI's. Without the backends,
+      # whose tests would run each toolchain the image happens to have
+      # but not the setup `check` gives them (JUnit's jars, crates for
+      # generated Rust, .NET 6), so they'd fail, not skip.
+      - name: All of tempest's tests, without backends
+        if: ${{ !cancelled() }}
+        run: cargo test --locked -p tempest --no-default-features
