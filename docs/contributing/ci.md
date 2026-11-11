@@ -9,8 +9,8 @@ weeks old, so a bad release has time to be caught first.
 ## What runs where
 
 Linux x64 on every push and pull request, so a change is checked in
-minutes; every other platform tempest is released for when someone
-asks, as nightly.yml's schedule is off for now (below).
+minutes; every other platform tempest is released for nightly or
+weekly, and whenever someone asks (below).
 
 ### Every push and pull request: Linux x64
 
@@ -52,24 +52,19 @@ for a required check (a workflow-level `paths-ignore` would leave
 required checks waiting instead).
 
 Each job caches its build with `Swatinem/rust-cache`, keyed by job (and
-by group, for the backends), saved only from `main`; pull requests read
+by group's `id`, for the backends, since keys can't have commas), saved
+only from `main`; pull requests read
 `main`'s. The cache holds third-party crates, built, and cargo's
 downloads: tempest's own crates are rebuilt in each job, which is most
 of a job's build, so there are few jobs, each running many checks. A
 newer push to a pull request cancels the older run.
 
-**Rough timings,** on GitHub's standard 2-core runners for private
-repositories, to be checked against the first runs: about 15 to 25
-minutes for each job, so 20 to 25 minutes for a run, and about 50 to
-65 runner minutes in all, where a single job took about 25, and nine
-jobs about 90 to 100. A change to notes alone takes about 10, and one
-to docs about 35 to 45.
+**Rough timings,** to be checked against the first full runs: about 15
+to 25 minutes for each job, so 20 to 25 minutes for a run. A change to
+notes alone takes about 10. GitHub's standard runners are free for
+public repositories, so the job count is about time, not cost.
 
 ### Nightly, weekly, and on demand: the other platforms
-
-**For now, nightly.yml's schedule is commented out to save runner
-minutes, so it runs only by hand.** What follows is how it runs with
-the schedule back on.
 
 [nightly.yml](../../.github/workflows/nightly.yml) runs its Linux jobs
 and `platforms-quick` every night (03:41 UTC), `platforms` every
@@ -179,18 +174,13 @@ What's left out, and why:
 `TEMPEST_ALLOW_MISSING` takes comma-separated words, each matched in a
 missing tool's message; the test still says what it skipped.
 
-**Timings and cost,** to be checked against the first runs:
-`platforms`' jobs build tempest twice (with and without `RUSTFLAGS`)
-and each backend's tests, so perhaps 30 to 60 minutes, Windows the
-slowest; `platforms-quick`'s build tempest once, without toolchains,
-so perhaps 10 to 15. GitHub bills runner minutes by OS: a Windows
-minute counts as about twice a Linux one, and a macOS minute about ten
-times, while Arm64 Linux is cheaper than x64 (check GitHub's current
-billing page). So the macOS job costs about as much as the other three
-together: around 500 Linux minutes a run in all for `platforms`, which
-is why it runs weekly, and around 150 to 200 for `platforms-quick`,
-skipped on nights after a day without commits. The Linux jobs take
-about 150 minutes a night, about 45 less when `cpp` is skipped.
+**Timings,** to be checked against the first runs: `platforms`' jobs
+build tempest twice (with and without `RUSTFLAGS`) and each backend's
+tests, so perhaps 30 to 60 minutes, Windows the slowest;
+`platforms-quick`'s build tempest once, without toolchains, so perhaps
+10 to 15. Standard runners are free for public repositories, on every
+OS; `platforms` runs weekly, and the nightly jobs skip a day without
+commits, to keep the queue short and spare GitHub's machines.
 Should GitHub stop offering an image, drop its row and keep building
 that target in binaries.yml.
 
@@ -230,8 +220,8 @@ tested.
 - **VS Code,** for the extension's tests, by `VSCODE_VERSION` in
   [editors/vscode/build.py](../../editors/vscode/build.py).
 
-- **Runner images:** ci.yml's jobs are pinned to `ubuntu-24.04`, for
-  Lua (above); nightly.yml's `platforms` and `platforms-quick` to the
+- **Runner images:** ci.yml's and pages.yml's jobs are pinned to
+  `ubuntu-24.04`, for Lua (above); nightly.yml's `platforms` and `platforms-quick` to the
   images in its table above, so a new image arrives as a deliberate
   bump, not a surprise.
 
@@ -244,7 +234,11 @@ renderer's lockfile).
 
 Downloads from servers far from GitHub's runners sometimes fail, so CI
 avoids or retries them: Lua comes from Ubuntu's mirrors, not lua.org;
-`apt-get` retries (`-o Acquire::Retries=3`); VS Code is cached
+[apt-install.sh](../../.github/ci-tools/apt-install.sh) skips packages
+the image has, updates from Ubuntu's own sources only, and retries each
+download three times with a 30-second timeout, so a dead mirror fails
+in minutes; Playwright's Chromium is installed without `--with-deps`
+(which runs apt), as the image has Chrome's libraries; VS Code is cached
 (`actions/cache`, keyed on its version), and
 [test/run.ts](../../editors/vscode/test/run.ts) tries a failed download
 three times before running the tests, which run once, and prints each
@@ -263,11 +257,12 @@ is the cue to fix the backend or the tests before bumping that pin.
 ## Bumping a pin
 
 - **Actions:** Dependabot ([.github/dependabot.yml](../../.github/dependabot.yml))
-  opens a monthly pull request updating the SHAs and their comments,
-  for releases at least two weeks old: one for every minor and patch
-  bump, and one per major bump. Read a major's release notes and check
-  the inputs we pass before merging, and after merging, run Nightly and
-  Binaries by hand, since only `ci.yml` runs on the pull request. By hand: resolve the release's
+  opens one monthly pull request updating the SHAs and their comments,
+  in the workflows and the local action together, for releases at least
+  two weeks old, majors included. Read each major's release notes and
+  check the inputs we pass before merging, and after merging, run
+  Nightly, Binaries, and Pages by hand, since only `ci.yml` runs on the
+  pull request. By hand: resolve the release's
   tag to its commit (`git ls-remote <repo> refs/tags/<tag>`, taking the
   `^{}` line for an annotated tag), and update the SHA and the comment
   everywhere the action is used.

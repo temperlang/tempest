@@ -65,7 +65,7 @@ Part of the [rewrite plan](README.md).
 - **Translated to tmpl:** `uv run compat/count_tmpl.py` counts the
   functional tests that translate to tmpl with no validator problems,
   and groups the rest by what they first need that the translation
-  doesn't cover yet (notes/history/tmpl-state.md).
+  doesn't cover yet.
 - **API diffs:** for each backend, extract the public surface from Kotlin's
   and the new output for the same libraries (functional tests, std,
   Chromarite), and diff them. Every intended change is listed in an allowlist
@@ -242,7 +242,7 @@ hint and their index in order of first appearance, `f#0`.
 ## 15. Milestones
 
 Milestones 1 to 6, from the literate split to all seven backends, are
-done; their record is in [history/milestones.md](history/milestones.md).
+done.
 
 7. **Watch, incremental rebuilds and the language server.**
 

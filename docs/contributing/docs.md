@@ -1,7 +1,8 @@
 # Writing these docs
 
 The docs are Markdown that reads well on GitHub, and the same files,
-unchanged, make the [docs site](https://temperlang.github.io/tempest/c9cb414b4800a065953f72df4ab69943/) (see [the site](#the-site)).
+unchanged, make the [docs site](https://temperlang.github.io/tempest/)
+(see [the site](#the-site)).
 
 ## Where things go
 
@@ -130,12 +131,11 @@ Anchors changed too: the old pages linked generated anchors, such as
 
 ## The site
 
-The [docs site](https://temperlang.github.io/tempest/c9cb414b4800a065953f72df4ab69943/) is README.md as its home page and every page of
-docs/ at the same path, as `.html`, with the
-[playground](https://temperlang.github.io/tempest/c9cb414b4800a065953f72df4ab69943/playground/) beside them. Its address has an
-unguessable part, read from the playground link in the README, until
-we unprefix it; every page says `noindex` and `nofollow`, sends no
-referrer, and `robots.txt` turns crawlers away.
+The [docs site](https://temperlang.github.io/tempest/) is README.md
+as its home page and every page of docs/ at the same path, as
+`.html`, with the
+[playground](https://temperlang.github.io/tempest/playground/) beside
+them.
 
 [Kelpto](https://github.com/temperlang/kelpto), the lossless Markdown
 and HTML library written in Temper, renders it: tempest builds Kelpto

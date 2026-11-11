@@ -445,7 +445,7 @@ impl Person {
 
 These are tempest's translations, trimmed of package files; try your
 own in the
-[playground](https://temperlang.github.io/tempest/c9cb414b4800a065953f72df4ab69943/playground/).
+[playground](https://temperlang.github.io/tempest/playground/).
 
 ## Types across the wire
 

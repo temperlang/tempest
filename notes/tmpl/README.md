@@ -30,8 +30,7 @@ is **Proposed**, for review.
 ## Files
 
 - [roadmap.md](roadmap.md): the levels and subsets, lowering that
-  backends still duplicate, and what's open; the dated log of what was
-  built is [history/tmpl-state.md](../history/tmpl-state.md).
+  backends still duplicate, and what's open.
 - [overview.md](overview.md): purpose, boundaries, the crate's API,
   core decisions, and lessons from Kotlin Temper's tmpl.
 - [nodes.md](nodes.md): node families, equality, and invariants.

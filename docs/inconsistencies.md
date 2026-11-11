@@ -71,8 +71,7 @@ page doesn't repeat those.
 - **tempest:** a static page, compiling in the browser, with no server
   and no accounts; sharing puts the code in the URL.
 - **Suggested:** terms that fit what it does (a static page may need few
-  or none), the Kotlin README's link updated, and one lasting address
-  once the site leaves its unguessable path.
+  or none), the Kotlin README's link updated, and one lasting address.
 
 ## Languages and versions
 
@@ -170,8 +169,8 @@ page doesn't repeat those.
   `watch`, `doc`, or `repl -b` yet, which say so, and the REPL has no
   `describe`, `translate`, or `help` functions yet
   ([the command line](tools/cli.md), [the REPL](tools/repl.md)).
-- **Suggested:** finish CLI parity ([the plan](../notes/switch-over.md)),
-  then decide whether the binary is called `temper`.
+- **Suggested:** finish CLI parity, then decide whether the binary is
+  called `temper`.
 
 ### I12: The functional test matrix
 

@@ -208,8 +208,7 @@ As built (2026-10-29, Proposed): `var` is a fact on the declaration
 only, not a node flag, so the `VAR` flags in the tables below are the
 declaration's; a node's flags are `MAY_BUBBLE` and `DERIVED` (its
 span's bit). Type arguments in `b` wait for subset B's generics. The
-schema's table is `crates/temper-tmpl/src/schema.rs`
-([history/tmpl-state.md](../history/tmpl-state.md#state)).
+schema's table is `crates/temper-tmpl/src/schema.rs`.
 
 ### Subset A's kinds
 

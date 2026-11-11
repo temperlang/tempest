@@ -106,5 +106,5 @@ Each idea has a status: **done** in tempest, **planned**, or an **idea**.
 
 Kelpto's `scripts/bench.py` runs the same benchmarks on all seven
 languages, and Chromarite has its own. A scorecard row comparing the
-output of Kotlin Temper and tempest on the same source belongs in the
-switch-over plan ([switch-over.md](switch-over.md), step 4).
+output of Kotlin Temper and tempest on the same source would be a
+useful part of any comparison of the two.

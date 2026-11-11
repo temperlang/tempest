@@ -268,8 +268,7 @@ native `tempest` carries these crates, not the wasm.
 [notes/code-style.md](../../../notes/code-style.md#dependencies) still
 says one.
 
-**Status:** added for the preview (2026-11-07,
-[notes/switch-over.md](../../../notes/switch-over.md)).
+**Status:** added (2026-11-07).
 
 ### Incremental sync, documents in memory
 
@@ -342,7 +341,7 @@ since each settle's arena replaces the last.
 modules included, each time. Switch-over notes it as "fast enough for
 the libraries we have"; there's no recorded measurement of latency.
 
-**Status:** tempest's choice for the preview; incremental settling is
+**Status:** tempest's choice for now; incremental settling is
 open.
 
 ### std written to a temporary directory
@@ -445,9 +444,8 @@ workspace folders; it keeps a build manager per work root, with a memory
 file system layered over the real one, the same idea as tempest's
 `Sources`, and waits 200 ms for changes to settle. Tempest adds
 references, rename, outlines, and signature help, and lacks semantic
-tokens and workspace-folder changes. The switch-over plan calls Kotlin's
-server "flaky, slow, and uses a lot of memory" as the reason for a new
-one ([notes/switch-over.md](../../../notes/switch-over.md)).
+tokens and workspace-folder changes. Kotlin's server has been flaky,
+slow, and heavy on memory, the reason for a new one.
 
 ## The VS Code extension
 

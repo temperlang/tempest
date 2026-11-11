@@ -77,8 +77,9 @@ DIAGRAM_MIN_SCALE = 0.6
 # The sanitizer's removals the docs mean, with their reasons.
 REMOVALS = HERE / "removals.txt"
 KELPTO_LIBS = ["kelpto-core", "kelpto-md", "kelpto-html", "kelpto"]
-# The playground's published address, from README.md, as pages.yml reads it.
-SITE_URL = re.compile(r"https://temperlang\.github\.io/tempest/[0-9a-f]{32}/")
+# The site's published address, which links to it (as the README's to
+# the playground) are made relative to.
+SITE_URL = "https://temperlang.github.io/tempest/"
 # Where links to the repository's files outside the site go, at a commit.
 REPO_URL = "https://github.com/temperlang/tempest"
 # The header's sections: docs/ folders and their names.
@@ -484,11 +485,6 @@ class Site:
         self.out = out
         self.sources = ["README.md"] + sorted(p.relative_to(ROOT).as_posix() for p in DOCS.rglob("*.md"))
         self.outside: list[str] = []  # links outside the repository, and images not on the site
-        self.stale: list[str] = []  # links to the site at another path than README.md's
-        found = SITE_URL.search((ROOT / "README.md").read_text())
-        if not found:
-            sys.exit("build.py: no playground link with a 32-hex path in README.md")
-        self.site_url = found.group(0)
         self.removed: list[str] = []
         self.titles: dict[str, str] = {}
         self.headings: dict[str, list[tuple[str, str]]] = {}  # h2s: id, text
@@ -522,10 +518,8 @@ class Site:
             repository on GitHub (if `github`); else None."""
             if href.startswith("#"):
                 return href
-            if m := SITE_URL.match(href):
-                if m.group(0) != self.site_url:
-                    self.stale.append(f"{src}: {href}: not README.md's path, {self.site_url}")
-                return relative(href[m.end() :] or "index.html", page)
+            if href.startswith(SITE_URL):
+                return relative(href[len(SITE_URL) :] or "index.html", page)
             if re.match(r"[A-Za-z][A-Za-z0-9+.-]*:|//", href):
                 return href
             target, outside = self.target(href, src)
@@ -713,8 +707,6 @@ class Site:
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex, nofollow">
-<meta name="referrer" content="no-referrer">
 <meta name="color-scheme" content="light dark">
 <title>{html.escape(title)}</title>
 <link rel="stylesheet" href="{css}">
@@ -873,7 +865,7 @@ def main() -> int:
     n = site.build()
     rendered = time.monotonic()
     problems, count, skipped = check(args.out.resolve())
-    problems = site.stale + site.outside + repo.check() + check_removals(site.removed, REMOVALS.read_text()) + problems
+    problems = site.outside + repo.check() + check_removals(site.removed, REMOVALS.read_text()) + problems
     print(f"build.py: {n} pages in {args.out} (Kelpto {built - started:.1f} s, pages {rendered - built:.1f} s)")
     if diagrams:
         print(f"build.py: {len(diagrams.svgs)} Mermaid diagrams, light and dark: {diagrams.drawn} drawn, {diagrams.cached} cached ({diagrams.seconds:.1f} s)")

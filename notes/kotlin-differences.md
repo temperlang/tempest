@@ -431,9 +431,9 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   method". Every backend reads a library's host files and chooses host
   code or the Temper implementation as Kotlin's `ConnectedChoice.kt`
   does, with `--no-connected`, and Java and C# leave out a replaced
-  `Counter.java` or `Counter.cs` ([history/tmpl-state.md](history/tmpl-state.md#state)). Where a backend needs host code that isn't there, tempest
-  says so, naming the file, where Kotlin leaves it to the target's
-  compiler or the first call.
+  `Counter.java` or `Counter.cs`. Where a backend needs host code that
+  isn't there, tempest says so, naming the file, where Kotlin leaves it
+  to the target's compiler or the first call.
   Test: settle/classes.cases, "a connected class's Temper implementation
   must be complete", "a connected class without a Temper implementation
   runs only host code", and "a connected class's constructor can't have
@@ -1501,8 +1501,7 @@ copied Kotlin's:
   is `-work/src/` (the work root's own name, not a path from the map),
   so its sources don't resolve; and its `file` is relative to
   `temper.out`, not to the map. Tempest writes the comment and names
-  sources by a path from the map to them, which Node follows (tested;
-  [history/tmpl-state.md](history/tmpl-state.md#state), "source maps for JS").
+  sources by a path from the map to them, which Node follows (tested).
   Kotlin includes `sourcesContent`; tempest leaves it out, since tmpl
   carries no source text.
   Test: temper-be-js/tests/functional.rs, `source_maps`;
@@ -1523,8 +1522,7 @@ copied Kotlin's:
   `unsigned char`, which for UTF-8 is code-point order), and Lua (whose
   `<` compares bytes with `strcoll`, the same in the C locale it starts
   in) order code points natively. One program, checked against the
-  interpreter, runs on all seven (done 2026-10-30;
-  [history/tmpl-state.md](history/tmpl-state.md#state)).
+  interpreter, runs on all seven (done 2026-10-30).
   Test: programs/string-order.temper.md, on every backend.
 - **C# formats numbers by the current culture:** Kotlin's C# writes
   `Int32.toString()` as the runtime's `Core.ConvertToString(n)`, which
@@ -1808,13 +1806,12 @@ copied Kotlin's:
   effect. Its ad hoc function types now also separate whether a method
   has `this`, a question to answer whenever tempest interns function
   types. Notes only; no change to tempest's plans.
-- **Classes in the backends** (2026-10-30; [history/tmpl-state.md](history/tmpl-state.md#state),
-  "classes"): Kotlin-compatible in names, constructors and factories
-  (Java and JS builders and `new(props)`, Rust `builders`, C++ `make`),
-  properties (Python `@property`, Java `getX`/`setX`, C# properties, JS
-  accessors, Rust and C++ getter methods, Lua `T.get`/`T.set`), and
-  layout (Java's and C#'s file per type), with these fixes and
-  differences on purpose:
+- **Classes in the backends** (2026-10-30): Kotlin-compatible in names,
+  constructors and factories (Java and JS builders and `new(props)`,
+  Rust `builders`, C++ `make`), properties (Python `@property`, Java
+  `getX`/`setX`, C# properties, JS accessors, Rust and C++ getter
+  methods, Lua `T.get`/`T.set`), and layout (Java's and C#'s file per
+  type), with these fixes and differences on purpose:
   Test: programs/classes.temper.md and `kit::CLASSES` on every backend,
   with each backend's goldens; the items below name more.
   - **Private members read on another instance** work on every backend;
@@ -1868,12 +1865,12 @@ copied Kotlin's:
     `ToString` is an `override`, as Kotlin's is since #641.
   - **Kept, not dropped:** declarations nothing uses (an unused interface,
     a class whose statics Kotlin inlines) stay in tempest's output.
-- **Nullables in the backends** (2026-10-30; [history/tmpl-state.md](history/tmpl-state.md#state),
-  "nullable types"): Kotlin-compatible spellings (Python `T | None`, JS
-  `T | null`, Rust `Option<T>`, Java `@Nullable` boxes, C# `T?`, C++
-  `NullableParam` or a null `shared_ptr`, Lua `temper.null`), `orelse`
-  as each host's `try` (Rust a closure's `Result`, Lua `pcall`), with
-  these fixes and differences on purpose:
+- **Nullables in the backends** (2026-10-30): Kotlin-compatible
+  spellings (Python `T | None`, JS `T | null`, Rust `Option<T>`, Java
+  `@Nullable` boxes, C# `T?`, C++ `NullableParam` or a null
+  `shared_ptr`, Lua `temper.null`), `orelse` as each host's `try` (Rust
+  a closure's `Result`, Lua `pcall`), with these fixes and differences
+  on purpose:
   Test: programs/nullables.temper.md and `kit::NULLABLES` on every
   backend.
   - **`panic()` isn't caught by `orelse`:** Kotlin's Python, Java, C#,
@@ -1914,13 +1911,13 @@ copied Kotlin's:
   - **`??` on a `var`** reports "Cannot assign to Int32 from Int32?" in
     both, since the macro reuses the name and a `var` isn't narrowed.
     Recommended for both: a temporary for a `var` subject.
-- **Generics in the backends** (2026-10-31; [history/tmpl-state.md](history/tmpl-state.md#state),
-  "generics"): Kotlin's surface for generic functions, classes, and
-  interfaces and core's lists, maps, and pairs (Python `TypeVar`s and
-  `Sequence`, JS `@template` and frozen arrays, Rust bounded type
-  parameters and `temper_core`'s `List`, Java and C# generics with
-  `java.util` and `System.Collections.Generic` types, C++ templates,
-  Lua tables), with these fixes and differences on purpose:
+- **Generics in the backends** (2026-10-31): Kotlin's surface for
+  generic functions, classes, and interfaces and core's lists, maps, and
+  pairs (Python `TypeVar`s and `Sequence`, JS `@template` and frozen
+  arrays, Rust bounded type parameters and `temper_core`'s `List`, Java
+  and C# generics with `java.util` and `System.Collections.Generic`
+  types, C++ templates, Lua tables), with these fixes and differences on
+  purpose:
   Test: programs/generics.temper.md and `kit::GENERICS` on every
   backend.
   - **JS `getOr` of a map with null values** gives the fallback in
@@ -1977,8 +1974,7 @@ copied Kotlin's:
     on every backend.
   - **Not compared:** the Kotlin layout test (`kotlin_layout.rs`)
     doesn't cover the generics tests yet.
-- **Core's other types in the backends** (2026-11-02;
-  [history/tmpl-state.md](history/tmpl-state.md#state), "core's other types"):
+- **Core's other types in the backends** (2026-11-02):
   Kotlin's surface for string indices, `StringBuilder`, `Empty`,
   `Deque`, `DenseBitVector`, and more of `String`'s and `Float64`'s
   members ([tmpl/profiles.md](tmpl/profiles.md), "As built, core's
@@ -2013,17 +2009,16 @@ copied Kotlin's:
     miscounts and misparses on LuaJIT and Lua 5.1 without `utf8`, so
     `types/float/ops` and `types/string/read` run only on Lua 5.3 or
     later.
-- **Divisions that can't fail, and maps, in the backends** (2026-11-03;
-  [history/tmpl-state.md](history/tmpl-state.md#state), "divisions that can't
-  fail"): `/` by an integer constant other than 0, and `%` by a
-  positive one, is tmpl's `divSafe` or `modSafe`, as Kotlin's
-  `DivIntIntSafe` and the like, wherever it is, so a function that
-  can't bubble may use it, and each backend spells it as Kotlin's (Java's
-  own `/`, Rust's `wrapping_div`, C#'s `Core.DivSafe`, C++'s
-  `Int::div_safe` or its own `/`, JS's `a / b | 0`). Typing takes a
-  builtin generic type's constructor's parameters from the type
-  arguments `new` gives it, so `new Map<Int, Int>([])`'s `[]` is a
-  `List<Pair<Int32, Int32>>`, as Kotlin types it. With these fixes:
+- **Divisions that can't fail, and maps, in the backends** (2026-11-03):
+  `/` by an integer constant other than 0, and `%` by a positive one, is
+  tmpl's `divSafe` or `modSafe`, as Kotlin's `DivIntIntSafe` and the
+  like, wherever it is, so a function that can't bubble may use it, and
+  each backend spells it as Kotlin's (Java's own `/`, Rust's
+  `wrapping_div`, C#'s `Core.DivSafe`, C++'s `Int::div_safe` or its own
+  `/`, JS's `a / b | 0`). Typing takes a builtin generic type's
+  constructor's parameters from the type arguments `new` gives it, so
+  `new Map<Int, Int>([])`'s `[]` is a `List<Pair<Int32, Int32>>`, as
+  Kotlin types it. With these fixes:
   Test: `kit::DIVISIONS` on every backend, with its checkers.
   - **JS:** the runtime declares `listedReduceFrom`'s and
     `mappedToListWith`'s functions with the wrong parameters, and
@@ -2051,8 +2046,7 @@ copied Kotlin's:
     64-bit integers and `countBetween`, which Kotlin's runtime gets
     wrong on LuaJIT. Rust's clippy allows `map`'s unused locals, which
     the test declares on purpose.
-- **Running tests with std's `testing`, in the backends** (2026-11-03;
-  [history/tmpl-state.md](history/tmpl-state.md#state), "backends running tests"):
+- **Running tests with std's `testing`, in the backends** (2026-11-03):
   std's `Test.bail()` is each backend's connection, as Kotlin's, and its
   private method isn't declared: Python's `assert False,
   str(test.messages_combined())`; Rust's `return
@@ -2107,8 +2101,7 @@ copied Kotlin's:
   files, which nothing imports, keep plain names.
   Test: temper-be-py/tests/functional.rs, `runs`, which checks every
   generated library module and std's with `tests/module_names.py`.
-- **std's `regex`, in Python and JS** (2026-11-03;
-  [history/tmpl-state.md](history/tmpl-state.md#state), "std's regex"): std's
+- **std's `regex`, in Python and JS** (2026-11-03): std's
   connected regex members are each backend's runtime functions, as
   Kotlin's (`temper_core.regex.regex_compiled_found(self, compiled,
   text)`, `regexCompiledFound(this, …)`), and aren't declared in their
@@ -2123,29 +2116,28 @@ copied Kotlin's:
   their JSDoc (`vendor/temper-patches/`), so std calls them plainly.
   Test: `kit::WITH_STD` (regex/match, regex/zero-advance), with `tsc`
   and the Python checkers.
-- **std's `regex`, in Rust, Java, C#, and C++** (2026-11-03;
-  [history/tmpl-state.md](history/tmpl-state.md#state), "std's regex on four more
-  backends"): each backend writes Kotlin's support code into std's
-  output (Rust's `src/regex/support.rs`, Java's
-  `temper/std/regex/Core.java`, C#'s `Regex/RegexSupport.cs` and
-  `IntRangeSet.cs`; C++'s is in its runtime), and connects the same
-  keys Kotlin's support networks do; std's crate's `Cargo.toml` has
-  `regex = { version = "=1.12.2", optional = true }`, and a crate that
-  imports `std/regex` asks for its feature, as Kotlin's. Rust writes
-  `mod support; use support::*;`, where Kotlin's `pub use` re-exports
-  nothing (the functions are `pub(crate)`) and rustc warns of it, and
-  passes `self`, not `&self`, as clippy's `needless_borrow` wants;
-  std's crate allows `dead_code` and `unused_variables` (std declares
-  what it never uses, and `adjustCodeSet`'s body ignores `regexRefs`),
-  where Kotlin's allows every warning in every crate. A statement
-  `orelse` whose body jumps (`RegexFormatter.pushCode`'s `return`s) runs
-  the body in place in a labeled block, as Kotlin's (`'ok: { 'orelse:
-  { … } fallback }`), each `?` in it `if let Ok(v) = e { v } else {
-  break 'orelse; }`. A constructor may run statements that don't touch
-  `this` among its fields' assignments (`Regex`'s `let formatted`).
-  Java calls `temper.std.regex.Core` by its full name everywhere, where
-  Kotlin's does only where `temper.core.Core` is imported. Java's and
-  C#'s naming keeps types apart from functions and module `let`s
+- **std's `regex`, in Rust, Java, C#, and C++** (2026-11-03): each
+  backend writes Kotlin's support code into std's output (Rust's
+  `src/regex/support.rs`, Java's `temper/std/regex/Core.java`, C#'s
+  `Regex/RegexSupport.cs` and `IntRangeSet.cs`; C++'s is in its
+  runtime), and connects the same keys Kotlin's support networks do;
+  std's crate's `Cargo.toml` has `regex = { version = "=1.12.2",
+  optional = true }`, and a crate that imports `std/regex` asks for its
+  feature, as Kotlin's. Rust writes `mod support; use support::*;`,
+  where Kotlin's `pub use` re-exports nothing (the functions are
+  `pub(crate)`) and rustc warns of it, and passes `self`, not `&self`,
+  as clippy's `needless_borrow` wants; std's crate allows `dead_code`
+  and `unused_variables` (std declares what it never uses, and
+  `adjustCodeSet`'s body ignores `regexRefs`), where Kotlin's allows
+  every warning in every crate. A statement `orelse` whose body jumps
+  (`RegexFormatter.pushCode`'s `return`s) runs the body in place in a
+  labeled block, as Kotlin's (`'ok: { 'orelse: { … } fallback }`), each
+  `?` in it `if let Ok(v) = e { v } else { break 'orelse; }`. A
+  constructor may run statements that don't touch `this` among its
+  fields' assignments (`Regex`'s `let formatted`). Java calls
+  `temper.std.regex.Core` by its full name everywhere, where Kotlin's
+  does only where `temper.core.Core` is imported. Java's and C#'s naming
+  keeps types apart from functions and module `let`s
   (`NamingRules::types_apart`), so std's local class `Digit` is `Digit`
   beside its module `let` `Digit`, as Kotlin's, which `RegexSupport.cs`
   names. C# names a class that a namespace this code is in hides from
@@ -2155,8 +2147,7 @@ copied Kotlin's:
   neither `adjustCodeSet` nor `pushCaptureName`, whose entries Kotlin's
   Java network has commented out (tempest's table had listed them).
   Test: `kit::WITH_STD` on those backends, Rust's under clippy.
-- **std's `regex`, in Lua** (2026-11-03;
-  [history/tmpl-state.md](history/tmpl-state.md#state), "std's regex on Lua"): a
+- **std's `regex`, in Lua** (2026-11-03): a
   `return`, `break`, or `continue` out of an `orelse` body returns a
   signal from the function `temper.pcall` runs, and an `if` after it
   redoes the jump, as Kotlin's `TryStatement` (`local ok, value, kind =
@@ -2167,8 +2158,7 @@ copied Kotlin's:
   them (`kind == "return"` first, then the jumps' names, where Kotlin's
   checks `kind == "flow"`).
   Test: `kit::WITH_STD` on Lua.
-- **std's `temporal`, `Date` as a connected type** (2026-11-04;
-  [history/tmpl-state.md](history/tmpl-state.md#state), "std's temporal"): Python,
+- **std's `temporal`, `Date` as a connected type** (2026-11-04): Python,
   JS, Java, and C# connect `Date` to `datetime.date`, `globalThis.Date`,
   `LocalDate`, and `DateTime`, and leave std's class out, as Kotlin's;
   but where Kotlin keeps its members that aren't connected
@@ -2191,27 +2181,25 @@ copied Kotlin's:
   over rather than bubbling), JS's `fromIsoString` gives an invalid
   `Date` rather than bubbling, and C++'s `today()` is local, not UTC.
   Test: funtest types/date on every backend, C#'s under `sv-SE`.
-- **std's `json`, in Java, C#, C++, and Lua** (2026-11-04;
-  [history/tmpl-state.md](history/tmpl-state.md#state), "std's json on four more
-  backends"): mostly as Kotlin's. Java boxes an override's result where
-  the overridden method's is a type parameter (`Boolean
-  decodeFromJson`) by returning the box, Java boxing at `return`, where
-  Kotlin also moves the body into a private helper; for a boxed
-  parameter both do, tempest's helper named `encodeToJsonUnboxed`
-  (numbered past the class's names) where Kotlin's is the name made
-  distinct (`encodeToJson__12`), a private name either way. C# has
-  Kotlin's `Optional<T>` for `T?`, wrapping and unwrapping at calls; its
-  tests allow the analyzers' CA1707 and CA1725, which std's names, as
-  Kotlin gives them, break. C++ writes `static_cast<void>(x);` after a
-  scalar local nothing reads, where `-Wunused-variable` would stop the
-  strict build. Lua casts to `Mapped` with `cast_to_map`, where Kotlin
-  calls `cast_to_mapped`, which its runtime lacks (its second
-  `cast_to_map` is that check), and writes a cast of a cast as one `@as`,
-  the outer, where LuaLS would read only the first.
+- **std's `json`, in Java, C#, C++, and Lua** (2026-11-04): mostly as
+  Kotlin's. Java boxes an override's result where the overridden
+  method's is a type parameter (`Boolean decodeFromJson`) by returning
+  the box, Java boxing at `return`, where Kotlin also moves the body
+  into a private helper; for a boxed parameter both do, tempest's helper
+  named `encodeToJsonUnboxed` (numbered past the class's names) where
+  Kotlin's is the name made distinct (`encodeToJson__12`), a private
+  name either way. C# has Kotlin's `Optional<T>` for `T?`, wrapping and
+  unwrapping at calls; its tests allow the analyzers' CA1707 and CA1725,
+  which std's names, as Kotlin gives them, break. C++ writes
+  `static_cast<void>(x);` after a scalar local nothing reads, where
+  `-Wunused-variable` would stop the strict build. Lua casts to `Mapped`
+  with `cast_to_map`, where Kotlin calls `cast_to_mapped`, which its
+  runtime lacks (its second `cast_to_map` is that check), and writes a
+  cast of a cast as one `@as`, the outer, where LuaLS would read only
+  the first.
   Test: funtest types/json/syntax-tree on those backends, with their
   checkers.
-- **std's `json`, in Python, JS, and Rust** (2026-11-04;
-  [history/tmpl-state.md](history/tmpl-state.md#state), "std's json"): std's `json`
+- **std's `json`, in Python, JS, and Rust** (2026-11-04): std's `json`
   is all Temper, as Kotlin connects none of it. A function that ends in
   `bubble()` ends in its statement (JS's `bubble();`, Rust's `return
   Err(…)` as the function's value), where tempest returned its value.
@@ -2231,8 +2219,7 @@ copied Kotlin's:
   Test: funtest types/json/syntax-tree on those backends, with their
   checkers.
 - **Builtin values as `AnyValue`, and `List.of`, in the backends**
-  (2026-11-04; [history/tmpl-state.md](history/tmpl-state.md#state), "builtin
-  values as `AnyValue`"): APIs as Kotlin's (`thing1: AnyValue` is
+  (2026-11-04): APIs as Kotlin's (`thing1: AnyValue` is
   Rust's `temper_core::AnyValue`, C++'s `shared_ptr<AnyValueBase>`,
   Java's `Object`, C#'s `object`); bodies differ where Kotlin's don't
   pass the checkers tempest runs.
@@ -2258,8 +2245,7 @@ copied Kotlin's:
     Kotlin's, where tempest had passed the `Option`, and clippy's
     `approx_constant` is allowed in the tests for as-expr's `3.14`.
 - **Labeled loops and classes declared in functions, in the backends**
-  (2026-11-03; [history/tmpl-state.md](history/tmpl-state.md#state), "labeled
-  loops' jumps"): a class declared in a function is declared at its
+  (2026-11-03): a class declared in a function is declared at its
   module's level, as Kotlin's `ClosureConvertClasses` does, but only one
   that names none of the function's locals (Kotlin's captures them in a
   closure record; tempest's says "not yet"). Code after a `while (true)`
@@ -2293,8 +2279,7 @@ copied Kotlin's:
   - **Lua** bounds `---@generic IT: lib.I`, and types a local of a
     function's type parameter `any`, since LuaLS knows the `---@generic`
     name only in the function's own annotations.
-- **Parameters' defaults in the backends** (2026-11-01;
-  [history/tmpl-state.md](history/tmpl-state.md#state), "parameters' defaults"):
+- **Parameters' defaults in the backends** (2026-11-01):
   Kotlin's surface for optional parameters (nullable, defaulting to null
   where the language can say so, overloads in Java and C++), with
   plainer bodies: the default set in place where the language allows
@@ -2309,14 +2294,13 @@ copied Kotlin's:
   (backends give only the trailing ones defaults); Kotlin's Rust backend
   throws on it.
   Test: programs/defaults/ and `kit::DEFAULTS` on every backend.
-- **Function values in the backends** (2026-10-31; [history/tmpl-state.md](history/tmpl-state.md#state),
-  "function values"): Kotlin's surface for function types and `@fun`
-  interfaces (each backend's plain function type, Java's
-  `java.util.function` interfaces by signature or one synthesized in
-  `PKG.function`, as Kotlin's), literals, references to functions, and
-  calls of values, with prettier bodies (one-expression literals inline
-  as lambdas, arrows, or one-line functions where Kotlin hoists each to a
-  named function), and these fixes:
+- **Function values in the backends** (2026-10-31): Kotlin's surface for
+  function types and `@fun` interfaces (each backend's plain function
+  type, Java's `java.util.function` interfaces by signature or one
+  synthesized in `PKG.function`, as Kotlin's), literals, references to
+  functions, and calls of values, with prettier bodies (one-expression
+  literals inline as lambdas, arrows, or one-line functions where Kotlin
+  hoists each to a named function), and these fixes:
   Test: programs/functions.temper.md and `kit::FUNCTIONS` on every
   backend.
   - **C++ captures an assigned local by reference** (`[=, &count]`), so

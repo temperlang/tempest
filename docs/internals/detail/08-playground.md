@@ -95,8 +95,7 @@ Temper (on the interpreter); std's `net` can't make requests.
 service outside its repository, so there's no code here to compare. A
 JVM compiler can't run in a tab without a heavy port.
 
-**Status:** switch-over milestone 5, done
-([notes/switch-over.md](../../../notes/switch-over.md)).
+**Status:** done.
 
 ### A plain C ABI, not wasm-bindgen
 
@@ -323,15 +322,11 @@ licenses, and stamps every URL the page loads with `?v=` and a hash of
 the built files, so a normal reload picks up a new build. CI runs it
 with `--skip-wasm` after its own wasm build. The Pages workflow builds
 and publishes it on each push to `main` that touches the site, the
-crates, vendored Temper, or the README, under a 32-hex path taken from
-the README's playground link, with `robots.txt` and `noindex` keeping
-crawlers out.
+crates, vendored Temper, or the README, at `playground/` beside the
+docs site.
 
 **Pros:** one script locally and in CI; caches never serve a mix of
 builds.
-
-**Cons:** the unguessable path is privacy by obscurity, which is what
-it's meant to be until the team decides to publish.
 
 ## The wasm API
 

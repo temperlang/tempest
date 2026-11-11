@@ -12,7 +12,7 @@
   <a href="docs/guide/tour.md">Quick tour</a> ·
   <a href="docs/guide/getting-started.md">Tutorial</a> ·
   <a href="docs/language/README.md">Reference</a> ·
-  <a href="https://temperlang.github.io/tempest/c9cb414b4800a065953f72df4ab69943/playground/"><b>Playground</b></a>
+  <a href="https://temperlang.github.io/tempest/playground/"><b>Playground</b></a>
 </p>
 
 ---
@@ -82,7 +82,7 @@ browser.
 ## Try it
 
 - **In your browser:** the
-  [playground](https://temperlang.github.io/tempest/c9cb414b4800a065953f72df4ab69943/playground/)
+  [playground](https://temperlang.github.io/tempest/playground/)
   runs the whole compiler as wasm: type Temper and see every
   language's output, errors, and test results as you type.
 - **From source,** with [Rust](https://rustup.rs/) 1.85 or later:
@@ -99,7 +99,8 @@ browser.
 ## Documentation
 
 Everything lives under [docs/](docs/README.md), and on the
-[docs site](https://temperlang.github.io/tempest/c9cb414b4800a065953f72df4ab69943/), beside the playground:
+[docs site](https://temperlang.github.io/tempest/), beside the
+playground:
 
 - [Guide](docs/guide/README.md): why Temper, a quick tour, getting
   started, and a tutorial.

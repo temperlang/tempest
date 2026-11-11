@@ -16,7 +16,6 @@ breaking change, and 🆕 a new feature.
 These are Temper's release notes, from its first compiler's repository,
 where each release gathered the notes written since the last. Release
 notes keep the syntax of their time, so their examples aren't checked.
-tempest's own progress is in [the switch-over plan](../../notes/switch-over.md).
 
 ## Writing a release note
 

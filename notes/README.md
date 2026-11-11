@@ -1,5 +1,11 @@
 # Temper in Rust: rewrite plan
 
+> [!NOTE]
+> These are working design notes: plans, proposals, and the reasoning
+> behind them, written as tempest was built. Some are out of date. The
+> [docs](../docs/README.md) are authoritative; where they and these
+> notes disagree, the docs win.
+
 Tempest, a skunkworks reimplementation of Temper. It keeps
 Temper's language, philosophy, functional-test behavior, and generated public
 APIs, with a new implementation that is much simpler, smaller, and faster. Kotlin
@@ -27,15 +33,11 @@ This folder holds the plan in parts:
 - [testing-and-milestones.md](testing-and-milestones.md): how compatibility is
   checked, including semantics and error messages; milestones; risks.
 - [history/](history/README.md): finished plans and status logs.
-  - [milestones.md](history/milestones.md): milestones 1 to 6, from the
-    literate split to all seven backends.
   - [milestone-3.md](history/milestone-3.md): the settle loop: core
     constructs, tree layout, names, and waiting and waking; and its
     status.
   - [milestone-4.md](history/milestone-4.md): types in the settle loop:
     its slices, and their status.
-  - [tmpl-state.md](history/tmpl-state.md): what tmpl and the backends
-    gained, chunk by chunk, to 2026-11-06.
 - [acyclic.md](acyclic.md): ruling out reference cycles at compile time,
   despite mutability (a design sketch).
 - [actors.md](actors.md): actors and isolation across backends, for
@@ -56,10 +58,6 @@ This folder holds the plan in parts:
   tempest's design and plan, by chunks.
 - [kotlin-differences.md](kotlin-differences.md): where tempest differs
   from Kotlin Temper on purpose, and Kotlin Temper's known bugs.
-- [switch-over.md](switch-over.md): what comes after the functional
-  tests, toward the team switching to tempest: real libraries, CLI
-  parity, a language server, a scorecard, the playground, and
-  architecture docs.
 
 ## 1. Goals and non-goals
 

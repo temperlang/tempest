@@ -1,9 +1,8 @@
 # Publishes the docs site (site/docs: README.md and docs/, rendered by
-# Kelpto) and the playground (site/playground) to GitHub Pages under an
-# unguessable path: the docs at <nonce>/, the playground at
-# <nonce>/playground/. The path comes from the playground link in
-# README.md, so the README stays the one place to change it. Kelpto's
-# commit is in site/docs/kelpto-ref.
+# Kelpto) and the playground (site/playground) to GitHub Pages: the docs
+# at https://temperlang.github.io/tempest/, the playground at
+# playground/ there. Kelpto's commit is in site/docs/kelpto-ref. The
+# repository's Pages source must be GitHub Actions (Settings, Pages).
 name: Pages
 
 on:
@@ -34,7 +33,8 @@ jobs:
   deploy:
     # Only main deploys, even when run by hand from another branch.
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    # Pinned, as ci.yml's jobs, so the image doesn't change underneath.
+    runs-on: ubuntu-24.04
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -44,10 +44,10 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
-      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         # uv itself, checked against its SHA-256 for Linux x64 (from
         # setup-uv's known-checksums.json; docs/contributing/ci.md).
         with:
@@ -61,28 +61,18 @@ jobs:
           repository: temperlang/kelpto
           ref: ${{ steps.kelpto.outputs.ref }}
           path: .kelpto
-      - name: Path
-        run: |
-          nonce=$(grep -oE 'github\.io/tempest/[0-9a-f]{32}/' README.md \
-            | head -1 | grep -oE '[0-9a-f]{32}')
-          if [ -z "$nonce" ]; then
-            echo "No playground link with a 32-hex path in README.md" >&2
-            exit 1
-          fi
-          echo "NONCE=$nonce" >> "$GITHUB_ENV"
-      # The wasm, npm ci, tsc, and esbuild; the page itself carries
-      # noindex, nofollow, and no-referrer.
+      # The wasm, npm ci, tsc, and esbuild.
       - name: Playground
-        run: uv run site/playground/build.py --out "_site/$NONCE/playground"
+        run: uv run site/playground/build.py --out _site/playground
       # README.md and docs/, rendered by Kelpto, which tempest builds for
-      # Python; every page carries noindex, nofollow, and no-referrer. It
-      # ends by checking every link on the site, into the playground too,
-      # and fails if any is broken. Links to repository files outside
-      # docs/ go to GitHub at $GITHUB_SHA, checked against this checkout.
+      # Python. It ends by checking every link on the site, into the
+      # playground too, and fails if any is broken. Links to repository
+      # files outside docs/ go to GitHub at $GITHUB_SHA, checked against
+      # this checkout.
       # Mermaid diagrams are drawn by mermaid in headless Chromium, which
       # the pinned playwright-core installs: its own build, cached by the
-      # lockfile.
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      # lockfile (not `--with-deps`, as in ci.yml).
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ hashFiles('site/docs/mermaid/package-lock.json') }}
@@ -90,18 +80,16 @@ jobs:
         working-directory: site/docs/mermaid
         run: |
           npm ci --ignore-scripts --no-audit --no-fund
-          npx --no-install playwright-core install --with-deps --only-shell chromium
+          npx --no-install playwright-core install --only-shell chromium
       - name: Docs site
         run: |
           cargo build --locked --release -p tempest
-          uv run site/docs/build.py --kelpto .kelpto --out "_site/$NONCE"
-      - name: Keep crawlers out
-        run: |
-          printf 'User-agent: *\nDisallow: /\n' > _site/robots.txt
-          touch _site/.nojekyll
-      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
-      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
+          uv run site/docs/build.py --kelpto .kelpto --out _site
+      # Published as built (no Jekyll, as the source is GitHub Actions);
+      # upload-pages-artifact leaves out dotfiles.
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: _site
       - id: deployment
-        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

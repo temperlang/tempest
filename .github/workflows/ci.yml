@@ -142,7 +142,7 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         # uv itself, checked against its SHA-256 for Linux x64 (from
         # setup-uv's known-checksums.json; docs/contributing/ci.md).
         with:
@@ -243,9 +243,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: py, js, lua, rust
+          - id: checked
+            name: py, js, lua, rust
             backends: py js lua rust
-          - name: java, csharp, cpp
+          - id: compiled
+            name: java, csharp, cpp
             backends: java csharp cpp
             apt: g++-12 g++-14 clang
     runs-on: ubuntu-24.04
@@ -259,9 +261,10 @@ jobs:
         # rustfmt and lint them with clippy.
         with:
           components: rustfmt, clippy
+      # Keyed by the matrix's `id`, as cache keys can't have commas.
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          key: ${{ matrix.name }}
+          key: ${{ matrix.id }}
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: ./.github/actions/toolchains
         with:
@@ -333,12 +336,12 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         # As in `lint`.
         with:
           version: "0.13.5"
           checksum: f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
       - id: small
@@ -360,7 +363,7 @@ jobs:
           test -n "$version"
           echo "version=$version" >> "$GITHUB_OUTPUT"
       - if: ${{ !cancelled() }}
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: editors/vscode/.vscode-test
           key: vscode-${{ runner.os }}-${{ steps.vscode.outputs.version }}
@@ -385,9 +388,10 @@ jobs:
           ref: ${{ steps.kelpto.outputs.ref }}
           path: .kelpto
       # The diagram renderer's playwright-core and Chromium, which the
-      # playground's smoke test borrows.
+      # playground's smoke test borrows. Not `--with-deps`, which runs
+      # apt: the image has Chrome, so Chromium's libraries are there.
       - if: ${{ !cancelled() }}
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ hashFiles('site/docs/mermaid/package-lock.json') }}
@@ -397,7 +401,7 @@ jobs:
         working-directory: site/docs/mermaid
         run: |
           npm ci --ignore-scripts --no-audit --no-fund
-          npx --no-install playwright-core install --with-deps --only-shell chromium
+          npx --no-install playwright-core install --only-shell chromium
       - name: Docs site
         if: ${{ !cancelled() && steps.small.outcome == 'success' && steps.renderer.outcome == 'success' }}
         run: uv run site/docs/build.py --kelpto .kelpto --tempest target/small/tempest --out "$RUNNER_TEMP/site"

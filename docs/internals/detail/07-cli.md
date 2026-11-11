@@ -760,8 +760,7 @@ What has to change first, found while writing this:
 | `doc` | says it's not yet | Documentation for the libraries |
 | backends `cppv`, `data`, `java8`, `mypyc` | say they're not yet | Variants and `data` files tmpl's backends don't cover |
 
-`watch`, the rest of `repl`, and doc generation are switch-over milestone 6
-([notes/switch-over.md](../../../notes/switch-over.md)).
+`watch`, the rest of `repl`, and doc generation are still to come.
 
 ## Tests
 

@@ -5,7 +5,7 @@ project's libraries and run their tests; the rest help start, run, and
 explore Temper. This repository's compiler, tempest, is the `tempest`
 command. It takes `temper`'s commands and flags, by the same names and
 short forms, so scripts can switch by changing the name; what it lacks
-says so ([the plan](../../notes/switch-over.md)).
+says so.
 
 | `temper` | What it does | `tempest` |
 |---|---|---|

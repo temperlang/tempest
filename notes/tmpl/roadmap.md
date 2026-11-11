@@ -10,7 +10,7 @@ Each level unlocks code, so design and building interleave.
 |---|---|---|
 | 1: purpose and decisions | Done, reviewed (2026-10-29) | The crate boundary and its rules; nothing to build alone |
 | 2: structure | Done, reviewed (2026-10-29) | The `temper-tmpl` crate skeleton: schema macro, node families, type and declaration tables, builder, the text writer and reader with a round trip, and the validator's structural rules, all tested on hand-written tmpl |
-| 3: details, in subsets | Subset A drafted (2026-10-29), and its model, text, and validator built, then qnames, connected declarations, and core as declarations (2026-10-29, [history/tmpl-state.md](../history/tmpl-state.md#state)); B, C, and D sketched | Per subset: exact fields, validator rules, and passes, then the frontend's translation (`to_tmpl`) for the functional tests that subset covers, then backends |
+| 3: details, in subsets | Subset A drafted (2026-10-29), and its model, text, and validator built, then qnames, connected declarations, and core as declarations (2026-10-29); B, C, and D sketched | Per subset: exact fields, validator rules, and passes, then the frontend's translation (`to_tmpl`) for the functional tests that subset covers, then backends |
 
 Level 3 goes subset by subset, each just ahead of the code that needs
 it (Proposed):
@@ -92,8 +92,7 @@ consolidate, each in its own restructuring change:
 
 ## State
 
-The dated log of what was built, chunk by chunk, is in
-[history/tmpl-state.md](../history/tmpl-state.md#state). Still open:
+Still open:
 
 **Target versions** (to do, 2026-11-04): C#'s generated projects should
 target `net48;net6.0`, as Kotlin's library template does, not `net6.0`
