@@ -33,6 +33,13 @@
 //! `temper-driver` ([`temper_driver::checked`], [`temper_driver::with_std`],
 //! [`temper_driver::translate`]). Each backend is a cargo feature, all on
 //! by default, as in `tempest`.
+//!
+//! Its only unsafe code is its exports' `no_mangle` attribute, each
+//! allowed by name (`#[allow(unsafe_code)]`), as the crate denies it
+//! otherwise. An unmangled name could clash with another symbol of the
+//! same name; the wasm module has no others, and natively only tests
+//! link these. The rest of the workspace forbids unsafe code, but
+//! `temper-os`.
 
 use std::cell::{OnceCell, RefCell};
 use std::fmt::Write;
@@ -58,6 +65,7 @@ thread_local! {
 }
 
 /// A buffer of `len` bytes for the next input, replacing the last one.
+#[allow(unsafe_code)]
 #[unsafe(no_mangle)]
 pub extern "C" fn alloc(len: usize) -> *mut u8 {
     INPUT.with_borrow_mut(|input| {
@@ -70,6 +78,7 @@ pub extern "C" fn alloc(len: usize) -> *mut u8 {
 /// `markdown` is nonzero, and keeps the parse tree and then the grammar
 /// step's tree as text for `output_ptr`, with a blank line between.
 /// Invalid UTF-8 is replaced rather than rejected.
+#[allow(unsafe_code)]
 #[unsafe(no_mangle)]
 pub extern "C" fn parse(ptr: *const u8, len: usize, markdown: u32) {
     with_source(ptr, len, markdown, |source, kind, out| {
@@ -85,6 +94,7 @@ pub extern "C" fn parse(ptr: *const u8, len: usize, markdown: u32) {
 /// how it failed, if it did. The
 /// interpreter's recursion needs more than wasm's default 1 MiB stack for
 /// deeply nested code.
+#[allow(unsafe_code)]
 #[unsafe(no_mangle)]
 pub extern "C" fn run(ptr: *const u8, len: usize, markdown: u32) {
     with_source(ptr, len, markdown, |source, kind, out| {
@@ -114,6 +124,7 @@ pub extern "C" fn run(ptr: *const u8, len: usize, markdown: u32) {
 /// ...}, ...]}`, laid out as Kotlin's `temper.out/LANG` under it, or
 /// `{"error": ...}` with what went wrong. JavaScript's module comes with
 /// its source map, which names the source `../main.temper` (or `.md`).
+#[allow(unsafe_code)]
 #[unsafe(no_mangle)]
 pub extern "C" fn generate(ptr: *const u8, len: usize, markdown: u32, backend: u32) {
     with_source(ptr, len, markdown, |source, kind, out| {
@@ -135,6 +146,7 @@ pub const TESTS: u32 = 4;
 /// The backends this build has, alphabetically, as JSON,
 /// `["py", ...]`, for `compile`'s `backends` mask, whose bit `1 << i` is
 /// the `i`th of them.
+#[allow(unsafe_code)]
 #[unsafe(no_mangle)]
 pub extern "C" fn backends() {
     let names: Vec<String> = built_in().map(json_string).collect();
@@ -171,6 +183,7 @@ fn registry() -> &'static Registry {
 /// `from` and `to` count UTF-16 code units in the main file, as
 /// JavaScript strings and editors do, and `line` and `column` count
 /// from 1; diagnostics in other files (std's) have no position.
+#[allow(unsafe_code)]
 #[unsafe(no_mangle)]
 pub extern "C" fn compile(ptr: *const u8, len: usize, options: u32, backends: u32) {
     with_source(ptr, len, options & MARKDOWN, |source, kind, out| {
@@ -194,6 +207,7 @@ pub fn compile_into(source: &str, kind: SourceKind, options: u32, mask: u32, out
 /// [`completions`]), giving just its diagnostics, as
 /// `{"diagnostics": [...]}` in `compile`'s shape. The playground shows
 /// these first, before the run and the backends' output.
+#[allow(unsafe_code)]
 #[unsafe(no_mangle)]
 pub extern "C" fn analyze(ptr: *const u8, len: usize, options: u32) {
     with_source(ptr, len, options & MARKDOWN, analyze_into);
@@ -224,6 +238,7 @@ pub fn analyze_into(source: &str, kind: SourceKind, out: &mut String) {
 /// `options` has [`RUN`] (and its tests' report, with [`TESTS`]), and
 /// what each backend in the `backends` mask generates, as `{"run": ...,
 /// "backends": ...}`.
+#[allow(unsafe_code)]
 #[unsafe(no_mangle)]
 pub extern "C" fn finish(options: u32, mask: u32) {
     OUTPUT.with_borrow_mut(|out| {
@@ -317,6 +332,7 @@ thread_local! {
 /// `{"from": 4, "to": 9, "name": "x", "kind": "let", "type": "Int32",
 /// "doc": null}`, with `name` and `kind` null if it's not a name, or
 /// `null` if there's nothing there.
+#[allow(unsafe_code)]
 #[unsafe(no_mangle)]
 pub extern "C" fn hover(at: u32) {
     query(|kept, out| {
@@ -343,6 +359,7 @@ pub extern "C" fn hover(at: u32) {
 /// "std/regex/regex.temper.md", "text": "…", "from": …, "to": …}` or
 /// `{"file": "core/core.temper", …}` for a builtin, or `null` for a
 /// builtin core doesn't declare.
+#[allow(unsafe_code)]
 #[unsafe(no_mangle)]
 pub extern "C" fn definition(at: u32) {
     query(|kept, out| {
@@ -384,6 +401,7 @@ pub extern "C" fn definition(at: u32) {
 
 /// Each use of what the name at UTF-16 offset `at` names in the kept
 /// source, with its declaration, as `[{"from": 4, "to": 9}, …]`.
+#[allow(unsafe_code)]
 #[unsafe(no_mangle)]
 pub extern "C" fn references(at: u32) {
     query(|kept, out| {
@@ -403,6 +421,7 @@ pub extern "C" fn references(at: u32) {
 /// to the input buffer's text (from `alloc`): the edits, as `{"edits":
 /// [{"from": 4, "to": 9, "text": "y"}, …]}`, or `{"error": "why"}`. With
 /// an empty name, only checks: `{"from": 4, "to": 9, "name": "x"}`.
+#[allow(unsafe_code)]
 #[unsafe(no_mangle)]
 pub extern "C" fn rename(at: u32, ptr: *const u8, len: usize) {
     let new_name = INPUT.with_borrow(|input| match ptr == input.as_ptr() && len <= input.len() {
@@ -445,6 +464,7 @@ pub extern "C" fn rename(at: u32, ptr: *const u8, len: usize) {
 /// The signature of the call whose arguments UTF-16 offset `at` of the
 /// kept source is among, as `{"label": "f(a: Int32): Void", "params":
 /// ["a: Int32"], "active": 0, "doc": null}`, or `null`.
+#[allow(unsafe_code)]
 #[unsafe(no_mangle)]
 pub extern "C" fn signature_help(at: u32) {
     query(|kept, out| {
@@ -467,6 +487,7 @@ pub extern "C" fn signature_help(at: u32) {
 /// The names that may go at UTF-16 offset `at` of the kept source, as
 /// `[{"name": "x", "kind": "let", "type": "Int32"}, ...]`, innermost
 /// first; after `x.`, `x`'s members.
+#[allow(unsafe_code)]
 #[unsafe(no_mangle)]
 pub extern "C" fn completions(at: u32) {
     query(|kept, out| {
@@ -507,6 +528,7 @@ fn utf16_span(source: &str, span: Span) -> (usize, usize) {
 /// What the backend that's `backend`th of [`backends`] generates for
 /// std, as `generate`'s JSON, translated once and kept, for running a
 /// library's tests with std's `testing` in its own language.
+#[allow(unsafe_code)]
 #[unsafe(no_mangle)]
 pub extern "C" fn std_library(backend: u32) {
     let json = match built_in().nth(backend as usize) {
@@ -668,11 +690,13 @@ fn with_source(
     });
 }
 
+#[allow(unsafe_code)]
 #[unsafe(no_mangle)]
 pub extern "C" fn output_ptr() -> *const u8 {
     OUTPUT.with_borrow(|out| out.as_ptr())
 }
 
+#[allow(unsafe_code)]
 #[unsafe(no_mangle)]
 pub extern "C" fn output_len() -> usize {
     OUTPUT.with_borrow(|out| out.len())
@@ -689,10 +713,10 @@ mod tests {
             .stack_size(64 << 20)
             .spawn(move || {
                 let ptr = alloc(source.len());
-                unsafe { std::ptr::copy_nonoverlapping(source.as_ptr(), ptr, source.len()) };
+                INPUT.with_borrow_mut(|input| input.copy_from_slice(source.as_bytes()));
                 run(ptr, source.len(), 0);
-                let out = unsafe { std::slice::from_raw_parts(output_ptr(), output_len()) };
-                String::from_utf8(out.to_vec()).unwrap()
+                assert_eq!(output_len(), OUTPUT.with_borrow(|out| out.len()));
+                OUTPUT.with_borrow(|out| out.clone())
             })
             .unwrap()
             .join()
@@ -710,10 +734,10 @@ mod tests {
             .stack_size(64 << 20)
             .spawn(move || {
                 let ptr = alloc(source.len());
-                unsafe { std::ptr::copy_nonoverlapping(source.as_ptr(), ptr, source.len()) };
+                INPUT.with_borrow_mut(|input| input.copy_from_slice(source.as_bytes()));
                 generate(ptr, source.len(), 1, backend);
-                let out = unsafe { std::slice::from_raw_parts(output_ptr(), output_len()) };
-                String::from_utf8(out.to_vec()).unwrap()
+                assert_eq!(output_len(), OUTPUT.with_borrow(|out| out.len()));
+                OUTPUT.with_borrow(|out| out.clone())
             })
             .unwrap()
             .join()

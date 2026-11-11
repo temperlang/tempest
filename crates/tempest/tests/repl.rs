@@ -316,12 +316,6 @@ fn ctrl_break_stops_the_input_not_the_session() {
     use std::os::windows::process::CommandExt;
     use std::time::{Duration, Instant};
     const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
-    const CTRL_BREAK_EVENT: u32 = 1;
-    unsafe extern "system" {
-        fn GenerateConsoleCtrlEvent(event: u32, group: u32) -> i32;
-        fn AttachConsole(process: u32) -> i32;
-        fn FreeConsole() -> i32;
-    }
     let mut child = Command::new(env!("CARGO_BIN_EXE_tempest"))
         .args(["repl", "-e", "console.log(\"ready\")"])
         .creation_flags(CREATE_NEW_PROCESS_GROUP)
@@ -364,16 +358,7 @@ fn ctrl_break_stops_the_input_not_the_session() {
         .unwrap();
     stdin.flush().unwrap();
     wait_for("looping\n", &mut out);
-    let group = child.id();
-    // SAFETY: plain console calls. Ctrl events go to processes sharing
-    // the sender's console; without one (as under some CI services),
-    // this process attaches to tempest's.
-    let sent = unsafe {
-        GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, group) != 0 || {
-            FreeConsole();
-            AttachConsole(group) != 0 && GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, group) != 0
-        }
-    };
+    let sent = temper_os::console::send_ctrl_break(child.id());
     assert!(
         sent,
         "no Ctrl-Break sent: {}",

@@ -7,6 +7,9 @@ version.workspace = true
 publish.workspace = true
 license.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 # Without `net`, as only the frontend's analysis is needed; dependents
 # turn it on through their own temper-frontend dependency if they like.

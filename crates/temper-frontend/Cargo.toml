@@ -7,6 +7,9 @@ version.workspace = true
 publish.workspace = true
 license.workspace = true
 
+[lints]
+workspace = true
+
 [features]
 default = ["net"]
 # A web client for std's `net` in the interpreter (`web_client`). Without

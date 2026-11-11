@@ -23,6 +23,11 @@ csharp = ["temper-driver/csharp"]
 cpp = ["temper-driver/cpp"]
 lua = ["temper-driver/lua"]
 
+# Not the workspace's lints, which forbid unsafe code outright: the
+# exports' `#[unsafe(no_mangle)]` is allowed one by one.
+[lints.rust]
+unsafe_code = "deny"
+
 [dependencies]
 # Without `net`: std `net` requests fail with "web client not supported here".
 temper-frontend = { path = "../temper-frontend", default-features = false }

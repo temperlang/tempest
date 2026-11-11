@@ -172,7 +172,6 @@ mod platform {
     use std::io;
     use std::os::unix::ffi::OsStrExt;
     use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
-    use std::os::unix::io::{AsRawFd, FromRawFd};
     use std::path::Path;
 
     /// Opens `name` in `dir`, both checked ([module docs](super)).
@@ -183,8 +182,7 @@ mod platform {
             .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC)
             .open(dir)
             .map_err(|e| refused(e, "the directory is a link, or can't be opened"))?;
-        // SAFETY: `geteuid` only reads the process's effective user ID.
-        let me = unsafe { libc::geteuid() };
+        let me = temper_os::fs::effective_uid();
         let meta = dir.metadata()?;
         check_dir(meta.uid(), me)?;
         if meta.mode() & 0o077 != 0 {
@@ -193,17 +191,8 @@ mod platform {
         let name = CString::new(name.as_bytes()).map_err(io::Error::other)?;
         let flags =
             libc::O_RDWR | libc::O_APPEND | libc::O_CREAT | libc::O_NOFOLLOW | libc::O_CLOEXEC;
-        // SAFETY: a valid directory descriptor and a NUL-terminated name;
-        // the descriptor returned, if any, is owned by the `File` made
-        // from it, and by nothing else.
-        let file = unsafe {
-            let fd = libc::openat(dir.as_raw_fd(), name.as_ptr(), flags, 0o600 as libc::c_uint);
-            if fd < 0 {
-                let e = io::Error::last_os_error();
-                return Err(refused(e, "the file is a link, or can't be opened"));
-            }
-            File::from_raw_fd(fd)
-        };
+        let file = temper_os::fs::open_at(&dir, &name, flags, 0o600)
+            .map_err(|e| refused(e, "the file is a link, or can't be opened"))?;
         let meta = file.metadata()?;
         check_file(meta.file_type().is_file(), meta.uid(), meta.nlink(), me)?;
         if meta.mode() & 0o077 != 0 {

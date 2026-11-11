@@ -7,5 +7,10 @@ version.workspace = true
 publish.workspace = true
 license.workspace = true
 
-# No dependencies, by design (notes/tmpl/overview.md, "Boundaries").
+[lints]
+workspace = true
+
+# No dependencies, by design (notes/tmpl/overview.md, "Boundaries"),
+# but the OS calls behind its tools' children.
 [dependencies]
+temper-os = { path = "../temper-os" }

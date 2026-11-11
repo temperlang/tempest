@@ -24,11 +24,15 @@
 //! Standard input stays tempest's for `program`; as the program's group
 //! isn't the terminal's foreground one, a program that read from the
 //! terminal would stop, but Temper has no way to read it.
+//!
+//! The groups, the signal handler, and the limits are
+//! [`temper_os::process`]'s, as this crate has no unsafe code.
 
 use std::io::Read;
 use std::process::{Child, Command, ExitStatus, Output, Stdio};
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
+use temper_os::process::Group;
 
 /// Each tool command's time limit unless `--timeout` or
 /// `TEMPEST_TIMEOUT` says otherwise: ten minutes.
@@ -111,16 +115,7 @@ pub fn limit_memory(command: &mut Command) -> &mut Command {
             Err(_) => Some(DEFAULT_MEMORY_LIMIT_MIB),
         };
         if let Some(mib) = mib {
-            let bytes = mib.saturating_mul(1 << 20);
-            use std::os::unix::process::CommandExt;
-            // SAFETY: getrlimit and setrlimit are async-signal-safe, and
-            // nothing here allocates.
-            unsafe {
-                command.pre_exec(move || {
-                    linux::lower_data_limit(bytes);
-                    Ok(())
-                });
-            }
+            temper_os::process::limit_data(command, mib.saturating_mul(1 << 20));
         }
     }
     command
@@ -176,12 +171,11 @@ fn run(
     what: &str,
     limit: Option<Duration>,
 ) -> Result<(ExitStatus, Vec<u8>, Vec<u8>, Option<Duration>), String> {
-    #[cfg(unix)]
-    unix::own_group(command);
+    temper_os::process::own_group(command);
     let mut child = command
         .spawn()
         .map_err(|e| format!("couldn't run {what}: {e}"))?;
-    let group = Group::new(&child);
+    let group = Group::register(&child);
     let read = |pipe: Option<_>| {
         pipe.map(|mut pipe: Box<dyn Read + Send>| {
             std::thread::spawn(move || {
@@ -234,204 +228,6 @@ fn wait(
         }
         std::thread::sleep(pause);
         pause = (pause * 2).min(Duration::from_millis(50));
-    }
-}
-
-/// A child's process group, registered so a signal to tempest kills it,
-/// and killed when dropped.
-struct Group {
-    #[cfg(unix)]
-    slot: Option<unix::Slot>,
-}
-
-impl Group {
-    #[cfg_attr(not(unix), allow(unused_variables))]
-    fn new(child: &Child) -> Group {
-        Group {
-            #[cfg(unix)]
-            slot: unix::register(child.id()),
-        }
-    }
-
-    fn kill(&self) {
-        #[cfg(unix)]
-        if let Some(slot) = &self.slot {
-            slot.kill();
-        }
-    }
-}
-
-impl Drop for Group {
-    fn drop(&mut self) {
-        self.kill();
-    }
-}
-
-#[cfg(unix)]
-mod unix {
-    //! Process groups, and the signal handler that kills them.
-
-    use std::os::unix::process::CommandExt;
-    use std::process::Command;
-    use std::sync::Once;
-    use std::sync::atomic::{AtomicI32, Ordering};
-
-    const SIGHUP: i32 = 1;
-    const SIGINT: i32 = 2;
-    const SIGKILL: i32 = 9;
-    const SIGTERM: i32 = 15;
-    const SIG_DFL: usize = 0;
-    const SIG_IGN: usize = 1;
-
-    unsafe extern "C" {
-        fn kill(pid: i32, sig: i32) -> i32;
-        fn signal(sig: i32, handler: usize) -> usize;
-        fn raise(sig: i32) -> i32;
-    }
-
-    /// The process groups running, by their ids, 0 for a free slot,
-    /// which the signal handler reads; tools may run on several threads
-    /// at once, as in backends' tests. A child past the 64th isn't
-    /// registered, so only the parent-death signal, on Linux, and its
-    /// own end, kill its group.
-    static GROUPS: [AtomicI32; 64] = [const { AtomicI32::new(0) }; 64];
-
-    /// Starts a command in a process group of its own, which on Linux
-    /// gets SIGKILL when tempest dies.
-    pub fn own_group(command: &mut Command) {
-        command.process_group(0);
-        #[cfg(target_os = "linux")]
-        super::linux::die_with_parent(command);
-    }
-
-    /// A registered process group.
-    pub struct Slot {
-        index: usize,
-        group: i32,
-    }
-
-    impl Slot {
-        /// Kills every process in the group. After the child's been
-        /// waited for, its id could, in principle, start another group,
-        /// but Linux hands out ids in turn, so not so soon.
-        pub fn kill(&self) {
-            // SAFETY: kill has no memory effects.
-            unsafe { kill(-self.group, SIGKILL) };
-        }
-    }
-
-    impl Drop for Slot {
-        fn drop(&mut self) {
-            GROUPS[self.index].store(0, Ordering::SeqCst);
-        }
-    }
-
-    /// Registers a child's group, which is its id, as it leads it.
-    pub fn register(id: u32) -> Option<Slot> {
-        install_handlers();
-        let group = i32::try_from(id).ok()?;
-        let index = GROUPS.iter().position(|slot| {
-            slot.compare_exchange(0, group, Ordering::SeqCst, Ordering::SeqCst)
-                .is_ok()
-        })?;
-        Some(Slot { index, group })
-    }
-
-    /// On SIGINT, SIGTERM, and SIGHUP, kills every registered group,
-    /// then ends tempest as the signal would have, unless tempest was
-    /// set to ignore it.
-    fn install_handlers() {
-        static ONCE: Once = Once::new();
-        ONCE.call_once(|| {
-            for sig in [SIGHUP, SIGINT, SIGTERM] {
-                // SAFETY: the handler only calls async-signal-safe
-                // functions and reads atomics.
-                unsafe {
-                    if signal(sig, on_signal as usize) == SIG_IGN {
-                        signal(sig, SIG_IGN);
-                    }
-                }
-            }
-        });
-    }
-
-    extern "C" fn on_signal(sig: i32) {
-        for slot in &GROUPS {
-            let group = slot.load(Ordering::SeqCst);
-            if group > 0 {
-                // SAFETY: kill is async-signal-safe.
-                unsafe { kill(-group, SIGKILL) };
-            }
-        }
-        // SAFETY: async-signal-safe; the signal, blocked while this
-        // handler runs, comes once it returns, with its default action.
-        unsafe {
-            signal(sig, SIG_DFL);
-            raise(sig);
-        }
-    }
-}
-
-#[cfg(target_os = "linux")]
-mod linux {
-    //! The parent-death signal and the memory limit, Linux's own.
-
-    use std::os::unix::process::CommandExt;
-    use std::process::Command;
-
-    const PR_SET_PDEATHSIG: i32 = 1;
-    const SIGKILL: i32 = 9;
-    #[cfg(target_pointer_width = "64")]
-    const RLIMIT_DATA: i32 = 2;
-
-    /// `struct rlimit`, whose `rlim_t` is 64 bits wide on 64-bit Linux.
-    #[cfg(target_pointer_width = "64")]
-    #[repr(C)]
-    struct Rlimit {
-        cur: u64,
-        max: u64,
-    }
-
-    unsafe extern "C" {
-        fn prctl(option: i32, ...) -> i32;
-        fn getppid() -> i32;
-        #[cfg(target_pointer_width = "64")]
-        fn getrlimit(resource: i32, limit: *mut Rlimit) -> i32;
-        #[cfg(target_pointer_width = "64")]
-        fn setrlimit(resource: i32, limit: *const Rlimit) -> i32;
-    }
-
-    /// Has the command get SIGKILL when tempest dies, or right away if
-    /// tempest died while starting it. It's when the thread that starts
-    /// it ends, strictly, but tools wait for what they start.
-    pub fn die_with_parent(command: &mut Command) {
-        let parent = i32::try_from(std::process::id()).unwrap_or(0);
-        // SAFETY: prctl and getppid are async-signal-safe, and nothing
-        // here allocates.
-        unsafe {
-            command.pre_exec(move || {
-                prctl(PR_SET_PDEATHSIG, SIGKILL as std::ffi::c_ulong);
-                if getppid() != parent {
-                    return Err(std::io::Error::other("tempest ended"));
-                }
-                Ok(())
-            });
-        }
-    }
-
-    /// Lowers this process's `RLIMIT_DATA` to `bytes`, where it's higher.
-    #[cfg(target_pointer_width = "64")]
-    pub fn lower_data_limit(bytes: u64) {
-        let mut limit = Rlimit { cur: 0, max: 0 };
-        // SAFETY: the pointers are to a live, properly laid out struct.
-        unsafe {
-            if getrlimit(RLIMIT_DATA, &mut limit) != 0 {
-                return;
-            }
-            let cur = limit.cur.min(bytes);
-            let max = limit.max;
-            setrlimit(RLIMIT_DATA, &Rlimit { cur, max });
-        }
     }
 }
 

@@ -104,7 +104,10 @@ Temper's regular bundles; Intel Macs can build tempest from source with
 cargo.
 
 - **`platforms-quick`, nightly,** tests the code that differs by
-  platform, which needs no backend's toolchain: the REPL's Ctrl-C
+  platform, which needs no backend's toolchain: first `temper-os`, the
+  OS calls, linted by clippy as that platform compiles them (Linux's
+  push CI lints only Linux's), with the inventory of unsafe code; the
+  REPL's Ctrl-C
   (SIGINT on Unix, the console's handler on Windows), ANSI color on
   Windows' console, and where history is kept (`~/Library/Application
   Support` on macOS, `%APPDATA%` on Windows); and child processes'

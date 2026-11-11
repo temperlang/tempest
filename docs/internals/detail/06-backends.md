@@ -384,6 +384,8 @@ each runs in a process group of its own, killed when it ends, times
 out (600 seconds by default), or tempest is interrupted, and on Linux
 dies with tempest; tools that want a memory limit ask for it with
 `limit_memory` ([the CLI's page](../../tools/cli.md#what-tools-start)).
+The OS calls for this are `temper-os`'s
+([OS calls in one crate](07-cli.md#os-calls-in-one-crate-the-only-unsafe-code)).
 
 **Not covered:** the declared MSRV (generated crates say 1.71.1; CI
 builds them with 1.85.0); PUC Lua 5.1 (LuaJIT runs the Lua tests);

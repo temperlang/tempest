@@ -13,6 +13,13 @@ version = "0.0.0"
 publish = false
 license = "Apache-2.0 OR MIT"
 
+# No unsafe code, and no crate can allow it: the OS calls std lacks are
+# `temper-os`'s, each behind a safe function, and only it and
+# `temper-wasm` (for its exports' `#[unsafe(no_mangle)]`) have lints of
+# their own. `temper-os`'s tests/unsafe_inventory.rs counts what's left.
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
 # For tracking binary size (compat/measure_size.py) and for what's released
 # (tempest and the VS Code packages): optimize for size, link everything
 # together, and strip. Benchmarks use the plain release profile.

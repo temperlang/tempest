@@ -304,6 +304,9 @@ jobs:
         run: git config --global core.autocrlf false
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: dtolnay/rust-toolchain@cfcaf53ba4c621917ec7f78a66bff7a8848ddad4 # 1.85.0 branch, 2026-10-16
+        # For the OS calls' lints, on this platform's code.
+        with:
+          components: clippy
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: ${{ matrix.os }}
@@ -312,6 +315,14 @@ jobs:
         run: echo "C:\Program Files\LLVM\bin" >> "$GITHUB_PATH"
       - name: Build
         run: cargo build --locked -p tempest
+      # The OS calls (temper-os) as this platform compiles them, linted
+      # (each unsafe block with its safety comment), and the inventory
+      # of unsafe code, which push CI checks on Linux only.
+      - name: OS calls
+        if: ${{ !cancelled() }}
+        run: |
+          cargo clippy --locked -p temper-os --all-targets -- -D warnings
+          cargo test --locked -p temper-os
       # The line editor's, color's, and history's unit tests (on Windows,
       # history's reparse-point check in place of Unix's modes, owners,
       # and links), and `tempest repl` as a command: piped input, its
@@ -422,6 +433,14 @@ jobs:
         run: echo "C:\Program Files\LLVM\bin" >> "$GITHUB_PATH"
       - name: Build
         run: cargo build --locked -p tempest
+      # The OS calls (temper-os) as this platform compiles them, linted
+      # (each unsafe block with its safety comment), and the inventory
+      # of unsafe code, which push CI checks on Linux only.
+      - name: OS calls
+        if: ${{ !cancelled() }}
+        run: |
+          cargo clippy --locked -p temper-os --all-targets -- -D warnings
+          cargo test --locked -p temper-os
       # The line editor's, color's, and history's unit tests (on Windows,
       # history's reparse-point check in place of Unix's modes, owners,
       # and links), and `tempest repl` as a command: piped input, its

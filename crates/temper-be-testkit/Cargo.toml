@@ -7,6 +7,9 @@ version.workspace = true
 publish.workspace = true
 license.workspace = true
 
+[lints]
+workspace = true
+
 # Only the backends' tests use it, as a dev-dependency; it knows no
 # backend.
 [dependencies]

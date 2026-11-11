@@ -1,0 +1,29 @@
+[package]
+name = "temper-os"
+description = "The operating system calls Rust's std lacks, behind safe functions: the workspace's only unsafe code"
+edition.workspace = true
+rust-version.workspace = true
+version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+# No dependencies on wasm or other platforms; the platforms' own
+# bindings where it calls them, rather than hand-written declarations.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2.191"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.60.2", features = ["Win32_System_Console"] }
+
+# Not the workspace's lints, which forbid unsafe code: here it's allowed,
+# but each unsafe block does one unsafe thing and says why that's sound
+# (`// SAFETY:`), and tests/unsafe_inventory.rs counts them.
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+undocumented_unsafe_blocks = "deny"
+multiple_unsafe_ops_per_block = "deny"
+unnecessary_safety_comment = "deny"
+unnecessary_safety_doc = "deny"
+missing_safety_doc = "deny"

@@ -2,7 +2,8 @@
 //! that a backend can translate without asking anything of the frontend
 //! (notes/tmpl/README.md).
 //!
-//! This crate has no dependencies, and never lists backends:
+//! This crate depends only on `temper-os`, for the processes its tools
+//! start, and never lists backends:
 //!
 //! - [`Backend`], what tools need of a backend, and [`OutFile`]; with
 //!   [`Tools`], how a backend's language runs tests, natively, which

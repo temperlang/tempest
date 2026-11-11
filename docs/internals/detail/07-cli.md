@@ -33,6 +33,7 @@ them, and what's weak or planned.
   - [Each language's own tools, without package managers where possible](#each-languages-own-tools-without-package-managers-where-possible)
   - [JSON records in Kotlin's shape](#json-records-in-kotlins-shape)
   - [The crates' licenses, kept current by a test](#the-crates-licenses-kept-current-by-a-test)
+  - [OS calls in one crate, the only unsafe code](#os-calls-in-one-crate-the-only-unsafe-code)
 - [The commands, step by step](#the-commands-step-by-step)
   - [build](#build)
   - [test on the interpreter](#test-on-the-interpreter)
@@ -557,6 +558,39 @@ which scans the jars of an installed build.
 only" where it is; and it adds about 32 KB to the binary, with the
 license texts another 50 KB.
 
+### OS calls in one crate, the only unsafe code
+
+**Chosen:** the calls std lacks are
+[`temper-os`](../../../crates/temper-os/src/lib.rs)'s, each behind a
+small safe function: tools' children in process groups, killed on
+SIGINT, SIGTERM, or SIGHUP, with Linux's parent-death signal and
+memory limit (`process`); the REPL's Ctrl-C (`interrupt`); Windows'
+console (`console`); and the history file's `openat` and `geteuid`
+(`fs`). It calls `libc` on Unix and `windows-sys` on Windows, and
+nothing on wasm. Every other crate takes the workspace's lints, which
+forbid unsafe code; `temper-wasm` denies it but for its exports'
+`no_mangle`. In `temper-os`, clippy wants one unsafe operation per
+block, each with a `// SAFETY:` comment, and signal handlers sit
+beside the code that installs them.
+[`unsafe_inventory.rs`](../../../crates/temper-os/tests/unsafe_inventory.rs)
+counts the `unsafe` keyword in every Rust file in the repository
+against a list, so adding or removing some fails it until the list
+changes too.
+
+**Alternatives:** a module in `temper-tmpl` or `tempest` (each needs
+some of the calls, and `temper-tmpl` can't depend on `tempest`, so one
+crate's module would serve the other across a boundary it shouldn't
+have); crates such as `nix` or `ctrlc` (more code than the dozen calls
+need); hand-written `extern` declarations, as before (types and
+constants by hand, unchecked per platform).
+
+**Exempt:** `vendor/temper/`'s Rust runtime, whose one unsafe read
+(`cast`, after a `TypeId` check) is Temper's own, synced unchanged and
+built apart from the workspace; it's in the inventory, so a sync that
+changes it shows. The other backends' runtimes aren't Rust.
+
+**Cons:** `temper-tmpl` now has a dependency, though none on wasm.
+
 ## The commands, step by step
 
 ### build
@@ -751,6 +785,9 @@ What has to change first, found while writing this:
   `errors_fail_only_where_they_run`.
 - **`licenses`' currency**, [`licenses.rs`](../../../crates/tempest/tests/licenses.rs):
   the list against `cargo metadata`.
+- **Unsafe code**, [`unsafe_inventory.rs`](../../../crates/temper-os/tests/unsafe_inventory.rs):
+  where it is, and how much, against its list; every crate but two on
+  the workspace's lints.
 - **Kotlin's layout**, [`kotlin_layout.rs`](../../../crates/tempest/tests/kotlin_layout.rs):
   `temper.out` for the functional tests against a record of Kotlin's
   (`kotlin-out.txt`), with every allowed difference listed with its

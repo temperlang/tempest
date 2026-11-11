@@ -7,6 +7,9 @@ version.workspace = true
 publish.workspace = true
 license.workspace = true
 
+[lints]
+workspace = true
+
 # Works from tmpl alone (notes/tmpl/overview.md, "Boundaries"); the
 # test kit, with the frontend and the functional tests, is only for its
 # tests.

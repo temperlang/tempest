@@ -109,7 +109,11 @@ pub fn repl_command(args: &[String]) -> u8 {
     };
     let out_terminal = io::stdout().is_terminal();
     let env = |name: &str| std::env::var(name).ok();
-    let colors = color::decide(choice, out_terminal && ansi::enable(), &env);
+    let colors = color::decide(
+        choice,
+        out_terminal && temper_os::console::enable_ansi(),
+        &env,
+    );
     // Line editing on a terminal, but not for `--separator eof`, where
     // all that's typed is one input.
     let editing = terminal && out_terminal && separator != Separator::Eof;
@@ -122,7 +126,7 @@ pub fn repl_command(args: &[String]) -> u8 {
         Ok(libraries) => libraries,
         Err(code) => return code,
     };
-    let interrupt = sigint::install();
+    let interrupt = temper_os::interrupt::install();
     let tools = temper_driver::repl::ReplTools::default();
     let languages = tools.languages();
     let options = ReplOptions {
@@ -222,7 +226,7 @@ impl Editing {
         let mut editor: Editor<line::Line, MemHistory> = Editor::with_history(config, memory)?;
         // Ctrl-C while an input runs is the interpreter's again, as
         // rustyline has taken SIGINT for itself.
-        sigint::install();
+        temper_os::interrupt::install();
         let helper = line::Line::new(
             self.session.clone(),
             self.separator,
@@ -353,7 +357,7 @@ fn read_inputs(
         }
         // Ctrl-C at the prompt drops what's begun.
         if interrupt.swap(false, Ordering::Relaxed) {
-            sigint::reset();
+            temper_os::interrupt::reset();
             chunker.clear();
             continue;
         }
@@ -375,155 +379,5 @@ fn run(session: &mut ReplSession, input: &str, interrupt: &AtomicBool) {
     interrupt.store(false, Ordering::Relaxed);
     session.feed(input);
     interrupt.store(false, Ordering::Relaxed);
-    sigint::reset();
-}
-
-/// ANSI escape codes on the terminal: on Windows, the console's virtual
-/// terminal processing, turned on with the console's own calls (no
-/// crate); elsewhere, there already.
-mod ansi {
-    /// Whether standard output takes ANSI escape codes, turning them on
-    /// if the platform needs it.
-    pub fn enable() -> bool {
-        platform::enable()
-    }
-
-    #[cfg(windows)]
-    mod platform {
-        use std::ffi::c_void;
-
-        const STD_OUTPUT_HANDLE: u32 = -11i32 as u32;
-        const ENABLE_VIRTUAL_TERMINAL_PROCESSING: u32 = 0x0004;
-
-        unsafe extern "system" {
-            fn GetStdHandle(handle: u32) -> *mut c_void;
-            fn GetConsoleMode(console: *mut c_void, mode: *mut u32) -> i32;
-            fn SetConsoleMode(console: *mut c_void, mode: u32) -> i32;
-        }
-
-        pub fn enable() -> bool {
-            // SAFETY: plain console calls on this process's own standard
-            // output handle, with a valid pointer for the mode.
-            unsafe {
-                let out = GetStdHandle(STD_OUTPUT_HANDLE);
-                let mut mode = 0u32;
-                if out.is_null() || GetConsoleMode(out, &mut mode) == 0 {
-                    return false;
-                }
-                mode & ENABLE_VIRTUAL_TERMINAL_PROCESSING != 0
-                    || SetConsoleMode(out, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING) != 0
-            }
-        }
-    }
-
-    #[cfg(not(windows))]
-    mod platform {
-        pub fn enable() -> bool {
-            true
-        }
-    }
-}
-
-/// Ctrl-C, as a flag for the interpreter rather than the end of the
-/// process: SIGINT on Unix, the console's Ctrl-C event on Windows, with
-/// the platform's own calls (no crate); on Windows, Ctrl-Break too. While a Ctrl-C is still
-/// unhandled, another one goes to the platform's default: on Unix, the
-/// next ends tempest, and on Windows, that one does, for when tempest
-/// itself is stuck.
-mod sigint {
-    use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-    use std::sync::{Arc, OnceLock};
-
-    static FLAG: OnceLock<Arc<AtomicBool>> = OnceLock::new();
-    /// Ctrl-Cs since the flag was last handled.
-    static PRESSES: AtomicU32 = AtomicU32::new(0);
-
-    /// The flag Ctrl-C sets, with the handler installed.
-    pub fn install() -> Arc<AtomicBool> {
-        let flag = FLAG
-            .get_or_init(|| Arc::new(AtomicBool::new(false)))
-            .clone();
-        platform::install();
-        flag
-    }
-
-    /// After a Ctrl-C is handled: the next ones count from none, and the
-    /// handler is back if a second one took it away.
-    pub fn reset() {
-        if PRESSES.swap(0, Ordering::Relaxed) > 1 {
-            platform::install();
-        }
-    }
-
-    /// What the handler does: sets the flag, and says whether it's the
-    /// first press since the last was handled; if not, the platform's
-    /// default takes over.
-    fn pressed() -> bool {
-        if let Some(flag) = FLAG.get() {
-            flag.store(true, Ordering::Relaxed);
-        }
-        PRESSES.fetch_add(1, Ordering::Relaxed) == 0
-    }
-
-    #[cfg(unix)]
-    mod platform {
-        use std::os::raw::c_int;
-
-        const SIGINT: c_int = 2;
-        const SIG_DFL: usize = 0;
-
-        unsafe extern "C" {
-            fn signal(signum: c_int, handler: usize) -> usize;
-        }
-
-        extern "C" fn on_sigint(_: c_int) {
-            if !super::pressed() {
-                // SAFETY: `signal` is async-signal-safe; this restores
-                // the default for the next SIGINT.
-                unsafe { signal(SIGINT, SIG_DFL) };
-            }
-        }
-
-        pub fn install() {
-            let handler: extern "C" fn(c_int) = on_sigint;
-            // SAFETY: the handler only touches atomics and calls `signal`,
-            // which are async-signal-safe.
-            unsafe { signal(SIGINT, handler as usize) };
-        }
-    }
-
-    #[cfg(windows)]
-    mod platform {
-        const CTRL_C_EVENT: u32 = 0;
-        const CTRL_BREAK_EVENT: u32 = 1;
-
-        unsafe extern "system" {
-            fn SetConsoleCtrlHandler(
-                handler: Option<unsafe extern "system" fn(u32) -> i32>,
-                add: i32,
-            ) -> i32;
-        }
-
-        unsafe extern "system" fn on_ctrl(kind: u32) -> i32 {
-            // Ctrl-Break as Ctrl-C (it alone can be sent to one process
-            // group, as tests do). Handled unless it's the third in a
-            // row, or another event, such as closing the console.
-            let key = kind == CTRL_C_EVENT || kind == CTRL_BREAK_EVENT;
-            (key && super::pressed()) as i32
-        }
-
-        /// Once: the handler stays, passing on what it doesn't handle.
-        pub fn install() {
-            static ONCE: std::sync::Once = std::sync::Once::new();
-            // SAFETY: registers a handler that only touches atomics.
-            ONCE.call_once(|| unsafe {
-                SetConsoleCtrlHandler(Some(on_ctrl), 1);
-            });
-        }
-    }
-
-    #[cfg(not(any(unix, windows)))]
-    mod platform {
-        pub fn install() {}
-    }
+    temper_os::interrupt::reset();
 }

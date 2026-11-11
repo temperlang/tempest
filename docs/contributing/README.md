@@ -30,6 +30,8 @@ This repository is tempest, Temper's compiler in Rust. Start with:
 - No explicit lifetimes where avoidable: ids into arenas, borrows on
   the stack, copies when cheap ([code style](../../notes/code-style.md)).
 - Few dependencies, each widely used and quick to compile.
+- No unsafe code outside `temper-os` (and `temper-wasm`'s exports):
+  [below](#unsafe-code).
 - Readable generated code: no numbered names except on real conflicts,
   and source maps for every backend.
 
@@ -48,6 +50,7 @@ This repository is tempest, Temper's compiler in Rust. Start with:
 | `temper-lsp` | The language server, `tempest lsp` |
 | `tempest` | The command-line tool: argument parsing and output |
 | `temper-wasm` | The compiler for the browser, the base of the playground |
+| `temper-os` | The OS calls std lacks, behind safe functions: the only crate with unsafe code |
 
 Also: `docs/` (these docs), `compat/` (scripts comparing with Temper's
 first compiler, fuzzing, timing, and checking the docs), `vendor/temper/`
@@ -106,6 +109,18 @@ from a list (`.github/nightly-libraries.json`;
 [test speed](../../notes/test-speed.md), "Real libraries, nightly").
 [CI and supply chain](ci.md) says what CI pins (actions, crates, and
 the checkers of generated code), why, and how to bump a pin.
+
+### Unsafe code
+
+The workspace's lints forbid unsafe code; every crate takes them
+(`[lints] workspace = true`), but `temper-os`, which holds the OS
+calls std lacks, and `temper-wasm`, whose exports need
+`#[unsafe(no_mangle)]`. In `temper-os`, each unsafe block does one
+unsafe thing and has a `// SAFETY:` comment saying why it's sound
+(clippy checks both), behind a safe function. Adding or removing
+unsafe code anywhere fails `temper-os`'s `unsafe_inventory` test
+until its `INVENTORY` list says so: update the count for the file,
+and say why for a new one.
 
 ## Sending changes
 

@@ -487,12 +487,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "temper-os"
+version = "0.0.0"
+dependencies = [
+ "libc",
+ "windows-sys 0.60.2",
+]
+
+[[package]]
 name = "temper-syntax"
 version = "0.0.0"
 
 [[package]]
 name = "temper-tmpl"
 version = "0.0.0"
+dependencies = [
+ "temper-os",
+]
 
 [[package]]
 name = "temper-wasm"
@@ -521,6 +532,7 @@ dependencies = [
  "temper-frontend",
  "temper-funtests",
  "temper-lsp",
+ "temper-os",
  "temper-syntax",
  "temper-tmpl",
 ]

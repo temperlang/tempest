@@ -34,7 +34,9 @@ temper-syntax ─► temper-frontend ──(to_tmpl)──► temper-tmpl ◄─
   the model, builder, validator, profiles, lowering passes, analyses,
   surface helpers, the naming pass and `NamingRules` (design.md section
   8), the text reader, writer and viewer, and later the binary codec.
-  No dependencies, not even on `temper-syntax`.
+  No dependencies, not even on `temper-syntax`, but `temper-os`, for
+  the OS calls behind the processes tools start (it has none itself on
+  wasm).
 - **In the frontend:** the translation from settled trees into tmpl, in
   `temper-frontend` (it depends on `temper-tmpl`, never the reverse).
 - **In each backend crate** (one per language): the translator to the
