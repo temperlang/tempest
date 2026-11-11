@@ -308,7 +308,8 @@ it, if there is one.
 Ctrl-C stops the input running, and the session goes on. At the
 prompt, it drops the input begun so far: at once on a terminal, or for
 piped input, once the line is entered. If tempest itself is ever stuck,
-pressing Ctrl-C again ends it.
+pressing Ctrl-C again ends it. On Windows, Ctrl-Break does as Ctrl-C
+does.
 
 ## Options
 

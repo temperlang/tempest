@@ -18,9 +18,9 @@
 # diagrams drawn, and its links checked), and `tempest test` on Chromarite and Ordable,
 # on the interpreter and on Python, JS, Lua, Java, and C#.
 # The `platforms` job runs the code that differs by platform (the REPL's
-# and child processes') natively on each other platform binaries.yml
-# releases for (Linux Arm64, macOS Arm64 and x64, and Windows x64 and
-# Arm64), with all of tempest's tests.
+# and child processes') natively on the other platforms binaries.yml
+# releases for (Linux Arm64, macOS Arm64, and Windows x64 and Arm64),
+# with all of tempest's tests.
 # The checkers of generated code are at exact versions (.github/ci-tools/);
 # nightly.yml also tries each one's latest release. Every action is pinned
 # by commit SHA (docs/contributing/ci.md).
@@ -253,12 +253,13 @@ jobs:
       - name: Size and speed charts are current
         run: uv run compat/size_speed_charts.py --check
 
-  # The code that differs by platform, on every platform binaries.yml
+  # The code that differs by platform, on the platforms binaries.yml
   # releases for but Linux x64, which `check` covers: the REPL's (Ctrl-C
   # through SIGINT or the console's handler, ANSI color on Windows'
   # console, and where history is kept) and children.rs's (process
   # groups and time limits; on Windows, only time limits). Natively, on
-  # each OS and architecture's own runner. The REPL's tests and
+  # each OS and architecture's own runner (no Intel macOS binary is
+  # built). The REPL's tests and
   # children.rs's are counted (tests-ran.sh), so a platform where
   # they're all left out fails; then all of tempest's tests, built
   # without backends, whose toolchains aren't set up here. Lean, as
@@ -272,12 +273,12 @@ jobs:
       matrix:
         # Pinned, as `check`'s image is, so a new image's change shows
         # up as a bump here. Each is the native runner for one of
-        # binaries.yml's targets: Linux Arm64, macOS on Apple silicon
-        # and Intel, and Windows x64 and Arm64.
+        # binaries.yml's targets: Linux Arm64, macOS on Apple silicon,
+        # and Windows x64 and Arm64. There's no Intel macOS binary
+        # (docs/contributing/ci.md).
         os:
           - ubuntu-24.04-arm
           - macos-15
-          - macos-15-intel
           - windows-2025
           - windows-11-arm
     runs-on: ${{ matrix.os }}
@@ -307,14 +308,16 @@ jobs:
         run: cargo build --locked -p tempest
       # The line editor's, color's, and history's unit tests (on Windows,
       # all but history's file modes), and `tempest repl` as a command:
-      # piped input, its flags, color, and, on Unix, Ctrl-C (SIGINT).
-      # The terminal test needs Linux's `script`, so runs on Linux Arm64
-      # too; Windows' Ctrl-C isn't tested yet.
+      # piped input, its flags, color, UTF-8 bytes through unchanged, and
+      # Ctrl-C: SIGINT on Unix, Ctrl-Break on Windows. The terminal test
+      # needs Linux's `script`, so runs on Linux Arm64 too. At least 10:
+      # all of them on macOS and Windows, so Windows' Ctrl-Break test
+      # can't be left out.
       - name: REPL
         if: ${{ !cancelled() }}
         run: |
           bash .github/ci-tools/tests-ran.sh 9 cargo test --locked -p tempest --bin tempest repl::
-          bash .github/ci-tools/tests-ran.sh 9 cargo test --locked -p tempest --test repl
+          bash .github/ci-tools/tests-ran.sh 10 cargo test --locked -p tempest --test repl
       # What a session prints, and the docs' transcripts.
       - name: REPL sessions
         if: ${{ !cancelled() }}

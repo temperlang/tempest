@@ -4,9 +4,7 @@
 //! tutorial's transcripts, in `tests/repl_docs.rs`.
 
 use std::fs;
-#[cfg(unix)]
-use std::io::Read;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::Path;
 use std::process::{Command, Stdio};
 
@@ -125,16 +123,50 @@ fn flags() {
     );
 }
 
-/// UTF-8 piped in stays UTF-8: strings and names with multi-byte
-/// characters, emoji, and combining marks.
+/// UTF-8 piped in comes out as the same UTF-8 bytes, on every platform:
+/// names in other scripts (Latin with diacritics, CJK), and values with
+/// an emoji with a skin tone, combining marks, and CJK, in results and
+/// in a diagnostic's quoted line. Piped input and output are bytes, so
+/// no console code page (Windows') converts them.
 #[test]
 fn utf8_input() {
-    let input = "let näme = \"😀 e\u{301} 日本\"\nnäme\nnäme.split(\" \").length\n";
-    let (_, out, _) = repl(&[], None, input);
+    let input = "let näme = \"😀 e\u{301} 日本\"\nnäme\nnäme.split(\" \").length\n\
+                 let 名前 = \"👋🏽 e\u{301} 日本語\"\n\
+                 let café = 名前.split(\" \")\n\
+                 café.length\n\
+                 名前\n\
+                 let x = 名前 + nope\n";
+    let mut child = Command::new(env!("CARGO_BIN_EXE_tempest"))
+        .arg("repl")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut stdin = child.stdin.take().unwrap();
+    stdin.write_all(input.as_bytes()).unwrap();
+    drop(stdin);
+    let output = child.wait_with_output().unwrap();
+    let expected = "interactive#0: void\n\
+                    interactive#1: \"😀 e\u{301} 日本\"\n\
+                    interactive#2: 3\n\
+                    interactive#3: void\n\
+                    interactive#4: void\n\
+                    interactive#5: 3\n\
+                    interactive#6: \"👋🏽 e\u{301} 日本語\"\n\
+                    interactive#7:1:14: error: nope has not been declared\n    \
+                    let x = 名前 + nope\n    \
+                    \x20            ^^^^\n\
+                    interactive#7: fail\n";
+    // Bytes, not text, so a stray conversion can't be decoded away.
     assert_eq!(
-        out,
-        "interactive#0: void\ninteractive#1: \"😀 e\u{301} 日本\"\ninteractive#2: 3\n"
+        output.stdout,
+        expected.as_bytes(),
+        "{}",
+        String::from_utf8_lossy(&output.stdout)
     );
+    assert_eq!(output.stderr, b"");
+    assert!(output.status.success());
 }
 
 /// Inputs import the work root's libraries by name: the work root around
@@ -236,6 +268,91 @@ fn ctrl_c_stops_the_input_not_the_session() {
     assert_eq!(
         String::from_utf8_lossy(&out),
         "Interrupted\ninteractive#1: fail\ninteractive#2: true\ninteractive#3: 2\n"
+    );
+}
+
+/// On Windows, Ctrl-Break stops the input running, not the session, as
+/// Ctrl-C does: Ctrl-C can't be sent to one process alone, but
+/// Ctrl-Break can, to a console process group of its own.
+#[cfg(windows)]
+#[test]
+fn ctrl_break_stops_the_input_not_the_session() {
+    use std::os::windows::process::CommandExt;
+    use std::time::{Duration, Instant};
+    const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+    const CTRL_BREAK_EVENT: u32 = 1;
+    unsafe extern "system" {
+        fn GenerateConsoleCtrlEvent(event: u32, group: u32) -> i32;
+        fn AttachConsole(process: u32) -> i32;
+        fn FreeConsole() -> i32;
+    }
+    let mut child = Command::new(env!("CARGO_BIN_EXE_tempest"))
+        .args(["repl", "-e", "console.log(\"ready\")"])
+        .creation_flags(CREATE_NEW_PROCESS_GROUP)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut stdin = child.stdin.take().unwrap();
+    let mut stdout = child.stdout.take().unwrap();
+    let (send, receive) = std::sync::mpsc::channel();
+    let reader = std::thread::spawn(move || {
+        let mut buffer = [0; 256];
+        while let Ok(n) = stdout.read(&mut buffer) {
+            if n == 0 || send.send(buffer[..n].to_vec()).is_err() {
+                break;
+            }
+        }
+    });
+    let start = Instant::now();
+    let mut out = Vec::new();
+    let wait_for = |text: &str, out: &mut Vec<u8>| {
+        while !String::from_utf8_lossy(out).contains(text) {
+            let shown = String::from_utf8_lossy(out).to_string();
+            assert!(
+                start.elapsed() < Duration::from_secs(60),
+                "no {text:?} in {shown:?}"
+            );
+            if let Ok(bytes) = receive.recv_timeout(Duration::from_millis(50)) {
+                out.extend(bytes);
+            }
+        }
+    };
+    // `-e` runs once the handler is in.
+    wait_for("ready\ninteractive#0: void\n", &mut out);
+    out.clear();
+    // Sent once the loop has begun, and only once, as a second press
+    // before the first is handled ends tempest.
+    stdin
+        .write_all(b"console.log(\"looping\"); var i = 0; while (true) { i += 1 }\n")
+        .unwrap();
+    stdin.flush().unwrap();
+    wait_for("looping\n", &mut out);
+    let group = child.id();
+    // SAFETY: plain console calls. Ctrl events go to processes sharing
+    // the sender's console; without one (as under some CI services),
+    // this process attaches to tempest's.
+    let sent = unsafe {
+        GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, group) != 0 || {
+            FreeConsole();
+            AttachConsole(group) != 0 && GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, group) != 0
+        }
+    };
+    assert!(
+        sent,
+        "no Ctrl-Break sent: {}",
+        std::io::Error::last_os_error()
+    );
+    wait_for("interactive#1: fail\n", &mut out);
+    stdin.write_all(b"i > 0\n1 + 1\n").unwrap();
+    drop(stdin);
+    let status = child.wait().unwrap();
+    reader.join().unwrap();
+    out.extend(receive.try_iter().flatten());
+    assert!(status.success(), "{status}");
+    assert_eq!(
+        String::from_utf8_lossy(&out),
+        "looping\nInterrupted\ninteractive#1: fail\ninteractive#2: true\ninteractive#3: 2\n"
     );
 }
 

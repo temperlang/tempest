@@ -16,7 +16,7 @@ request, in two jobs:
   build, the playground, the VS Code extension, the docs, and the
   functional tests. Nearly all of tempest is the same on every
   platform, so this is where it's tested.
-- **`platforms`, on every other platform tempest is released for:**
+- **`platforms`, on the other platforms tempest is released for:**
   the code that differs by platform, natively, on each OS and
   architecture's own GitHub runner, one job each from one definition:
 
@@ -24,13 +24,16 @@ request, in two jobs:
   | --------------------------- | ------------------ |
   | `aarch64-unknown-linux-gnu` | `ubuntu-24.04-arm` |
   | `aarch64-apple-darwin`      | `macos-15`         |
-  | `x86_64-apple-darwin`       | `macos-15-intel`   |
   | `x86_64-pc-windows-msvc`    | `windows-2025`     |
   | `aarch64-pc-windows-msvc`   | `windows-11-arm`   |
 
   `x86_64-unknown-linux-gnu` is `check`'s, which runs these tests
-  among the workspace's. The code: the REPL's Ctrl-C (SIGINT on Unix,
-  the console's handler on Windows), ANSI color on Windows' console,
+  among the workspace's. There's no Intel macOS (`x86_64-apple-darwin`)
+  binary, as in Kotlin Temper's regular bundles; Intel Macs can build
+  tempest from source with cargo.
+
+  The code: the REPL's Ctrl-C (SIGINT on Unix, the console's handler
+  on Windows), ANSI color on Windows' console,
   and where history is kept (`~/Library/Application Support` on macOS,
   `%APPDATA%` on Windows); and child processes' (`temper-tmpl`'s
   `children.rs`): process groups and time limits on Unix, and time
@@ -45,9 +48,14 @@ request, in two jobs:
 
   Tests that need Linux or Unix skip by `cfg`: the terminal test needs
   Linux's `script` (so it runs on Linux Arm64 too), and the Ctrl-C test
-  sends SIGINT, so Windows' Ctrl-C isn't tested. So that a platform
-  can't pass by leaving them all out, [tests-ran.sh](../../.github/ci-tools/tests-ran.sh) fails a step
-  unless at least a given number of tests passed; raise its counts as
+  sends SIGINT. On Windows, a test of its own sends Ctrl-Break, which,
+  unlike Ctrl-C, can go to one console process group, and the REPL
+  takes as Ctrl-C. A UTF-8 test, on every platform, checks piped
+  output's bytes, so no code page converts them. So that a platform
+  can't pass by leaving tests out,
+  [tests-ran.sh](../../.github/ci-tools/tests-ran.sh) fails a step
+  unless at least a given number of tests passed (for the REPL's
+  command, all of them on macOS and Windows); raise its counts as
   tests are added. Windows checks text files out with CRLF line ends,
   so the job turns that off (`core.autocrlf false`) before checking
   out. Warnings are errors (`RUSTFLAGS`), so code only these platforms
@@ -59,15 +67,13 @@ request, in two jobs:
   cheaper than x64 (check GitHub's current billing page before adding
   macOS jobs). So: a debug build, cached by rust-cache, with no
   checkers, toolchains, or clippy, and a 30-minute limit. Should
-  GitHub stop offering an image (Intel macOS images are being
-  retired), drop its row and keep building that target in
-  binaries.yml.
+  GitHub stop offering an image, drop its row and keep building that
+  target in binaries.yml.
 
 [binaries.yml](../../.github/workflows/binaries.yml) builds the released
-binaries nightly, cross-compiling Intel macOS on Apple silicon and
-Windows Arm64 on x64, and runs nothing on them; `platforms` is where
-they're tested. [nightly.yml](../../.github/workflows/nightly.yml)
-runs on Linux.
+binaries nightly, cross-compiling Windows Arm64 on x64, and runs
+nothing on them; `platforms` is where they're tested.
+[nightly.yml](../../.github/workflows/nightly.yml) runs on Linux.
 
 ## What's pinned
 

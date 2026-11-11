@@ -7,6 +7,10 @@
 //! input, lines are read plainly, without a prompt, so the output is
 //! clean. Output is colored by `--color` ([`color`]).
 //!
+//! Input and output are UTF-8 whatever the console's code page: piped,
+//! they're bytes, read and written as they are; on a Windows console,
+//! Rust's std and rustyline use its UTF-16 calls.
+//!
 //! Ctrl-C stops the input running, through the interpreter's interrupt
 //! check, and the session goes on; at the prompt, it drops the input
 //! begun so far. If tempest itself is stuck, pressing Ctrl-C again ends
@@ -381,7 +385,7 @@ mod ansi {
 
 /// Ctrl-C, as a flag for the interpreter rather than the end of the
 /// process: SIGINT on Unix, the console's Ctrl-C event on Windows, with
-/// the platform's own calls (no crate). While a Ctrl-C is still
+/// the platform's own calls (no crate); on Windows, Ctrl-Break too. While a Ctrl-C is still
 /// unhandled, another one goes to the platform's default: on Unix, the
 /// next ends tempest, and on Windows, that one does, for when tempest
 /// itself is stuck.
@@ -450,6 +454,7 @@ mod sigint {
     #[cfg(windows)]
     mod platform {
         const CTRL_C_EVENT: u32 = 0;
+        const CTRL_BREAK_EVENT: u32 = 1;
 
         unsafe extern "system" {
             fn SetConsoleCtrlHandler(
@@ -459,9 +464,11 @@ mod sigint {
         }
 
         unsafe extern "system" fn on_ctrl(kind: u32) -> i32 {
-            // Handled unless it's the third Ctrl-C in a row, or another
-            // event, such as closing the console.
-            (kind == CTRL_C_EVENT && super::pressed()) as i32
+            // Ctrl-Break as Ctrl-C (it alone can be sent to one process
+            // group, as tests do). Handled unless it's the third in a
+            // row, or another event, such as closing the console.
+            let key = kind == CTRL_C_EVENT || kind == CTRL_BREAK_EVENT;
+            (key && super::pressed()) as i32
         }
 
         /// Once: the handler stays, passing on what it doesn't handle.

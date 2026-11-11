@@ -1,5 +1,5 @@
 # Builds `tempest` for Linux (x64, and Arm64 for 64-bit Raspberry Pi
-# OS), macOS (Apple silicon and Intel), and Windows (x64 and Arm64), with
+# OS), macOS (Apple silicon), and Windows (x64 and Arm64), with
 # Temper's std built in, `temper-wasm`, and the VS Code extension's
 # packages (one per platform with its tempest, and a universal one
 # without), and uploads each as a workflow artifact. Pushing a tag
@@ -57,10 +57,6 @@ jobs:
             exe: tempest
           - os: macos-latest
             target: aarch64-apple-darwin
-            exe: tempest
-          # Intel Macs, cross-compiled on Apple silicon.
-          - os: macos-latest
-            target: x86_64-apple-darwin
             exe: tempest
           - os: windows-latest
             target: x86_64-pc-windows-msvc
