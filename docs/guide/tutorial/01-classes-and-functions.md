@@ -18,15 +18,12 @@ and for that, it will be easier to use an interactive console.
 Start up the Temper read-evaluate-print-loop (REPL) console like so:
 
 ```sh
-temper repl
+tempest repl
 # And wait for the `$` prompt.
 ```
 
-If needed, see also the tutorial on [getting started with Temper](../getting-started.md).
-
-> **Note:** tempest has no REPL yet. Meanwhile, the
-> [playground](../../tools/playground.md) runs Temper as you type
-> ([inconsistencies](../../inconsistencies.md#i9-the-command-line)).
+If needed, see also the tutorial on [getting started with Temper](../getting-started.md),
+and [the REPL's page](../../tools/repl.md) for more on what it does.
 
 The Temper REPL evaluates arbitrary Temper code, including simple math:
 
@@ -42,6 +39,7 @@ Note, above, a trailing semicolon evaluates as `void`.
 Now that we've seen how the REPL works, copy and paste the following code into
 it:
 
+<!-- repl: paste -->
 ```temper
 class Rectangle(
   // Currently, the only float type in Temper is Float64.
@@ -55,25 +53,24 @@ is separate from any backend language (such as Java, JS, or Python). You should
 see output such as the following:
 
 ```console
-interactive#2: Rectangle__0/*new*/
-```
-
-Now we can create new `Rectangle` instances:
-
-```temper
+interactive#2: Rectangle
 $ new Rectangle(1.5, 0.5)
-interactive#3: {class: Rectangle__0, width: 1.5, height: 0.5}
+interactive#3: {class: Rectangle, width: 1.5, height: 0.5}
 ```
 
-The numeric suffixes, such as `__0`, provide internally unique names for
-diagnosis but aren't the publicly usable names, so continue to exclude them when
-providing new inputs.
+That's the class itself. Then we can create new `Rectangle` instances, as
+`new Rectangle(1.5, 0.5)` above does.
+
+If you later declare another `Rectangle`, it replaces the old one for later
+inputs, and values made from the old one print its class with the input that
+declared it, as `interactive#2.Rectangle`, to tell the two apart.
 
 On the other hand, the JSON-like representation we see above *is* supported by
 Temper as an alternative for calling class constructors. Reminiscent of JS
 object literals, this is the only form of named arguments provided in Temper.
 We call this syntax "property bags":
 
+<!-- repl: paste -->
 ```temper
 // Feel free to try out this form.
 { class: Rectangle, width: 1.5, height: 0.5 }
@@ -142,7 +139,7 @@ interactive#9: 1.5
 $ h
 interactive#10: 0.5
 $ { height: h * 2.5, width } // shorthand "punning" for `width: width`
-interactive#11: {class: Rectangle__0, width: 1.5, height: 1.25}
+interactive#11: {class: Rectangle, width: 1.5, height: 1.25}
 $ [width, h] // `List` literal, a type we'll see more of later
 interactive#12: [1.5,0.5]
 ```
@@ -151,14 +148,14 @@ Also, note that variables defined with `let` can't be reassigned.
 
 ```console
 $ h = 1.0;
-1: h = 1.0;
-   ⇧
-[interactive#13:1+0-1]: Cannot set const h__3 again
-interactive#13: fail
+interactive#13:1:1: error: Cannot assign to h, which is not a var
+    h = 1.0;
+    ^
+interactive#13: void
 ```
 
-To allow reassignment, use `var` instead of `let` (although `var` doesn't
-work across different entries in the REPL). We could also define our class
+The error is reported, and the assignment isn't done. To allow reassignment,
+use `var` instead of `let`, which works across entries in the REPL too. We could also define our class
 properties as `public var width` and so on if we want mutable contents. On the
 whole, Temper favors immutable data, but mutable is still available.
 
@@ -170,8 +167,9 @@ as by using a full `let` or `class` declaration.
 
 It's not fun to call something a class that only has data storage, so let's
 redefine our `Rectangle` type and add methods to it (see [issue#22](https://github.com/temperlang/temper/issues/22) on
-automating `.toString()`):
+automating `.toString()`). Here we've started a new REPL, so this is input 0:
 
+<!-- repl: restart paste -->
 ```temper
 class Rectangle(
   public width: Float64,
@@ -210,19 +208,21 @@ interactive#2: 0.75
 $ box.perimeter // no parens because getter
 interactive#3: 4.0
 $ box.scaled(3.0)
-interactive#4: {class: Rectangle__0, width: 4.5, height: 1.5}
+interactive#4: {class: Rectangle, width: 4.5, height: 1.5}
 $ "Here's a ${box.scaled(2.0)}"
 interactive#5: "Here's a Rectangle of size 3.0 x 1.0"
 ```
 
 Temper also has top-level functions. Let's make one:
 
+<!-- repl: paste -->
 ```temper
 // Function definitions use `let` just like variables.
 let areaPerPerimeter(rectangle: Rectangle): Float64 {
   // Destructuring works on any getter.
   let { perimeter } = rectangle;
-  rectangle.area() / perimeter
+  // Float64 division fails on division by zero, so say what then.
+  rectangle.area() / perimeter orelse panic()
 }
 ```
 
@@ -241,17 +241,20 @@ All the evaluation above is done in Temper's own interpreter, but the REPL also
 lets us sneak a peek into backend translation. Let's say our definition for
 `areaPerPerimeter` above was input `#6` with this output:
 
+<!-- repl: skip -->
 ```temper
 $ let areaPerPerimeter(rectangle: Rectangle): Float64 {
     // Destructuring works on any getter as well as simple properties.
     let { perimeter } = rectangle;
-    rectangle.area() / perimeter
+    rectangle.area() / perimeter orelse panic()
   }
 interactive#6: void
 ```
 
-We can use that to get translations into different backends. For example:
+We can use that to get translations into different backends, in Kotlin
+Temper's REPL (tempest's doesn't have `translate` yet). For example:
 
+<!-- repl: skip -->
 ```console
 $ translate(6, "csharp")
 Translated csharp for interactive#6 ...

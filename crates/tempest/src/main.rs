@@ -11,6 +11,8 @@
 //!     tempest run --library NAME -b interp|BACKEND [-w DIR] [-ign FILE] [-o DIR]
 //!                 [--timeout S|none] [--no-connected] [-v] [--logformat text|json]
 //!                 [--std DIR]
+//!     tempest repl [-w DIR] [-ign FILE] [-e CODE]... [--separator newline|semisemi|eof]
+//!                  [--prompt normal|hide] [--fuel N|none] [-v] [--std DIR]
 //!     tempest init [-o DIR]
 //!     tempest serve|lsp [--std DIR]
 //!     tempest version | license | licenses | help [COMMAND]
@@ -35,6 +37,10 @@
 //! - `run` builds the work root for one backend, then runs a library's
 //!   top level with that language's tools, or on the interpreter
 //!   ([`temper_driver::run`]).
+//! - `repl` reads Temper a line at a time and runs each input on the
+//!   interpreter, against what earlier inputs declared, printing each
+//!   result as Kotlin's does, `interactive#N: value` ([`repl`],
+//!   [`temper_frontend::repl`]).
 //! - `init` writes a new project's skeleton, as Kotlin's
 //!   ([`temper_driver::init`]).
 //! - `serve`, or `lsp`, serves an editor over stdio as a language server
@@ -42,7 +48,7 @@
 //! - `version`, `license`, and `licenses` are about tempest itself; the
 //!   last lists the crates built into it, from a file that a test keeps
 //!   current (`tests/licenses.rs`).
-//! - `watch`, `repl`, and `doc`, and Kotlin's backends `cppv`, `data`,
+//! - `watch` and `doc`, `repl -b`, and Kotlin's backends `cppv`, `data`,
 //!   `java8`, and `mypyc`, say they aren't in tempest yet.
 //!
 //! **Errors** don't stop any command, as in Kotlin Temper: every error is
@@ -60,6 +66,7 @@
 //! 101 for a bug in tempest, a panic, as Rust's own panics exit.
 
 mod help;
+mod repl;
 
 use std::io::{self, Write};
 use std::path::Path;
@@ -130,7 +137,8 @@ fn run_command(args: &[String]) -> u8 {
         "license" => about(name, rest, &license_text()),
         "licenses" => about(name, rest, LICENSES),
         "help" | "--help" | "-h" => help_command(rest),
-        "watch" | "repl" | "doc" => {
+        "repl" => repl::repl_command(rest),
+        "watch" | "doc" => {
             eprintln!("{}", not_yet_command(name));
             NOT_YET_CODE
         }
@@ -154,7 +162,6 @@ fn run_command(args: &[String]) -> u8 {
 pub fn not_yet_command(name: &str) -> String {
     let meanwhile = match name {
         "watch" => "meanwhile, run `tempest build` or `tempest test` after each change",
-        "repl" => "meanwhile, the playground runs Temper as you type",
         _ => "meanwhile, a library's .temper.md files are its documentation",
     };
     format!(
@@ -180,12 +187,15 @@ struct Flags {
     tokens: Option<String>,
     fuel: Option<String>,
     timeout: Option<String>,
+    exec: Vec<String>,
+    separator: Option<String>,
+    prompt: Option<String>,
     positional: Vec<String>,
 }
 
 /// Each option: its long name, its short one if any, and whether it
 /// takes a value.
-const OPTIONS: [(&str, Option<&str>, bool); 13] = [
+const OPTIONS: [(&str, Option<&str>, bool); 16] = [
     ("std", None, true),
     ("workroot", Some("w"), true),
     ("ignorefile", Some("ign"), true),
@@ -199,6 +209,9 @@ const OPTIONS: [(&str, Option<&str>, bool); 13] = [
     ("tokens", None, true),
     ("fuel", None, true),
     ("timeout", None, true),
+    ("exec-before", Some("e"), true),
+    ("separator", None, true),
+    ("prompt", None, true),
 ];
 
 /// Parses a command's arguments, allowing the options in `allowed` (by
@@ -257,6 +270,9 @@ fn parse(command: &str, args: &[String], allowed: &[&str], positional: usize) ->
             "tokens" => once(&mut flags.tokens)?,
             "fuel" => once(&mut flags.fuel)?,
             "timeout" => once(&mut flags.timeout)?,
+            "separator" => once(&mut flags.separator)?,
+            "prompt" => once(&mut flags.prompt)?,
+            "exec-before" => flags.exec.push(value),
             "backend" => {
                 if !flags.backends.contains(&value) {
                     flags.backends.push(value);

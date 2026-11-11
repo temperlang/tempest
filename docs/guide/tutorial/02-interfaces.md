@@ -5,7 +5,7 @@ fun. Now let's learn about interfaces, which help us organize related classes.
 As before, let's get into the Temper REPL:
 
 ```sh
-temper repl
+tempest repl
 # And wait for the `$` prompt.
 ```
 
@@ -13,6 +13,7 @@ temper repl
 
 Let's begin with a variation on our `Rectangle` type from before:
 
+<!-- repl: paste -->
 ```temper
 class Rectangle(
   public width: Float64,
@@ -34,9 +35,11 @@ $ let tau = 2.0 * Float64.pi;
 interactive#1: void
 ```
 
-You can also get the internal description of a numbered input result after
-frontend processing has finished:
+In Kotlin Temper's REPL, you can also get the internal description of a
+numbered input result after frontend processing has finished (tempest's REPL
+doesn't have `describe` yet):
 
+<!-- repl: skip -->
 ```console
 $ describe(1, "frontend.generateCodeStage.after")
 Describe interactive#1 @ frontend.generateCodeStage.after
@@ -57,6 +60,7 @@ Studio Code, you can hover over a variable name to see the inferred type.
 But oh yeah, we were going to make another class to go with `Rectangle`. Here it
 is:
 
+<!-- repl: paste -->
 ```temper
 class Circle(
   public radius: Float64,
@@ -69,12 +73,13 @@ class Circle(
 
 Sweet. Now what if we want a list of different kinds of shapes?
 
+<!-- repl: paste -->
 ```temper
 // What's the type here?
 let shapes = [{ width: 1.5, height: 0.5 }, { radius: 2.0 }];
 ```
 
-If we use `describe` on that, we'll see that the inferred type is
+If we use Kotlin Temper's `describe` on that, we'll see that the inferred type is
 `List<Rectangle__0 | Circle__0>`. But that's misleading. Many popular
 programming languages that Temper does or could target don't have support for
 ad hoc union types. So we can't rely on this, and we plan to restrict outward
@@ -84,6 +89,7 @@ support in Temper for ad hoc union types in the future (see [issue#23](https://g
 
 To make a common type for our shapes, let's define an `interface`:
 
+<!-- repl: paste -->
 ```temper
 interface Shape {
   area(): Float64;
@@ -96,6 +102,7 @@ interface Shape {
 Once that's done, we can redefine our earlier classes as extending this
 interface:
 
+<!-- repl: paste -->
 ```temper
 class Rectangle(
   public width: Float64,
@@ -109,6 +116,7 @@ class Rectangle(
 
 For `Circle`, let's override `toString`:
 
+<!-- repl: paste -->
 ```temper
 // And repeating tau here for convenience, in case you started over.
 let tau = 2.0 * Float64.pi;
@@ -124,12 +132,14 @@ class Circle(
 
 Now we can use `Shape` as a common type for the list:
 
+<!-- repl: paste -->
 ```temper
 let shapes: List<Shape> = [{ width: 1.5, height: 0.5 }, { radius: 2.0 }];
 ```
 
 Here's an example function that works on lists of shapes:
 
+<!-- repl: paste -->
 ```temper
 let toStrings(shapes: List<Shape>): List<String> {
   // Anonymous function block here! We'll discuss those later.
@@ -141,17 +151,17 @@ And we can call this function on our shapes:
 
 ```console
 $ toStrings(shapes)
-interactive#9: ["Shape of area 0.75","Circle of radius 2.0"]
+interactive#10: ["Shape of area 0.75","Circle of radius 2.0"]
 ```
 
 Also, just to make a point, we can't actually construct instances of interfaces:
 
-```temper
+```console
 $ new Shape()
-1: new Shape()
-       ┗━━━┛
-[interactive#3:1+4-9]@G: Cannot instantiate abstract type Shape
-interactive#13: fail
+interactive#11:1:5: error: Cannot instantiate abstract type Shape
+    new Shape()
+        ^^^^^
+interactive#11: fail
 ```
 
 ## More on inheritance
@@ -159,38 +169,26 @@ interactive#13: fail
 So in Temper, classes can extend interfaces. Interfaces can also extend other
 interfaces. But classes *can't* extend other classes. Let's try:
 
-```temper
+```console
 // A square is a kind of rectangle, right? Maybe?
-class Square extends Rectangle {
-  // Custom constructors are a thing, even if inheriting from classes isn't.
-  public constructor(edgeLength: Float64) {
-    // Value init would also work if the properties were in this same class.
-    this.width = edgeLength;
-    this.height = edgeLength;
+$ class Square extends Rectangle {
+    // Custom constructors are a thing, even if inheriting from classes isn't.
+    public constructor(edgeLength: Float64) {
+      // Value init would also work if the properties were in this same class.
+      this.width = edgeLength;
+      this.height = edgeLength;
+    }
   }
-}
-```
-
-Currently, some of the errors we get here are misleading and confusing, but we
-do get errors:
-
-```temper
-1: lass Square extends Rectangle {
-                       ┗━━━━━━━┛
-[interactive#42:1+21-30]@S: Cannot extend concrete type(s) Rectangle
-5: this.width = edgeLength;
-   ┗━━━━━━━━━━━━━━━━━━━━━┛
-[interactive#42:5+8-31]@G: Wrong number of arguments.  Expected 3
-5: this.width = edgeLength;
-                ┗━━━━━━━━┛
-[interactive#42:5+21-31]@G: Expected subtype of Rectangle__0, but got Float64
-6: this.height = edgeLength;
-   ┗━━━━━━━━━━━━━━━━━━━━━━┛
-[interactive#42:6+8-32]@G: Wrong number of arguments.  Expected 3
-6: this.height = edgeLength;
-                 ┗━━━━━━━━┛
-[interactive#42:6+22-32]@G: Expected subtype of Rectangle__0, but got Float64
-interactive#42: Square__0
+interactive#12:1:22: error: Cannot extend concrete type(s) Rectangle
+    class Square extends Rectangle {
+                         ^^^^^^^^^
+interactive#12:5:5: error: Member width defined in Rectangle incompatible with usage
+        this.width = edgeLength;
+        ^^^^^^^^^^
+interactive#12:6:5: error: Member height defined in Rectangle incompatible with usage
+        this.height = edgeLength;
+        ^^^^^^^^^^^
+interactive#12: Square
 ```
 
 Focus on that first message "Cannot extend concrete type(s) Rectangle".
@@ -200,6 +198,7 @@ plan to improve these other messages in the future (see [issue#12](https://githu
 If we want a square that's also rectangular, one option might be to extract
 another interface:
 
+<!-- repl: paste -->
 ```temper
 interface Rectangular extends Shape {
   // Saying just `width: Float64;` confuses Temper right now.
@@ -213,6 +212,7 @@ interface Rectangular extends Shape {
 
 Then we can make `Rectangle` and `Square` subtypes of `Rectangular`:
 
+<!-- repl: paste -->
 ```temper
 class Rectangle(
   public width: Float64,
@@ -222,6 +222,7 @@ class Rectangle(
 
 And we can still use a custom constructor on `Square` if we want:
 
+<!-- repl: paste -->
 ```temper
 class Square extends Rectangular {
   public width: Float64;
@@ -236,6 +237,7 @@ class Square extends Rectangular {
 
 Now, here are some updated shape lists:
 
+<!-- repl: paste -->
 ```temper
 let boxes: List<Rectangular> = [
   { edgeLength: 1.0 },
@@ -250,11 +252,12 @@ in Java, JS, or Python, you might see something different than this:
 
 ```console
 $ boxes
-interactive#50: [{class: Square__0, width: 1.0},{class: Rectangle__0, width: 1.5, height: 0.5}]
+interactive#17: [{class: Square, width: 1.0},{class: Rectangle, width: 1.5, height: 0.5}]
 ```
 
 Our `boxes` are `Rectangular`, so we can use that abstraction:
 
+<!-- repl: paste -->
 ```temper
 boxes.map { (box): String =>
   "${box.width} x ${box.height}"
@@ -266,12 +269,12 @@ And meanwhile, our list `toString` conversion function still works as before:
 
 ```console
 $ let shapes: List<Shape> = [boxes[0], boxes[1], { radius: 2.0 }];
-interactive#52: void
+interactive#19: void
 $ toStrings(shapes)
-interactive#53: ["Shape of area 1.0","Shape of area 0.75","Circle of radius 2.0"]
+interactive#20: ["Shape of area 1.0","Shape of area 0.75","Circle of radius 2.0"]
 // Temper `List` is immutable and so is covariant in its item type.
 $ toStrings(boxes)
-interactive#53: ["Shape of area 1.0","Shape of area 0.75"]
+interactive#21: ["Shape of area 1.0","Shape of area 0.75"]
 ```
 
 So for **hierarchies and abstractions of behavior**, use **interfaces**.

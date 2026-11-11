@@ -386,15 +386,14 @@ impl Settle {
     pub(super) fn type_all_exprs(&mut self) {
         // Missing `else`s never reached, where the `if` is a statement
         // too, which panic, as Kotlin's ([`super::sealed`]).
-        for i in 0..self.lib.tree.len() as u32 {
+        for i in self.round_nodes()..self.lib.tree.len() as u32 {
             let node = NodeId(i);
             let tree = &self.lib.tree;
             if tree.kind(node) == NodeKind::Block && tree.children(node).is_empty() {
                 let _ = self.unreachable_else(node, false);
             }
         }
-        let roots: Vec<NodeId> = self.lib.files.iter().map(|f| f.root).collect();
-        for root in roots {
+        for root in self.round_roots() {
             let exprs = Exprs::new(&self.lib, &self.scopes).under(root);
             for expr in exprs {
                 // A generic function's own type parameters are unknown
@@ -413,7 +412,7 @@ impl Settle {
         }
         // Each class member's type, for tmpl: a field's, a getter's
         // result, or a method's signature without `this`.
-        for i in 0..self.lib.tree.len() as u32 {
+        for i in self.round_nodes()..self.lib.tree.len() as u32 {
             let class = NodeId(i);
             if self.lib.tree.kind(class) != NodeKind::Class {
                 continue;

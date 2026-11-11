@@ -991,8 +991,8 @@ Other differences we won't copy:
   - **Usage errors exit with 2**, as most Unix tools do; Kotlin's are
     127 (kotlinx-cli's), which shells use for "command not found", and
     `temper help bogus` says "Too many arguments! Couldn't process
-    argument bogus!". What tempest lacks yet (`watch`, `repl`, `doc`,
-    the `cppv`, `data`, `java8`, and `mypyc` backends, and `serve
+    argument bogus!". What tempest lacks yet (`watch`, `doc`, `repl
+    -b`, the `cppv`, `data`, `java8`, and `mypyc` backends, and `serve
     --port`) exits with 3, saying so.
     Test: tempest/tests/cli.rs, `usage` and `not_yet`.
   - **The work root's help text:** Kotlin's `--workroot` help says the
@@ -1052,6 +1052,65 @@ Other differences we won't copy:
     trace and fail as anything else does. The language server
     survives one, as an "internal error" diagnostic or error response.
     Test: temper-lsp/tests/lsp.rs, `panics_become_internal_errors`.
+
+- **The REPL** (2026-11-11): `tempest repl` prints Kotlin's
+  `interactive#N: value` lines and renders values as Kotlin's does,
+  with these differences ([docs/tools/repl.md](../docs/tools/repl.md),
+  the study in [repl.md](repl.md)):
+  - **One growing module**, not a module per input importing snapshots
+    of earlier exports: each input's scope chains to the previous
+    input's, so a later declaration shadows an earlier one, and a
+    top-level `var` carries over, typed, where Kotlin drops it ("No
+    declaration for v"). A declaration whose input failed stays, and a
+    read of it fails saying so ("x has no value: interactive#4
+    failed"); Kotlin keeps the older binding.
+    Test: temper-frontend/tests/repl/basics.cases, "top-level vars
+    carry over and stay typed"; errors.cases, "a declaration whose
+    input failed fails when read, saying why".
+  - **Type names** print as declared, `Rectangle`, not `Rectangle__0`,
+    and a class a later input hides prints with its input,
+    `interactive#5.Rectangle`; Kotlin prints `Rectangle__0` for both.
+    The tutorial's transcripts are tempest's now.
+    Test: basics.cases, "redefinition shadows, earlier code keeping the
+    old"; temper-frontend/tests/repl_docs.rs.
+  - **Diagnostics** are tempest's, `interactive#N:line:column: level:
+    message` and the line with the span marked, in place of Kotlin's
+    `[interactive#0:1+0-9]@G:` and stage letters, each error reported
+    once, where Kotlin repeats some at each stage that finds them.
+  - **Kotlin's REPL bugs, fixed:** printing a cyclic value overflowed
+    the JVM's stack and ended the session (tempest prints `↻` where it
+    recurs, and limits depth and length); a function whose body had an
+    error failed silently when a later input called it (tempest says
+    why); reassigning a `let` from a later input named the wrong input
+    (tempest's error is at the assignment, in its own input); a
+    top-level `var` was gone in the next input; and piped input echoed
+    the auto-indent into the output and the input, shifting columns
+    (tempest prompts only on a terminal, and never echoes).
+    Test: errors.cases, "a cyclic value prints (Kotlin's REPL
+    overflowed and ended)", "a function whose body has an error says
+    why when called (Kotlin fails silently)", and "reassigning a let
+    from a later input names its own input (Kotlin names the wrong
+    one)"; basics.cases, "top-level vars carry over and stay typed";
+    tempest/tests/repl.rs, `piped_input_prints_only_results`.
+  - **Robustness:** Ctrl-C stops the input running, through the
+    interpreter's step check, where Kotlin's ends the process; a panic
+    in tempest is caught and reported, and the session goes on, where
+    Kotlin catches only `NotImplementedError`. An unclosed `"` ends
+    with its line, as the lexer reads it, where Kotlin's REPL kept
+    reading lines into the string.
+    Test: tempest/tests/repl.rs, `ctrl_c_stops_the_input_not_the_session`;
+    temper-frontend/src/repl.rs, `a_panic_is_caught_and_the_session_goes_on`;
+    errors.cases, "an unclosed \" ends with its line (Kotlin's read on)".
+  - **Defaults:** the work root around the current directory is loaded
+    without `-w` (Kotlin loads only std then); no prompt when standard
+    input isn't a terminal (Kotlin's `--prompt hide`); a bare bubble
+    prints only `fail`, but other failures say why first.
+    Test: tempest/tests/repl.rs, `imports_from_the_work_root` and
+    `prompts`.
+  - **Not yet:** line editing, history, completion, color, `help`,
+    `describe`, `translate`, and `-b`; and std's tutorial examples
+    that Kotlin's REPL ran but tempest's language rejects are noted in
+    docs/inconsistencies.md, I24.
 
 - **Code with errors** (2026-11-05): where Kotlin's TmpL has garbage
   nodes, which each backend writes its own way (a comment in Java, a

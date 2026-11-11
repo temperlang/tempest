@@ -171,8 +171,8 @@ SIGABRT). The wasm still aborts, built with a profile of its own,
 
 ### Not in tempest yet, said plainly
 
-**Chosen:** Kotlin's commands that tempest lacks (`watch`, `repl`, and
-`doc`), its backends (`cppv`, `data`, `java8`, and `mypyc`, listed as
+**Chosen:** Kotlin's commands that tempest lacks (`watch` and `doc`,
+and `repl -b`), its backends (`cppv`, `data`, `java8`, and `mypyc`, listed as
 [`NOT_YET`](../../../crates/temper-driver/src/lib.rs)), and `serve
 --port` each say they aren't in tempest yet, what to do meanwhile, and
 where to read more, and exit with 3. The old one-backend commands
@@ -722,11 +722,11 @@ What has to change first, found while writing this:
 | `serve --port N` | `serve`, `lsp` | stdio, not a TCP port the client opens (`--port` says so); no semantic tokens ([page 9's detail](09-language-server.md#kotlins-language-server)) |
 | `version`, `license`, `licenses`, `help` | the same | `licenses` lists Rust crates; `--version` too |
 | `watch` | says it's not yet | Planned: a loop around `build` or `test` ([page 8's detail](08-playground.md#watch-planned)) |
-| `repl` | says it's not yet | Interactive, with stage dumps; the playground meanwhile |
+| `repl` | `repl` | One growing module settled an input at a time ([the REPL](../../tools/repl.md)); no line editing, `describe`, `translate`, `help`, or `-b` yet |
 | `doc` | says it's not yet | Documentation for the libraries |
 | backends `cppv`, `data`, `java8`, `mypyc` | say they're not yet | Variants and `data` files tmpl's backends don't cover |
 
-`watch`, `repl`, and doc generation are switch-over milestone 6
+`watch`, the rest of `repl`, and doc generation are switch-over milestone 6
 ([notes/switch-over.md](../../../notes/switch-over.md)).
 
 ## Tests
@@ -789,7 +789,8 @@ and a panic's exit code (no input is known to panic).
 - **Two spellings of the std step** (`with_std` and `build`'s own).
 - **Tool helpers in `temper-tmpl`**, which could move to a small crate
   of their own.
-- **Parity:** `watch`, `repl`, and `doc`; Kotlin's `cppv`, `data`,
+- **Parity:** `watch` and `doc`; the REPL's line editing, functions,
+  and `-b`; Kotlin's `cppv`, `data`,
   `java8`, and `mypyc` backends; `serve --port`.
 - **Runtime version:** output names `temper-core` 0.6.0 but needs
   tempest's patched runtimes; a distinct pre-release version is one

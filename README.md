@@ -75,8 +75,8 @@ browser.
 - **Editors:** a language server, `tempest lsp`, and a VS Code
   extension ([editors/vscode](editors/vscode/README.md)).
 - **The command line** takes `temper`'s commands and flags: `build`,
-  `test`, `run`, `init`, `serve`, `version`, `license`, `licenses`, and
-  `help`; `watch`, `repl`, and `doc` are coming
+  `test`, `run`, `repl`, `init`, `serve`, `version`, `license`,
+  `licenses`, and `help`; `watch` and `doc` are coming
   ([docs/tools/cli.md](docs/tools/cli.md)).
 
 ## Try it

@@ -30,6 +30,7 @@ mod net;
 mod numbers;
 mod promises;
 mod regexes;
+pub(crate) mod repl;
 mod strings;
 
 use crate::builtins::{Builtin, Constant, Function, TYPES};
@@ -202,6 +203,11 @@ const MAX_DEPTH: u32 = 2000;
 /// linear memory: V8's, under Node, at 1200 to 1400 calls (2026-11-06).
 #[cfg(target_arch = "wasm32")]
 const MAX_DEPTH: u32 = 500;
+/// Steps handed out at a time where a run can be interrupted, between
+/// checks of the interrupt: about a millisecond's.
+const SLICE: u64 = 1 << 16;
+/// How an interrupted run fails.
+pub(crate) const INTERRUPTED: &str = "interrupted";
 /// A step budget for callers that must finish quickly, such as the web
 /// playground and tests' own runs of small programs; compile-time
 /// evaluation will need one too. About a second in a release build.
@@ -232,7 +238,7 @@ pub fn run(settled: &Settled, fuel: Option<u64>) -> Run {
 /// Runs a library's top-level code as [`run`] does, giving each line it
 /// logs to `out` as it's logged rather than keeping it.
 pub fn run_streaming(settled: &Settled, fuel: Option<u64>, out: &mut dyn FnMut(&str)) -> Run {
-    run_with(settled, fuel, false, Some(out))
+    run_with(settled, fuel, false, Some(Box::new(out)))
 }
 
 /// Runs a library as [`run`] does, then each module's tests, if it has
@@ -244,12 +250,7 @@ pub fn run_tests(settled: &Settled, fuel: Option<u64>) -> Run {
     run_with(settled, fuel, true, None)
 }
 
-fn run_with(
-    settled: &Settled,
-    fuel: Option<u64>,
-    tests: bool,
-    sink: Option<&mut dyn FnMut(&str)>,
-) -> Run {
+fn run_with(settled: &Settled, fuel: Option<u64>, tests: bool, sink: Option<LineSink<'_>>) -> Run {
     // `u64::MAX` steps take centuries, so no fuel needs no check of its own.
     let budget = fuel.unwrap_or(u64::MAX);
     // Modules' declarations are globals, each module's in order.
@@ -270,8 +271,11 @@ fn run_with(
             sink,
         },
         fuel: budget,
+        reserve: 0,
+        interrupt: None,
         depth: 0,
         globals,
+        unset_why: HashMap::new(),
         lowering,
         ready: VecDeque::new(),
         cached: Vec::new(),
@@ -401,8 +405,11 @@ struct Output<'a> {
     /// Lines past the limit, only counted, and where the note goes.
     dropped: usize,
     note: usize,
-    sink: Option<&'a mut dyn FnMut(&str)>,
+    sink: Option<LineSink<'a>>,
 }
+
+/// Where logged lines go as they're logged.
+type LineSink<'a> = Box<dyn FnMut(&str) + 'a>;
 
 impl Output<'_> {
     fn log(&mut self, line: String) {
@@ -433,10 +440,21 @@ impl Output<'_> {
 
 struct Interp<'a> {
     output: Output<'a>,
+    /// Steps left before [`Interp::refuel`] is asked for more.
     fuel: u64,
+    /// Steps to hand out in slices once `fuel` runs out, so that an
+    /// interrupt is noticed between slices; 0 where there's no interrupt,
+    /// and `fuel` is all there is.
+    reserve: u64,
+    /// Set from elsewhere, as by Ctrl-C, to stop what's running at the
+    /// next slice ([`repl`]).
+    interrupt: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
     /// Calls in progress.
     depth: u32,
     globals: Vec<Val>,
+    /// Why some globals have no value, for a read of one: their REPL
+    /// input failed before setting them ([`repl`]).
+    unset_why: HashMap<u32, Rc<str>>,
     lowering: Lowering,
     /// `async` blocks and native jobs ready to run.
     ready: VecDeque<Task>,

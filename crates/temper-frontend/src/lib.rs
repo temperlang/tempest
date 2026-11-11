@@ -23,6 +23,7 @@
 //! - [`sources`]: where a build reads files: the disk, std built in, or
 //!   memory, in layers.
 //! - [`project`]: libraries on disk, found as `temper test` finds them.
+//! - [`repl`]: a REPL session, settling and running one input at a time.
 //! - [`library_tests`]: running libraries' tests, for `tempest test`.
 //! - [`log`]: commands' reports as text or JSON records
 //!   (`--logformat`).
@@ -50,6 +51,7 @@ pub mod order;
 pub mod print;
 pub mod project;
 pub mod regex;
+pub mod repl;
 pub mod scope;
 pub mod settle;
 pub mod sources;

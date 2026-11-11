@@ -1,0 +1,238 @@
+//! Tests of `tempest repl` as a command: piped transcripts, its flags,
+//! the work root's libraries, and Ctrl-C. What a session prints for
+//! each input is tested in temper-frontend's `tests/repl.rs`; the
+//! tutorial's transcripts, in `tests/repl_docs.rs`.
+
+use std::fs;
+use std::io::{Read, Write};
+use std::path::Path;
+use std::process::{Command, Stdio};
+
+/// Runs `tempest repl` with `args`, in `dir` if given, piping `input` in;
+/// gives its exit code, stdout and stderr.
+fn repl(args: &[&str], dir: Option<&Path>, input: &str) -> (i32, String, String) {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_tempest"));
+    command.arg("repl").args(args);
+    if let Some(dir) = dir {
+        command.current_dir(dir);
+    }
+    let mut child = (command.stdin(Stdio::piped()))
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(input.as_bytes())
+        .unwrap();
+    let output = child.wait_with_output().unwrap();
+    let text = |b: Vec<u8>| String::from_utf8(b).unwrap();
+    (
+        output.status.code().unwrap(),
+        text(output.stdout),
+        text(output.stderr),
+    )
+}
+
+/// A fresh directory, removed after `f`.
+fn with_dir(test: &str, f: impl FnOnce(&Path)) {
+    let dir = std::env::temp_dir().join(format!("tempest-repl-{}-{test}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    f(&dir);
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// Piped input gives each result, and nothing else: no prompts, and no
+/// indentation echoed (Kotlin's REPL echoed its auto-indent into piped
+/// output and into the input, shifting snippets' columns).
+#[test]
+fn piped_input_prints_only_results() {
+    let input = "let f(a: Int): Int {\n  if (a > 1) {\n    a * f(a - 1)\n  } else {\n    1\n  }\n}\nf(5)\n  nope\n";
+    let (code, out, err) = repl(&[], None, input);
+    assert_eq!((code, err.as_str()), (0, ""));
+    assert_eq!(
+        out,
+        "interactive#0: void\n\
+         interactive#1: 120\n\
+         interactive#2:1:3: error: nope has not been declared\n    \
+         \x20 nope\n    \
+         \x20 ^^^^\n\
+         interactive#2: fail\n"
+    );
+}
+
+/// `--prompt normal` prompts with `$ `, and `  ` while an input goes on;
+/// the end of input exits with 0, whatever failed.
+#[test]
+fn prompts() {
+    let (code, out, _) = repl(&["--prompt", "normal"], None, "[1,\n2]\npanic()\n");
+    assert_eq!(code, 0);
+    assert_eq!(
+        out,
+        "$   interactive#0: [1,2]\n$ Panicked: panic()\ninteractive#1: fail\n$ \n"
+    );
+    let (code, out, _) = repl(&["--prompt", "hide"], None, "1\n");
+    assert_eq!((code, out.as_str()), (0, "interactive#0: 1\n"));
+}
+
+/// Input that ends partway still runs, as Ctrl-D runs what's pending.
+#[test]
+fn the_end_of_input_runs_what_is_pending() {
+    let (code, out, _) = repl(&[], None, "[1,\n2]");
+    assert_eq!(code, 0);
+    assert_eq!(out, "interactive#0: [1,2]\n");
+    let (code, out, _) = repl(&[], None, "[1,\n2");
+    assert_eq!(code, 0);
+    assert!(out.ends_with("interactive#0: 2\n"), "{out}");
+}
+
+/// `-e` runs inputs first; `--separator` chooses what ends an input.
+#[test]
+fn flags() {
+    let (_, out, _) = repl(
+        &["-e", "let x = 2", "--exec-before", "let y = 3"],
+        None,
+        "x * y\n",
+    );
+    assert_eq!(
+        out,
+        "interactive#0: void\ninteractive#1: void\ninteractive#2: 6\n"
+    );
+    let input = "let ev(n: Int): Boolean { n == 0 || od(n - 1) }\n\
+                 let od(n: Int): Boolean { n != 0 && ev(n - 1) } ;;\n\
+                 od(3) ;;\n";
+    let (_, out, _) = repl(&["--separator", "semisemi"], None, input);
+    assert_eq!(out, "interactive#0: void\ninteractive#1: true\n");
+    let (_, out, _) = repl(&["--separator", "eof"], None, "let a = 1;\na + 1\n");
+    assert_eq!(out, "interactive#0: 2\n");
+    for args in [
+        &["--separator", "comma"][..],
+        &["--prompt", "loud"],
+        &["--fuel", "0"],
+        &["extra"],
+    ] {
+        assert_eq!(repl(args, None, "").0, 2, "{args:?}");
+    }
+    let (_, out, _) = repl(&["--fuel", "1000"], None, "while (true) {}\n1\n");
+    assert_eq!(
+        out,
+        "Panicked: ran out of steps\ninteractive#0: fail\ninteractive#1: 1\n"
+    );
+}
+
+/// UTF-8 piped in stays UTF-8: strings and names with multi-byte
+/// characters, emoji, and combining marks.
+#[test]
+fn utf8_input() {
+    let input = "let näme = \"😀 e\u{301} 日本\"\nnäme\nnäme.split(\" \").length\n";
+    let (_, out, _) = repl(&[], None, input);
+    assert_eq!(
+        out,
+        "interactive#0: void\ninteractive#1: \"😀 e\u{301} 日本\"\ninteractive#2: 3\n"
+    );
+}
+
+/// Inputs import the work root's libraries by name: the work root around
+/// the current directory by default, or `-w`'s.
+#[test]
+fn imports_from_the_work_root() {
+    with_dir("workroot", |dir| {
+        let lib = dir.join("lib");
+        fs::create_dir_all(&lib).unwrap();
+        fs::write(
+            lib.join("config.temper.md"),
+            "    export let name = \"greeting\";\n",
+        )
+        .unwrap();
+        fs::write(
+            lib.join("greet.temper"),
+            "export let greet(who: String): String { \"Hello, ${who}!\" }\n",
+        )
+        .unwrap();
+        let input = "let { greet } = import(\"greeting\");\ngreet(\"REPL\")\n";
+        let expected = "interactive#0: void\ninteractive#1: \"Hello, REPL!\"\n";
+        let (_, out, _) = repl(&[], Some(&lib), input);
+        assert_eq!(out, expected);
+        let (_, out, _) = repl(&["-w", &dir.to_string_lossy()], None, input);
+        assert_eq!(out, expected);
+        // Outside a work root, there are none.
+        let (_, out, _) = repl(&[], Some(&std::env::temp_dir()), input);
+        assert!(
+            out.contains("error: Not supported yet: importing greeting"),
+            "{out}"
+        );
+    });
+}
+
+/// Ctrl-C (SIGINT) stops the input running, not the session.
+#[cfg(unix)]
+#[test]
+fn ctrl_c_stops_the_input_not_the_session() {
+    use std::time::{Duration, Instant};
+    // `-e` runs once Ctrl-C is handled; until then, SIGINT would end it.
+    let mut child = Command::new(env!("CARGO_BIN_EXE_tempest"))
+        .args(["repl", "-e", "console.log(\"ready\")"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut stdin = child.stdin.take().unwrap();
+    let mut stdout = child.stdout.take().unwrap();
+    // What it prints, read on a thread, so the test can wait for it.
+    let (send, receive) = std::sync::mpsc::channel();
+    let reader = std::thread::spawn(move || {
+        let mut buffer = [0; 256];
+        while let Ok(n) = stdout.read(&mut buffer) {
+            if n == 0 || send.send(buffer[..n].to_vec()).is_err() {
+                break;
+            }
+        }
+    });
+    let mut out = Vec::new();
+    let start = Instant::now();
+    while !String::from_utf8_lossy(&out).contains("ready\ninteractive#0: void\n") {
+        assert!(start.elapsed() < Duration::from_secs(60), "not ready");
+        if let Ok(bytes) = receive.recv_timeout(Duration::from_millis(100)) {
+            out.extend(bytes);
+        }
+    }
+    out.clear();
+    stdin
+        .write_all(b"var i = 0; while (true) { i += 1 }\n")
+        .unwrap();
+    stdin.flush().unwrap();
+    std::thread::sleep(Duration::from_millis(200));
+    // A SIGINT, then another every two seconds, in case the first came
+    // before the loop began, until the input says it failed.
+    while !String::from_utf8_lossy(&out).contains("interactive#1: fail") {
+        assert!(
+            start.elapsed() < Duration::from_secs(60),
+            "no interrupt: {}",
+            String::from_utf8_lossy(&out)
+        );
+        let pid = child.id().to_string();
+        let killed = Command::new("kill").args(["-INT", &pid]).status().unwrap();
+        assert!(killed.success());
+        let wait = Instant::now();
+        while wait.elapsed() < Duration::from_secs(2) {
+            match receive.recv_timeout(Duration::from_millis(100)) {
+                Ok(bytes) => out.extend(bytes),
+                Err(_) if String::from_utf8_lossy(&out).contains("interactive#1: fail") => break,
+                Err(_) => {}
+            }
+        }
+    }
+    stdin.write_all(b"i > 0\n1 + 1\n").unwrap();
+    drop(stdin);
+    let status = child.wait().unwrap();
+    reader.join().unwrap();
+    out.extend(receive.try_iter().flatten());
+    assert!(status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&out),
+        "Interrupted\ninteractive#1: fail\ninteractive#2: true\ninteractive#3: 2\n"
+    );
+}

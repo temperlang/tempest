@@ -1,0 +1,66 @@
+# REPL sessions: std imports, regexes, async across inputs, and UTF-8.
+=== std imports
+let { Date } = import("std/temporal");
+new Date(2024, 2, 29).toString()
+let { ... } = import("std/regex");
+let { Test } = import("std/testing");
+--- transcript
+interactive#0: void
+interactive#1: "2024-02-29"
+interactive#2: void
+interactive#3: void
+
+=== regex literals
+let r = /a(?thing=.)c/;
+r.find("abc").groups["thing"].value
+--- transcript
+interactive#0: void
+interactive#1: "b"
+
+=== async blocks wait across inputs for a later input's promise
+let b = new PromiseBuilder<Int>();
+async { (): GeneratorResult<Empty> extends GeneratorFn =>
+  let n = await b.promise;
+  console.log("got ${n}");
+}
+1
+b.complete(5);
+--- transcript
+interactive#0: void
+interactive#1: void
+interactive#2: 1
+got 5
+interactive#3: void
+
+=== top-level await
+let p = new PromiseBuilder<String>();
+p.complete("ready");
+await p.promise
+let q = new PromiseBuilder<String>();
+let got = await q.promise
+q.complete("later");
+got
+--- transcript
+interactive#0: void
+interactive#1: void
+interactive#2: "ready"
+interactive#3: void
+1 promise is unresolved.
+interactive#4: fail
+interactive#5: void
+interactive#6: "later"
+
+=== UTF-8 in strings and names
+"héllo wörld 😀 e\u{301}"
+let café = "e\u{301}"
+café.countBetween(String.begin, café.end)
+let 名前 = "😀🎉"
+名前
+"${名前}!"
+--- transcript
+interactive#0: "héllo wörld 😀 é"
+interactive#1: void
+interactive#2: 2
+interactive#3: void
+interactive#4: "😀🎉"
+interactive#5: "😀🎉!"

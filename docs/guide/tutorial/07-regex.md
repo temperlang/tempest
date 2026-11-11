@@ -45,7 +45,7 @@ $ let { ... } = import("std/regex");
 interactive#0: void
 $ let regex = /a(?thing=.)c/;
 interactive#1: void
-$ regex.find("abc")["thing"].value
+$ regex.find("abc").groups["thing"].value
 interactive#2: "b"
 ```
 
@@ -53,7 +53,7 @@ From this regex, we can also get its structured representation:
 
 ```temper
 $ regex.data
-interactive#3: {class: Sequence, items: [{class: CodePoints, value: "a"},{class: Capture, name: "thing", item: {class: Dot__13}},{class: CodePoints, value: "c"}]}
+interactive#3: {class: Sequence, items: [{class: CodePoints, value: "a"},{class: Capture, name: "thing", item: {class: Dot}},{class: CodePoints, value: "c"}]}
 ```
 
 Or we can manually build an equivalent:
@@ -65,7 +65,7 @@ $ let regex2 = new Sequence([
     new CodePoints("c"),
   ]).compiled();
 interactive#4: void
-$ regex2.find("abc")["thing"].value
+$ regex2.find("abc").groups["thing"].value
 interactive#5: "b"
 ```
 
@@ -85,7 +85,7 @@ $ let text = ".";
 interactive#6: void
 $ let otherRegex = rgx"a(?thing=${text})c";
 interactive#7: void
-// Note {class: CodePoints, value: "."} rather than {class: Dot__13}.
+// Note {class: CodePoints, value: "."} rather than {class: Dot}.
 $ otherRegex.data
 interactive#8: {class: Sequence, items: [{class: CodePoints, value: "a"},{class: Capture, name: "thing", item: {class: CodePoints, value: "."}},{class: CodePoints, value: "c"}]}
 ```

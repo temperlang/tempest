@@ -36,6 +36,7 @@ page doesn't repeat those.
 | [I21](#i21-dateyearsbetween-with-the-later-date-first) | std/temporal | Negative, off by one | Fix std, or document |
 | [I22](#i22-named-groups-in-regular-expressions) | std/regex | `(?<name>…)` | Pick one syntax, or both |
 | [I23](#i23-integer-literals-too-big-for-int32) | builtins | Four bit examples wrap | Decide literal typing, then fix |
+| [I24](#i24-tutorial-examples-tempest-doesnt-run) | tutorial 3 | `fn` without a declared type; `do(fn …)` | Fix the examples, or tempest |
 
 ## Licensing and community
 
@@ -164,9 +165,11 @@ page doesn't repeat those.
   `repl` (and its `describe`), `version`, and `help`; the language
   server is `temper serve --port N`.
 - **tempest:** `temper`'s commands and flags, as `tempest build`,
-  `test`, `run`, `init`, `version`, `license`, `licenses`, `help`, and
-  `serve` (or `lsp`, on standard input and output only); no `watch`,
-  `repl`, or `doc` yet, which say so ([the command line](tools/cli.md)).
+  `test`, `run`, `repl`, `init`, `version`, `license`, `licenses`,
+  `help`, and `serve` (or `lsp`, on standard input and output only); no
+  `watch`, `doc`, or `repl -b` yet, which say so, and the REPL has no
+  `describe`, `translate`, or `help` functions yet
+  ([the command line](tools/cli.md), [the REPL](tools/repl.md)).
 - **Suggested:** finish CLI parity ([the plan](../notes/switch-over.md)),
   then decide whether the binary is called `temper`.
 
@@ -291,3 +294,20 @@ remove its `known` comment and its row here.
 - **Suggested:** decide whether integer literals take their type from
   context; then add `i64`, or write the 32-bit ones in hex, as the
   answer needs.
+
+### I24: Tutorial examples tempest doesn't run
+
+The tutorial's REPL transcripts run as a test
+(`crates/temper-frontend/tests/repl_docs.rs`); two of
+[control flow](guide/tutorial/03-control-flow.md)'s examples are left
+out of it, as tempest rejects them:
+
+- `let areaPerPerimeter = fn (shape: Shape): Float64 { … }`: "needs a
+  declared type, such as a @fun interface, since a function literal
+  takes its type from the type wanted"
+  ([language.md](../notes/language.md), fun interfaces).
+- `do(fn () { … while(i < n, fn { … }); })`: "Use of builtin do is
+  malformed".
+
+**Suggested:** decide whether tempest should accept them, or show
+what it accepts in the tutorial.

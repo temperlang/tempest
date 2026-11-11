@@ -94,12 +94,12 @@ impl Settle {
     /// Finds the uses of locals known not to be null, before typing.
     pub(crate) fn find_flow_facts(&mut self) {
         let mut walk = Walk::default();
-        for file in &self.lib.files {
-            self.flow(file.root, Some(Vec::new()), &mut walk);
+        for root in self.round_roots() {
+            self.flow(root, Some(Vec::new()), &mut walk);
         }
-        self.typing.non_null = walk.non_null;
-        self.typing.is_type = walk.is_type;
-        self.typing.assigned = walk.assigned;
+        self.typing.non_null.extend(walk.non_null);
+        self.typing.is_type.extend(walk.is_type);
+        self.typing.assigned.extend(walk.assigned);
     }
 
     /// Walks a node, given what's known before it, and gives what's known

@@ -29,7 +29,7 @@ pub(crate) struct StaticExtension {
 
 impl Settle {
     /// The parts of `@staticExtension(T, "name")`, if `decorator` is one.
-    pub(crate) fn static_extension_of(&self, decorator: NodeId) -> Option<(NodeId, NameId)> {
+    pub(crate) fn static_extension_of(&mut self, decorator: NodeId) -> Option<(NodeId, NameId)> {
         let tree = &self.lib.tree;
         let [callee, ty, name] = *tree.children(decorator) else {
             return None;
@@ -45,12 +45,13 @@ impl Settle {
         let Some(temper_syntax::ast::Value::String(name)) = self.lib.value(name) else {
             return None;
         };
-        let name = self.lib.names.find(name)?;
-        Some((ty, name))
+        // Interned, as a REPL's later input may be the first to use it.
+        let name = name.clone();
+        Some((ty, self.lib.names.intern(&name)))
     }
 
     /// The name in `@extension("name")`, if `decorator` is one.
-    pub(crate) fn extension_of(&self, decorator: NodeId) -> Option<NameId> {
+    pub(crate) fn extension_of(&mut self, decorator: NodeId) -> Option<NameId> {
         let tree = &self.lib.tree;
         let [callee, name] = *tree.children(decorator) else {
             return None;
@@ -66,8 +67,9 @@ impl Settle {
         let Some(temper_syntax::ast::Value::String(name)) = self.lib.value(name) else {
             return None;
         };
-        // A name never used as a member can't hide a "No member".
-        self.lib.names.find(name)
+        // Interned, as a REPL's later input may be the first to use it.
+        let name = name.clone();
+        Some(self.lib.names.intern(&name))
     }
 
     /// Records a declared symbol that's an extension, static or not:

@@ -36,11 +36,7 @@ pub const COMMANDS: [(&str, &str, bool); 13] = [
         "Starts the language server over standard input and output (as serve).",
         true,
     ),
-    (
-        "repl",
-        "Interactive shell for Temper code (not in tempest yet).",
-        false,
-    ),
+    ("repl", "Interactive shell for Temper code.", true),
     (
         "run",
         "Loads the named Temper-built library after processing libraries in the work root.",
@@ -221,7 +217,39 @@ pub fn command(name: &str) -> Option<String> {
         "licenses" => "usage: tempest licenses\n\n\
              Displays the third-party crates built into tempest and their licenses.\n"
             .to_string(),
-        "watch" | "repl" | "doc" => format!("{}\n", crate::not_yet_command(name)),
+        "repl" => format!(
+            "usage: tempest repl [OPTION]...\n\
+             \n\
+             Reads Temper a line at a time, running each complete input on the\n\
+             interpreter against what earlier inputs declared, and printing its\n\
+             result as interactive#N: value. A line ends an input unless a\n\
+             bracket, a multi-quoted string, or a block comment is still open.\n\
+             Ctrl-C stops the input running; Ctrl-D ends the session.\n\
+             \n\
+             Options:\n\
+             \x20   -w, --workroot DIR\n\
+             \x20           The work root whose libraries inputs can import, by name.\n\
+             \x20           By default, the work root around the current directory, as\n\
+             \x20           for build, if there is one.\n\
+             {IGNOREFILE}\
+             \x20   -e, --exec-before CODE\n\
+             \x20           An input to run before reading any; may be given more than\n\
+             \x20           once.\n\
+             \x20   --separator newline|semisemi|eof\n\
+             \x20           What ends an input: a line break outside brackets and strings\n\
+             \x20           (the default), ;; at the end of a line, or the end of all\n\
+             \x20           input.\n\
+             \x20   --prompt normal|hide\n\
+             \x20           Whether to prompt with $; by default, only when standard\n\
+             \x20           input is a terminal.\n\
+             \x20   --fuel N|none\n\
+             \x20           The steps each input may take (default none).\n\
+             \x20   -b, --backend BACKEND\n\
+             \x20           Kotlin's: a backend language's own REPL, with the work\n\
+             \x20           root's libraries loaded; not in tempest yet.\n\
+             {VERBOSE}{STD}"
+        ),
+        "watch" | "doc" => format!("{}\n", crate::not_yet_command(name)),
         _ => return None,
     };
     Some(text)

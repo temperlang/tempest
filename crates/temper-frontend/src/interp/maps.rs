@@ -49,6 +49,11 @@ impl Entries {
         self.pairs.len()
     }
 
+    /// The entries, in order.
+    pub(super) fn pairs(&self) -> &[(Val, Val)] {
+        &self.pairs
+    }
+
     fn get(&self, k: &Val) -> Result<Option<Val>, Abrupt> {
         Ok(self.index.get(&key(k)?).map(|&i| self.pairs[i].1.clone()))
     }

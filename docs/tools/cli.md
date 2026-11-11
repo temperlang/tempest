@@ -12,12 +12,12 @@ says so ([the plan](../../notes/switch-over.md)).
 | [`build`](#build) | Brings the libraries under the work root up to date, in every target language, under `temper.out/` | `build`, and `-o DIR` to write elsewhere |
 | [`test`](#test) | Runs the libraries' tests on each backend given, or on the interpreter | `test`, on the interpreter by default |
 | [`run`](#run) | Builds the work root, then runs a library's top level with a backend's language | `run` |
+| [`repl`](repl.md) | An interactive shell for Temper, or for a backend's language with the libraries loaded | `repl` for Temper, without line editing yet; not `-b` |
 | [`init`](#init) | Creates a new library: a `config.temper.md` and a first source file | `init`, file for file |
 | [`serve`](#serve-or-lsp) | Starts the language server for an editor | `serve`, or `lsp`, over standard input and output |
 | [`version`](#version-license-and-licenses), `license`, `licenses` | About the tool itself | the same |
 | [`help`](#help) | The commands, or one command's options | the same |
 | [`watch`](#not-in-tempest-yet) | Like `build`, but keeps running, rebuilding (and testing, with `-t`) as files change | not yet |
-| [`repl`](#not-in-tempest-yet) | An interactive shell for Temper, or for a backend's language with the libraries loaded | not yet; see the [playground](playground.md) |
 | [`doc`](#not-in-tempest-yet) | Generates documentation for the libraries | not yet |
 
 > **Note:** the guide uses `temper` throughout; where `tempest` lacks a
@@ -32,8 +32,8 @@ the same wherever they're taken:
 
 | Option | Taken by | Meaning |
 |---|---|---|
-| `-w DIR`, `--workroot DIR` | `build`, `test`, `run` | The [work root](#the-work-root) |
-| `-ign FILE`, `--ignorefile FILE` | `build`, `test`, `run` | An [ignore file](#ignore-files) with the last word |
+| `-w DIR`, `--workroot DIR` | `build`, `test`, `run`, `repl` | The [work root](#the-work-root) |
+| `-ign FILE`, `--ignorefile FILE` | `build`, `test`, `run`, `repl` | An [ignore file](#ignore-files) with the last word |
 | `-b BACKEND`, `--backend BACKEND` | `build`, `test`, `run` | A backend: `cpp`, `csharp`, `java`, `js`, `lua`, `py`, or `rust` ([target languages](../backends/README.md)), or `interp`, the interpreter, for `test` and `run`. `build` and `test` take it more than once |
 | `--no-connected` | `build`, `test`, `run` | Use the Temper bodies of `@connected` functions, where they have them, instead of each language's own code |
 | `-v`, `--verbose` | `build`, `test`, `run` | Say more: what was written, every test's result, what the code logs, and [hints](#diagnostics) |
@@ -227,14 +227,15 @@ The commands, each with a line, or one command's options.
 
 ## Not in tempest yet
 
-`watch`, `repl`, and `doc`, and the backends `cppv`, `data`, `java8`,
-and `mypyc`, say they aren't in tempest yet, and exit with 3, so a
-script can tell them from a failure:
+`watch` and `doc`, `repl -b`, and the backends `cppv`, `data`,
+`java8`, and `mypyc`, say they aren't in tempest yet, and exit with 3,
+so a script can tell them from a failure:
 
 - **`watch`** waits for a file watcher of its own, which will reuse
   `build` and `test` ([the plan](../internals/detail/08-playground.md#watch-planned)).
   Meanwhile, run `tempest build` or `tempest test` after a change.
-- **`repl`**: Temper as you type is the [playground](playground.md)'s.
+- **`repl -b BACKEND`**, a backend language's own REPL with the work
+  root's libraries loaded; [`repl`](repl.md) runs Temper.
 - **`doc`** waits for a documentation generator.
 - **The backends:** `data` writes data files a library declares, and
   `cppv`, `java8`, and `mypyc` are variants of C++, Java, and Python
@@ -283,7 +284,7 @@ says `BecauseNameUndeclared`). The tests' records are `temper`'s.
 | 0 | Success |
 | 1 | Failure: errors in the code, a test that failed or didn't run, a library that didn't build, or a backend this build of tempest was built without |
 | 2 | A usage error: an unknown command or option, a missing value, or a backend that doesn't exist |
-| 3 | Not in tempest yet: `watch`, `repl`, `doc`, a backend `temper` has, or `serve --port` |
+| 3 | Not in tempest yet: `watch`, `doc`, `repl -b`, a backend `temper` has, or `serve --port` |
 | 101 | A bug in tempest: it panicked, saying where on standard error. Please report it with what you ran |
 
 `temper` exits with 1 on failure and 127 on a usage error, which

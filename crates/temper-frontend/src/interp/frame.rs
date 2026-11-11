@@ -74,7 +74,7 @@ impl Interp<'_> {
         let code = frame.code.clone();
         loop {
             if self.fuel == 0 {
-                return Err(Abrupt::Panic("ran out of steps".into()));
+                self.refuel()?;
             }
             self.fuel -= 1;
             let at = frame.pc;
@@ -98,7 +98,12 @@ impl Interp<'_> {
                 }
                 Op::Global(i) => {
                     let value = self.globals[*i as usize].clone();
-                    push_variable(s, &code, at, frame, value)
+                    match value {
+                        Val::Uninit if self.unset_why.contains_key(i) => {
+                            Err(fail(self.unset_why[i].to_string()))
+                        }
+                        value => push_variable(s, &code, at, frame, value),
+                    }
                 }
                 Op::SetLocal(i) => {
                     frame.values[*i as usize] = frame.pop();
@@ -265,6 +270,22 @@ impl Interp<'_> {
                 }
             }
         }
+    }
+}
+
+impl Interp<'_> {
+    /// More steps, once `fuel` runs out: a slice of the reserve, unless
+    /// the run was interrupted, or there's none left.
+    fn refuel(&mut self) -> Result<(), Abrupt> {
+        if (self.interrupt.as_ref()).is_some_and(|i| i.load(std::sync::atomic::Ordering::Relaxed)) {
+            return Err(Abrupt::Panic(super::INTERRUPTED.into()));
+        }
+        if self.reserve == 0 {
+            return Err(Abrupt::Panic("ran out of steps".into()));
+        }
+        self.fuel = self.reserve.min(super::SLICE);
+        self.reserve -= self.fuel;
+        Ok(())
     }
 }
 

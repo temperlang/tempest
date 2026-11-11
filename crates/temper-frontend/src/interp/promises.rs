@@ -50,6 +50,14 @@ impl Promise {
         }
     }
 
+    /// Adds a paused block to those awaiting the promise, which must be
+    /// pending.
+    pub(super) fn park(&self, block: Rc<Generator>) {
+        if let State::Pending(waiters) = &mut *self.state.borrow_mut() {
+            waiters.push(block);
+        }
+    }
+
     /// What `await` gives, once the promise is resolved: its value, or
     /// for a broken one, a failure.
     pub(super) fn outcome(&self) -> Option<R> {

@@ -218,8 +218,10 @@ impl Settle {
     /// for the type its place wants ([`targets`]).
     pub(crate) fn queue_typing(&mut self) {
         self.find_flow_facts();
-        self.typing.parents = vec![NO_PARENT; self.lib.tree.len()];
-        let mut stack: Vec<NodeId> = self.lib.files.iter().map(|f| f.root).collect();
+        self.typing.parents.resize(self.lib.tree.len(), NO_PARENT);
+        // A session's later rounds may declare new subtypes.
+        self.typing.sealed_subtypes = None;
+        let mut stack: Vec<NodeId> = self.round_roots();
         while let Some(node) = stack.pop() {
             for &child in self.lib.tree.children(node) {
                 self.typing.set_parent(child, node);
@@ -870,8 +872,7 @@ impl Settle {
     /// Reports type errors in each file, once declarations' types are
     /// known.
     pub(crate) fn check_types(&mut self) {
-        let roots: Vec<NodeId> = self.lib.files.iter().map(|f| f.root).collect();
-        for root in roots {
+        for root in self.round_roots() {
             self.check(root);
         }
         self.check_fields_first();
@@ -879,8 +880,12 @@ impl Settle {
         for m in 0..self.lib.modules.len() {
             let scope = self.modules[m];
             let files = self.lib.modules[m].files.clone();
-            for f in files {
-                self.check_members_exist(self.lib.files[f.0 as usize].root, scope);
+            let first = self.round_files();
+            for f in files.into_iter().filter(|f| f.0 as usize >= first) {
+                // A REPL input's own scope, which its root made.
+                let root = self.lib.files[f.0 as usize].root;
+                let scope = self.scopes.of_node(root).unwrap_or(scope);
+                self.check_members_exist(root, scope);
             }
         }
         self.type_all_exprs();

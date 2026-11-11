@@ -5,12 +5,13 @@ Now we actually get into programming logic. And we'll still use the Temper REPL
 for now:
 
 ```sh
-temper repl
+tempest repl
 ```
 
 We can also start with a variation of our types from before. You can paste this
 all at once. The REPL will see it as multiple inputs:
 
+<!-- repl: paste -->
 ```temper
 interface Shape {
   area(): Float64;
@@ -44,6 +45,7 @@ class Circle(
 
 Let's also get ourselves some shapes to work with:
 
+<!-- repl: paste -->
 ```temper
 let shapes: List<Shape> = [{ width: 1.5, height: 0.5 }, { radius: 2.0 }];
 ```
@@ -70,19 +72,24 @@ interactive#6: ["Rectangle of size 1.5 x 0.5","Circle of radius 2.0"]
 
 And top-level `let` function definitions are also shorthand for `fn` assignment:
 
+> **Note:** tempest wants a declared type for the second form
+> ([inconsistencies](../../inconsistencies.md#i24-tutorial-examples-tempest-doesnt-run)).
+
+<!-- repl: skip -->
 ```temper
 // These two forms are roughly equivalent.
 let areaPerPerimeter(shape: Shape): Float64 {
-  shape.area() / shape.perimeter()
+  shape.area() / shape.perimeter() orelse panic()
 }
 // This version just doesn't carry the name metadata on the function object.
 let areaPerPerimeter = fn (shape: Shape): Float64 {
-  shape.area() / shape.perimeter()
+  shape.area() / shape.perimeter() orelse panic()
 }
 ```
 
 You can also call back to function parameters in your own functions:
 
+<!-- repl: paste -->
 ```temper
 let mapAreas(
   shapes: List<Shape>,
@@ -98,7 +105,7 @@ here from context and can omit the parens around `(area) =>` because of that:
 
 ```console
 $ mapAreas(shapes) { area => 2.0 * area }
-interactive#14: [1.5,25.132741228718345]
+interactive#8: [1.5,25.132741228718345]
 ```
 
 Or in other words, `fn` is very versatile in Temper, even though the `fn`
@@ -117,6 +124,7 @@ function callbacks, such as seen in the `mapAreas` example above.
 Well, we've had a lot of fun with functional code above. Let's try out some
 imperative looping instead, beginning with C-style `for` loops:
 
+<!-- repl: paste -->
 ```temper
 // Type `Int` can be inferred here, but be explicit so we see the type.
 for (var i: Int = 0; i < shapes.length; i += 1) {
@@ -127,10 +135,11 @@ for (var i: Int = 0; i < shapes.length; i += 1) {
 
 Here's the output, given our earlier list of shapes:
 
+<!-- repl: output -->
 ```
 Rectangle of size 1.5 x 0.5
 Circle of radius 2.0
-interactive#15: void
+interactive#9: void
 ```
 
 First, yes Temper has C-style `for` loops at present, and they might stay. We're
@@ -153,6 +162,7 @@ mix numeric types in arithmetic.
 But back to imperative loops, in addition to `for`, Temper also has `while`
 loops. For now, let's just convert the loop above to `while`:
 
+<!-- repl: paste -->
 ```temper
 // This `do` block eases putting multiple statements in one REPL input.
 do {
@@ -170,6 +180,10 @@ loop behavior. Temper also has `do ... while` loops. But to be more surprising
 maybe, let's rewrite the above using explicit `fn` function blocks as described
 earlier:
 
+> **Note:** tempest reports this `do(fn () { … })` as malformed
+> ([inconsistencies](../../inconsistencies.md#i24-tutorial-examples-tempest-doesnt-run)).
+
+<!-- repl: skip -->
 ```temper
 do(fn () {
   var i = 0;
@@ -186,16 +200,18 @@ into Temper's built-in `while` macro, one is just syntactic sugar for the other.
 Both translate to a `while` loop in Java, JS, or Python. In most cases, trailing
 blocks are clearer to read and write.
 
-To look closer at Temper's handling of various syntax forms, try using the
-`describe` REPL function mentioned earlier but with
-`"frontend.disAmbiguateStage.after"` to see an earlier stage of processing. Or
-try the `translate` function, or enter `help()` for more info.
+To look closer at Temper's handling of various syntax forms, in Kotlin
+Temper's REPL, try using the `describe` REPL function mentioned earlier but
+with `"frontend.disAmbiguateStage.after"` to see an earlier stage of
+processing. Or try the `translate` function, or enter `help()` for more info.
+(These aren't in tempest's REPL yet.)
 
 ## Branches
 
 Temper has if-else chains (which also are syntactic sugar for macro calls with
 `fn` blocks):
 
+<!-- repl: paste -->
 ```temper
 shapes.map { (shape): String =>
   let area = shape.area();
@@ -213,6 +229,7 @@ shapes.map { (shape): String =>
 
 In place of `switch`, Temper has `when` blocks:
 
+<!-- repl: paste -->
 ```temper
 let lengthSuffix(length: Int): String {
   when (length) {
@@ -229,6 +246,7 @@ let lengthSuffix(length: Int): String {
 You can also match types by using `is` (and see [issue#25](https://github.com/temperlang/temper/issues/25) on exhaustiveness
 checking):
 
+<!-- repl: paste -->
 ```temper
 let squaredExtent(shape: Shape): Float64 {
   when (shape) {
@@ -237,7 +255,7 @@ let squaredExtent(shape: Shape): Float64 {
     // Use a `do` block for multiple statements in the result expression.
     is Rectangle -> do {
       let { width, height } = shape;
-      (width * width + height * height) / 4.0
+      (width * width + height * height) / 4.0 orelse panic()
     }
     // Because another type could be added later.
     else -> NaN;
@@ -266,11 +284,12 @@ manifests in the REPL with a simple `fail` message:
 
 ```temper
 $ shapes[0]
-interactive#30: {class: Rectangle__0, width: 1.5, height: 0.5}
+interactive#16: {class: Rectangle, width: 1.5, height: 0.5}
 $ shapes[1]
-interactive#31: {class: Circle__0, radius: 2.0}
+interactive#17: {class: Circle, radius: 2.0}
 $ shapes[2]
-interactive#32: fail
+Panicked: index 2 out of bounds for length 2
+interactive#18: fail
 ```
 
 That last one failed because there are only 2 shapes in our array. And using bad
@@ -285,12 +304,13 @@ efficiently checked in advance:
 ```temper
 // The value after `orelse` is used when the lefthand side is `Bubble`.
 $ shapes[0] as Circle orelse ({ radius: 1.0 })
-interactive#33: {class: Circle__0, radius: 1.0}
+interactive#19: {class: Circle, radius: 1.0}
 ```
 
 We can use this in our own functions as well. For example, we adjust our length
 suffix function from earlier:
 
+<!-- repl: paste -->
 ```temper
 // Note the `throws Bubble` on the type here.
 let lengthSuffix(length: Int): String throws Bubble {
@@ -310,7 +330,7 @@ it. Let's handle that case:
 
 ```console
 $ [0, 1, 2, -1].map { (n): String => lengthSuffix(n) orelse "s???" }
-interactive#36: ["s","","s","s???"]
+interactive#22: ["s","","s","s???"]
 ```
 
 Some details on `Bubble` propagation still need to be worked out on backends,

@@ -32,6 +32,7 @@ Here are some quick examples on ways to avoid reference cycles.
 
 This code is incorrect Temper:
 
+<!-- repl: paste -->
 ```temper
 // Bad Temper code! Will be prohibitied by the compiler in future releases!
 class Node<T>(
@@ -51,12 +52,20 @@ class Node<T>(
 // Yep, this builds them.
 let parent = new Node("parent");
 parent.addKid(new Node("kid"));
-// Viewing `parent` in the repl today causes stack overflow.
+```
+
+Viewing `parent` in the REPL shows the cycle, marked `↻` where the kid
+refers back to its parent (Kotlin Temper's REPL overflowed its stack here):
+
+```console
+$ parent
+interactive#3: {class: Node, value: "parent", parent: null, kidsBuilder: [{class: Node, value: "kid", parent: ↻, kidsBuilder: []}]}
 ```
 
 To make this work in Temper, we have to lose the `parent` and also make the kids
 list immutable:
 
+<!-- repl: paste -->
 ```temper
 // Now avoiding cycles!
 class Node<T>(
@@ -75,6 +84,7 @@ But then you can't arbitrarily navigate up the tree from any given node. What if
 you want to access ancestor nodes for some reason? If you need that information
 during traversal, you can just pass it down as you go:
 
+<!-- repl: paste -->
 ```temper
 let walk<T>(
   node: Node<T>,
@@ -100,7 +110,7 @@ $ walk(parent) { node: Node<String>, parent: Node<String>? =>
   }
 parent
 kid under parent
-interactive#19: void
+interactive#7: void
 ```
 
 A list of all ancestors could also be passed in, or other recursive algorithms
@@ -112,6 +122,7 @@ If you really need either cyclical data or mutable recursive data, one option is
 to make a `List` of nodes then represent references using indices in the list
 (and see [issue#31](https://github.com/temperlang/temper/issues/31) for potential index types):
 
+<!-- repl: paste -->
 ```temper
 // We've discussed the idea of specialized typed index references, but there
 // aren't any definitive plans yet. Meanwhile, just use a simple typedef.
@@ -158,12 +169,12 @@ $ let graph = {
         { value: "c", neighbors: [0, 1] },
       ]
   };
-interactive#25: void
+interactive#11: void
 $ graph.mapNeighbors(graph.nodes[0]) { (node): String =>
     // We could traverse the graph deeper here if we want.
     node.value
   }
-interactive#26: ["a","b","c"]
+interactive#12: ["a","b","c"]
 ```
 
 Other resources may exist on developing data structures and algorithms without

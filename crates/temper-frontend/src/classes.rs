@@ -1333,13 +1333,19 @@ impl Settle {
         forced: bool,
     ) -> Result<Vec<(SymbolId, NodeId)>, Fact> {
         let mut found: Vec<(SymbolId, NodeId)> = Vec::new();
+        // Names seen nearer, which shadow farther ones, as a REPL input's
+        // class shadows an earlier input's of the same name.
+        let mut seen = std::collections::HashSet::new();
         let mut at = Some(scope);
         while let Some(id) = at.filter(|&id| id != crate::scope::BUILTINS) {
             let s = self.scopes.get(id);
             if !s.complete && !forced {
                 return Err(Fact::ScopeComplete(id));
             }
-            for &(_, symbol) in &s.names {
+            for &(name, symbol) in s.names.iter().rev() {
+                if !seen.insert(name) {
+                    continue;
+                }
                 let Some(class) = self.class_of(symbol) else {
                     continue;
                 };

@@ -45,6 +45,7 @@ often depends on the specific backend. That's why downcasting is so constrained
 in Temper. But in addition to sealed interface subtypes, you can also downcast
 to check against `null`:
 
+<!-- repl: restart -->
 ```console
 $ let maybeMultiply(x: Float64?, y: Float64?): Float64? {
     // The ` as T` macro has return type `T throws Bubble`, so use `orelse`.
@@ -97,11 +98,12 @@ As we saw earlier, Temper has the following numeric types built in:
 
 These two types don't interop directly. For example:
 
+<!-- repl: restart -->
 ```temper
 $ 1 + 2.5
-1: 1 + 2.5
-   ┗━━━━━┛
-[interactive#0:1+0-7]@G: No applicable variants in (fn (Int, Int): Int & fn (Int): Int & fn (Float64, Float64): Float64 & fn (Float64): Float64) for inputs (Int, Float64)
+interactive#0:1:5: error: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32, Float64]
+    1 + 2.5
+        ^^^
 interactive#0: fail
 $ 1.toFloat64() + 2.5
 interactive#1: 3.5
@@ -133,16 +135,14 @@ use numbers as Booleans:
 
 ```console
 $ if (1) { console.log("hi"); }
-1: if (1) { console.log("hi"
-       ⇧
-[interactive#1:1+4-5]@G: Expected value of type Boolean not Int
-1: if (1) { console.log("hi"
-       ⇧
-[interactive#1:1+4-5]@R: Expected value of type Boolean not Int
-interactive#1: fail
+interactive#5:1:5: error: Expected value of type Boolean not Int32
+    if (1) { console.log("hi"); }
+        ^
+Failed: Expected a Boolean, not Int
+interactive#5: fail
 $ if (true) { console.log("hi"); }
 hi
-interactive#2: void
+interactive#6: void
 ```
 
 The error repeats in the bad usage example because it happens at multiple
@@ -164,6 +164,7 @@ Temper has the following types for representing text:
 
 Here are some examples:
 
+<!-- repl: restart -->
 ```temper
 $ let what = "libraries";
 interactive#0: void
@@ -174,17 +175,14 @@ interactive#2: ["I","❤","libraries"]
 $ message.isEmpty
 interactive#3: false
 $ message.length
-1: message.length
-           ┗━━━━┛
-[interactive#4:1+8-14]@G: Expected function type, but got Invalid
-1: message.length
-   ┗━━━━━━━━━━━━┛
-[interactive#4:1+0-14]@G: No member length in String__27
+interactive#4:1:1: error: No member length in String
+    message.length
+    ^^^^^^^^^^^^^^
 interactive#4: fail
 $ message.countBetween(String.begin, message.end)
-interactive#6: 13
+interactive#5: 13
 $ message[message.next(message.next(String.begin))]
-interactive#7: 10084
+interactive#6: 10084
 ```
 
 Different backends have different internal string representations, so simple
@@ -204,6 +202,7 @@ backend, but the exact integer differs depending on the "native string encoding.
 Temper also has raw string syntax to treat backslashes as text data via the
 `raw` string tag, as well as multiline string syntax:
 
+<!-- repl: restart -->
 ```
 $ raw"\d+\.\d+"
 interactive#0: "\\d+\\.\\d+"
@@ -232,15 +231,11 @@ $ console.log(
     """
     "^ And above is just `""` after `"`
   )
-```
-
-```
 - An outline
   - With indentation
 - Another point
 ""
 ^ And above is just `""` after `"`
-
 interactive#1: void
 ```
 
@@ -287,6 +282,7 @@ represented by core types in each backend to the extent possible, such as by
 
 Here are some examples:
 
+<!-- repl: restart -->
 ```console
 $ let nums = [10, 20, 30]; // inferred type: List<Int>
 interactive#0: void
@@ -295,12 +291,10 @@ interactive#1: 3
 $ nums[1]
 interactive#2: 20
 $ nums.add(40);
-1: nums.add(40);
-        ┗━┛
-[interactive#3:1+5-8]@G: Expected function type, but got Invalid
-1: nums.add(40);
-   ┗━━━━━━━━━━┛
-[interactive#3:1+0-12]@G: No member add in List__10 | Listed__44
+interactive#3:1:1: error: No member add in List<Int32>
+    nums.add(40);
+    ^^^^^^^^
+Failed: No method add for List
 interactive#3: fail
 $ let nums2 = do {
     let builder = new ListBuilder<Int>();
@@ -340,6 +334,7 @@ As for list types, `Map` and `MapBuilder` use standard backend types where
 available, such as `IReadOnlyDictionary` or `IDictionary` in C#, `Map` in Java
 or JS, or `dict` in Python.
 
+<!-- repl: restart -->
 ```console
 $ let messages = new Map([
     new Pair(200, "OK"),

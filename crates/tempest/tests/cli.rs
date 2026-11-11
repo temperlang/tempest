@@ -106,7 +106,7 @@ fn help() {
     );
     assert_eq!(tempest(&["build", "-h", "-b", "cobol"]).1, out);
     for command in [
-        "test", "run", "init", "serve", "lsp", "version", "license", "licenses", "help",
+        "test", "run", "repl", "init", "serve", "lsp", "version", "license", "licenses", "help",
     ] {
         let (code, out, _) = tempest(&["help", command]);
         assert_eq!(code, 0, "{command}");
@@ -158,11 +158,11 @@ fn license_and_licenses() {
 }
 
 /// What isn't in tempest yet says so, with a pointer, and exits with 3:
-/// Kotlin's `watch`, `repl`, and `doc`, its backends `cppv`, `data`,
+/// Kotlin's `watch` and `doc`, `repl -b`, its backends `cppv`, `data`,
 /// `java8`, and `mypyc`, and its language server's `--port`.
 #[test]
 fn not_yet() {
-    for command in ["watch", "repl", "doc"] {
+    for command in ["watch", "doc"] {
         let (code, out, err) = tempest(&[command, "-w", "."]);
         assert_eq!((code, out.as_str()), (3, ""), "{command}");
         let expected = format!(
@@ -183,6 +183,12 @@ fn not_yet() {
             assert!(err.starts_with(&expected), "{err}");
         }
     }
+    let (code, _, err) = tempest(&["repl", "-b", "py"]);
+    assert_eq!(code, 3);
+    assert!(
+        err.starts_with("tempest repl: -b py isn't in tempest yet"),
+        "{err}"
+    );
     let (code, _, err) = tempest(&["serve", "--port", "4000"]);
     assert_eq!(code, 3);
     assert!(

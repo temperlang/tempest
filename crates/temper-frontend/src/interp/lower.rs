@@ -612,6 +612,44 @@ impl Lowering {
         Rc::new(self.build(0))
     }
 
+    /// A REPL input's top-level statements, in the order they run,
+    /// giving the last one's value with `keep`. It may `await` at its top
+    /// level, as an `async` block's body may, its file's `root` standing
+    /// for the function ([`crate::repl`]).
+    pub(super) fn repl_input(
+        &mut self,
+        s: &Settled,
+        scope: ScopeId,
+        statements: &[NodeId],
+        keep: bool,
+        root: NodeId,
+    ) -> Rc<Code> {
+        self.begin(
+            Rc::new(Layout::new(s, scope, statements)),
+            Some(root),
+            statements.first().copied().unwrap_or(root),
+        );
+        self.b.generator = Some(GeneratorKind::Safe);
+        self.items(s, statements, None, keep);
+        if !keep {
+            self.emit(Op::Const(Val::Void));
+        }
+        self.emit(Op::Return);
+        Rc::new(self.build(0))
+    }
+
+    /// Adds a module whose globals start at `first`, as a REPL session
+    /// grows.
+    pub(super) fn add_globals(&mut self, scope: ScopeId, first: u32) {
+        self.globals.insert(scope, first);
+    }
+
+    /// Forgets the error messages found so far, as a session's library
+    /// has reported more since.
+    pub(super) fn forget_errors(&mut self) {
+        self.errors = None;
+    }
+
     /// An expression at a module's top level, such as running its tests.
     pub(super) fn expression(&mut self, s: &Settled, scope: ScopeId, expr: NodeId) -> Rc<Code> {
         self.begin(Rc::new(Layout::new(s, scope, &[expr])), None, expr);

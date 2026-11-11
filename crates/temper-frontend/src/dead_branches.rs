@@ -29,7 +29,7 @@ impl Settle {
     /// fine stays as it is.
     pub(crate) fn drop_dead_branches(&mut self) {
         self.fold_undeclared_null_checks();
-        let roots: Vec<NodeId> = (self.lib.files.iter()).map(|f| f.root).collect();
+        let roots: Vec<NodeId> = self.round_roots();
         let mut stack = roots;
         while let Some(node) = stack.pop() {
             let tree = &self.lib.tree;
@@ -58,7 +58,7 @@ impl Settle {
     /// name's error stays an error, though Kotlin reports nothing; the
     /// fold is recovery, so what runs matches Kotlin.
     fn fold_undeclared_null_checks(&mut self) {
-        let roots: Vec<NodeId> = (self.lib.files.iter()).map(|f| f.root).collect();
+        let roots: Vec<NodeId> = self.round_roots();
         let mut stack = roots;
         while let Some(node) = stack.pop() {
             let tree = &self.lib.tree;

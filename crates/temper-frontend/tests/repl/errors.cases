@@ -1,0 +1,126 @@
+# REPL sessions: errors, failures, and Kotlin's REPL bugs, fixed.
+=== bad code reports, and the session goes on
+let = 3
+1 +
+2
+nope()
+1 + 2
+--- transcript
+interactive#0:1:1: error: Cannot assign to let, which is not a var
+    let = 3
+    ^^^
+interactive#0: 3
+interactive#1:1:1: error: Expected a TopLevel here
+    1 +
+    ^^^
+interactive#1: fail
+interactive#2: 2
+interactive#3:1:1: error: nope has not been declared
+    nope()
+    ^^^^
+interactive#3: fail
+interactive#4: 3
+
+=== a type error still runs
+let t: Int = "s"
+t
+--- transcript
+interactive#0:1:14: error: Cannot assign to Int32 from String
+    let t: Int = "s"
+                 ^^^
+interactive#0: void
+interactive#1: "s"
+
+=== bad escapes fail as they run, though not reported yet (Kotlin reports them)
+"a\u{110000}b"
+"\u{zz}"
+--- transcript
+Failed: Malformed code
+interactive#0: fail
+Failed: Malformed code
+interactive#1: fail
+
+=== a panic in Temper code fails the input, and the session goes on
+let boom(): Int { panic() }
+boom()
+1 / 0
+2
+--- transcript
+interactive#0: void
+Panicked: panic()
+interactive#1: fail
+interactive#2: fail
+interactive#3: 2
+
+=== a declaration whose input failed fails when read, saying why
+let z = 1 / 0
+z
+let w = z + 1
+--- transcript
+interactive#0: fail
+Failed: z has no value: interactive#0 failed
+interactive#1: fail
+Failed: z has no value: interactive#0 failed
+interactive#2: fail
+
+=== a function whose body has an error says why when called (Kotlin fails silently)
+let f(): Int { missing + 1 }
+f()
+--- transcript
+interactive#0:1:16: error: missing has not been declared
+    let f(): Int { missing + 1 }
+                   ^^^^^^^
+interactive#0: void
+Failed: missing has not been declared
+interactive#1: fail
+
+=== reassigning a let from a later input names its own input (Kotlin names the wrong one)
+let h = 1
+h = 2;
+h
+--- transcript
+interactive#0: void
+interactive#1:1:1: error: Cannot assign to h, which is not a var
+    h = 2;
+    ^
+interactive#1: void
+interactive#2: 1
+
+=== a cyclic value prints (Kotlin's REPL overflowed and ended)
+class Node(public var next: Node?) {}
+let n = new Node(null)
+n.next = n;
+n
+let lb = new ListBuilder<AnyValue>()
+lb.add(lb);
+lb
+--- transcript
+interactive#0: Node
+interactive#1: void
+interactive#2: void
+interactive#3: {class: Node, next: ↻}
+interactive#4: void
+interactive#5: void
+interactive#6: [↻]
+
+=== an unclosed " ends with its line (Kotlin's read on)
+"open
+1 + 1
+--- transcript
+interactive#0: "open"
+interactive#1: 2
+
+=== a bad import reports and goes on
+let { x } = import("std");
+let { y } = import("./nowhere");
+3
+--- transcript
+interactive#0:1:1: error: Not supported yet: importing std
+    let { x } = import("std");
+    ^^^^^^^^^^^^^^^^^^^^^^^^^
+interactive#0: fail
+interactive#1:1:1: error: Import of ./nowhere failed
+    let { y } = import("./nowhere");
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+interactive#1: fail
+interactive#2: 3

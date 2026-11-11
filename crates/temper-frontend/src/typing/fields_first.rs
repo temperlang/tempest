@@ -93,8 +93,7 @@ impl Settle {
     /// Checks each class's constructor and field initializers.
     pub(super) fn check_fields_first(&mut self) {
         let mut classes = Vec::new();
-        let roots: Vec<NodeId> = self.lib.files.iter().map(|f| f.root).collect();
-        let mut stack = roots;
+        let mut stack = self.round_roots();
         while let Some(node) = stack.pop() {
             if self.lib.tree.kind(node) == NodeKind::Class
                 && self.lib.tree.data(node) & CLASS_INTERFACE == 0

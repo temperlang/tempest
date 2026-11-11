@@ -52,6 +52,8 @@ This folder holds the plan in parts:
 - [tmpl/](tmpl/README.md): tmpl, the backend IR: its crate, nodes,
   types, profiles and lowering, formats, and targets, as a layered
   design with one file per topic.
+- [repl.md](repl.md): the REPL: Kotlin's `temper repl` studied, and
+  tempest's design and plan, by chunks.
 - [kotlin-differences.md](kotlin-differences.md): where tempest differs
   from Kotlin Temper on purpose, and Kotlin Temper's known bugs.
 - [switch-over.md](switch-over.md): what comes after the functional

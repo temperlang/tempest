@@ -96,6 +96,25 @@ impl<F: Copy + Eq + Hash> Engine<F> {
         }
     }
 
+    /// Allows `extra` more steps, as for each round of a session that
+    /// grows ([`crate::settle::Incremental`]).
+    pub fn grow_budget(&mut self, extra: u64) {
+        self.budget = self.budget.saturating_add(extra);
+    }
+
+    /// Drops every item not done, as if done, after a round that
+    /// stopped partway; facts they'd have produced are left unpublished.
+    pub fn abandon(&mut self) {
+        for item in &mut self.items {
+            item.done = true;
+            item.queued = false;
+            item.waiting = None;
+        }
+        self.ready.clear();
+        self.waiters.clear();
+        self.producers.clear();
+    }
+
     /// Steps run so far.
     pub fn steps(&self) -> u64 {
         self.steps

@@ -27,6 +27,9 @@
 //!
 //! Debug builds check that no step read a declaration from a node that a
 //! later step rewrote.
+//!
+//! [`settle`] settles a library at once; [`Incremental`] settles one that
+//! grows a round at a time, as a REPL session's does.
 
 use crate::builtins::Builtin;
 use crate::core;
@@ -39,6 +42,9 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use temper_syntax::ast::{Builtin as SyntaxBuiltin, Value};
 use temper_syntax::names::NameId;
 use temper_syntax::tree::{NodeId, NodeKind, Span};
+
+mod incremental;
+pub use incremental::{Incremental, Round};
 
 /// What a work item can wait on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -102,7 +108,7 @@ pub struct Settled {
 
 /// A module's scope, and its top-level statements in the order they run
 /// ([`crate::order`]).
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct SettledModule {
     pub id: ModuleId,
     pub scope: ScopeId,
@@ -118,76 +124,11 @@ pub struct SettledModule {
 
 /// Settles a library's files.
 pub fn settle(library: Library) -> Settled {
-    let mut library = library;
-    let scopes = Scopes::new(&mut library.names, library.test_server_port);
-    let budget = 1000 + 100 * library.tree.len() as u64;
-    let mut s = Settle {
-        lib: library,
-        scopes,
-        engine: Engine::new(budget),
-        work: Vec::new(),
-        modules: Vec::new(),
-        module_blocks: Vec::new(),
-        exports: HashSet::new(),
-        connected: HashSet::new(),
-        connected_lists: HashMap::new(),
-        auto_eq: HashMap::new(),
-        fun_interfaces: HashSet::new(),
-        sealed: HashSet::new(),
-        json_decorated: HashSet::new(),
-        static_extension_marks: HashMap::new(),
-        static_extensions: Vec::new(),
-        extension_marks: HashMap::new(),
-        extensions: Vec::new(),
-        imports: Vec::new(),
-        overloads: HashMap::new(),
-        tests: Vec::new(),
-        test_runners: Vec::new(),
-        passed: Vec::new(),
-        removed: HashSet::new(),
-        object_literals: BTreeMap::new(),
-        typing: Typing::default(),
-        step: 0,
-        #[cfg(debug_assertions)]
-        reads: Vec::new(),
-        #[cfg(debug_assertions)]
-        rewrites: Vec::new(),
-    };
+    let mut s = Settle::new(library);
     for m in 0..s.lib.modules.len() {
-        let files = s.lib.modules[m].files.clone();
-        let roots: Vec<NodeId> = files
-            .iter()
-            .map(|f| s.lib.files[f.0 as usize].root)
-            .collect();
-        let scope = s.scopes.add(BUILTINS, ScopeKind::Module, roots[0], false);
-        s.modules.push(scope);
-        s.module_blocks.push(roots.len() as u32);
-        for root in roots {
-            let item = s.add(
-                Work::Block {
-                    node: root,
-                    scope,
-                    next: 0,
-                },
-                READ_BLOCKS,
-                root,
-            );
-            s.engine.will_produce(Fact::ScopeComplete(scope), item);
-        }
+        s.queue_module(ModuleId(m as u32));
     }
-    let mut typed = false;
-    if s.run() {
-        s.drop_dead_branches();
-        s.queue_typing();
-        if s.run() {
-            s.check_types();
-            typed = true;
-        }
-    }
-    // Only if the step budget ran out.
-    s.decide_object_literals_left();
-    #[cfg(debug_assertions)]
-    s.check_reads();
+    let typed = s.settle_round();
     let mut modules = s.settled_modules();
     // Tagged strings' contexts worked out at compile time, once the tree
     // is typed and ordered so it can run.
@@ -204,30 +145,148 @@ pub fn settle(library: Library) -> Settled {
 }
 
 impl Settle {
+    /// The state for settling a library, with nothing queued yet.
+    fn new(library: Library) -> Settle {
+        let mut library = library;
+        let scopes = Scopes::new(&mut library.names, library.test_server_port);
+        let budget = 1000 + 100 * library.tree.len() as u64;
+        Settle {
+            lib: library,
+            scopes,
+            engine: Engine::new(budget),
+            work: Vec::new(),
+            modules: Vec::new(),
+            module_blocks: Vec::new(),
+            exports: HashSet::new(),
+            connected: HashSet::new(),
+            connected_lists: HashMap::new(),
+            auto_eq: HashMap::new(),
+            fun_interfaces: HashSet::new(),
+            sealed: HashSet::new(),
+            json_decorated: HashSet::new(),
+            static_extension_marks: HashMap::new(),
+            static_extensions: Vec::new(),
+            extension_marks: HashMap::new(),
+            extensions: Vec::new(),
+            imports: Vec::new(),
+            overloads: HashMap::new(),
+            tests: Vec::new(),
+            test_runners: Vec::new(),
+            passed: Vec::new(),
+            removed: HashSet::new(),
+            object_literals: BTreeMap::new(),
+            typing: Typing::default(),
+            round_files: 0,
+            round_nodes: 0,
+            repl_scopes: HashSet::new(),
+            step: 0,
+            #[cfg(debug_assertions)]
+            reads: Vec::new(),
+            #[cfg(debug_assertions)]
+            rewrites: Vec::new(),
+        }
+    }
+
+    /// Makes a module's scope, a top level's, and queues reading its
+    /// files' blocks.
+    fn queue_module(&mut self, m: ModuleId) {
+        let files = self.lib.modules[m.0 as usize].files.clone();
+        let roots: Vec<NodeId> = files
+            .iter()
+            .map(|f| self.lib.files[f.0 as usize].root)
+            .collect();
+        let scope = self
+            .scopes
+            .add(BUILTINS, ScopeKind::Module, roots[0], false);
+        self.modules.push(scope);
+        self.module_blocks.push(roots.len() as u32);
+        for root in roots {
+            self.queue_root(root, scope);
+        }
+    }
+
+    /// Queues reading a file's block, its module's `scope`.
+    fn queue_root(&mut self, root: NodeId, scope: ScopeId) {
+        let item = self.add(
+            Work::Block {
+                node: root,
+                scope,
+                next: 0,
+            },
+            READ_BLOCKS,
+            root,
+        );
+        self.engine.will_produce(Fact::ScopeComplete(scope), item);
+    }
+
+    /// Runs the loop over what's queued, then, once expansion has
+    /// settled, the typing round, over the files from
+    /// [`Settle::round_files`] on. True if typing ran, as it does unless
+    /// the step budget ran out.
+    fn settle_round(&mut self) -> bool {
+        let mut typed = false;
+        if self.run() {
+            self.drop_dead_branches();
+            self.queue_typing();
+            if self.run() {
+                self.check_types();
+                typed = true;
+            }
+        }
+        // Only if the step budget ran out.
+        self.decide_object_literals_left();
+        #[cfg(debug_assertions)]
+        self.check_reads();
+        typed
+    }
+
+    /// The roots of the files this round settles: all of them, but for
+    /// a session that grows ([`Incremental`]), only those added since
+    /// the last round.
+    pub(crate) fn round_roots(&self) -> Vec<NodeId> {
+        (self.lib.files[self.round_files..].iter())
+            .map(|f| f.root)
+            .collect()
+    }
+
+    /// The first node this round made; older ones were settled before.
+    pub(crate) fn round_nodes(&self) -> u32 {
+        self.round_nodes
+    }
+
+    /// The first file this round settles.
+    pub(crate) fn round_files(&self) -> usize {
+        self.round_files
+    }
+}
+
+impl Settle {
     /// The modules in the order they run, with their top levels sorted.
     fn settled_modules(&mut self) -> Vec<SettledModule> {
-        let s = self;
-        let mut modules = Vec::new();
-        for id in s.run_order() {
-            let scope = s.modules[id.0 as usize];
-            let files = &s.lib.modules[id.0 as usize].files;
-            let roots: Vec<NodeId> = files
-                .iter()
-                .map(|f| s.lib.files[f.0 as usize].root)
-                .collect();
-            let top_levels =
-                crate::order::sort_top_levels(&mut s.lib.tree, &s.scopes, scope, &roots);
-            let tests = s.test_run(id);
-            let test_cases = s.test_cases(id);
-            modules.push(SettledModule {
-                id,
-                scope,
-                top_levels,
-                tests,
-                test_cases,
-            });
+        self.run_order()
+            .into_iter()
+            .map(|id| self.settled_module(id, self.modules[id.0 as usize]))
+            .collect()
+    }
+
+    /// A module, its files' top levels sorted to run, with its tests.
+    fn settled_module(&mut self, id: ModuleId, scope: ScopeId) -> SettledModule {
+        let files = &self.lib.modules[id.0 as usize].files;
+        let roots: Vec<NodeId> = files
+            .iter()
+            .map(|f| self.lib.files[f.0 as usize].root)
+            .collect();
+        let top_levels =
+            crate::order::sort_top_levels(&mut self.lib.tree, &self.scopes, scope, &roots);
+        let tests = self.test_run(id);
+        let test_cases = self.test_cases(id);
+        SettledModule {
+            id,
+            scope,
+            top_levels,
+            tests,
+            test_cases,
         }
-        modules
     }
 }
 
@@ -287,6 +346,15 @@ pub(crate) struct Settle {
     /// with the scopes they're in ([`Settle::decide_object_literal`]).
     pub(crate) object_literals: BTreeMap<NodeId, ScopeId>,
     pub(crate) typing: Typing,
+    /// The first file and node of the round being settled: 0 for a
+    /// library settled at once; for a session that grows
+    /// ([`Incremental`]), the first of what it added since the last
+    /// round. The typing round and checks walk only what's new.
+    round_files: usize,
+    round_nodes: u32,
+    /// A REPL session's top levels, a scope per input, each chained to
+    /// the one before ([`Incremental`]).
+    pub(crate) repl_scopes: HashSet<ScopeId>,
     /// The current step, for the debug check.
     step: u64,
     #[cfg(debug_assertions)]
@@ -554,7 +622,12 @@ impl Settle {
         // As in Kotlin Temper, a block's local is visible only after its
         // declaration, so `var x = x` reads an outer `x`; functions and
         // classes are visible all through the block, for mutual recursion.
-        if kind == SymbolKind::Local && self.scopes.get(scope).kind == ScopeKind::Block && is_let {
+        // So too a REPL input's top-level `let`, so `let s = "${s}!"`
+        // reads the `s` of an earlier input.
+        let block_like = kind == SymbolKind::Local
+            && self.scopes.get(scope).kind == ScopeKind::Block
+            || kind == SymbolKind::TopLevel && self.repl_scopes.contains(&scope);
+        if block_like && is_let {
             let init = core::let_parts(&self.lib.tree, let_node).2;
             if !init.is_some_and(|i| matches!(self.lib.tree.kind(i), NodeKind::Fn | NodeKind::Fun))
             {
@@ -1028,8 +1101,10 @@ impl Settle {
         self.reads.push((_node, self.step));
     }
 
+    /// Checks the reads and rewrites recorded this round, then forgets
+    /// them, so a session's rounds check only their own.
     #[cfg(debug_assertions)]
-    fn check_reads(&self) {
+    fn check_reads(&mut self) {
         let mut last_rewrite = std::collections::HashMap::new();
         for &(node, step) in &self.rewrites {
             last_rewrite.insert(node, step);
@@ -1042,6 +1117,8 @@ impl Settle {
                 );
             }
         }
+        self.reads.clear();
+        self.rewrites.clear();
     }
 
     pub(crate) fn is_temporary(&self, node: NodeId) -> bool {

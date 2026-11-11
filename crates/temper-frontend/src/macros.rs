@@ -1964,6 +1964,16 @@ impl Settle {
                 Message::Unsupported(format!("{what} in a for … of body")),
             ),
             Some(&(ScopeKind::Fn, f)) => self.rewrite(call, kind, f.0, &[value]),
+            // A REPL input may await at its top level, which runs as an
+            // `async` block's body does, its root standing for the
+            // function ([`crate::repl`]).
+            Some(&(ScopeKind::Module, root))
+                if kind == NodeKind::Await
+                    && (self.scopes.of_node(root))
+                        .is_some_and(|s| self.repl_scopes.contains(&s)) =>
+            {
+                self.rewrite(call, kind, root.0, &[value])
+            }
             _ => self.error(call, Message::YieldingOutsideGeneratorFn(what)),
         }
         true
