@@ -125,6 +125,25 @@ Failed: half has no value: interactive#2 failed
 interactive#3: fail
 ```
 
+## Tests
+
+The first input's tests run once, after it, as `tempest test` runs a
+library's: each failure, then the summary. What it declares works
+either way. So `tempest repl --separator eof < file.temper`, or `-e`,
+runs a file's tests, then goes on with what it declares:
+
+<!-- repl: restart -->
+```console
+$ let twice(n: Int): Int { n * 2 }; test("doubles") { assert(twice(2) == 5) }
+Test failed: doubles - expected twice(2) == (5) not (4)
+Tests passed: 0 of 1
+interactive#0: void
+$ twice(21)
+interactive#1: 42
+```
+
+A later input's tests don't run: each is an error.
+
 ## Async
 
 Promises and `async` blocks last across inputs, and an input may

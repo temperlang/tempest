@@ -92,6 +92,12 @@ impl Incremental {
         self.last_segment
     }
 
+    /// Whether later rounds' inputs may declare tests, which the input
+    /// then gives as [`SettledModule::tests`]; else a test is an error.
+    pub fn allow_tests(&mut self, allowed: bool) {
+        self.s.repl_tests = allowed;
+    }
+
     /// Settles what was added since the last round: `input`, a REPL
     /// input's file, in a scope chained to the previous input's, and the
     /// modules loaded for it, each in a scope of its own.
@@ -104,6 +110,7 @@ impl Incremental {
         let repl = s.lib.files[input.0 as usize].module;
         let root = s.lib.files[input.0 as usize].root;
         let first_new = s.modules.len();
+        let tests_before = s.tests.len();
         self.round_start = Some((first_new, self.last_segment));
         let parent = self.last_segment.unwrap_or(BUILTINS);
         let segment = s.scopes.add(parent, ScopeKind::Module, root, false);
@@ -147,12 +154,19 @@ impl Incremental {
             top_levels.push(last);
             s.lib.tree.set_children(root, &top_levels);
         }
+        // Its tests, if it declared any; the module's earlier inputs'
+        // tests, if any, are already reported.
+        let declared = s.tests[tests_before..].iter().any(|&(m, _)| m == repl);
+        let (tests, test_cases) = match declared {
+            true => (s.test_run(repl), s.test_cases(repl)),
+            false => (None, Vec::new()),
+        };
         let input = SettledModule {
             id: repl,
             scope: segment,
             top_levels,
-            tests: None,
-            test_cases: Vec::new(),
+            tests,
+            test_cases,
         };
         self.files_settled = s.lib.files.len();
         self.nodes_settled = s.lib.tree.len() as u32;

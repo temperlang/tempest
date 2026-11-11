@@ -384,7 +384,9 @@ text `tempest repl` prints, then its value (`null` if it failed):
 
 Kinds are `diagnostic`, `log`, `failure`, `output` (the REPL's
 functions'), `note`, `unresolved`, `interrupted`, `internal`,
-`truncated`, and `result`. `repl_complete` splits a typed or pasted
+`truncated`, and `result`. Input 0's tests, if it has any, run after
+it: a `failure` for each that fails, then a `note` with the summary, as
+`Tests passed: 2 of 3`. `repl_complete` splits a typed or pasted
 buffer into inputs as the CLI splits piped lines
 ([`Chunker`](../../../crates/temper-frontend/src/repl.rs)); the page
 feeds each to `repl_input` in turn, and uses `brackets` for the next
@@ -489,7 +491,8 @@ sequenceDiagram
   by kind (and a diagnostic's level); the echoed input is highlighted
   with `highlightCode` over the Temper stream language's tree. Lines
   streamed while an input runs are replaced by its answer's, which
-  lists them again, in order.
+  lists them again, in order. Input 0 shows only if it failed or says
+  more than logs, as its tests' summary, once per editor code.
 - **Keys:** Enter runs once `repl_complete` says the text is whole,
   else adds a line, indented two spaces per open bracket (at the end;
   elsewhere, as the line above). Shift+Enter adds a line; Ctrl or

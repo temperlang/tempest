@@ -82,6 +82,8 @@ export function createRepl(host: ReplHost): { show(): void } {
   let nextId = 1;
   /** The editor's code the session started with, or null for none yet. */
   let sessionSource: string | null = null;
+  /** The editor's code whose input 0 the transcript last showed. */
+  let shownSource: string | null = null;
   /** Inputs after input 0, in order, for replay. */
   let taken: ReplReplay[] = [];
   /** The number the next input gets. */
@@ -363,21 +365,27 @@ export function createRepl(host: ReplHost): { show(): void } {
         resolve?.(message.completion);
         return;
       }
-      case "started":
+      case "started": {
         if (message.id !== starting) return;
         starting = 0;
         nextNumber = message.answer ? message.answer.input + 1 + message.replayed : message.replayed;
-        if (message.answer && message.answer.value === null) {
-          // Input 0, the editor's code, failed: show why. What it
-          // declared without errors still works.
+        const answer = message.answer;
+        const quiet = (kind: string) => kind === "log" || kind === "result" || kind === "truncated";
+        const telling = answer && (answer.value === null || answer.events.some((e) => !quiet(e.kind)));
+        if (answer && telling && sessionSource !== shownSource) {
+          // Input 0, the editor's code, failed, or has more to say than
+          // its logs, as its tests' summary: show it, once for the code.
+          // What it declared without errors still works.
+          shownSource = sessionSource;
           const div = element("div", "repl-block");
           div.append(element("p", "repl-banner note", "The editor's code, input 0:"));
           log.append(div);
-          render({ text: sessionSource ?? "", fuel: FUEL, block: div }, message.answer);
+          render({ text: sessionSource ?? "", fuel: FUEL, block: div }, answer);
         }
         status("");
         pump();
         return;
+      }
       case "answer":
         if (running?.id !== message.id) return;
         render(running, message.answer);

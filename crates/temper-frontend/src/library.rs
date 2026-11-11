@@ -220,6 +220,8 @@ pub enum Message {
     /// contexts at compile time ([`crate::autoescape`]). Kotlin's
     /// `ContextAutoescCalloutMessage`.
     ContentTag(String),
+    /// Ours: a test in a REPL input after the first, which doesn't run.
+    TestsInRepl,
     /// Ours: a feature the settle loop doesn't have yet.
     Unsupported(String),
     /// Ours: the item never settled; the chain of what it waited on.
@@ -456,6 +458,9 @@ impl Message {
             ),
             Message::InvalidRegex(why) => format!("Invalid regex: {why}"),
             Message::ContentTag(problem) => format!("content tag reported:{problem}"),
+            Message::TestsInRepl => "Tests don't run in the REPL: write them in a library's \
+                                     files, and run tempest test"
+                .into(),
             Message::Unsupported(what) => format!("Not supported yet: {what}"),
             Message::NeverSettled(chain) => format!("Never settled, waiting on {chain}"),
             Message::OutOfSteps(n) => format!("Gave up after {n} steps"),

@@ -194,6 +194,24 @@ impl Runner {
         outcome(result)
     }
 
+    /// Runs an input's tests, `run` ([`SettledModule::tests`]), each with
+    /// the steps an input may take, giving each test's name and why it
+    /// failed, if it did; or how running them all failed, as an
+    /// interrupt.
+    pub(crate) fn run_tests(
+        &mut self,
+        s: &Settled,
+        scope: ScopeId,
+        run: NodeId,
+    ) -> Result<Vec<(String, Option<String>)>, Outcome> {
+        self.start();
+        let budget = self.fuel.unwrap_or(u64::MAX);
+        let cases = self.interp.run_test_cases(s, scope, run, budget);
+        let cases = cases.map_err(|abrupt| outcome(Err(abrupt)))?;
+        let report: Vec<String> = cases.into_iter().flat_map(|c| c.report).collect();
+        Ok(crate::library_tests::parse_junit(&report))
+    }
+
     /// Notes why the globals of a module that failed are unset, for a
     /// later read of one: `why`, after its name.
     pub(crate) fn note_unset(&mut self, s: &Settled, scope: ScopeId, why: &str) {

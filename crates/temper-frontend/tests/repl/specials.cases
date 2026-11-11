@@ -105,12 +105,52 @@ help()
 interactive#0: void
 interactive#1: "mine"
 
-=== test refuses with a clear message
-test("t") { assert(true) }
+=== input 0's tests run once, with a summary
+let twice(n: Int): Int { n * 2 }; test("doubles") { assert(twice(2) == 4) }; test("zero") { assert(twice(0) == 0) }
 --- transcript
-interactive#0:1:1: error: Tests don't run in the REPL: write them in a library's files, and run tempest test
+Tests passed: 2 of 2
+interactive#0: void
+
+=== a failing test says why, and the declarations still work
+let twice(n: Int): Int { n * 2 }; test("ok") { assert(twice(1) == 2) }; test("off") { assert(twice(2) == 5) }; test("msg") { assert(false) { "says why" } }
+twice(21)
+--- transcript
+Test failed: off - expected twice(2) == (5) not (4)
+Test failed: msg - says why
+Tests passed: 1 of 3
+interactive#0: void
+interactive#1: 42
+
+=== input 0's tests and declarations, used afterwards; later tests refuse
+class Point(public x: Int, public y: Int) {}; let origin = new Point(0, 0); test("origin") { console.log("in a test"); assert(origin.x == 0) }
+new Point(origin.x + 1, 2)
+test("t") { assert(true) }
+origin.y
+--- transcript
+in a test
+Tests passed: 1 of 1
+interactive#0: void
+interactive#1: {class: Point, x: 1, y: 2}
+interactive#2:1:1: error: Tests don't run in the REPL: write them in a library's files, and run tempest test
     test("t") { assert(true) }
     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+interactive#2: fail
+interactive#3: 0
+
+=== tests after input 0 refuse, even with none in it
+1
+test("t") { assert(true) }
+--- transcript
+interactive#0: 1
+interactive#1:1:1: error: Tests don't run in the REPL: write them in a library's files, and run tempest test
+    test("t") { assert(true) }
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+interactive#1: fail
+
+=== input 0's tests don't run if it fails
+let x: Int = 1 / 0; test("t") { assert(x == 1) }
+--- transcript
+Tests passed: 0 of 1 (1 not run)
 interactive#0: fail
 
 === control characters are escaped in diagnostics and values

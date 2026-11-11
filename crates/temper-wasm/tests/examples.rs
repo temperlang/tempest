@@ -1,10 +1,12 @@
 //! Every example the playground bundles (`site/playground/examples/`)
 //! compiles as the playground compiles it, through `compile` with
 //! `RUN | TESTS` and every backend: no errors, every backend's files,
-//! and the interpreter's output and tests' results as pinned here.
+//! and the interpreter's output and tests' results as pinned here; and
+//! as the REPL tab's input 0, the same output and tests' summary.
 
 use serde_json::Value;
 use std::path::Path;
+use temper_frontend::repl::ReplOptions;
 use temper_syntax::lex::SourceKind;
 use temper_wasm::{RUN, TESTS, built_in, compile_into};
 
@@ -57,6 +59,18 @@ fn compile(source: String) -> Value {
     serde_json::from_str(&json).unwrap_or_else(|e| panic!("{e}: {json}"))
 }
 
+/// Starts the REPL tab's session with `source` as input 0, as the
+/// playground does, giving its answer.
+fn repl_start(source: String) -> Value {
+    let json = std::thread::Builder::new()
+        .stack_size(64 << 20)
+        .spawn(move || temper_wasm::repl::start_with(ReplOptions::default(), &source))
+        .unwrap()
+        .join()
+        .unwrap();
+    serde_json::from_str(&json).unwrap_or_else(|e| panic!("{e}: {json}"))
+}
+
 #[test]
 fn every_example_works() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../site/playground/examples");
@@ -91,6 +105,15 @@ fn every_example_works() {
         assert_eq!(run["defined"], tests.len(), "{name}");
         let summary = format!("Tests passed: {0} of {0}", tests.len());
         assert_eq!(run["summary"], summary.as_str(), "{name}");
+        let mut expected: Vec<Value> = (output.iter())
+            .map(|line| serde_json::json!({"kind": "log", "text": line}))
+            .collect();
+        if !tests.is_empty() {
+            expected.push(serde_json::json!({"kind": "note", "text": summary}));
+        }
+        expected.push(serde_json::json!({"kind": "result", "text": "interactive#0: void"}));
+        let repl = repl_start(std::fs::read_to_string(dir.join(name)).unwrap());
+        assert_eq!(repl["events"], Value::Array(expected), "{name} in the REPL");
         for backend in &backends {
             let generated = &result["backends"][backend];
             assert!(

@@ -10,10 +10,10 @@
 // shows output, with the interpreter's and the JavaScript's runs
 // agreeing. Then a hover shows a type, an edit survives a reload in the
 // URL's fragment, and the top bar's Temper link leads to the site (../).
-// Then the REPL tab: `1 + 2`, a function typed over several lines with
-// Enter, a log streamed while its input runs, Stop with the session
-// restored (and the numbering kept), an input that runs out of steps and
-// then keeps going, and
+// Then the REPL tab: the editor's tests run as input 0, `1 + 2`, a
+// function typed over several lines with Enter, a log streamed while
+// its input runs, Stop with the session restored (and the numbering
+// kept), an input that runs out of steps and then keeps going, and
 // `translate`.
 // Throughout, no console errors, page errors, or failed requests.
 // Chromium is PATH, else $TEMPEST_CHROMIUM, else Playwright's own
@@ -213,6 +213,15 @@ try {
   };
   const expect = (what, text, pattern) => (pattern.test(text) ? [] : [`${what}: ${JSON.stringify(text.slice(-300))}`]);
 
+  await replStep("REPL: the editor's tests run as input 0", async () => {
+    // The first example, in the editor, has a test.
+    const input0 = await page.$eval("#repl-transcript", (t) => t.textContent ?? "");
+    const errors = await page.$$eval("#repl-transcript .repl-failure, #repl-transcript .repl-diagnostic.error", (es) => es.length);
+    return [
+      ...expect("input 0", input0, /Tests passed: (\d+) of \1(?!\d)[^]*interactive#0: void/),
+      ...(errors ? [`${errors} failures or errors`] : []),
+    ];
+  });
   await replStep("REPL: 1 + 2", async () => {
     await run("1 + 2");
     return expect("result", await lastResult(), /^interactive#\d+: 3$/);

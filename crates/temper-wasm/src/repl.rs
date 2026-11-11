@@ -383,6 +383,32 @@ mod tests {
         assert_eq!(out[6], "null");
     }
 
+    /// The editor's tests run once, as input 0, with a summary; a later
+    /// input's test is refused.
+    #[test]
+    fn runs_the_editors_tests() {
+        let out = session(&[
+            (
+                "start",
+                "let twice(n: Int): Int { n * 2 }\ntest(\"ok\") { assert(twice(1) == 2) }\n\
+                 test(\"off\") { assert(twice(2) == 5) }\n",
+                0.0,
+            ),
+            ("input", "twice(4)", 0.0),
+            ("input", "test(\"later\") { assert(true) }", 0.0),
+        ]);
+        assert_eq!(
+            out[0],
+            "{\"input\":0,\"events\":[{\"kind\":\"failure\",\
+             \"text\":\"Test failed: off - expected twice(2) == (5) not (4)\"},\
+             {\"kind\":\"note\",\"text\":\"Tests passed: 1 of 2\"},\
+             {\"kind\":\"result\",\"text\":\"interactive#0: void\"}],\
+             \"value\":\"void\",\"out_of_steps\":false}"
+        );
+        assert!(out[1].contains("\"interactive#1: 8\""), "{}", out[1]);
+        assert!(out[2].contains("Tests don't run in the REPL"), "{}", out[2]);
+    }
+
     /// An input that runs out of its steps says so, and runs again, as
     /// the next input, with more.
     #[test]

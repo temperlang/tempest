@@ -179,6 +179,7 @@ impl Settle {
             round_files: 0,
             round_nodes: 0,
             repl_scopes: HashSet::new(),
+            repl_tests: false,
             step: 0,
             #[cfg(debug_assertions)]
             reads: Vec::new(),
@@ -355,6 +356,9 @@ pub(crate) struct Settle {
     /// A REPL session's top levels, a scope per input, each chained to
     /// the one before ([`Incremental`]).
     pub(crate) repl_scopes: HashSet<ScopeId>,
+    /// Whether the REPL input this round settles may declare tests
+    /// ([`Incremental::allow_tests`]); else a test there is an error.
+    pub(crate) repl_tests: bool,
     /// The current step, for the debug check.
     step: u64,
     #[cfg(debug_assertions)]

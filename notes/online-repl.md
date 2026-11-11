@@ -85,10 +85,12 @@ open questions it ended with are at the end, with their answers.
   worker's analysis is of the editor's source alone, so it can't see
   earlier inputs. Also `translate` in panes, links from
   `interactive#N` labels, and folding long output.
-- **Open:** an editor whose code has tests fails as input 0 ("Tests
-  don't run in the REPL"), with five of the seven examples; what it
-  declares still works, but the first thing a visitor sees is an error.
-  Skipping tests in input 0 with a note would need a frontend change.
+- **Tests in input 0** (t361, 2026-11-11): they run once, after it,
+  reporting each failure and `tempest test`'s summary; the tab shows
+  input 0's block when it says more than logs, once per editor code.
+  The session keeps the tests' expression for a later `test()` (t362).
+  Tests in later inputs are still refused (t363). The smoke test checks
+  that the first example's tests pass as input 0.
 
 The CLI REPL's decisions hold here too:
 

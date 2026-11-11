@@ -18,9 +18,9 @@ REPL, as [`tempest repl`](repl.md) runs in a terminal: type an input,
 and see its result as `interactive#N: value`, with what it logged, its
 errors, and its warnings. The editor's code is input 0, so inputs can
 call what it declares; edit it, and the REPL starts again from it, with
-your inputs run again. Tests don't run in a REPL, so if the editor's
-code has any, input 0 fails, with an error for each, though what it
-declares still works.
+your inputs run again. The editor's tests run once, as input 0's, and
+the REPL shows their summary, `Tests passed: 3 of 3`, with any failures;
+tests typed into the REPL don't run.
 
 - **Enter** runs the input once it's whole, or else starts a new line,
   so a function can be typed over several lines. **Shift+Enter** always

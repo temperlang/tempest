@@ -52,6 +52,10 @@ impl Settle {
             );
             return true;
         };
+        if self.repl_scopes.contains(&scope) && !self.repl_tests {
+            self.error(call, Message::TestsInRepl);
+            return true;
+        }
         let span = self.lib.tree.span(call);
         let f = match self.block_of(body) {
             Some(block) => {
@@ -102,6 +106,15 @@ impl Settle {
         self.rewrite(call, NodeKind::Let, LET_INIT, &[left, case]);
         self.tests.push((module, left));
         if !self.test_runners.iter().any(|&(m, _)| m == module) {
+            // In a REPL input, whose top-level `let`s are visible from
+            // their end, the import is visible all through it.
+            let span = match self.repl_scopes.contains(&scope) {
+                true => {
+                    let at = self.lib.tree.span(root).start;
+                    Span { start: at, end: at }
+                }
+                false => span,
+            };
             let runner = self.import_testing(root, span, call);
             self.test_runners.push((module, runner));
         }

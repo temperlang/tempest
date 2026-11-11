@@ -53,6 +53,7 @@ pub const OUT_OF_STEPS: &str = crate::interp::OUT_OF_STEPS;
 
 use crate::interp::repl::{Outcome, Runner, render};
 use crate::library::{Level, Library, Message};
+use crate::library_tests::Tally;
 use crate::project::load_imports;
 use crate::scope::{Lookup, ScopeId};
 use crate::settle::{Incremental, Settled};
@@ -208,6 +209,10 @@ pub struct ReplSession {
     /// Names an input found undeclared, with the first such input, so a
     /// later input declaring one can note it.
     undeclared: HashMap<String, usize>,
+    /// Input 0's tests, if it has any: its scope, the expression that
+    /// runs them ([`crate::settle::SettledModule::tests`]), and how many.
+    /// Kept so they could run again against later inputs' declarations.
+    tests: Option<(ScopeId, NodeId, usize)>,
     /// Makes the next input panic, to test that a panic is caught.
     #[cfg(test)]
     panic_next: bool,
@@ -244,6 +249,7 @@ impl ReplSession {
             inputs: 0,
             segments: HashMap::new(),
             undeclared: HashMap::new(),
+            tests: None,
             #[cfg(test)]
             panic_next: false,
         };
@@ -368,6 +374,8 @@ impl ReplSession {
         if std::mem::take(&mut self.panic_next) {
             panic!("as a test asked");
         }
+        // Only input 0, the editor's code or the first typed, runs tests.
+        self.settle.allow_tests(input == 0);
         let round = self.settle.settle_input(file);
         self.segments.insert(round.input.scope, input);
         (self.specials.borrow_mut().inputs).push(Some((file, round.input.scope)));
@@ -386,6 +394,7 @@ impl ReplSession {
             .last
             .filter(|_| !semicolon && kind == Some(NodeKind::Class));
         let latest = round.input.scope;
+        let tests = (round.input.tests).map(|run| (latest, run, round.input.test_cases.len()));
         let (runner, segments, sink) = (&mut self.runner, &self.segments, &self.sink);
         let emit = |event: ReplEvent| (*sink.borrow_mut())(&event);
         let resumed = |runner: &mut Runner, s: &Settled| {
@@ -403,7 +412,7 @@ impl ReplSession {
                 }
             }
         };
-        self.settle.view(|s| {
+        let value = self.settle.view(|s| {
             // Every global first, so a panic as one runs leaves none
             // missing.
             for module in &round.modules {
@@ -451,7 +460,46 @@ impl ReplSession {
                     None
                 }
             }
-        })
+        });
+        if let Some(tests) = tests {
+            self.tests = Some(tests);
+            self.run_tests(value.is_some());
+        }
+        value
+    }
+
+    /// Runs input 0's tests, if `ran`, as the input ran to its end, and
+    /// reports each failure and then `tempest test`'s summary, as
+    /// `Tests passed: 2 of 3`; if not, that none ran.
+    fn run_tests(&mut self, ran: bool) {
+        let Some((scope, run, defined)) = self.tests else {
+            return;
+        };
+        let runner = &mut self.runner;
+        let results = match ran {
+            true => self.settle.view(|s| runner.run_tests(s, scope, run)),
+            false => Ok(Vec::new()),
+        };
+        let results = match results {
+            Ok(results) => results,
+            Err(Outcome::Interrupted) => return self.emit(&ReplEvent::Interrupted),
+            Err(Outcome::Failed(why)) => return self.emit(&ReplEvent::Failure(why)),
+            Err(Outcome::Value(_) | Outcome::Unresolved) => return,
+        };
+        for (name, why) in &results {
+            if let Some(why) = why {
+                self.emit(&ReplEvent::Failure(format!("Test failed: {name} - {why}")));
+            }
+        }
+        let run = results.len();
+        let tally = Tally {
+            run,
+            failed: results.iter().filter(|r| r.1.is_some()).count(),
+            defined,
+            not_run: defined.saturating_sub(run),
+            unexpected: run.saturating_sub(defined),
+        };
+        self.emit(&ReplEvent::Note(tally.summary()));
     }
 
     /// Notes names an earlier input found undeclared that input `input`
@@ -497,17 +545,8 @@ impl ReplSession {
             if d.level == Level::Error {
                 errors.insert(message.clone());
             }
-            let mut message = message;
             if let Message::UndeclaredName(name) = &d.message {
-                // A `test(…)` names std's `Test`, which only a library's
-                // tests import.
-                if name == "Test" && lib.source_text(d.span).starts_with("test") {
-                    message = "Tests don't run in the REPL: write them in a library's \
-                               files, and run tempest test"
-                        .into();
-                } else {
-                    undeclared.push(name.to_string());
-                }
+                undeclared.push(name.to_string());
             }
             let (file, start) = lib.locate(d.span.start);
             let file = &lib.files[file.0 as usize];

@@ -407,51 +407,17 @@ fn run_with(settled: &Settled, fuel: Option<u64>, tests: bool, sink: Option<Line
     });
     let mut test_steps = Vec::new();
     for (scope, test_run) in runs.collect::<Vec<_>>() {
-        // `r#([t#test, …])`: each test runs alone, `r#([t#test])`.
-        let [runner, list] = *settled.library.tree.children(test_run) else {
-            result = Err(fail("Tests gave no report"));
-            break;
-        };
-        let code = interp.lowering.expression(settled, scope, runner);
-        let runner = interp.run_top(settled, code);
-        let code = interp.lowering.expression(settled, scope, list);
-        let (runner, cases) = match (runner, interp.run_top(settled, code)) {
-            (Ok(runner), Ok(Val::List(ref cases))) => (runner, cases.clone()),
-            (Err(abrupt), _) | (_, Err(abrupt)) => {
+        match interp.run_test_cases(settled, scope, test_run, budget) {
+            Ok(cases) => {
+                for case in cases {
+                    test_steps.push((case.name, case.steps));
+                    interp.output.lines.extend(case.report);
+                }
+            }
+            Err(abrupt) => {
                 result = Err(abrupt);
                 break;
             }
-            _ => {
-                result = Err(fail("Tests gave no report"));
-                break;
-            }
-        };
-        for case in cases.iter() {
-            let name = match case {
-                Val::Pair(pair) => to_string(&pair.0),
-                _ => String::new(),
-            };
-            interp.fuel = budget;
-            interp.depth = 0;
-            let ran = interp.apply(
-                settled,
-                runner.clone(),
-                vec![Val::List(Rc::from([case.clone()]))],
-            );
-            let tasks = interp.run_tasks(settled);
-            test_steps.push((name.clone(), budget - interp.fuel));
-            let lines = match ran.and_then(|report| tasks.map(|()| report)) {
-                Ok(Val::Str(ref report)) => report.lines().map(String::from).collect(),
-                Ok(_) => junit_failure(&name, "Tests gave no report"),
-                Err(abrupt) => {
-                    let mut why = describe(abrupt);
-                    if why == OUT_OF_STEPS {
-                        why = format!("{why} (each test may take {budget})");
-                    }
-                    junit_failure(&name, &why)
-                }
-            };
-            interp.output.lines.extend(lines);
         }
     }
     let failure = result.err().map(|abrupt| match describe(abrupt) {
@@ -462,6 +428,77 @@ fn run_with(settled: &Settled, fuel: Option<u64>, tests: bool, sink: Option<Line
         output: interp.output.finish(),
         failure,
         test_steps,
+    }
+}
+
+/// A test that ran ([`Interp::run_test_cases`]).
+struct TestCase {
+    name: String,
+    /// The steps it took.
+    steps: u64,
+    /// Its JUnit XML report, a tag a line.
+    report: Vec<String>,
+}
+
+impl Interp<'_> {
+    /// Runs a module's tests, `r#([t#test, …])` ([`crate::settle::SettledModule::tests`]),
+    /// each alone, as `r#([t#test])`, with `budget` steps, then what it
+    /// queued. A test that ends abruptly fails alone, with a report of
+    /// its own; an interrupt stops them all, as does a runner that can't
+    /// be made.
+    fn run_test_cases(
+        &mut self,
+        settled: &Settled,
+        scope: crate::scope::ScopeId,
+        test_run: NodeId,
+        budget: u64,
+    ) -> Result<Vec<TestCase>, Abrupt> {
+        let [runner, list] = *settled.library.tree.children(test_run) else {
+            return Err(fail("Tests gave no report"));
+        };
+        let code = self.lowering.expression(settled, scope, runner);
+        let runner = self.run_top(settled, code)?;
+        let code = self.lowering.expression(settled, scope, list);
+        let Val::List(ref cases) = self.run_top(settled, code)? else {
+            return Err(fail("Tests gave no report"));
+        };
+        let mut ran = Vec::new();
+        for case in cases.iter() {
+            let name = match case {
+                Val::Pair(pair) => to_string(&pair.0),
+                _ => String::new(),
+            };
+            self.fuel = budget.min(SLICE);
+            self.reserve = budget - self.fuel;
+            self.depth = 0;
+            let report = self.apply(
+                settled,
+                runner.clone(),
+                vec![Val::List(Rc::from([case.clone()]))],
+            );
+            let tasks = self.run_tasks(settled);
+            let steps = budget - (self.fuel + self.reserve);
+            let report = match report.and_then(|report| tasks.map(|()| report)) {
+                Ok(Val::Str(ref report)) => report.lines().map(String::from).collect(),
+                Ok(_) => junit_failure(&name, "Tests gave no report"),
+                Err(Abrupt::Panic(why)) if why == INTERRUPTED => {
+                    return Err(Abrupt::Panic(why));
+                }
+                Err(abrupt) => {
+                    let mut why = describe(abrupt);
+                    if why == OUT_OF_STEPS {
+                        why = format!("{why} (each test may take {budget})");
+                    }
+                    junit_failure(&name, &why)
+                }
+            };
+            ran.push(TestCase {
+                name,
+                steps,
+                report,
+            });
+        }
+        Ok(ran)
     }
 }
 
