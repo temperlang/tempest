@@ -257,16 +257,22 @@ pub struct BuiltinMember {
 /// then of the builtin types it extends with the same type arguments
 /// (`Listed` for `List`), each name once, with the type's own type
 /// parameters shown as `args`, as `String` for `T` in a `List<String>`
-/// (or by their own names where `args` has none). Empty for a type whose
-/// members typing doesn't read.
+/// (or by their own names where `args` has none). Empty for a builtin
+/// type whose members typing doesn't read; a type core declares outside
+/// the builtins, as `Console`, has its own.
 pub fn builtin_members(type_name: &str, args: &[String]) -> Vec<BuiltinMember> {
     let mut out: Vec<BuiltinMember> = Vec::new();
     let mut name = Some(type_name);
     while let Some(ty) = name {
-        let Some(&declared_in) = READ_TYPES.iter().find(|&&t| t == ty) else {
-            break;
+        let (class, declared_in) = match READ_TYPES.iter().find(|&&t| t == ty) {
+            Some(&t) => (core_class(t), t),
+            // A type core declares outside the builtins, as `Console`.
+            None if !TYPES.contains(&ty) => match (other_class(ty), declaration(ty, false)) {
+                (Some(class), Some((_, _, at))) => (class, &CORE[at..at + ty.len()]),
+                _ => break,
+            },
+            None => break,
         };
-        let class = core_class(ty);
         let shown_args: Vec<String> = (class.type_param_names.iter().enumerate())
             .map(|(i, n)| args.get(i).cloned().unwrap_or_else(|| n.clone()))
             .collect();
@@ -677,6 +683,9 @@ mod tests {
                 .any(|m| m.name == "fromCodePoint" && m.is_static)
         );
         assert!(builtin_members("Nope", &[]).is_empty());
+        let console = builtin_members("Console", &[]);
+        assert_eq!(console[0].detail, "log(message: String): Void");
+        assert_eq!(console[0].declared_in, "Console");
     }
 
     #[test]

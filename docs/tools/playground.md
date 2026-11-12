@@ -32,9 +32,11 @@ the REPL don't run.
   inputs.
 - **Completion, hover, and signature help** work in the input cell as
   in the editor, and know what earlier inputs declared, and the REPL's
-  own functions. The completion menu opens as you type, with nothing
-  picked, so Enter still runs: **Down** or **Up** picks, **Enter**
-  accepts, **Ctrl+Space** opens it, and **Escape** closes it. **Ctrl+I**
+  own functions. The completion menu opens as you type a name or after
+  `.`, with the first option picked: **Enter** or **Tab** accepts it,
+  **Down** or **Up** picks another, **Ctrl+Space** opens it, and
+  **Escape** closes it. With no menu open, or the name already typed
+  in full, Enter runs. **Ctrl+I**
   (Cmd+I on a Mac) shows the type and docs of the name at the cursor.
   They read the cell without running it, and wait while an input runs.
 - **The transcript** folds long output after 40 lines, with **Show

@@ -21,9 +21,10 @@
 //   the cursor), and signature help, from `repl_query` over the session:
 //   the cell's text is read against what earlier inputs declared, never
 //   settled or run. While an input runs, the worker is busy, so the
-//   cell has no help until it ends. The completion menu opens with
-//   nothing picked, so Enter still runs; Down or Up picks, then Enter
-//   accepts, as Ctrl+Space opens it.
+//   cell has no help until it ends. The completion menu opens by itself
+//   only while a name is typed or after `.`, with the first option
+//   picked: Enter or Tab accepts it, Escape closes it. Enter runs
+//   instead if the name typed is already an option, as `x` for `x`.
 // - The transcript keeps the latest `MAX_BLOCKS` inputs, folds long
 //   output after `FOLD_LINES` lines, with "Show all", and links each
 //   `interactive#N` to that input's block, putting its text in the cell.
@@ -32,11 +33,16 @@ import {
   type Completion,
   type CompletionContext,
   type CompletionResult,
+  acceptCompletion,
   autocompletion,
+  closeCompletion,
+  completionStatus,
+  currentCompletions,
+  selectedCompletion,
 } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, indentWithTab, insertNewlineAndIndent } from "@codemirror/commands";
 import { type HighlightStyle, type Language, bracketMatching } from "@codemirror/language";
-import { EditorState, type Extension, StateEffect, StateField } from "@codemirror/state";
+import { EditorState, type Extension, Prec, StateEffect, StateField } from "@codemirror/state";
 import { EditorView, type Tooltip, drawSelection, hoverTooltip, keymap, placeholder, showTooltip } from "@codemirror/view";
 import { highlightCode } from "@lezer/highlight";
 
@@ -206,7 +212,14 @@ export function createRepl(host: ReplHost): { show(): void } {
         history(),
         drawSelection(),
         bracketMatching(),
-        autocompletion({ override: [completeCell], selectOnOpen: false }),
+        // Before the menu's own keys, which would accept a name already typed.
+        Prec.highest(
+          keymap.of([
+            { key: "Enter", run: (view) => accept(view, true) },
+            { key: "Tab", run: (view) => accept(view, false) },
+          ]),
+        ),
+        autocompletion({ override: [completeCell] }),
         hoverTooltip(hoverCell, { hoverTime: 300 }),
         signatureField,
         infoField,
@@ -237,6 +250,25 @@ export function createRepl(host: ReplHost): { show(): void } {
       ],
     }),
   });
+
+  /**
+   * Enter or Tab with the completion menu open: accepts the option
+   * picked. Enter closes the menu instead, and runs, if the name typed
+   * is already an option. False with no menu, for the keys' other uses.
+   */
+  function accept(view: EditorView, enterKey: boolean): boolean {
+    const state = view.state;
+    if (completionStatus(state) !== "active" || !selectedCompletion(state)) return false;
+    const head = state.selection.main.head;
+    const typed = WORD.exec(state.sliceDoc(Math.max(0, head - 200), head))?.[0];
+    if (enterKey && typed && currentCompletions(state).some((c) => c.label === typed)) {
+      closeCompletion(view);
+      return false;
+    }
+    // Too soon after the menu opened, it refuses; the key still isn't Enter's.
+    acceptCompletion(view);
+    return true;
+  }
 
   /** Enter, Ctrl+Enter, or Run: runs the cell's inputs if it's whole. */
   async function enter(view: EditorView, force: boolean): Promise<void> {

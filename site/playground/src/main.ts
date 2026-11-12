@@ -795,7 +795,10 @@ function hoverDom(value: HoverInfo): HTMLElement {
     kind.textContent = `${value.kind} `;
     type.append(kind);
   }
-  const isSignature = value.name !== null && value.type?.startsWith(`${value.name}`);
+  // A signature or type starts with its name, `twice(n: Int32)` or
+  // `List<T>`; `Int32`, `Int`'s, doesn't.
+  const rest = value.name !== null && value.type?.startsWith(value.name) ? value.type.slice(value.name.length) : null;
+  const isSignature = rest !== null && (rest === "" || rest.startsWith("(") || rest.startsWith("<"));
   type.append(value.name && !isSignature ? `${value.name}: ${value.type}` : (value.type ?? ""));
   dom.append(type);
   if (value.doc) {

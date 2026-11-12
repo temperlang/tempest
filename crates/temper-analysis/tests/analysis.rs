@@ -269,6 +269,18 @@ fn builtin_members_complete() {
     // A builtin type's statics after its name.
     let found = completed("String.");
     assert!(names_of(&found).contains(&"fromCodePoint"), "{found:?}");
+    // `console`'s, which core declares a `Console`, alone or before more.
+    let log = ("log".to_string(), Some("log(message: String): Void".into()));
+    assert_eq!(completed("console."), [log.clone()]);
+    assert_eq!(completed("console.l"), [log.clone()]);
+    let source = "console.
+let after = 1;
+";
+    let a = analyze(source);
+    let found: Vec<String> = (a.completions(MAIN, 8).into_iter())
+        .map(|c| c.name)
+        .collect();
+    assert_eq!(found, ["log"]);
 }
 
 #[test]
@@ -625,4 +637,63 @@ fn hover_core_docs() {
         "{console}"
     );
     assert!(!console.contains("\n*"), "{console}");
+}
+
+const TYPED: &str = r#"
+class Box<T> {
+  public value: T;
+  public put(item: T): Void { value = item; }
+  public get size(): Int { 1 }
+}
+let greet(name: String, box: Box<String>): String { name }
+let each(f: fn (Int): Void): Void { f(1) }
+each { (n: Int): Void => console.log(n.toString()) }
+let keyed(m: Map<String, Int>): Boolean { m.isEmpty }
+"#;
+
+/// Hover's headline at the `nth` `needle` in [`TYPED`], `ahead` bytes in.
+fn typed_headline(a: &Analysis, needle: &str, nth: usize, ahead: u32) -> String {
+    let h = a.hover(MAIN, at(TYPED, needle, nth, ahead));
+    h.map(|h| h.headline()).unwrap_or_default()
+}
+
+#[test]
+fn hover_on_types_in_signatures() {
+    let a = analyze(TYPED);
+    let shown = |needle, nth, ahead| typed_headline(&a, needle, nth, ahead);
+    // Parameters' and results' types, builtin or declared.
+    assert_eq!(shown("String, box", 0, 0), "builtin String");
+    assert_eq!(shown("String { name", 0, 2), "builtin String");
+    assert_eq!(shown("Box<String>)", 0, 1), "class Box<T>");
+    assert_eq!(shown("T): Void", 0, 0), "type parameter T");
+    assert_eq!(shown("Void { value", 0, 0), "builtin Void");
+    // An alias shows what it aliases, and its doc.
+    assert_eq!(shown("Int { 1", 0, 0), "builtin Int: Int32");
+    let int = a.hover(MAIN, at(TYPED, "Int { 1", 0, 0)).unwrap();
+    assert!(int.doc.is_some_and(|d| d.contains("*Int32*")));
+    // A function type's, and a block's parameters and result.
+    assert_eq!(shown("Int): Void):", 0, 0), "builtin Int: Int32");
+    assert_eq!(shown("Void): Void", 0, 7), "builtin Void");
+    assert_eq!(shown("Int): Void =>", 0, 0), "builtin Int: Int32");
+    assert_eq!(shown("Void =>", 0, 0), "builtin Void");
+    // A generic builtin, with core's type parameters.
+    assert_eq!(shown("Map<", 0, 0), "builtin Map<K, V>");
+    assert_eq!(shown("Boolean", 0, 0), "builtin Boolean");
+}
+
+#[test]
+fn definitions_and_references_from_signatures() {
+    let a = analyze(TYPED);
+    let d = a.definition(MAIN, at(TYPED, "Box<String>)", 0, 0)).unwrap();
+    assert_eq!(d.span.start, at(TYPED, "Box<T>", 0, 0));
+    let d = a.definition(MAIN, at(TYPED, "T): Void", 0, 0)).unwrap();
+    assert_eq!(d.span.start, at(TYPED, "T>", 0, 0));
+    let core = a
+        .core_definition(MAIN, at(TYPED, "String { name", 0, 2))
+        .unwrap();
+    assert_eq!(&core.source[core.span.start as usize..][..6], "String");
+    // `T`'s uses: the field's type and the parameter's.
+    let uses = a.references(MAIN, at(TYPED, "T>", 0, 0), false);
+    let starts: Vec<u32> = uses.iter().map(|l| l.span.start).collect();
+    assert_eq!(starts, [at(TYPED, "T;", 0, 0), at(TYPED, "T): Void", 0, 0)]);
 }

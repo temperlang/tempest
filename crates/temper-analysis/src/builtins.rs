@@ -52,7 +52,12 @@ impl Analysis<'_> {
                     return None;
                 }
                 let name = self.settled.library.names.get(s.name);
-                Some((vec![core_declaration(name)?], name.to_string()))
+                let at = core_declaration(name)?;
+                // An alias, as `Int = Int32`, then what it aliases, for
+                // its doc comment.
+                let mut ats = vec![at];
+                ats.extend(core_alias(at).and_then(core_declaration));
+                Some((ats, name.to_string()))
             }
             Target::Member { call, key } => {
                 if let Some(Resolved::Decl(_)) = self.member(call) {
@@ -82,6 +87,57 @@ impl Analysis<'_> {
             members::Receiver::Class { .. } => None,
         }
     }
+}
+
+/// A builtin type as hover shows it: with its type parameters, as core
+/// declares them, `Map<K, V>`; or what it aliases, `Int32` for `Int`.
+pub(crate) fn builtin_type_shown(name: &str) -> String {
+    let Some(at) = core_declaration(name) else {
+        return name.to_string();
+    };
+    if let Some(aliased) = core_alias(at) {
+        return aliased.to_string();
+    }
+    let rest = &corelib::TEXT[at + name.len()..];
+    let Some(rest) = rest.strip_prefix('<') else {
+        return name.to_string();
+    };
+    // Each parameter's name, past `@out` and before `extends …`.
+    let (mut depth, mut params, mut param) = (1, Vec::new(), String::new());
+    for c in rest.chars() {
+        match c {
+            '<' => depth += 1,
+            '>' if depth == 1 => break,
+            '>' => depth -= 1,
+            ',' if depth == 1 => params.push(std::mem::take(&mut param)),
+            '\n' => break,
+            _ => param.push(c),
+        }
+    }
+    params.push(param);
+    let params: Vec<&str> = (params.iter())
+        .filter_map(|p| {
+            (p.split_whitespace())
+                .find(|w| !w.starts_with('@'))
+                .map(|w| w.trim_end_matches(|c: char| !c.is_alphanumeric() && c != '_'))
+        })
+        .collect();
+    format!("{name}<{}>", params.join(", "))
+}
+
+/// What core's declaration at byte `at` of its text aliases, if it's an
+/// alias, as `export let Int = Int32;`.
+fn core_alias(at: usize) -> Option<&'static str> {
+    let text = corelib::TEXT;
+    let line_start = text.get(..at)?.rfind('\n').map_or(0, |i| i + 1);
+    let line = text[line_start..].lines().next()?;
+    let rest = line.strip_prefix("export let ")?;
+    let (_, aliased) = rest.split_once(" = ")?;
+    let aliased = aliased.strip_suffix(';')?;
+    aliased
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '_')
+        .then_some(aliased)
 }
 
 /// The doc comment, `/** … */`, right before a declaration whose name is

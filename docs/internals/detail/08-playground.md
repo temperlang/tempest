@@ -530,10 +530,12 @@ sequenceDiagram
   builders through `ReplHost.help`), asked with `query` messages.
   While an input runs, or the session starts, the page asks nothing
   and shows none, so a query never waits behind a run or starts a
-  session. The completion menu opens with nothing picked
-  (`selectOnOpen: false`), so Enter still runs while it's open; Down
-  or Up picks, Enter accepts, Escape closes. Ctrl or Cmd+I shows the
-  hover for the name at the cursor, for the keyboard.
+  session. The completion menu opens by itself only while a name is
+  typed or after `.`, with the first option picked: Enter or Tab
+  accepts, Escape closes. Enter runs instead when the name typed is
+  already an option, so `x` then Enter shows `x`; with no menu, Enter
+  runs as ever, and Ctrl or Cmd+Enter always runs. Ctrl or Cmd+I shows
+  the hover for the name at the cursor, for the keyboard.
 - **Transcript:** at most 300 inputs, the oldest dropped with a note;
   past 40 lines an input's output folds behind "Show all"; and an
   `interactive#N` in an event's text, for an input with a block other

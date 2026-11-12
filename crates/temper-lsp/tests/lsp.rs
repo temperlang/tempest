@@ -469,6 +469,7 @@ fn definition_and_hover_into_core() {
         "let blank = \"\".isEmpty;",
         "ignore(frozen.length);",
         "console.log(\"hi\");",
+        "let shout(s: String): Int { 1 }",
         "",
     ];
     open(&mut client, &file, &text.join("\n"));
@@ -507,6 +508,9 @@ fn definition_and_hover_into_core() {
     assert_eq!(line, "public get length(): builtins.Int;");
     let (line, _) = core_line(5, 9);
     assert_eq!(line, "public log(message: String): Void;");
+    // A parameter's type.
+    let (line, _) = core_line(6, 13);
+    assert!(line.starts_with("export class String "), "{line}");
     // Hover shows core's doc comment after the signature.
     let hover = client.request("textDocument/hover", at(&file, 1, 7));
     let value = str_at(&hover, &["contents", "value"]);
@@ -522,6 +526,19 @@ fn definition_and_hover_into_core() {
     let value = str_at(&hover, &["contents", "value"]);
     assert!(
         value.contains("The *List* type is a random-access"),
+        "{value}"
+    );
+    // A parameter's type and a result type, with core's docs.
+    let hover = client.request("textDocument/hover", at(&file, 6, 13));
+    let value = str_at(&hover, &["contents", "value"]);
+    assert!(
+        value.starts_with("```temper\nbuiltin String\n```\n\nA *String*"),
+        "{value}"
+    );
+    let hover = client.request("textDocument/hover", at(&file, 6, 22));
+    let value = str_at(&hover, &["contents", "value"]);
+    assert!(
+        value.starts_with("```temper\nbuiltin Int: Int32\n```\n\n*Int32*"),
         "{value}"
     );
     // Nothing for a local.

@@ -31,6 +31,7 @@ pub use symbols::DocSymbol;
 use members::Subst;
 use std::cell::OnceCell;
 use std::collections::HashMap;
+use temper_frontend::builtins::Builtin;
 use temper_frontend::core::{
     self, CLASS_INTERFACE, LET_VAR, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD,
     ROLE_PARAM, ROLE_SETTER, ROLE_TYPE_PARAM,
@@ -118,13 +119,27 @@ impl Hover {
     pub fn headline(&self) -> String {
         let ty = self.ty.as_deref().unwrap_or("?");
         match (&self.name, self.kind) {
-            // A signature already starts with its name, as `twice(n: Int32)`.
-            (Some(name), Some(kind)) if ty.starts_with(name.as_str()) => {
+            // A signature already starts with its name, as `twice(n: Int32)`,
+            // and a type is its name, as `List<T>`; `Int32` isn't `Int`'s.
+            (Some(name), Some(kind))
+                if (ty.strip_prefix(name.as_str()))
+                    .is_some_and(|rest| rest.is_empty() || rest.starts_with(['(', '<'])) =>
+            {
                 format!("{} {ty}", kind.label())
             }
             (Some(name), Some(kind)) => format!("{} {name}: {ty}", kind.label()),
             _ => ty.to_string(),
         }
+    }
+}
+
+/// What hover shows as a type parameter's or builtin type's type: the
+/// type its name names, as in `name: String`, `T`, or `Map<K, V>`.
+fn type_name_shown(s: &temper_frontend::scope::Symbol, name: &str) -> Option<String> {
+    match (s.kind, s.decl) {
+        (SymbolKind::Builtin(Builtin::Type(_)), None) => Some(builtins::builtin_type_shown(name)),
+        (SymbolKind::TypeParam, _) => Some(name.to_string()),
+        _ => None,
     }
 }
 
@@ -313,10 +328,10 @@ impl Analysis<'_> {
                     true => self.kind(symbol),
                     false => self.decl_kind(decl.unwrap_or(node), None),
                 };
-                let ty = match decl {
+                let ty = type_name_shown(s, &name).or_else(|| match decl {
                     Some(decl) => self.decl_type(decl, &name, node),
                     None => self.settled.typing.expr(node).map(|t| self.show(t)),
-                };
+                });
                 (name, kind, ty, decl)
             }
             Target::Member { call, key } => {
@@ -513,6 +528,9 @@ impl Analysis<'_> {
         let Some(symbol) = self.lookup(file, object_end, object) else {
             return Some(Vec::new());
         };
+        if object == "console" && self.settled.scopes.symbol(symbol).decl.is_none() {
+            return Some(self.members_of(&members::CONSOLE));
+        }
         let t = (self.settled.scopes.symbol(symbol).decl)
             .and_then(|decl| self.settled.typing.decls.get(&decl).copied());
         Some(match t.and_then(|t| self.receiver(t)) {

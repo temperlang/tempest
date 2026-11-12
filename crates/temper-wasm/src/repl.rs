@@ -35,8 +35,9 @@ pub const HELP_FOOTER: &str = "Keys: Enter runs the input once it's whole, or el
      always runs; Up and Down, on the first or last line, go through earlier\n\
      inputs; Escape or Stop ends the input running, and the inputs before it\n\
      run again. On a touch screen, Enter starts a new line and Run runs.\n\
-     Completion opens as you type, or with Ctrl+Space: Down picks, Enter\n\
-     accepts. Ctrl+I (Cmd+I) shows the type and docs of the name at the cursor.\n\
+     Completion opens as you type a name or `.`, or with Ctrl+Space, with the\n\
+     first option picked: Enter or Tab accepts it, and Escape closes it.\n\
+     Ctrl+I (Cmd+I) shows the type and docs of the name at the cursor.\n\
      Each input may take 50 million steps; \"Keep going\" runs it again with more.\n";
 
 /// The session and what its inputs report.
@@ -640,6 +641,9 @@ mod tests {
             out.push(ask(HOVER, "console.log(\"no\"); twice(1 / 0)", 22));
             out.push(streamed().join("|"));
             out.push(input("twice(4)", None));
+            out.push(ask(COMPLETIONS, "console.", 8));
+            out.push(ask(HOVER, "let s: String = \"\"", 8));
+            out.push(ask(COMPLETIONS, "let f(count: Int): Int {\n  cou", 30));
             out
         });
         assert_eq!(out[0], "null");
@@ -681,6 +685,27 @@ mod tests {
         assert!(out[9].contains("\"name\":\"twice\""), "{}", out[9]);
         assert_eq!(out[10], "");
         assert!(out[11].starts_with("{\"input\":3,"), "{}", out[11]);
+        // `console`'s members, and a type's name.
+        assert_eq!(
+            out[12],
+            "{\"from\":8,\"items\":[{\"name\":\"log\",\"kind\":\"method\",\
+             \"type\":\"log(message: String): Void\"}]}"
+        );
+        assert!(
+            out[13].starts_with(
+                "{\"from\":7,\"to\":13,\"name\":\"String\",\"kind\":\"builtin\",\
+                 \"type\":\"String\",\"doc\":\"A *String*"
+            ),
+            "{}",
+            out[13]
+        );
+        // A parameter the cell declares.
+        assert!(
+            out[14]
+                .starts_with("{\"from\":27,\"items\":[{\"name\":\"count\",\"kind\":\"parameter\""),
+            "{}",
+            out[14]
+        );
     }
 
     /// `runTests()` runs input 0's tests again against a redefinition.

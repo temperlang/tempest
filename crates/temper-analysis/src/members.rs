@@ -234,7 +234,7 @@ impl Analysis<'_> {
             }
             let typed = (self.settled.typing.expr(node)).is_some_and(|t| t != types::UNKNOWN)
                 && !matches!(tree.kind(node), NodeKind::Let | NodeKind::Block);
-            let a_type = self.type_named(node).is_some();
+            let a_type = self.type_named(node).is_some() || self.is_console(node);
             let width = span.end - span.start;
             if (typed || a_type) && best.is_none_or(|(w, _)| width > w) {
                 best = Some((width, node));
@@ -263,11 +263,21 @@ impl Analysis<'_> {
             }
             return Some(out);
         }
+        if self.is_console(receiver) {
+            return Some(self.members_of(&CONSOLE));
+        }
         let t = self.settled.typing.expr(receiver)?;
         Some(match self.receiver(t) {
             Some(r) => self.members_of(&r),
             None => Vec::new(),
         })
+    }
+
+    /// Whether a node is the builtin `console`, which typing leaves
+    /// untyped; core declares it a `Console`.
+    pub(crate) fn is_console(&self, node: NodeId) -> bool {
+        use temper_frontend::builtins::{Builtin, Constant};
+        self.settled.scopes.resolved_builtin(node) == Some(Builtin::Value(Constant::Console))
     }
 
     /// The type a name names, if it names one: a class or a builtin type.
@@ -304,6 +314,12 @@ impl Analysis<'_> {
         self.settled.typing.types.display(t, &class_name)
     }
 }
+
+/// The builtin `console`'s members, as core declares them.
+pub(crate) const CONSOLE: Receiver = Receiver::Builtin {
+    name: "Console",
+    args: Vec::new(),
+};
 
 /// A type that a name names.
 pub(crate) enum Named {

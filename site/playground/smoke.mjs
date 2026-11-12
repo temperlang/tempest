@@ -16,7 +16,9 @@
 // its input runs, Stop with the session restored (and the numbering
 // kept), an input that runs out of steps and then keeps going,
 // `translate`, completion in the cell offering a name an earlier input
-// declared and `runTests`, hover over it by pointer and by Ctrl+I,
+// declared and `runTests` (Enter accepting the first), `console.`'s
+// `log` (by Tab), and Enter running a name typed in full, hover over it
+// by pointer and by Ctrl+I,
 // signature help, an `interactive#N` link putting that input in the
 // cell, and `runTests()` after a redefinition failing the editor's test.
 // Then the site's header (site/shared): its sections, with Playground
@@ -321,15 +323,32 @@ try {
     await page.keyboard.type("runT");
     await page.waitForSelector("#repl-cell .cm-tooltip-autocomplete li");
     const own = await page.$$eval("#repl-cell .cm-tooltip-autocomplete li .cm-completionLabel", (ls) => ls.map((l) => l.textContent));
-    // From the keyboard: Down picks the first, Enter accepts it.
-    await page.keyboard.press("ArrowDown");
+    // The first is picked: Enter accepts it.
     await page.keyboard.press("Enter");
     const accepted = await page.$eval("#repl-cell .cm-content", (c) => c.textContent ?? "");
     await clearCell();
+    // So does Tab, after `.`, where `console` has `log`.
+    await page.keyboard.type("console.");
+    await page.waitForSelector("#repl-cell .cm-tooltip-autocomplete li");
+    const members = await page.$$eval("#repl-cell .cm-tooltip-autocomplete li .cm-completionLabel", (ls) => ls.map((l) => l.textContent));
+    await page.keyboard.press("Tab");
+    const tabbed = await page.$eval("#repl-cell .cm-content", (c) => c.textContent ?? "");
+    await clearCell();
+    // A name typed in full, with the menu open, runs on Enter.
+    const before = await page.$$eval("#repl-transcript .repl-result", (rs) => rs.length);
+    await page.keyboard.type("sq");
+    await page.waitForSelector("#repl-cell .cm-tooltip-autocomplete li");
+    await page.keyboard.press("Enter");
+    await page.waitForFunction((n) => document.querySelectorAll("#repl-transcript .repl-result").length > n, before);
+    await idle();
+    const ran = await lastResult();
     return [
       ...(names.includes("sq") ? [] : [`no sq in ${JSON.stringify(names.slice(0, 12))}`]),
       ...(own.includes("runTests") ? [] : [`no runTests in ${JSON.stringify(own)}`]),
       ...(accepted === "runTests" ? [] : [`accepted ${JSON.stringify(accepted)}`]),
+      ...(members.includes("log") ? [] : [`no log after console. in ${JSON.stringify(members)}`]),
+      ...(tabbed === "console.log" ? [] : [`Tab accepted ${JSON.stringify(tabbed)}`]),
+      ...expect("sq, run", ran, /^interactive#\d+: /),
     ];
   });
   await replStep("REPL: hover and signature help in the cell", async () => {

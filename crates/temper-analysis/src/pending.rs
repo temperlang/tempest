@@ -226,7 +226,8 @@ impl Analysis<'_> {
             Some(d) if decl != s.decl => self.decl_kind(d, None),
             _ => self.kind(symbol),
         };
-        let ty = decl.and_then(|d| self.decl_type(d, &name, d));
+        let ty =
+            type_name_shown(s, &name).or_else(|| decl.and_then(|d| self.decl_type(d, &name, d)));
         let doc = match decl {
             Some(d) => self.doc(d),
             None => (self.core_target(Target::Symbol(symbol)))
@@ -432,14 +433,16 @@ fn in_string_or_comment(text: &str, at: usize) -> bool {
 }
 
 /// The names that `let`, `var`, `class`, and `interface` declare in
-/// `text`, in order.
+/// `text`, in order, then its parameters', as `n` in `(n: Int)`.
 fn own_declarations(text: &str) -> Vec<(String, DeclKind)> {
-    let tokens = lex(text, SourceKind::Standalone);
+    let tokens: Vec<_> = (lex(text, SourceKind::Standalone).into_iter())
+        .filter(|t| !t.kind.is_ignorable())
+        .collect();
     let words: Vec<&str> = (tokens.iter())
         .filter(|t| t.kind == TokenKind::Word)
         .map(|t| &text[t.range()])
         .collect();
-    let mut out = Vec::new();
+    let mut out: Vec<(String, DeclKind)> = Vec::new();
     for pair in words.windows(2) {
         let kind = match pair[0] {
             "let" => DeclKind::Let,
@@ -450,6 +453,17 @@ fn own_declarations(text: &str) -> Vec<(String, DeclKind)> {
         };
         if !KEYWORDS.contains(&pair[1]) {
             out.push((pair[1].to_string(), kind));
+        }
+    }
+    // A parameter, as `n` in `(n: Int)`: any other name before `:`.
+    for pair in tokens.windows(2) {
+        let (name, colon) = (&text[pair[0].range()], &text[pair[1].range()]);
+        if pair[0].kind == TokenKind::Word
+            && colon == ":"
+            && !KEYWORDS.contains(&name)
+            && !out.iter().any(|(n, _)| n == name)
+        {
+            out.push((name.to_string(), DeclKind::Parameter));
         }
     }
     out
