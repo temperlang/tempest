@@ -101,7 +101,7 @@
       "comment": "Lines indented 4 spaces or a tab, after a blank line in the source; TextMate can't see the line before, so a list item's indented paragraph also reads as code.",
       "contentName": "meta.embedded.block.temper",
       "begin": "^(?=(?: {4}|\\t)[ \\t]*\\S)",
-      "while": "^(?:(?: {4}|\\t)|[ \\t]*$)",
+      "while": "^(?=(?: {4}|\\t)|[ \\t]*$)",
       "patterns": [
         {
           "include": "source.temper"

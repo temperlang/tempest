@@ -79,7 +79,10 @@ runs the tests in a real VS Code. `--binaries DIR` bundles each
 ## How it's built
 
 - `syntaxes/`: the TextMate grammars, checked by `check_grammar.py`,
-  whose small tokenizer scopes samples.
+  whose small tokenizer scopes samples, and by `test/grammar.mjs`, which
+  runs them with VS Code's own engine (vscode-textmate, with Oniguruma as
+  wasm from vscode-oniguruma) over samples and every literate file in the
+  repository: `node editors/vscode/test/grammar.mjs [FILE...]`.
 - `src/extension.ts`: starts `tempest lsp` with `vscode-languageclient`,
   which syncs documents incrementally and maps VS Code's features to
   LSP's requests. `src/server.ts` finds tempest, tested by

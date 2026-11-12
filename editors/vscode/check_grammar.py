@@ -267,6 +267,9 @@ let notInert = 1;
 ```
 
     let indented = "yes";
+    let page = html"""
+      ~<p>"${indented}"</p>
+    let afterTriple = 3;
 
 ~~~
 let tilde = 2;
@@ -320,6 +323,10 @@ def check_scopes() -> None:
     expect(tokens, "indented", "meta.embedded.block.temper")
     expect(tokens, "yes", "string.quoted.double")
     expect(tokens, "tilde", "meta.embedded.block.temper")
+    # A multi-quoted string in an indented block ends at its first line
+    # without a margin, as it does outside Markdown.
+    expect(tokens, "afterTriple", "variable.other.declaration")
+    expect(tokens, "afterTriple", "string.quoted.triple", present=False)
 
 
 def words_in(pattern: str) -> set[str]:

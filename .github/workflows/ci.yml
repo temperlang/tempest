@@ -349,7 +349,8 @@ jobs:
         run: cargo build --locked --profile small -p tempest
       # The VS Code extension, type checked by its pinned tsc and bundled
       # by esbuild, its search for tempest tested under Node, its TextMate
-      # grammars checked (check_grammar.py), and packaged by vsce, as a
+      # grammars checked (check_grammar.py, and test/grammar.mjs with VS
+      # Code's own TextMate engine), and packaged by vsce, as a
       # universal .vsix and a Linux x64 one with tempest's release build;
       # that one's tests run in a real VS Code (@vscode/test-electron),
       # under xvfb, against its tempest. VS Code is cached by the version

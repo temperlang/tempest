@@ -17,7 +17,9 @@
    tests into out/.
 4. Runs the tests of finding tempest (src/server.test.ts) and of the
    preview's pure parts (src/page.test.ts) with Node's own test runner,
-   and the grammars' check (check_grammar.py).
+   the grammars' check (check_grammar.py), and the grammars run by VS
+   Code's own TextMate engine over samples and the repository's literate
+   files (test/grammar.mjs).
 5. Packages with `vsce package`: out/temper-VERSION.vsix, the universal
    package, with no tempest; and a platform package,
    out/temper-TARGET-VERSION.vsix, for each tempest given, with it in
@@ -231,6 +233,7 @@ def main() -> None:
     run(bin_dir / "esbuild", "test/run.ts", *common, "--format=cjs", "--outfile=out/test/run.js")
     run("node", "--test", *(f"out/{name}.test.mjs" for name in tests))
     run(sys.executable, HERE / "check_grammar.py")
+    run("node", HERE / "test" / "grammar.mjs")
 
     bundles: dict[str, Path] = {}
     if args.binaries:
