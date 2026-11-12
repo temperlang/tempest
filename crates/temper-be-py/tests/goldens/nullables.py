@@ -9,24 +9,24 @@ __all__ = ('Node', 'describe', 'first_word', 'stops')
 
 
 class Node:
-    __slots__ = ('_value', '_next_')
+    __slots__ = ('_value', '_next')
     _value: int
-    _next_: 'Node | None'
+    _next: 'Node | None'
 
     def __init__(self, /, value: int, next_: 'Node | None') -> None:
         self._value = value
-        self._next_ = next_
+        self._next = next_
 
     @property
     def value(self, /) -> int:
         return self._value
 
     @property
-    def next_(self, /) -> 'Node | None':
-        return self._next_
+    def next(self, /) -> 'Node | None':
+        return self._next
 
     def last(self, /) -> int:
-        n: 'Node | None' = self._next_
+        n: 'Node | None' = self._next
         if n is None:
             return self._value
         else:
@@ -114,7 +114,7 @@ _console.log(f'{_or_zero(None)} {_or_zero(5)}')
 _varying()
 _list: Node = Node(1, Node(2, Node(3, None)))
 _console.log(str(_list.last()))
-_tail: Node | None = _list.next_
+_tail: Node | None = _list.next
 if _tail is not None:
     _console.log(str(_tail.value))
 try:

@@ -7,3 +7,6 @@
 13:1 -> ../imports-library.temper.md:13:5  console.log(`both ${both(2)} <- console.log("both ${both(2).
 14:1 -> ../imports-library.temper.md:16:5  const checked = new Checked( <- let checked = new Checked(la
 15:1 -> ../imports-library.temper.md:17:5  console.log(`renamed ${check <- console.log(
+16:1 -> ../imports-library.temper.md:20:5  const b = new Builtins(4); <- let b = new Builtins(4);
+17:1 -> ../imports-library.temper.md:21:5  console.log(`builtins ${b.ha <- console.log(
+18:1 -> ../imports-library.temper.md:24:5  console.log(b.print()); <- console.log(b.print());

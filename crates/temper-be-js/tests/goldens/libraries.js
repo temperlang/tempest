@@ -168,7 +168,7 @@ function cube(x) {
  */
 function corner(grid) {
   try {
-    return grid.get_(1, 1);
+    return grid.get(1, 1);
   } catch {
     return -1.0;
   }
@@ -565,7 +565,7 @@ export class Grid extends type() {
    * @param {number} j
    * @returns {number}
    */
-  get_(i, j) {
+  get(i, j) {
     return listedGet(/** @type {number[]} */ (this.#values), (Math.imul(i, this.#ncols) + j) | 0);
   }
 

@@ -111,6 +111,8 @@ fn identifier(c: char, first: bool) -> bool {
 /// The first variant's rules.
 pub const RULES: NamingRules = NamingRules {
     reserved: &[KEYWORDS, PRINTED],
+    // A field obscures a type of its name in its class (`Math.min`).
+    member_reserved: &[KEYWORDS, PRINTED],
     case,
     private_prefix: "",
     escape_suffix: "_",

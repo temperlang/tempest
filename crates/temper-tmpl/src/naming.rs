@@ -44,6 +44,14 @@ pub struct NamingRules {
     /// Lists of keywords, and of names the translator prints (builtins,
     /// runtime helpers), which no declaration may take.
     pub reserved: &'static [&'static [&'static str]],
+    /// Lists of names a class's or interface's members may not take, in
+    /// place of [`reserved`](Self::reserved), since a member's name is
+    /// looked up on its object or class, not in the scopes the
+    /// translator's printed names are: keywords, and only those printed
+    /// names a member could hide or clash with, as Python's annotations
+    /// and decorators in class bodies (`int`, `property`). A builtin's
+    /// name is free, as Kotlin's members have it (JS `get`, Python `map`).
+    pub member_reserved: &'static [&'static [&'static str]],
     /// The case for a kind of declaration, exported or not.
     pub case: fn(DeclKind, bool) -> Case,
     /// Put before module-level names that aren't exported: `_` in Python.
@@ -542,6 +550,11 @@ pub fn assign(p: &Program, rules: &NamingRules) -> NameMap {
         .iter()
         .flat_map(|l| l.iter().copied())
         .collect();
+    let member_reserved: HashSet<&str> = rules
+        .member_reserved
+        .iter()
+        .flat_map(|l| l.iter().copied())
+        .collect();
     // Other libraries' declarations, but core's, which backends reach
     // through their runtimes: as their own library's naming named them,
     // from its interface, std's too.
@@ -572,7 +585,7 @@ pub fn assign(p: &Program, rules: &NamingRules) -> NameMap {
         };
     }
     for module in &p.modules {
-        name_module(p, rules, &reserved, module, &mut map);
+        name_module(p, rules, &reserved, &member_reserved, module, &mut map);
     }
     map
 }
@@ -670,6 +683,7 @@ fn name_module(
     p: &Program,
     rules: &NamingRules,
     reserved: &HashSet<&str>,
+    member_reserved: &HashSet<&str>,
     module: &Module,
     map: &mut NameMap,
 ) {
@@ -822,7 +836,7 @@ fn name_module(
                 name_function(p, rules, reserved, item, &HashSet::new(), map)
             }
             Node::Class { members, .. } | Node::Interface { members, .. } => {
-                name_members(p, rules, reserved, p.nodes.list(members), map);
+                name_members(p, rules, member_reserved, p.nodes.list(members), map);
                 for &member in p.nodes.list(members) {
                     if let Node::Method { .. }
                     | Node::AbstractMethod { .. }
@@ -841,7 +855,7 @@ fn name_module(
 /// Names a class's or interface's members, in their own namespace: each
 /// its source name, styled; a getter and setter of one property share it,
 /// and so may a field and the property it implements; anything else that
-/// would clash is suffixed.
+/// would clash is suffixed. `reserved` is the rules' `member_reserved`.
 fn name_members(
     p: &Program,
     rules: &NamingRules,

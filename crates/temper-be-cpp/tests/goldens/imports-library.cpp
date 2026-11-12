@@ -40,6 +40,14 @@ void global_init_init() {
     std::shared_ptr<renamed::Checked> checked = renamed::Checked::make(renamed::lambda(renamed::temper_globals::native.value));
     int32_t int32 = checked->delete_();
     core::Console::log(console, "renamed " + std::to_string(int32) + " " + std::to_string(checked->get_local()) + " " + std::to_string(checked->end));
+    std::shared_ptr<renamed::Builtins> b = renamed::Builtins::make(4);
+    int32_t value = b->get(1);
+    int32_t value2 = b->set(3);
+    int32_t value3 = b->map(5);
+    core::Str string = b->format();
+    int32_t value4 = b->get_int_();
+    core::Console::log(console, "builtins " + std::to_string(b->hash) + " " + std::to_string(value) + " " + std::to_string(value2) + " " + std::to_string(value3) + " " + string + " " + std::to_string(value4) + " " + std::to_string(b->later()));
+    core::Console::log(console, b->print());
   });
 }
 

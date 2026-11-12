@@ -201,6 +201,7 @@ fn identifier(c: char, first: bool) -> bool {
 /// The first variant's rules.
 pub const RULES: NamingRules = NamingRules {
     reserved: &[KEYWORDS, SPECIAL, PRINTED],
+    member_reserved: &[KEYWORDS, &["constructor"]],
     case,
     private_prefix: "",
     escape_suffix: "_",

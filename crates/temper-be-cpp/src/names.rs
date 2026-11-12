@@ -179,6 +179,9 @@ fn identifier(c: char, first: bool) -> bool {
 /// The first variant's rules.
 pub const RULES: NamingRules = NamingRules {
     reserved: &[KEYWORDS, PRINTED, MACROS],
+    // A member hides a name in its member functions (`int32_t`), and
+    // every struct has `make` and `shared_from_this`.
+    member_reserved: &[KEYWORDS, PRINTED, MACROS],
     case,
     private_prefix: "",
     escape_suffix: "_",

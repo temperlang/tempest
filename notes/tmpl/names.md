@@ -492,6 +492,19 @@ the Python backend's first variant:
   labels are `goto` targets, as C#'s: `continue` ending the body of a
   loop that a `continue` of its own needs, and `continue_NAME` and
   `break_NAME` for jumps from inner loops, from the same source names.
+- **Members** (2026-11-12, `NamingRules::member_reserved`): a class's
+  or interface's members are escaped against their own lists, not the
+  whole `reserved` set, since a member's name is looked up on its object
+  or class, where the names the translator prints aren't. So a builtin's
+  name stays public API, as Kotlin's (JS `get` and `set`, Python `map`,
+  `hash`, and `format`). Each backend keeps its keywords, plus what a
+  member would really hide or clash with: Python's names printed in a
+  class body (`property`, `staticmethod`, and the builtins its
+  annotations name, as `int` and `str`, which a method defined earlier
+  in the body would hide), JS's `constructor`, Rust's `new`, `clone`,
+  and `clone_boxed`, and, unchanged, Java's (a field obscures a type of
+  its name) and C++'s (a member hides a name in its member functions).
+  Lua's and C#'s are their keywords alone.
 - **Not named:** labels (Python prints none), and core's declarations
   (the connection table's names).
 - **With modules** (2026-10-30): other libraries' declarations (std's

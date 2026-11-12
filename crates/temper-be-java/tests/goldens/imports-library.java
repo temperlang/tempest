@@ -3,6 +3,7 @@ package imports_library;
 import java.util.logging.Logger;
 import modules.ModulesGlobal;
 import modules.helpers.HelpersGlobal;
+import renamed.Builtins;
 import renamed.Checked;
 import renamed.RenamedGlobal;
 import temper.core.Core;
@@ -20,5 +21,8 @@ public final class ImportsLibraryGlobal {
         console.log("both " + both(2));
         Checked checked = new Checked(RenamedGlobal.lambda(RenamedGlobal.native_));
         console.log("renamed " + checked.delete() + " " + checked.getLocal() + " " + checked.end);
+        Builtins b = new Builtins(4);
+        console.log("builtins " + b.hash + " " + b.get(1) + " " + b.set(3) + " " + b.map(5) + " " + b.format() + " " + b.getInt() + " " + b.later());
+        console.log(b.print());
     }
 }

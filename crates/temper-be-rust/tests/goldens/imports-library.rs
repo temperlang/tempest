@@ -12,6 +12,18 @@ pub(crate) fn init() -> temper_core::Result<()> {
                 checked.local(),
                 checked.end()
             );
+            let b = renamed::Builtins::new(4);
+            println!(
+                "builtins {} {} {} {} {} {} {}",
+                b.hash(),
+                b.get(1),
+                b.set(3),
+                b.map(5),
+                b.format(),
+                b.int(),
+                b.later()
+            );
+            println!("{}", b.print());
             Ok(())
         })
         .clone()

@@ -1734,6 +1734,14 @@ copied Kotlin's:
   that `and` would skip.
   Test: temper-be-lua/tests/functional.rs, `HIDING` (`print`, `math`);
   programs/operators.temper.md (`same`).
+- **Members named like printed names:** Kotlin escapes members only
+  for keywords, as tempest does, but for a few names whose output would
+  break: a Python method or property named `int`, `str`, `property`, or
+  another name printed in a class body hides it from the annotations and
+  decorators after it, a JS method named `constructor` is the
+  constructor, and a Rust method `new`, `clone`, or `clone_boxed` clashes
+  with the one every class has. Tempest gives those a `_`.
+  Test: programs/renamed.temper.md (`Builtins`).
 - **Lua's `goto`:** Kotlin's list of Lua keywords leaves out `goto`
   (reserved since Lua 5.2), so a Temper name `goto` gives Lua that
   doesn't parse; tempest reserves it. And Kotlin says it supports Lua

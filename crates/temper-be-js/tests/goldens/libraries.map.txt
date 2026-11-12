@@ -334,7 +334,7 @@
 559:3 -> ../libraries.temper.md:44:49  get values() { <- values: List<Float64>) {
 559:7 -> ../libraries.temper.md:44:49 (values)  values() { <- values: List<Float64>) {
 563:3 -> ../libraries.temper.md:45:14  /** <- get(i: Int, j: Int): Float64
-568:3 -> ../libraries.temper.md:45:14 (get)  get_(i, j) { <- get(i: Int, j: Int): Float64
+568:3 -> ../libraries.temper.md:45:14 (get)  get(i, j) { <- get(i: Int, j: Int): Float64
 569:5 -> ../libraries.temper.md:46:9  return listedGet(/** @type { <- values[i * ncols + j]
 572:3 -> ../libraries.temper.md:49:21  /** <- parse(s: String): Grid? { pa
 576:3 -> ../libraries.temper.md:49:21  static parse(s) { <- parse(s: String): Grid? { pa

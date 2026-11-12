@@ -61,6 +61,7 @@ fn identifier(c: char, first: bool) -> bool {
 
 const RULES: NamingRules = NamingRules {
     reserved: &[&["if", "str", "min"]],
+    member_reserved: &[&["if"]],
     case,
     private_prefix: "_",
     escape_suffix: "_",

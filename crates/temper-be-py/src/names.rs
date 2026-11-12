@@ -249,6 +249,25 @@ pub const IMPORTED: &[&str] = &[
     "string_to_int64",
 ];
 
+/// The builtins the translator prints in a class body, as decorators
+/// (`@property`, `@staticmethod`) and in annotations, which Python
+/// evaluates there (`-> int`), as do type checkers: a method or property
+/// of the same name defined earlier in the body would hide them. Other
+/// builtins are free for members, as Kotlin's (`map`, `hash`, `format`),
+/// since an attribute hides nothing. Sorted.
+pub const CLASS_BODY: &[&str] = &[
+    "bool",
+    "dict",
+    "float",
+    "int",
+    "list",
+    "object",
+    "property",
+    "staticmethod",
+    "str",
+    "tuple",
+];
+
 fn case(kind: DeclKind, _exported: bool) -> Case {
     match kind {
         DeclKind::Class | DeclKind::Interface => Case::Keep,
@@ -263,6 +282,7 @@ fn identifier(c: char, first: bool) -> bool {
 /// The first variant's rules.
 pub const RULES: NamingRules = NamingRules {
     reserved: &[KEYWORDS, BUILTINS, IMPORTED],
+    member_reserved: &[KEYWORDS, CLASS_BODY],
     case,
     private_prefix: "_",
     escape_suffix: "_",

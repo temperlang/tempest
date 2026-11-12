@@ -8,6 +8,7 @@
 - [🚨Breaking change: Multiline string syntax (yes, again)](#breaking-change-multiline-string-syntax-yes-again)
 - [🆕 Bitwise operators](#-bitwise-operators)
 - [🚨Breaking change: Details of rules for `<` ambiguity have changed](#breaking-change-details-of-rules-for--ambiguity-have-changed)
+- [Rust crates depend on `temper-std` only when they use it](#rust-crates-depend-on-temper-std-only-when-they-use-it)
 
 ## 🚨Breaking change: Rest parameter syntax removed.
 
@@ -289,3 +290,10 @@ Now they don't, but if you need a comparison operator, always put spaces
 around it.
 
 See the builtin/< reference article for details.
+
+## Rust crates depend on `temper-std` only when they use it
+
+A generated Rust crate no longer depends on `temper-std` when its
+library doesn't use std, where it always did before. A project with a
+committed `Cargo.lock` that builds such a crate sees `temper-std` drop
+out of it once.

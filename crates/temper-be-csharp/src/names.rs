@@ -124,6 +124,7 @@ fn identifier(c: char, first: bool) -> bool {
 /// The first variant's rules.
 pub const RULES: NamingRules = NamingRules {
     reserved: &[],
+    member_reserved: &[],
     case,
     private_prefix: "",
     escape_suffix: "_",

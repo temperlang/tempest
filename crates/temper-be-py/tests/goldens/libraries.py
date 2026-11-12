@@ -478,21 +478,21 @@ class Tag(Shown):
 
 
 class Held(_Generic[_T_2]):
-    __slots__ = ('_item', '_next_')
+    __slots__ = ('_item', '_next')
     _item: _T_2
-    _next_: 'Held[_T_2] | None'
+    _next: 'Held[_T_2] | None'
 
     def __init__(self, /, item: _T_2, next_: 'Held[_T_2] | None') -> None:
         self._item = item
-        self._next_ = next_
+        self._next = next_
 
     @property
     def item(self, /) -> _T_2:
         return self._item
 
     @property
-    def next_(self, /) -> 'Held[_T_2] | None':
-        return self._next_
+    def next(self, /) -> 'Held[_T_2] | None':
+        return self._next
 
     def to_string(self, /) -> str:
         return f'Held({self._item.to_string()})'
@@ -802,7 +802,7 @@ _console.log(_joiner.out)
 _held: Held[Tag] = Held(Tag('a'), None)
 _other: Held[Tag] = Held(Tag('b'), _held)
 _nobody: Held[Tag] | None = None
-_console.log(f"{_held.to_string()} {(Tag('none') if (_subject2 := None if (_subject3 := _other.next_) is None else _subject3.item) is None else _subject2).to_string()} {_boolean_to_string(same_held(_held, _held))} {_boolean_to_string(same_held(_held, _other))} {_boolean_to_string(same_held(_nobody, _nobody))} {_boolean_to_string(same_held(_nobody, _held))}")
+_console.log(f"{_held.to_string()} {(Tag('none') if (_subject2 := None if (_subject3 := _other.next) is None else _subject3.item) is None else _subject2).to_string()} {_boolean_to_string(same_held(_held, _held))} {_boolean_to_string(same_held(_held, _other))} {_boolean_to_string(same_held(_nobody, _nobody))} {_boolean_to_string(same_held(_nobody, _held))}")
 _console.log(f"{effects_of('ab', 1, 2)} {Bundle((), '2').first} {len(_flags)}")
 _counter: Ticks = Ticks()
 _stepper: Counting[str] = _counter
