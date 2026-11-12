@@ -1447,7 +1447,9 @@ copied Kotlin's:
   functions they use. tmpl should keep source order. Rust and C++
   needed `init` first until #636, which initializes them on first use,
   as tempest's do too (api-compat.md, proposal 2); init timing still
-  differs per backend.
+  differs per backend. JS can't keep a static in Kotlin's private
+  `static #x` field, which the init block outside the class can't set,
+  so it's a module `let`, `Class$x`, behind the same `static get`.
   Test: programs/classes.temper.md (`Rect.unit`) and funtests
   classes/static-properties and classes/static-properties-scope, on
   every backend; Rust's and C++'s `FIRST_USE` runs.

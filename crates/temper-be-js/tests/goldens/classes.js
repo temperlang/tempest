@@ -53,13 +53,19 @@ export class Shape extends type() {
   }
 }
 
+/** @type {Rect} */
+let Rect$unit;
+
 export class Rect extends type(Shape) {
   /** @type {number} */
   #w;
   /** @type {number} */
   #h;
-  /** @type {Rect} */
-  static unit;
+
+  /** @returns {Rect} */
+  static get unit() {
+    return Rect$unit;
+  }
 
   /**
    * @param {{ w: number, h: number }} props
@@ -391,7 +397,7 @@ class Sql extends type() {
   }
 }
 
-Rect.unit = new Rect(1, 1);
+Rect$unit = new Rect(1, 1);
 const r = new Rect(2, 3);
 console.log(r.toString());
 console.log(r.area.toString());

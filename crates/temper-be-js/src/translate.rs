@@ -84,6 +84,9 @@ pub struct Translator<'a> {
     /// The `doAwait` parameters of the generators being translated,
     /// innermost last, which an `await` yields a call of.
     awaiters: Vec<String>,
+    /// The `let`s holding the static fields of the class being written,
+    /// which go before it.
+    static_lets: Vec<Stmt>,
 }
 
 /// What a module's tests use of it that it doesn't export: its private
@@ -182,6 +185,7 @@ impl<'a> Translator<'a> {
             host: None,
             uses_host: false,
             awaiters: Vec::new(),
+            static_lets: Vec::new(),
         }
     }
 
@@ -1349,12 +1353,15 @@ impl<'a> Translator<'a> {
                 out.push(Stmt::Assign { target, value });
             }
             Node::InitStatic { target, value } => {
-                let class = self.class_ref(p.decls.get(target).owner);
+                let target = match self.static_storage(target) {
+                    Some(storage) => Expr::name(storage),
+                    None => {
+                        let class = self.class_ref(p.decls.get(target).owner);
+                        class.member(self.name(target))
+                    }
+                };
                 let value = self.expr(value)?;
-                out.push(Stmt::Assign {
-                    target: class.member(self.member_name(target)),
-                    value,
-                });
+                out.push(Stmt::Assign { target, value });
             }
             Node::Yield { value } => {
                 let value = match value {
@@ -1895,10 +1902,7 @@ impl<'a> Translator<'a> {
                 // `String.begin`, `Float64.pi`, and the like.
                 self.connected(target, &[])?
             }
-            Node::GetStatic { target } => {
-                let class = self.class_ref(p.decls.get(target).owner);
-                class.member(self.member_name(target))
-            }
+            Node::GetStatic { target } => self.static_read(target),
             Node::New { ctor, args, .. }
                 if is_external(p, ctor) && library_of(p, ctor) == "core"
                     || by_connection(p, ctor, crate::connected::connects_std) =>

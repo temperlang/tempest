@@ -4,9 +4,11 @@
 //! `instanceof` checks. A field is stored privately, as `#name`, with a
 //! getter, and a setter if it's a `var`, unless it's private; private
 //! methods, getters, and setters are `#name` too. A class's constructor
-//! calls `super()` first. Static fields and functions are plain, since
-//! the module's init block assigns and calls them, and so is everything
-//! of an interface's, since
+//! calls `super()` first. A static field is a module `let` before the
+//! class, since the module's init block sets it, with a `static get` if
+//! it's public, as Kotlin's private static field and getter; static
+//! functions are plain, since the init block may call them, and so is
+//! everything of an interface's, since
 //! the mixin copies its methods to classes where its `#` names don't
 //! reach.
 //!
@@ -64,7 +66,9 @@ impl Translator<'_> {
         if temper_tmpl::host::uses_host(p, decl, super::NAMES) {
             body.push(self.host_class(item, decl)?);
         } else {
-            body.push(self.class(item)?);
+            let class = self.class(item);
+            body.append(&mut self.static_lets);
+            body.push(class?);
         }
         Ok(())
     }
@@ -110,6 +114,32 @@ impl Translator<'_> {
         (d.facts.contains(Facts::PRIVATE) || d.facts.contains(Facts::PROTECTED))
             && !matches!(d.kind, DeclKind::StaticField | DeclKind::Function)
             && p.decls.get(d.owner).kind == DeclKind::Class
+    }
+
+    /// Where a static field of a class or interface written here is
+    /// stored, as Kotlin's private static field `#name` is: a module
+    /// `let`, `Class$name`, since the module's init block, outside the
+    /// class, sets it. `$` is in no Temper name, so it's a fresh one. A
+    /// public static field is a `static get` of it, so assigning one
+    /// throws, as Kotlin's; a private one has none. `None` for a host
+    /// class's.
+    pub(super) fn static_storage(&self, field: DeclId) -> Option<String> {
+        let owner = self.p.decls.get(field).owner;
+        if temper_tmpl::host::uses_host(self.p, owner, super::NAMES) {
+            return None;
+        }
+        Some(format!("{}${}", self.name(owner), self.name(field)))
+    }
+
+    /// A static field's value: its `let`, in its class if private, as
+    /// nothing else may read it, and elsewhere its getter.
+    pub(super) fn static_read(&mut self, field: DeclId) -> Expr {
+        let d = self.p.decls.get(field);
+        let private = d.facts.contains(Facts::PRIVATE) || d.facts.contains(Facts::PROTECTED);
+        match self.static_storage(field) {
+            Some(storage) if private => Expr::name(storage),
+            _ => self.class_ref(d.owner).member(self.name(field)),
+        }
     }
 
     /// A member's name as its uses write it: `#name` if it's hidden.
@@ -470,13 +500,37 @@ impl Translator<'_> {
                         });
                     }
                 }
-                Node::StaticField { decl } => fields.push(Member::Field {
-                    span,
-                    is_static: true,
-                    name: self.name(decl),
-                    ty: self.ty(p.decls.get(decl).ty)?,
-                    value: None,
-                }),
+                Node::StaticField { decl } => {
+                    let d = p.decls.get(decl);
+                    let ty = self.ty(d.ty)?;
+                    let Some(storage) = self.static_storage(decl) else {
+                        return not_yet("a host class's static field");
+                    };
+                    self.static_lets.push(
+                        Stmt::Decl {
+                            export: false,
+                            keyword: Keyword::Let,
+                            name: storage.clone(),
+                            ty: Some(ty.clone()),
+                            value: None,
+                        }
+                        .spanned(span),
+                    );
+                    if d.facts.contains(Facts::PRIVATE) || d.facts.contains(Facts::PROTECTED) {
+                        continue;
+                    }
+                    fields.push(Member::Method {
+                        span,
+                        is_static: true,
+                        kind: MethodKind::Getter,
+                        name: self.name(decl),
+                        name_span: d.name_span,
+                        source_name: p.name(decl).to_string(),
+                        params: Vec::new(),
+                        result: Some(ty),
+                        body: vec![Stmt::Return(Some(Expr::name(storage)))],
+                    });
+                }
                 Node::AbstractMethod { decl, params } => {
                     let name = self.name(decl);
                     if !interface || !declared.insert(name.clone()) {
