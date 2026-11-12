@@ -1797,7 +1797,9 @@ copied Kotlin's:
   it. Tempest runs every module's init in Temper's order on every
   backend, and keeps tests' needs out of the library's own build. Its
   package files name what's imported, where Kotlin's name what's left
-  after folding.
+  after folding. Lua's root doesn't require a module that imports it,
+  directly or through others, as a library's tests module may, since
+  that `require` would recurse (fixed 2026-11-12, regex parser).
   Test: programs/modules/ and programs/imports-library/, on every
   backend; temper-tmpl/tests/text/problems.cases, "module init order
   (F5, R6)".

@@ -244,7 +244,7 @@ pub fn without_net(cases: &mut [Case]) {
 /// A program in a directory of its own (`NAME/NAME.temper.md`) is a
 /// library of several modules, its other modules in subdirectories, which
 /// its main file imports; such libraries may import each other by name.
-/// `modules` is three modules importing each other, and
+/// `modules` is modules importing each other, one of them the main one, and
 /// `imports-library` imports `modules`, and `renamed`, whose exports'
 /// names backends' namings change. `testing` has tests, which need
 /// std's `testing` to run, so backends check only their form for now.
@@ -611,6 +611,30 @@ fn load(case: &Case) -> Library {
         library.test_server_port = Some(test_server_port().into());
     }
     load_imports(&Sources::standard(), &mut library);
+    // A shared library ([`LIBRARIES`]) has every module in its directory,
+    // as the CLI loads it, those that nothing imports too, after the
+    // others.
+    if LIBRARIES.iter().any(|l| case.dir == programs_dir().join(l)) {
+        let mut dirs = vec![case.dir.clone()];
+        while let Some(dir) = dirs.pop() {
+            let mut entries: Vec<PathBuf> = (fs::read_dir(&dir).unwrap().flatten())
+                .map(|e| e.path())
+                .collect();
+            entries.sort();
+            let name = dir.to_string_lossy();
+            let loaded = (library.modules.iter()).any(|m| m.dir == name);
+            for path in entries {
+                let file = path.to_string_lossy().into_owned();
+                if path.is_dir() {
+                    dirs.push(path);
+                } else if !loaded && temper_frontend::project::is_source(&file) {
+                    let text = fs::read_to_string(&path).unwrap();
+                    library.add_file(&file, &text, source_kind(&file));
+                }
+            }
+        }
+        load_imports(&Sources::standard(), &mut library);
+    }
     library
 }
 

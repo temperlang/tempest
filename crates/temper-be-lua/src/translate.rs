@@ -42,7 +42,8 @@
 //! and the `var`s its tests assign, through a table its module adds to
 //! its exports for them, under `'$test'`. The root module requires the
 //! library's other modules that it doesn't import, so requiring the
-//! library runs them all, as Kotlin's Python and JS do.
+//! library runs them all, as Kotlin's Python and JS do, but for those
+//! that import the root, directly or not, whose `require` would recurse.
 //!
 //! **Lua's limit on locals:** a function, the chunk included, may have at
 //! most 200 locals alive at once. Past 128 module-level locals (Kotlin's
@@ -276,6 +277,39 @@ fn importable(p: &Program, decl: DeclId) -> bool {
 fn is_var(p: &Program, decl: DeclId) -> bool {
     let d = p.decls.get(decl);
     d.kind == DeclKind::ModuleLet && d.facts.contains(Facts::VAR)
+}
+
+/// What a module's chunk requires: its items' and init block's imports,
+/// and the classes its casts check.
+fn chunk_imports(p: &Program, module: &Module) -> Vec<analysis::Import> {
+    let roots: Vec<NodeId> = (module.items.iter().copied())
+        .chain([module.init])
+        .collect();
+    classes::with_casts(p, module.decl, &roots, module_imports(p, module))
+}
+
+/// The library's modules whose chunks require `target`'s, directly or
+/// through others, which the root module mustn't require, since Lua's
+/// `require` of a chunk still running recurses.
+fn importers_of(p: &Program, target: DeclId) -> HashSet<DeclId> {
+    let edges: Vec<(DeclId, Vec<DeclId>)> = (p.modules.iter())
+        .map(|m| (m.decl, chunk_imports(p, m).iter().map(|i| i.from).collect()))
+        .collect();
+    let mut found = HashSet::new();
+    let mut grew = true;
+    while grew {
+        grew = false;
+        for (m, from) in &edges {
+            if *m != target
+                && !found.contains(m)
+                && from.iter().any(|f| *f == target || found.contains(f))
+            {
+                found.insert(*m);
+                grew = true;
+            }
+        }
+    }
+    found
 }
 
 /// What `require` names a module by: the library's name for its root
@@ -535,15 +569,17 @@ impl<'a> Translator<'a> {
         }
         // Other modules' functions and `let`s, as locals; and in the root
         // module, the library's other modules it doesn't import, so
-        // requiring the library runs every module, as in JS and Python.
+        // requiring the library runs every module, as in JS and Python,
+        // but those that import the root, which can't run before it ends.
         let mut imports = Vec::new();
-        let roots: Vec<NodeId> = (module.items.iter().copied())
-            .chain([module.init])
-            .collect();
-        let imported = classes::with_casts(p, module.decl, &roots, module_imports(p, module));
+        let imported = chunk_imports(p, module);
         if module.path.is_empty() {
+            let after = importers_of(p, module.decl);
             for other in &p.modules {
-                if other.decl != module.decl && !imported.iter().any(|i| i.from == other.decl) {
+                if other.decl != module.decl
+                    && !after.contains(&other.decl)
+                    && !imported.iter().any(|i| i.from == other.decl)
+                {
                     let path = Expr::Str(require_path(p, other.decl));
                     imports.push(Stmt::Expr(Expr::name("require").call(vec![path])));
                 }

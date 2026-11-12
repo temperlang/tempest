@@ -73,7 +73,6 @@ pub(crate) fn prod(hidden: Hidden, j: i32) -> i32 {
 }
 
 struct HiderStruct {
-    i: i32,
     hidden: Hidden,
 }
 
@@ -82,10 +81,8 @@ pub struct Hider(Arc<HiderStruct>);
 
 impl Hider {
     pub fn new(i: i32) -> Hider {
-        let i_ = i;
         Hider(Arc::new(HiderStruct {
-            i: i_,
-            hidden: Hidden::new(i_),
+            hidden: Hidden::new(i),
         }))
     }
 

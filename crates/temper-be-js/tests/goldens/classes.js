@@ -357,6 +357,60 @@ class Version extends type() {
   }
 }
 
+class Stock extends type() {
+  /** @type {number} */
+  #count;
+  /** @type {readonly number[]} */
+  #itemsVar;
+  /** @type {number} */
+  #size;
+
+  /**
+   * @param {{ items: readonly number[], count?: number | null }} props
+   * @returns {Stock}
+   */
+  static new(props) {
+    return new Stock(props.items, props.count);
+  }
+
+  /**
+   * @param {readonly number[]} items
+   * @param {number | null} [count]
+   */
+  constructor(items, count) {
+    super();
+    count ??= items.length;
+    this.#count = count;
+    this.#itemsVar = items;
+    this.#size = items.length;
+  }
+
+  /** @returns {number} */
+  get count() {
+    return this.#count;
+  }
+
+  /** @returns {number} */
+  get size() {
+    return this.#size;
+  }
+
+  /** @returns {readonly number[]} */
+  get items() {
+    return this.#itemsVar;
+  }
+
+  /** @param {readonly number[]} value */
+  set items(value) {
+    this.#itemsVar = value;
+  }
+
+  /** @returns {number} */
+  sizeNow() {
+    return this.items.length;
+  }
+}
+
 class Sql extends type() {
   /** @type {string[]} */
   #parts;
@@ -423,6 +477,9 @@ console.log(sq.area.toString());
 if (s instanceof Rect) {
   console.log(/** @type {Rect} */ (/** @type {unknown} */ (s)).w.toString());
 }
+const st = new Stock(Object.freeze([4, 5]));
+st.items = Object.freeze([1, 2, 3]);
+console.log(`${st.count} ${st.size} ${st.sizeNow()} ${st.items.length}`);
 const favorite = same("bigint");
 let named = 0;
 {

@@ -1727,6 +1727,11 @@ impl Interp<'_> {
             let own = 1 + core::class_parts(tree, class.node).2.len();
             for &(n, b) in s.scopes.get(scope).names.iter().take(own) {
                 let symbol = s.scopes.symbol(b);
+                // A `@noProperty` input is no member by name
+                // (`lower::Op::GetInput`).
+                if symbol.input {
+                    continue;
+                }
                 if let (true, Some(decl)) = (n == name, symbol.decl) {
                     if wanted(tree.data(decl)) {
                         let found = (class.clone(), decl, symbol.slot as usize);

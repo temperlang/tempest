@@ -93,7 +93,6 @@ local function prod(hidden, j)
 end
 
 ---@class work.Hider
----@field i integer
 ---@field hidden work.Hidden
 ---@field plus fun(self: work.Hider, j: integer): integer
 ---@field times fun(self: work.Hider, j: integer): integer
@@ -105,8 +104,7 @@ local Hider = temper.type("work.Hider")
 ---@param this work.Hider
 ---@param i integer
 function Hider.constructor(this, i)
-  this.i = i
-  this.hidden = Hidden(this.i)
+  this.hidden = Hidden(i)
 end
 
 ---@param this work.Hider

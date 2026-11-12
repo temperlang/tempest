@@ -213,17 +213,56 @@ void global_init_init() {
 
 }  // namespace modules
 
+// client.hpp
+#pragma once
+
+#include <temper-core/core.hpp>
+#include <modules/init.hpp>
+
+namespace modules {
+
+// Runs the module's top level, once. Exported functions, constructors,
+// static functions, and accessors run it first, so calling it is
+// optional.
+void global_init_client();
+
+int32_t sumTwice(int32_t n);
+
+}  // namespace modules
+
+// client.cpp
+#include <modules/client.hpp>
+
+namespace modules {
+
+namespace core = temper::core;
+
+int32_t sumTwice(int32_t n) {
+  global_init_client();
+  return core::Int::mul(sum(n), 2);
+}
+
+void global_init_client() {
+  core::init_once([] {
+    global_init_init();
+  });
+}
+
+}  // namespace modules
+
 // main.cpp
 #include "modules/helpers/deep.hpp"
 #include "modules/helpers.hpp"
 #include "modules/core.hpp"
 #include "modules/init.hpp"
+#include "modules/client.hpp"
 
 int main() {
   modules::global_init_deep();
   modules::global_init_helpers();
   modules::global_init_core();
   modules::global_init_init();
+  modules::global_init_client();
 }
 
 // CMakeLists.txt
@@ -236,7 +275,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 find_package(Threads REQUIRED)
 
-add_library(modules helpers/deep.cpp helpers.cpp core.cpp init.cpp)
+add_library(modules helpers/deep.cpp helpers.cpp core.cpp init.cpp client.cpp)
 target_include_directories(modules PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_link_libraries(modules PUBLIC Threads::Threads)
 

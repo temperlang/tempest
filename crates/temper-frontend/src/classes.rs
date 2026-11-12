@@ -22,9 +22,9 @@
 use crate::builtins::{Builtin, Function, Macro};
 use crate::core::{
     CLASS_AUTO_EQ, CLASS_CONNECTED, CLASS_CONNECTED_LIST, CLASS_FUN, CLASS_INTERFACE, CLASS_SEALED,
-    FN_NO_BODY, FN_OUT_TYPE, LET_INIT, LET_VAR, MEMBER_CONNECTED, MEMBER_OPERATOR_CMP,
-    MEMBER_OPERATOR_EQ, MEMBER_PRIVATE, MEMBER_PROTECTED, MEMBER_PUBLIC, MEMBER_STATIC,
-    ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD, ROLE_PARAM, ROLE_SETTER,
+    FN_NO_BODY, FN_OUT_TYPE, LET_INIT, LET_VAR, MEMBER_CONNECTED, MEMBER_NO_PROPERTY,
+    MEMBER_OPERATOR_CMP, MEMBER_OPERATOR_EQ, MEMBER_PRIVATE, MEMBER_PROTECTED, MEMBER_PUBLIC,
+    MEMBER_STATIC, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD, ROLE_PARAM, ROLE_SETTER,
     TYPE_PARAMS_SHIFT, class_parts, fn_parts, let_parts, member_fn, type_params,
 };
 use crate::library::{FunRule, Level, Message};
@@ -478,8 +478,9 @@ impl Settle {
                             Some("protected") => MEMBER_PROTECTED,
                             Some("private") => MEMBER_PRIVATE,
                             // A constructor input that isn't a property; as
-                            // a private one here, readable only in the class.
-                            Some("noProperty") if header => MEMBER_PRIVATE,
+                            // a private one here, that only initializers
+                            // read ([`MEMBER_NO_PROPERTY`]).
+                            Some("noProperty") if header => MEMBER_PRIVATE | MEMBER_NO_PROPERTY,
                             Some("var") => LET_VAR,
                             Some("static") => MEMBER_STATIC,
                             Some("connected") => MEMBER_CONNECTED,
@@ -923,7 +924,9 @@ impl Settle {
             let data = tree.data(m);
             if is_method(m) && !is_abstract(m) {
                 seen.push(key(m));
-            } else if matches!(role(m), 0 | ROLE_PARAM) && data & MEMBER_STATIC == 0 {
+            } else if matches!(role(m), 0 | ROLE_PARAM)
+                && data & (MEMBER_STATIC | MEMBER_NO_PROPERTY) == 0
+            {
                 // A field is a getter, and if it's a `var`, a setter.
                 let name = self.lib.name(tree.children(m)[0]);
                 seen.push((name, ROLE_GETTER));

@@ -1,3 +1,4 @@
+pub mod client;
 pub mod core;
 pub mod helpers;
 mod r#mod;
@@ -14,6 +15,7 @@ pub fn init(config: Option<temper_core::Config>) -> temper_core::Result<temper_c
         helpers::init()?;
         core::init()?;
         r#mod::init()?;
+        client::init()?;
         Ok(())
     })?;
     Ok(support::config().runner().clone())

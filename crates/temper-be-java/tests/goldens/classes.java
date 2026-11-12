@@ -1,5 +1,6 @@
 package classes;
 
+import java.util.List;
 import java.util.logging.Logger;
 import temper.core.Core;
 import temper.core.Core.Console;
@@ -58,6 +59,9 @@ public final class ClassesGlobal {
         if (s instanceof Rect) {
             console.log(Integer.toString(((Rect) s).w));
         }
+        Stock st = new Stock(List.of(4, 5));
+        st.setItems(List.of(1, 2, 3));
+        console.log(st.count + " " + st.size + " " + st.sizeNow() + " " + st.getItems().size());
         Class<?> favorite = same(Long.class);
         int named = 0;
         {

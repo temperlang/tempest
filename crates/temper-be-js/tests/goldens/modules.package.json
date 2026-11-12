@@ -6,6 +6,7 @@
         "./helpers": "./helpers.js",
         "./core": "./core.js",
         "./modules": "./modules.js",
+        "./client": "./client.js",
         ".": "./index.js"
     },
     "dependencies": {

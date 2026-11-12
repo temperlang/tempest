@@ -2,8 +2,9 @@
 
 Classes and interfaces: fields, constructors (made from a class's header,
 or its own), methods, getters and setters, static fields and functions,
-private members read on another instance, interfaces with abstract and
-default members, `@auto("==")` and `@operator` methods, `toString`, `is`, `as`, and narrowing. Calls chain on
+private members read on another instance, a `@noProperty` input that
+initializers read, though a getter and setter share its name, interfaces
+with abstract and default members, `@auto("==")` and `@operator` methods, `toString`, `is`, `as`, and narrowing. Calls chain on
 objects that methods return, which C++ must keep alive. The log is what
 tempest's interpreter gives.
 
@@ -60,6 +61,14 @@ tempest's interpreter gives.
       }
     }
 
+    class Stock(@noProperty items: List<Int>, public count: Int = items.length) {
+      private var itemsVar: List<Int> = items;
+      public get items(): List<Int> { itemsVar }
+      public set items(value: List<Int>) { itemsVar = value; }
+      public size: Int = items.length;
+      public sizeNow(): Int { items.length }
+    }
+
     let shape(x: Shape): Shape { x }
 
     let r = new Rect(2, 3);
@@ -87,6 +96,9 @@ tempest's interpreter gives.
     if (s is Rect) {
       console.log(s.w.toString());
     }
+    let st = new Stock([4, 5]);
+    st.items = [1, 2, 3];
+    console.log("${st.count} ${st.size} ${st.sizeNow()} ${st.items.length}");
 
 ```log
 Rect(2, 3)
@@ -105,6 +117,7 @@ true true
 true false
 16
 2
+2 2 3 3
 ```
 
 ## Types as values

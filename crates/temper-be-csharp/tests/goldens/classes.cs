@@ -78,6 +78,9 @@ public static class ClassesGlobal
         {
             console.Log(((Rect)s).W.ToString(CultureInfo.InvariantCulture));
         }
+        Stock st = new Stock(Listed.CreateReadOnlyList<int>(4, 5));
+        st.Items = Listed.CreateReadOnlyList<int>(1, 2, 3);
+        console.Log(string.Create(CultureInfo.InvariantCulture, $"{st.Count} {st.Size} {st.SizeNow()} {st.Items.Count}"));
         Type favorite = Same(typeof(long));
         int named = 0;
         {

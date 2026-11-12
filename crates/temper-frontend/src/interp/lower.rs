@@ -72,6 +72,9 @@ pub(super) enum Op {
     JumpIfFalse(u32),
     /// `obj.name`: pops `obj`.
     GetProp(NameId),
+    /// A `@noProperty` input's value, which an initializer reads: pops
+    /// `this`, and reads its field in this slot.
+    GetInput(u32),
     /// `obj.name = value`: pops both, pushes `value`.
     SetProp(NameId),
     /// Pops the arguments and the callee.
@@ -1265,6 +1268,10 @@ impl Lowering {
                 }
             },
             SymbolKind::TypeParam => _ = self.emit(Op::Const(Val::Type)),
+            SymbolKind::Member if sym.input => {
+                self.this(s, sym.owner);
+                self.emit(Op::GetInput(sym.slot));
+            }
             SymbolKind::Member => {
                 self.this(s, sym.owner);
                 self.emit(Op::GetProp(sym.name));

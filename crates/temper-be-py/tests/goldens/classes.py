@@ -1,5 +1,8 @@
 from abc import ABCMeta as _ABCMeta, abstractmethod as _abstractmethod
-from collections.abc import MutableSequence as _MutableSequence
+from collections.abc import (
+    MutableSequence as _MutableSequence,
+    Sequence as _Sequence,
+)
 from temper_core import (
     LoggingConsole as _LoggingConsole,
     boolean_to_string as _boolean_to_string,
@@ -211,6 +214,39 @@ class _Version:
             return self._minor - other._minor
 
 
+class _Stock:
+    __slots__ = ('_count', '_items_var', '_size')
+    _count: int
+    _items_var: _Sequence[int]
+    _size: int
+
+    def __init__(self, /, items: _Sequence[int], count: int | None = None) -> None:
+        if count is None:
+            count = len(items)
+        self._count = count
+        self._items_var = items
+        self._size = len(items)
+
+    @property
+    def count(self, /) -> int:
+        return self._count
+
+    @property
+    def items(self, /) -> _Sequence[int]:
+        return self._items_var
+
+    @items.setter
+    def items(self, value: _Sequence[int], /) -> None:
+        self._items_var = value
+
+    @property
+    def size(self, /) -> int:
+        return self._size
+
+    def size_now(self, /) -> int:
+        return len(self.items)
+
+
 def _shape(x: Shape, /) -> Shape:
     return x
 
@@ -287,6 +323,9 @@ _sq: Square = _cast_by_type(_q, Square)
 _console.log(str(_sq.area))
 if isinstance(_s, Rect):
     _console.log(str(_s.w))
+_st: _Stock = _Stock((4, 5))
+_st.items = (1, 2, 3)
+_console.log(f'{_st.count} {_st.size} {_st.size_now()} {len(_st.items)}')
 _favorite: type = _same(int)
 _named: int = 0
 _i = 0

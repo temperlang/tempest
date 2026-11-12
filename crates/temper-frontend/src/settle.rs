@@ -622,6 +622,12 @@ impl Settle {
         let b = self
             .scopes
             .declare(scope, name, kind, Some(let_node), mutable);
+        if kind == SymbolKind::Member
+            && is_let
+            && self.lib.tree.data(let_node) & core::MEMBER_NO_PROPERTY != 0
+        {
+            self.scopes.mark_input(b);
+        }
         self.note_extension(let_node, b, scope);
         // As in Kotlin Temper, a block's local is visible only after its
         // declaration, so `var x = x` reads an outer `x`; functions and

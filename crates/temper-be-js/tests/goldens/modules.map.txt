@@ -30,17 +30,24 @@
 9:3 -> ../core/core.temper:1:41  try { <- n / d orelse 0 }
 # modules/modules.internal.js
 # generated line:column -> source:line:column, and the text at each
-5:1 -> ../modules.temper.md:21:5  /** <- export let sum(n: Int): Int
-9:1 -> ../modules.temper.md:21:5  export function sum(n) { <- export let sum(n: Int): Int
-9:17 -> ../modules.temper.md:21:16 (sum)  sum(n) { <- sum(n: Int): Int {
-9:20 -> ../modules.temper.md:21:5  (n) { <- export let sum(n: Int): Int
-10:3 -> ../modules.temper.md:22:7  return (((twice(n) + base) | <- double(n) + helperBase + bas
-13:1 -> ../modules.temper.md:11:5  const calls2 = calls; <- let { twice as double, base,
-14:1 -> ../modules.temper.md:19:5  const base2 = 1; <- let base = 1;
-15:1 -> ../modules.temper.md:25:5  console.log(greet("modules") <- console.log(greet("modules")
-16:1 -> ../modules.temper.md:26:5  console.log(`sum ${sum(3)}`) <- console.log("sum ${sum(3).to
-17:1 -> ../modules.temper.md:27:5  console.log(`share ${share(7 <- console.log("share ${share(7
-18:1 -> ../modules.temper.md:28:5  bump(); <- bump();
-19:1 -> ../modules.temper.md:29:5  bump(); <- bump();
-20:1 -> ../modules.temper.md:30:5  console.log(`calls ${calls2} <- console.log("calls ${calls.t
-21:1 -> ../modules.temper.md:40:5  console.log(`calls now ${bum <- console.log("calls now ${bum
+5:1 -> ../modules.temper.md:22:5  /** <- export let sum(n: Int): Int
+9:1 -> ../modules.temper.md:22:5  export function sum(n) { <- export let sum(n: Int): Int
+9:17 -> ../modules.temper.md:22:16 (sum)  sum(n) { <- sum(n: Int): Int {
+9:20 -> ../modules.temper.md:22:5  (n) { <- export let sum(n: Int): Int
+10:3 -> ../modules.temper.md:23:7  return (((twice(n) + base) | <- double(n) + helperBase + bas
+13:1 -> ../modules.temper.md:12:5  const calls2 = calls; <- let { twice as double, base,
+14:1 -> ../modules.temper.md:20:5  const base2 = 1; <- let base = 1;
+15:1 -> ../modules.temper.md:26:5  console.log(greet("modules") <- console.log(greet("modules")
+16:1 -> ../modules.temper.md:27:5  console.log(`sum ${sum(3)}`) <- console.log("sum ${sum(3).to
+17:1 -> ../modules.temper.md:28:5  console.log(`share ${share(7 <- console.log("share ${share(7
+18:1 -> ../modules.temper.md:29:5  bump(); <- bump();
+19:1 -> ../modules.temper.md:30:5  bump(); <- bump();
+20:1 -> ../modules.temper.md:31:5  console.log(`calls ${calls2} <- console.log("calls ${calls.t
+21:1 -> ../modules.temper.md:41:5  console.log(`calls now ${bum <- console.log("calls now ${bum
+# modules/client.internal.js
+# generated line:column -> source:line:column, and the text at each
+3:1 -> ../client/client.temper:3:1  /** <- export let sumTwice(n: Int):
+7:1 -> ../client/client.temper:3:1  export function sumTwice(n) <- export let sumTwice(n: Int):
+7:17 -> ../client/client.temper:3:12 (sumTwice)  sumTwice(n) { <- sumTwice(n: Int): Int { sum(
+7:25 -> ../client/client.temper:3:1  (n) { <- export let sumTwice(n: Int):
+8:3 -> ../client/client.temper:3:36  return Math.imul(sum(n), 2); <- sum(n) * 2 }

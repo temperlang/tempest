@@ -1,9 +1,10 @@
 # Modules
 
-A library of four modules: this one, `helpers`, and `helpers/deep`,
+A library of five modules: this one, `helpers`, and `helpers/deep`,
 which `helpers` imports too, and which run in that order, each after
-those it imports, and `core`, whose C# namespace would hide the
-runtime's class `Core`. Imports name functions, a `let`, and a `var`,
+those it imports; `core`, whose C# namespace would hide the
+runtime's class `Core`; and `client`, which imports this one, as a
+library's tests may, so this one can't run it first. Imports name functions, a `let`, and a `var`,
 which an import copies when it runs, as the interpreter and Kotlin's backends
 read it, so later writes don't show here; an alias; and a module's own
 declaration with an imported one's name.

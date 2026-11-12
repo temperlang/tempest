@@ -187,6 +187,26 @@
               </arguments>
             </configuration>
           </execution>
+          <execution>
+            <id>modules.client.ClientMain</id>
+            <goals>
+              <!-- Run in the Maven VM via `mvn compile exec:java@modules.client.ClientMain` -->
+              <goal>java</goal>
+              <!-- Run in a forked JVM via `mvn compile exec:exec@modules.client.ClientMain` -->
+              <goal>exec</goal>
+            </goals>
+            <configuration>
+              <!-- Used by exec:java -->
+              <mainClass>modules.client.ClientMain</mainClass>
+              <!-- Used by exec:exec -->
+              <executable>java</executable>
+              <arguments>
+                <argument>-classpath</argument>
+                <argument>${project.build.outputDirectory}</argument>
+                <argument>modules.client.ClientMain</argument>
+              </arguments>
+            </configuration>
+          </execution>
         </executions>
       </plugin>
     </plugins>

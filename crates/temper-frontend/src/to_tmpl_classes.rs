@@ -187,6 +187,11 @@ impl Translator<'_> {
                     explicit = Some(m);
                     continue;
                 }
+                // A `@noProperty` input is only the constructor's.
+                (ROLE_PARAM, false) if data & core::MEMBER_NO_PROPERTY != 0 => {
+                    ctor_params.push(m);
+                    continue;
+                }
                 (ROLE_PARAM, false) => ctor_params.push(m),
                 _ => {}
             }
@@ -655,7 +660,8 @@ impl Translator<'_> {
             if self.param_default(p).is_some() {
                 locals[i] = self.decls[&p];
             }
-            if explicit.is_none() {
+            // A `@noProperty` input stays the parameter, for initializers.
+            if explicit.is_none() && self.data(p) & core::MEMBER_NO_PROPERTY == 0 {
                 self.decls.remove(&p);
             }
         }
@@ -691,6 +697,12 @@ impl Translator<'_> {
             let f = core::let_parts(&self.s.library.tree, c).2.unwrap();
             if let Some(body) = core::fn_parts(&self.s.library.tree, f).2 {
                 self.stmts(body, &mut stmts)?;
+            }
+        }
+        // The inputs, done with.
+        if explicit.is_none() {
+            for p in &params {
+                self.decls.remove(p);
             }
         }
         let at = explicit.unwrap_or(class);
@@ -966,7 +978,9 @@ impl Translator<'_> {
             match data & ROLE_MASK {
                 ROLE_CONSTRUCTOR => explicit = Some(m),
                 ROLE_PARAM => {
-                    self.member(m, at)?;
+                    if data & core::MEMBER_NO_PROPERTY == 0 {
+                        self.member(m, at)?;
+                    }
                     params.push(m);
                 }
                 _ => {}
@@ -997,6 +1011,8 @@ impl Translator<'_> {
     fn accessor(&self, m: FNode, write: bool) -> FNode {
         let role = |n: FNode| self.data(n) & ROLE_MASK;
         let fits = |n: FNode| match role(n) {
+            // A `@noProperty` input is read only as itself.
+            ROLE_PARAM if n != m && self.data(n) & core::MEMBER_NO_PROPERTY != 0 => false,
             0 | ROLE_PARAM => true,
             ROLE_GETTER => !write,
             ROLE_SETTER => write,
@@ -1654,8 +1670,9 @@ impl Translator<'_> {
             _ => self.class_node(self.s.scopes.resolved(object)?)?,
         };
         let scope = self.s.scopes.of_node(class)?;
+        // Not a `@noProperty` input, which is no member by its name.
         let found = (self.s.scopes.get(scope).names.iter())
-            .filter(|&&(n, _)| n == name)
+            .filter(|&&(n, b)| n == name && !self.s.scopes.symbol(b).input)
             .filter_map(|&(_, b)| self.s.scopes.symbol(b).decl)
             .find(|&m| self.kind(m) == NodeKind::Let)?;
         Some((object, found))
