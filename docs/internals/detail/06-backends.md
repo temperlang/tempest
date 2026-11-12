@@ -183,6 +183,41 @@ version at all. See [weaknesses](#known-weaknesses-and-plans).
 upstream, in an open Kotlin PR (#532 for one turn at a time), or still
 to offer.
 
+### The runtime version generated code names
+
+**Open, for the team.** Each backend's `Variant` names `temper-core`
+0.6.0 (`runtime_version`), and std is 0.6.0 too (`STD_VERSION`), but
+generated code calls API that only the patched runtimes have: Java's
+and C#'s top-level turn, Python's `top_level_turn`, Rust's
+`awake_upon`, Lua's promises and `temper.async`, and C++'s `co_await`
+and net client. Only JS's patches are types alone. Inside `temper.out`
+this works, since each runtime is written beside the libraries and
+Rust's and C#'s package files point there; a package published from
+it and installed against the registries' 0.6.0 fails to build or run.
+Version metadata (`0.6.0+tempest`) doesn't help: Cargo, npm, and NuGet
+ignore it when resolving, and PyPI rejects local versions.
+
+Options:
+
+1. **The next release's version, as a pre-release, until it ships.**
+   One constant for every backend's runtime and std (say 0.7.0, each
+   ecosystem's pre-release form until released: `0.7.0-dev.1`, PEP 440's
+   `0.7.0.dev1`; LuaRocks has none, so `dev` or the release), written
+   into the vendored runtimes' own package files by `sync_temper.py`.
+   Generated packages then never claim a runtime that lacks their API.
+   Needs: the version, and who publishes those runtimes.
+2. **Upstream the patches, and a Kotlin release with them.** Generated
+   code names that release, and both compilers share one runtime again.
+   Cleanest in the end, but waits on Kotlin PRs (#532 and the patches
+   still to offer) and a release.
+3. **Keep 0.6.0, and say output needs the runtime beside it.** No work,
+   but published packages stay broken against the registries.
+
+**Recommended:** 1 now, as one shared constant, moving to 2's release
+when it exists; as this compiler replaces Kotlin's, that release may
+well be the first one built from it. C++ should name its runtime
+version in CMakeLists.txt either way.
+
 ### Pluggable: a description per backend
 
 **Chosen:** each crate exports `BACKEND`, a
@@ -396,10 +431,8 @@ through each `tools.rs` in the backends' own test suites.
 ## Known weaknesses and plans
 
 - **Runtime version against patches.** Package files name `temper-core`
-  0.6.0 while the output needs patched API. Options: a distinct
-  pre-release runtime version until the patches land upstream, or
-  saying plainly that output targets the patched runtimes. C++ should
-  name its runtime version too.
+  0.6.0 while the output needs patched API; the options are under
+  [the runtime version generated code names](#the-runtime-version-generated-code-names).
 - **Untested MSRV and older targets.** One CI job on Rust 1.71.1, or a
   newer MSRV (api-compat.md, proposed change 11); C#'s `net48` and .NET
   8 are a to-do in [roadmap.md](../../../notes/tmpl/roadmap.md)
