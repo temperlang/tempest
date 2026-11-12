@@ -5,6 +5,9 @@ pub(crate) fn init() -> temper_core::Result<()> {
     INIT_ONCE
         .get_or_init(|| {
             let _name = Arc::new("case".to_string());
+            UNIT_VECS
+                .set(Arc::new(vec![Vec2::new(1.0, 0.0), Vec2::new(0.0, 1.0)]))
+                .unwrap_or_else(|_| panic!());
             Ok(())
         })
         .clone()
@@ -111,6 +114,13 @@ pub(crate) fn assert_more_things(
     Ok(())
 }
 
+static UNIT_VECS: OnceLock<temper_core::List<Vec2>> = OnceLock::new();
+
+#[cfg(test)]
+pub(crate) fn unit_vecs() -> temper_core::List<Vec2> {
+    crate::support::initialized(|| UNIT_VECS.get()).clone()
+}
+
 pub mod builders {
     use super::*;
 
@@ -179,6 +189,36 @@ mod tests {
                     ))
                 })
             });
+        }
+        test.soft_fail_to_hard()
+    }
+
+    #[test]
+    fn module_values() -> temper_core::Result<()> {
+        crate::init(None)?;
+        temper_std::init(None)?;
+        let test = temper_std::testing::Test::new();
+        {
+            let length = temper_core::ListedTrait::len(&super::unit_vecs());
+            let mut i: i32 = 0;
+            while i < length {
+                let vec = temper_core::ListedTrait::get(&super::unit_vecs(), i);
+                i = i.wrapping_add(1);
+                {
+                    let actual = super::norm_squared(vec.clone());
+                    let expected: f64 = 1.0;
+                    test.assert(
+                        temper_core::float64::cmp(actual, expected) == 0,
+                        Arc::new(move || {
+                            Arc::new(format!(
+                                "expected normSquared(vec) == ({}) not ({})",
+                                temper_core::float64::to_string(expected),
+                                temper_core::float64::to_string(actual)
+                            ))
+                        }),
+                    );
+                }
+            }
         }
         test.soft_fail_to_hard()
     }

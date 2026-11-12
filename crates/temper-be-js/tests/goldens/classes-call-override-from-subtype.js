@@ -47,7 +47,12 @@ class A extends type() {
   }
 }
 
-class B extends type(A) {}
+class B extends type(A) {
+  /** @type {() => string} */
+  a = /** @type {any} */ (undefined);
+  /** @type {string} */
+  thing = /** @type {any} */ (undefined);
+}
 
 class C extends type(A) {
   /** @returns {string} */
@@ -80,7 +85,10 @@ class ASplit extends type() {
   }
 }
 
-class BSplit extends type(ASplit) {}
+class BSplit extends type(ASplit) {
+  /** @type {() => string} */
+  a = /** @type {any} */ (undefined);
+}
 
 class CSplit extends type() {
   /** @returns {string} */
@@ -110,11 +118,20 @@ class B1Deep extends type(ADeep) {
   }
 }
 
-class B2Deep extends type(B1Deep) {}
+class B2Deep extends type(B1Deep) {
+  /** @type {() => string} */
+  a = /** @type {any} */ (undefined);
+}
 
-class B3Deep extends type(B2Deep) {}
+class B3Deep extends type(B2Deep) {
+  /** @type {() => string} */
+  a = /** @type {any} */ (undefined);
+}
 
-class CDeep extends type(ADeep) {}
+class CDeep extends type(ADeep) {
+  /** @type {() => string} */
+  a = /** @type {any} */ (undefined);
+}
 
 class DDeep extends type(B2Deep, CDeep) {
   /** @returns {string} */

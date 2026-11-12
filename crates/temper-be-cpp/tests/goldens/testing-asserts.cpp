@@ -37,6 +37,7 @@ struct TestHelper : public std::enable_shared_from_this<TestHelper> {
 void aTestCase(std::shared_ptr<temper_std::Test> const & test);
 void aFailingTest(std::shared_ptr<temper_std::Test> const & test);
 void exported(std::shared_ptr<temper_std::Test> const & test);
+void moduleValues(std::shared_ptr<temper_std::Test> const & test);
 #endif
 
 }  // namespace asserts
@@ -47,6 +48,12 @@ void exported(std::shared_ptr<temper_std::Test> const & test);
 namespace asserts {
 
 namespace core = temper::core;
+
+namespace temper_globals {
+
+static core::GlobalSlot<std::shared_ptr<std::vector<std::shared_ptr<Vec2>>>> unitVecs;
+
+}  // namespace temper_globals
 
 static double normSquared(std::shared_ptr<Vec2> const & vec);
 
@@ -120,8 +127,10 @@ static void assertMoreThings(std::shared_ptr<temper_std::Test> const & t, std::s
 
 void global_init_init() {
   core::init_once([] {
+    temper_globals::unitVecs.construct();
     temper_std::global_init_testing();
     core::Str name = TEMPER_STR("case");
+    temper_globals::unitVecs.value = core::List::make<std::shared_ptr<Vec2>>(Vec2::make(1.0, 0.0), Vec2::make(0.0, 1.0));
   });
 }
 
@@ -147,6 +156,22 @@ void exported(std::shared_ptr<temper_std::Test> const & test) {
     core::Str actual = vec->toString();
     core::Str expected = TEMPER_STR("(1.5, 2.5) size squared 8.5");
     test->assert_(actual == expected, [=]() -> core::Str { return "expected vec.toString() == (" + expected + ") not (" + actual + ")"; });
+  }
+}
+
+void moduleValues(std::shared_ptr<temper_std::Test> const & test) {
+  {
+    int32_t length = core::List::length<std::shared_ptr<Vec2>>(temper_globals::unitVecs.value);
+    int32_t i = 0;
+    while (i < length) {
+      std::shared_ptr<Vec2> vec = core::List::get<std::shared_ptr<Vec2>>(temper_globals::unitVecs.value, i);
+      i = core::Int::add(i, 1);
+      {
+        double actual = asserts::normSquared(vec);
+        double expected = 1.0;
+        test->assert_(core::Float64::eq(actual, expected), [=]() -> core::Str { return "expected normSquared(vec) == (" + core::Float64::toString(expected) + ") not (" + core::Float64::toString(actual) + ")"; });
+      }
+    }
   }
 }
 
@@ -188,6 +213,14 @@ int main() {
       {"exported", [] {
         auto test = temper_std::Test::make();
         asserts::exported(test);
+        auto messages = test->messagesCombined();
+        return temper::core::TestOutcome{
+            test->get_passing(),
+            temper::core::is_null(messages) ? std::string() : temper::core::Str(messages).str()};
+      }},
+      {"module values", [] {
+        auto test = temper_std::Test::make();
+        asserts::moduleValues(test);
         auto messages = test->messagesCombined();
         return temper::core::TestOutcome{
             test->get_passing(),

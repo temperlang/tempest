@@ -159,7 +159,7 @@ helper files.
 **Chosen:** each language's `temper-core` (and parts of std's host
 code) is copied from Kotlin Temper into `vendor/temper/` by
 `compat/sync_temper.py`, with tempest's fixes kept as patches in
-`vendor/temper-patches/` (23 so far) that each sync re-applies. Each
+`vendor/temper-patches/` (22 so far) that each sync re-applies. Each
 backend's `runtime.rs` embeds its runtime's files for `tempest build`
 to write beside the output. CI checks the copy is current
 (`sync_temper.py --check`).

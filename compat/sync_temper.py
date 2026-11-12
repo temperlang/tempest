@@ -47,7 +47,7 @@ VENDOR = ROOT / "vendor" / "temper"
 # `Upstream:` line saying whether Kotlin has it yet.
 PATCHES = ROOT / "vendor" / "temper-patches"
 # What copying leaves out, and comparing ignores.
-IGNORED = ("__pycache__", "target")
+IGNORED = ("__pycache__", ".mypy_cache", "target")
 # What we copy, from the Temper checkout, to where under VENDOR.
 PARTS = {
     "functional-test-suite/src/commonMain/resources": "functional-tests",

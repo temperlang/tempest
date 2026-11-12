@@ -1,9 +1,9 @@
 # Source
 
-Copied from Kotlin Temper by `compat/sync_temper.py` on 2026-11-09.
+Copied from Kotlin Temper by `compat/sync_temper.py` on 2026-11-12.
 
 - Branch: `main`
-- Commit: `0769b64d2280ce9515cb60c599165d1a22fe199c`
+- Commit: `69f1a5b075ae83d5b3c10a974817ecfe62a7be5c`
 - Uncommitted changes in the copied folders: no
 
 Folders:

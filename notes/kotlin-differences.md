@@ -2305,7 +2305,10 @@ copied Kotlin's:
     as `tsc` rejects a static member naming the class's type parameters,
     and declares an interface's inherited abstract properties again,
     since `tsc` sees nothing through the runtime's `type(I)`, so `J
-    extends I` satisfies a bound of `I`.
+    extends I` satisfies a bound of `I`. Since 2026-11-12 it also
+    declares inherited methods with default bodies, and those of
+    generic interfaces, with the type arguments the interface supplies
+    (`Labeled<L, T> extends Holder<T>` has `Holder`'s `held` as a `T`).
   - **Lua** bounds `---@generic IT: lib.I`, and types a local of a
     function's type parameter `any`, since LuaLS knows the `---@generic`
     name only in the function's own annotations.

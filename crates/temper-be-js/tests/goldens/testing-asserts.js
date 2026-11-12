@@ -116,3 +116,5 @@ export class TestHelper extends type() {
 }
 
 const name = "case";
+/** @type {readonly Vec2[]} */
+export const unitVecs = Object.freeze([new Vec2(1.0, 0.0), new Vec2(0.0, 1.0)]);

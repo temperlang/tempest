@@ -63,3 +63,5 @@
 113:3 -> ../asserts.temper.md:67:14  get j() { <- let j: Int,
 113:7 -> ../asserts.temper.md:67:18 (j)  j() { <- j: Int,
 118:1 -> ../asserts.temper.md:26:5  const name = "case"; <- let name = "case";
+119:1 -> ../asserts.temper.md:100:5  /** @type {readonly Vec2[]} <- let unitVecs = [new Vec2(1.0
+120:1 -> ../asserts.temper.md:100:5  export const unitVecs = Obje <- let unitVecs = [new Vec2(1.0

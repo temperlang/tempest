@@ -20,7 +20,10 @@
 //! For TypeScript's checker, an interface declares its abstract members
 //! as fields with their types, initialized to an `undefined` cast to
 //! `any`, which nothing stores: nothing makes an interface's instance,
-//! and the mixin copies only its prototype. (TypeScript 7 no longer reads
+//! and the mixin copies only its prototype. It declares the methods it
+//! inherits from interfaces above it again, abstract or not, with the
+//! type arguments it supplies them (`Labeled<L, T> extends Holder<T>`
+//! declares `Holder`'s `held` as a `T`, its own). (TypeScript 7 no longer reads
 //! a declaration without a value, `/** @type {number} */ this.area;`.)
 //! TypeScript doesn't see what the mixin copies, so an upcast or downcast
 //! to a type with members the value's type doesn't declare is cast
@@ -303,8 +306,10 @@ impl Translator<'_> {
         if p.decls.get(decl).kind == DeclKind::Class {
             names.extend(self.forwarded(decl).into_iter().map(|m| self.name(m)));
         } else {
-            for (m, _) in self.inherited_abstract(decl, members) {
-                if let Node::AbstractMethod { decl, .. } = p.nodes.get(m) {
+            for (m, _) in self.inherited_members(decl, members) {
+                if let Node::AbstractMethod { decl, .. } | Node::Method { decl, .. } =
+                    p.nodes.get(m)
+                {
                     names.insert(self.name(decl));
                 }
             }
@@ -357,11 +362,16 @@ impl Translator<'_> {
             .collect()
     }
 
-    /// The abstract members an interface inherits from the program's own
-    /// interfaces above it that aren't generic, and doesn't declare: which
-    /// it declares again for TypeScript, which sees nothing through the
-    /// runtime's `type(I)`, so `J extends I` has `I`'s properties.
-    fn inherited_abstract(&self, iface: DeclId, members: temper_tmpl::Kids) -> Vec<(NodeId, bool)> {
+    /// The methods, abstract or with default bodies, an interface
+    /// inherits from the program's own interfaces above it, and doesn't
+    /// declare, each with the interface it's from: which it declares
+    /// again for TypeScript, which sees nothing through the runtime's
+    /// `type(I)`, so `J extends I` has `I`'s properties and methods.
+    fn inherited_members(
+        &self,
+        iface: DeclId,
+        members: temper_tmpl::Kids,
+    ) -> Vec<(NodeId, DeclId)> {
         let p = self.p;
         let decl_of = |m: NodeId| match p.nodes.get(m) {
             Node::Field { decl }
@@ -375,7 +385,7 @@ impl Translator<'_> {
             .collect();
         let mut out = Vec::new();
         for up in ancestors(p, iface) {
-            if up == iface || !p.decls.type_params(up).is_empty() {
+            if up == iface {
                 continue;
             }
             let Some(&node) = self.class_nodes.get(&up) else {
@@ -387,7 +397,9 @@ impl Translator<'_> {
             let mut adds = Vec::new();
             for &m in p.nodes.list(members) {
                 match p.nodes.get(m) {
-                    Node::AbstractMethod { decl, .. } if !names.contains(&self.name(decl)) => {
+                    Node::AbstractMethod { decl, .. } | Node::Method { decl, .. }
+                        if !names.contains(&self.name(decl)) && !self.hidden(decl) =>
+                    {
                         adds.push((m, self.name(decl)));
                     }
                     _ => {}
@@ -395,11 +407,56 @@ impl Translator<'_> {
             }
             // A getter and its setter share a name: both, then the name.
             for (m, name) in adds {
-                out.push((m, true));
+                out.push((m, up));
                 names.insert(name);
             }
         }
         out
+    }
+
+    /// For each generic interface above `iface`, its type parameters'
+    /// types as `iface` supplies them, written out: `T` for `Holder`'s
+    /// `T` where `Labeled<L, T> extends Holder<T>`. The nearest path
+    /// (breadth-first) supplies them, as [`ancestors`] finds each.
+    fn supplied_type_args(&mut self, iface: DeclId) -> R<HashMap<DeclId, HashMap<DeclId, String>>> {
+        let p = self.p;
+        let mut out: HashMap<DeclId, HashMap<DeclId, String>> = HashMap::new();
+        out.insert(iface, HashMap::new());
+        let mut queue = vec![iface];
+        let mut next = 0;
+        let outer = std::mem::take(&mut self.type_args);
+        let mut result = Ok(());
+        'walk: while next < queue.len() {
+            let d = queue[next];
+            next += 1;
+            if !p.decls.contains(d) {
+                continue;
+            }
+            self.type_args = out[&d].clone();
+            for &s in p.decls.supers(d) {
+                let TypeData::Nominal { decl: up, args } = p.types.get(s) else {
+                    continue;
+                };
+                if out.contains_key(&up) {
+                    continue;
+                }
+                let mut supplied = HashMap::new();
+                let args = p.types.list(args).to_vec();
+                for (&param, &arg) in p.decls.type_params(up).iter().zip(&args) {
+                    match self.ty(arg) {
+                        Ok(text) => supplied.insert(param, text),
+                        Err(e) => {
+                            result = Err(e);
+                            break 'walk;
+                        }
+                    };
+                }
+                out.insert(up, supplied);
+                queue.push(up);
+            }
+        }
+        self.type_args = outer;
+        result.map(|()| out)
     }
 
     /// A class or interface.
@@ -412,6 +469,7 @@ impl Translator<'_> {
         let outer = std::mem::replace(&mut self.class, decl);
         let body = self.class_body(decl, members);
         self.class = outer;
+        self.type_args.clear();
         let members = body?;
         self.imports.insert("type");
         let supers: Vec<Expr> = (p.decls.supers(decl).iter())
@@ -439,12 +497,21 @@ impl Translator<'_> {
         // An interface's abstract properties, declared once for a getter
         // and its setter.
         let mut declared = HashSet::new();
-        let mut all: Vec<(NodeId, bool)> =
-            p.nodes.list(members).iter().map(|&m| (m, false)).collect();
+        let mut all: Vec<(NodeId, Option<DeclId>)> =
+            p.nodes.list(members).iter().map(|&m| (m, None)).collect();
+        let mut supplied = HashMap::new();
         if interface {
-            all.extend(self.inherited_abstract(class, members));
+            let inherited = self.inherited_members(class, members);
+            if !inherited.is_empty() {
+                supplied = self.supplied_type_args(class)?;
+            }
+            all.extend(inherited.into_iter().map(|(m, up)| (m, Some(up))));
         }
-        for (m, inherited) in all {
+        for (m, from) in all {
+            let inherited = from.is_some();
+            // An inherited member's types, in terms of this interface's
+            // type parameters.
+            self.type_args = (from.and_then(|up| supplied.get(&up).cloned())).unwrap_or_default();
             // A std member this backend connects, as `Test.bail()` or
             // `Regex.compiledFound()`, isn't declared, as Kotlin's.
             if temper_tmpl::qname::connected_member_node(p, m, crate::connected::connects_std) {
@@ -531,7 +598,10 @@ impl Translator<'_> {
                         body: vec![Stmt::Return(Some(Expr::name(storage)))],
                     });
                 }
-                Node::AbstractMethod { decl, params } => {
+                // An inherited default body too, which the mixin copies.
+                Node::AbstractMethod { decl, params } | Node::Method { decl, params, .. }
+                    if inherited || matches!(p.nodes.get(m), Node::AbstractMethod { .. }) =>
+                {
                     let name = self.name(decl);
                     if !interface || !declared.insert(name.clone()) {
                         continue;
@@ -629,6 +699,7 @@ impl Translator<'_> {
                 other => return not_yet(format!("a {} member", other.kind().name())),
             }
         }
+        self.type_args.clear();
         if !interface {
             for winner in self.forwarded(class) {
                 methods.push(self.forwarder(winner)?);

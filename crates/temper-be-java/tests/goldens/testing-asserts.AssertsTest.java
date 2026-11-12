@@ -1,6 +1,7 @@
 package asserts;
 
 import java.util.List;
+import temper.core.Core;
 import temper.std.testing.Test;
 
 public final class AssertsTest {
@@ -35,6 +36,28 @@ public final class AssertsTest {
                 String actual = vec.toString();
                 String expected = "(1.5, 2.5) size squared 8.5";
                 test.assert_(actual.equals(expected), () -> "expected vec.toString() == (" + expected + ") not (" + actual + ")");
+            }
+        } finally {
+            test.softFailToHard();
+        }
+    }
+
+    @org.junit.jupiter.api.Test
+    public void moduleValues() {
+        Test test = new Test();
+        try {
+            {
+                int length = AssertsGlobal.unitVecs.size();
+                int i = 0;
+                while (i < length) {
+                    Vec2 vec = Core.listGet(AssertsGlobal.unitVecs, i);
+                    i = i + 1;
+                    {
+                        double actual = AssertsGlobal.normSquared(vec);
+                        double expected = 1.0;
+                        test.assert_(Double.compare(actual, expected) == 0, () -> "expected normSquared(vec) == (" + Core.float64ToString(expected) + ") not (" + Core.float64ToString(actual) + ")");
+                    }
+                }
             }
         } finally {
             test.softFailToHard();

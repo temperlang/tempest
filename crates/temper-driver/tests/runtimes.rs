@@ -8,8 +8,8 @@ use std::path::{Path, PathBuf};
 
 /// What Kotlin leaves out of a runtime it copies.
 fn left_out(backend: &str, path: &str) -> bool {
-    let name = path.rsplit('/').next().unwrap();
-    name.starts_with('.')
+    // Dotfiles, and what's in dot folders, as a checker's `.mypy_cache`.
+    path.split('/').any(|part| part.starts_with('.'))
         || (backend, path) == ("js", "package-lock.json")
         || (backend == "py" && path.starts_with("mypyc/"))
         || (backend == "java" && path.starts_with("src/test/"))

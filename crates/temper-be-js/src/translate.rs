@@ -87,6 +87,10 @@ pub struct Translator<'a> {
     /// The `let`s holding the static fields of the class being written,
     /// which go before it.
     static_lets: Vec<Stmt>,
+    /// Type parameters written as other types: a generic supertype's,
+    /// as the interface being written supplies them, while it declares
+    /// that supertype's members again.
+    type_args: HashMap<DeclId, String>,
 }
 
 /// What a module's tests use of it that it doesn't export: its private
@@ -186,6 +190,7 @@ impl<'a> Translator<'a> {
             uses_host: false,
             awaiters: Vec::new(),
             static_lets: Vec::new(),
+            type_args: HashMap::new(),
         }
     }
 
@@ -465,7 +470,10 @@ impl<'a> Translator<'a> {
                     false => format!("{text} | null"),
                 }
             }
-            TypeData::TypeParam { decl } => self.p.name(decl).to_string(),
+            TypeData::TypeParam { decl } => match self.type_args.get(&decl) {
+                Some(text) => text.clone(),
+                None => self.p.name(decl).to_string(),
+            },
         })
     }
 
