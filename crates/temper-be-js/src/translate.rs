@@ -446,7 +446,21 @@ impl<'a> Translator<'a> {
                 }
             }
             TypeData::Function { .. } => self.fn_type(ty)?,
-            TypeData::Nullable(inner) => format!("{} | null", self.ty(inner)?),
+            // A function type's `=>` would take the `| null`.
+            TypeData::Nullable(inner) => {
+                let text = self.ty(inner)?;
+                let function = match self.p.types.get(inner) {
+                    TypeData::Function { .. } => true,
+                    TypeData::Nominal { decl, .. } => {
+                        self.p.decls.get(decl).facts.contains(Facts::FUN)
+                    }
+                    _ => false,
+                };
+                match function {
+                    true => format!("({text}) | null"),
+                    false => format!("{text} | null"),
+                }
+            }
             TypeData::TypeParam { decl } => self.p.name(decl).to_string(),
         })
     }

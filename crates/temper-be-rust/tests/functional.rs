@@ -329,6 +329,23 @@ fn missing_host_code() {
     });
 }
 
+/// What the translation doesn't cover yet says where, from the
+/// innermost node with a span.
+#[test]
+fn not_yet_says_where() {
+    let text = "export class P(public x: Float64?) {}\n\
+                export let same(a: P, b: P): Boolean {\n  a.x == b.x\n}\n";
+    let case = Case::inline("where", "where.temper", text, Vec::new());
+    kit::with_stack(move || {
+        let error = translate(&kit::program_for(&case, &RUST.rules), &RUST).unwrap_err();
+        assert_eq!(error.at.as_deref(), Some("where.temper:3:3"), "{error}");
+        assert!(
+            error.to_string().ends_with(" at where.temper:3:3"),
+            "{error}"
+        );
+    });
+}
+
 fn runtime() -> PathBuf {
     kit::vendored("be-rust/temper-core")
 }

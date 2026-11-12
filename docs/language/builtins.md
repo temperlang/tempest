@@ -1752,8 +1752,14 @@ console.log("Hello, ${ world }!"); //!outputs "Hello, Earth!"
 ```
 
 As shown above, when importing from files under the same *work root*,
-use a relative file path starting with one of `"./"` or `"../"`.
+use a relative file path: `"."`, `".."`, or one starting with `"./"` or
+`"../"`.
 This allows multiple co-compiled libraries to link to one another.
+
+A bare `import("./tests");` statement, with nothing destructured, only
+makes that module part of the library, as for a module of tests that
+nothing else imports. It brings in no names, so the module it names may
+import the one naming it.
 
 Import specifiers always use the URL file separator (`/`), regardless
 of whether compilation happens on an operating-system like Linux which

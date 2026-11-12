@@ -82,11 +82,27 @@ pub const VARIANTS: &[&Variant] = &[&RUST];
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NotYet {
     pub what: String,
+    /// Where, as `path:line:column` ([`Program::location`]), if the
+    /// innermost node translated with a span gives it.
+    pub at: Option<String>,
+}
+
+impl NotYet {
+    pub fn new(what: impl Into<String>) -> NotYet {
+        NotYet {
+            what: what.into(),
+            at: None,
+        }
+    }
 }
 
 impl fmt::Display for NotYet {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "not yet in the Rust backend: {}", self.what)
+        write!(f, "not yet in the Rust backend: {}", self.what)?;
+        match &self.at {
+            Some(at) => write!(f, " at {at}"),
+            None => Ok(()),
+        }
     }
 }
 
@@ -247,13 +263,13 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
     let settled = temper_tmpl::errors::settle(p, &variant.profile);
     let p = settled.as_ref().unwrap_or(p);
     // Generators as state machines (`temper_tmpl::coroutines`).
-    let lowered = temper_tmpl::coroutines::lower(p, variant.profile.coroutines)
-        .map_err(|what| NotYet { what })?;
+    let lowered =
+        temper_tmpl::coroutines::lower(p, variant.profile.coroutines).map_err(NotYet::new)?;
     let p = lowered.as_ref().unwrap_or(p);
     // A captured `var` parameter as a local, which may be a cell.
     let copied = temper_tmpl::cells::copy_captured_params(p);
     let p = copied.as_ref().unwrap_or(p);
-    let names = assign_checked(p, &variant.rules).map_err(|what| NotYet { what })?;
+    let names = assign_checked(p, &variant.rules).map_err(NotYet::new)?;
     let package = &p.library.name;
     // std's package is `temper-std`, as Kotlin's, in `std/`; a config's
     // `rustName` names another's, in the library's directory still.

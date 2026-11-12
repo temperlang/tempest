@@ -91,6 +91,44 @@ public final class FunctionsGlobal {
         return n;
     }
 
+    static int climb(int x) {
+        int d;
+        if (x == 0) {
+            class DownGroup {
+                int down(int n) {
+                    if (n <= x) {
+                        return 0;
+                    } else {
+                        return down(n - 1) + 1;
+                    }
+                }
+            }
+            DownGroup downGroup = new DownGroup();
+            IntUnaryOperator down = downGroup::down;
+            d = down.applyAsInt(3);
+        } else {
+            return -1;
+        }
+        d = d + 1;
+        if (d == 4) {
+            int top = d + 1;
+            class UpGroup {
+                int up(int n) {
+                    if (n >= top) {
+                        return n;
+                    } else {
+                        return up(n + 1);
+                    }
+                }
+            }
+            UpGroup upGroup = new UpGroup();
+            IntUnaryOperator up = upGroup::up;
+            return up.applyAsInt(d);
+        } else {
+            return d;
+        }
+    }
+
     static {
         console = Core.getConsole(Logger.getLogger("functions"));
         IntSupplier counter = makeCounter(10);
@@ -206,5 +244,10 @@ public final class FunctionsGlobal {
         };
         drive(5, fn8);
         console.log("sum " + sumFrom(ns, 4) + " doubles " + doubles("bookkeeper"));
+        console.log("climb " + climb(0) + " " + climb(1));
+        Gate gate = new Gate();
+        console.log("gate " + gate.allows(0) + " " + gate.passed(4));
+        gate.check = x -> x - 1;
+        console.log("gate " + gate.allows(1) + " " + gate.allows(2) + " " + gate.passed(4));
     }
 }

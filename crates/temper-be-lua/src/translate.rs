@@ -482,7 +482,21 @@ impl<'a> Translator<'a> {
             TypeData::Function { .. } => self.function_type(ty)?,
             // `temper.null` stands for null, as Kotlin's, since Lua's `nil`
             // can't be a table's value or tell an argument left out.
-            TypeData::Nullable(t) => format!("{}|temper.Null", self.ty(t)?),
+            // A function type's result would take the `|temper.Null`.
+            TypeData::Nullable(t) => {
+                let text = self.ty(t)?;
+                let function = match self.p.types.get(t) {
+                    TypeData::Function { .. } => true,
+                    TypeData::Nominal { decl, .. } => {
+                        self.p.decls.get(decl).facts.contains(Facts::FUN)
+                    }
+                    _ => false,
+                };
+                match function {
+                    true => format!("({text})|temper.Null"),
+                    false => format!("{text}|temper.Null"),
+                }
+            }
             // A function's, by its `---@generic` name; a class's, which
             // LuaLS's classes don't take, any.
             TypeData::TypeParam { decl } => {

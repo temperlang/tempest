@@ -143,8 +143,12 @@ impl Settle {
             },
             // Expanded by `expand_chain_null`, as its callee isn't a name.
             Macro::ChainNull => false,
-            // Only in `let { … } = import(…)`, which `Settle::import` reads.
-            Macro::Import => false,
+            // `let { … } = import(…)` is `Settle::import`'s; this is a
+            // bare `import("…")` statement.
+            Macro::Import => match *args {
+                [path] => self.bare_import(call, path),
+                _ => false,
+            },
             Macro::Test => self.expand_test(call, scope, &args),
             Macro::Assert => self.expand_assert(call, scope, &args),
             Macro::Orelse => match *args {

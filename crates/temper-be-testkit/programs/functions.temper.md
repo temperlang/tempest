@@ -7,8 +7,10 @@ core's list members that take functions (`map`, `filter`, `join`, and
 closures made in a loop, each capturing that time round's `let`, in a
 function and in a generator, which is stepped once past its end; and
 loops: `continue` in a `for … of`, and a `for` whose second
-declaration reads the first. The log is what tempest's interpreter
-gives.
+declaration reads the first; a local function that calls itself, in a
+block that's a `let`'s value and in one that's a function's; and a
+nullable `@fun` value held in a local and called after a null check.
+The log is what tempest's interpreter gives.
 
     @fun interface Counter(): Int;
     @fun interface IntOp(x: Int): Int;
@@ -96,6 +98,40 @@ gives.
       n
     }
     console.log("sum ${sumFrom(ns, 4)} doubles ${doubles("bookkeeper")}");
+    let climb(x: Int): Int {
+      var d = when (x) {
+        0 -> do {
+          let down(n: Int): Int { if (n <= x) { 0 } else { down(n - 1) + 1 } }
+          down(3)
+        }
+        else -> return -1;
+      };
+      d += 1;
+      when (d) {
+        4 -> do {
+          let top = d + 1;
+          let up(n: Int): Int { if (n >= top) { n } else { up(n + 1) } }
+          up(d)
+        }
+        else -> d
+      }
+    }
+    console.log("climb ${climb(0)} ${climb(1)}");
+    class Gate() {
+      public var check: IntOp? = null;
+      public allows(n: Int): Boolean {
+        let c = check;
+        c == null || c(n) > 0
+      }
+      public passed(n: Int): Int {
+        let c = check;
+        if (c != null) { c(n) } else { n }
+      }
+    }
+    let gate = new Gate();
+    console.log("gate ${gate.allows(0)} ${gate.passed(4)}");
+    gate.check = fn (x: Int): Int { x - 1 };
+    console.log("gate ${gate.allows(1)} ${gate.allows(2)} ${gate.passed(4)}");
 
 ```log
 count 12
@@ -109,4 +145,7 @@ hits 2
 0 10 20
 0 1 10 11 20 21
 sum 17 doubles 3
+climb 5 -1
+gate true 4
+gate false true 3
 ```

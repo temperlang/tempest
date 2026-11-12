@@ -51,7 +51,7 @@ use temper_tmpl::{
 type R<T> = Result<T, NotYet>;
 
 fn not_yet<T>(what: impl Into<String>) -> R<T> {
-    Err(NotYet { what: what.into() })
+    Err(NotYet::new(what))
 }
 
 /// What a place wants of the value written there.
@@ -1360,7 +1360,23 @@ impl<'a> Translator<'a> {
             && matches!(p.nodes.get(right), Node::Null {})
     }
 
+    /// A not-yet error from translating `id`, given `id`'s place unless
+    /// a node inside it gave its own.
+    fn placed<T>(&self, id: NodeId, made: R<T>) -> R<T> {
+        made.map_err(|mut e| {
+            if e.at.is_none() {
+                e.at = self.p.location(self.p.nodes.span(id));
+            }
+            e
+        })
+    }
+
     fn stmt(&mut self, id: NodeId, out: &mut Vec<Stmt>) -> R<()> {
+        let made = self.stmt_of(id, out);
+        self.placed(id, made)
+    }
+
+    fn stmt_of(&mut self, id: NodeId, out: &mut Vec<Stmt>) -> R<()> {
         let p = self.p;
         match p.nodes.get(id) {
             Node::Block { .. } => {
@@ -1906,6 +1922,11 @@ impl<'a> Translator<'a> {
     }
 
     pub(crate) fn expr(&mut self, id: NodeId, want: Want) -> R<Expr> {
+        let made = self.expr_of(id, want);
+        self.placed(id, made)
+    }
+
+    fn expr_of(&mut self, id: NodeId, want: Want) -> R<Expr> {
         let p = self.p;
         let ty = p.nodes.ty(id);
         let e = match p.nodes.get(id) {

@@ -641,7 +641,7 @@ impl Library {
     }
 
     /// The directory an import path names from a module: a relative one,
-    /// as `./b/` or `../c`, one in the standard library, as
+    /// as `./b/`, `../c`, `.`, or `..`, one in the standard library, as
     /// `std/temporal`, under [`Library::std_root`], or one in a library
     /// of [`Library::libraries`], as `other-lib/sub` or `other-lib`, under
     /// its root. `None` for others.
@@ -649,7 +649,9 @@ impl Library {
         if let Some(rest) = path.strip_prefix("std/") {
             return Some(normalize(&format!("{}/{rest}", self.std_root())));
         }
-        if !(path.starts_with("./") || path.starts_with("../")) {
+        let relative =
+            matches!(path, "." | "..") || path.starts_with("./") || path.starts_with("../");
+        if !relative {
             let (first, rest) = path.split_once('/').unwrap_or((path, ""));
             let (_, root) = self.libraries.iter().find(|(name, _)| name == first)?;
             return Some(normalize(&format!("{root}/{rest}")));

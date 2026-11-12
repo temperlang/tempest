@@ -7,6 +7,7 @@ from concurrent.futures import Future as _Future
 from temper_core import (
     LoggingConsole as _LoggingConsole,
     adapt_generator_factory as _adapt_generator_factory,
+    boolean_to_string as _boolean_to_string,
     int_add as _int_add,
     int_mul as _int_mul,
     int_sub as _int_sub,
@@ -107,6 +108,60 @@ def _doubles(s: str, /) -> int:
     return n
 
 
+def _climb(x: int, /) -> int:
+    d: int
+    if x == 0:
+        def down(n: int, /) -> int:
+            if n <= x:
+                return 0
+            else:
+                return _int_add(down(_int_sub(n, 1)), 1)
+        d = down(3)
+    else:
+        return -1
+    d = _int_add(d, 1)
+    if d == 4:
+        top = _int_add(d, 1)
+        def up(n: int, /) -> int:
+            if n >= top:
+                return n
+            else:
+                return up(_int_add(n, 1))
+        return up(d)
+    else:
+        return d
+
+
+class _Gate:
+    __slots__ = ('_check',)
+    _check: _Callable[[int], int] | None
+
+    def __init__(self, /) -> None:
+        self._check = None
+
+    @property
+    def check(self, /) -> _Callable[[int], int] | None:
+        return self._check
+
+    @check.setter
+    def check(self, value: _Callable[[int], int] | None, /) -> None:
+        self._check = value
+
+    def allows(self, n: int, /) -> bool:
+        c: _Callable[[int], int] | None = self._check
+        if c is None:
+            return True
+        else:
+            return c(n) > 0
+
+    def passed(self, n: int, /) -> int:
+        c: _Callable[[int], int] | None = self._check
+        if c is not None:
+            return c(n)
+        else:
+            return n
+
+
 _console: _LoggingConsole = _LoggingConsole(__name__)
 _counter: _Callable[[], int] = _make_counter(10)
 _counter()
@@ -164,3 +219,8 @@ def _fn8(do_await: _Callable[[_Future[_Any]], _Any], /) -> _Generator[_Any, _Any
 
 _drive(5, _fn8)
 _console.log(f"sum {_sum_from(_ns, 4)} doubles {_doubles('bookkeeper')}")
+_console.log(f'climb {_climb(0)} {_climb(1)}')
+_gate: _Gate = _Gate()
+_console.log(f'gate {_boolean_to_string(_gate.allows(0))} {_gate.passed(4)}')
+_gate.check = lambda x: _int_sub(x, 1)
+_console.log(f'gate {_boolean_to_string(_gate.allows(1))} {_boolean_to_string(_gate.allows(2))} {_gate.passed(4)}')

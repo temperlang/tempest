@@ -2159,6 +2159,7 @@ impl Translator<'_> {
             NodeKind::Break | NodeKind::Continue | NodeKind::Return => self.stmt(node, out),
             NodeKind::Block if !self.children(node).is_empty() => {
                 let children = self.children(node).to_vec();
+                self.predeclare_functions(&children)?;
                 let (&last, rest) = children.split_last().unwrap();
                 for &child in rest {
                     self.stmt(child, out)?;
@@ -2542,6 +2543,7 @@ impl Translator<'_> {
             return Ok(());
         }
         let children = self.children(node).to_vec();
+        self.predeclare_functions(&children)?;
         if let Some((&last, rest)) = children.split_last() {
             for &child in rest {
                 self.stmt(child, out)?;

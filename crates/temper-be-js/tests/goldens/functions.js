@@ -108,6 +108,51 @@ function doubles(s) {
   return n;
 }
 
+/**
+ * @param {number} x
+ * @returns {number}
+ */
+function climb(x) {
+  /** @type {number} */
+  let d;
+  if (x === 0) {
+    /**
+     * @param {number} n
+     * @returns {number}
+     */
+    function down(n) {
+      if (n <= x) {
+        return 0;
+      } else {
+        return (down((n - 1) | 0) + 1) | 0;
+      }
+    }
+    d = down(3);
+  } else {
+    return -1;
+  }
+  d = (d + 1) | 0;
+  {
+    if (d === 4) {
+      const top = (d + 1) | 0;
+      /**
+       * @param {number} n
+       * @returns {number}
+       */
+      function up(n) {
+        if (n >= top) {
+          return n;
+        } else {
+          return up((n + 1) | 0);
+        }
+      }
+      return up(d);
+    } else {
+      return d;
+    }
+  }
+}
+
 class Scaler extends type() {
   /**
    * @param {number} x
@@ -155,6 +200,52 @@ class Button extends type() {
   /** @returns {string} */
   press() {
     return `${this.#label} ${this.#onPress()}`;
+  }
+}
+
+class Gate extends type() {
+  /** @type {((arg0: number) => number) | null} */
+  #check;
+
+  constructor() {
+    super();
+    this.#check = null;
+  }
+
+  /** @returns {((arg0: number) => number) | null} */
+  get check() {
+    return this.#check;
+  }
+
+  /** @param {((arg0: number) => number) | null} value */
+  set check(value) {
+    this.#check = value;
+  }
+
+  /**
+   * @param {number} n
+   * @returns {boolean}
+   */
+  allows(n) {
+    const c = this.#check;
+    if (c == null) {
+      return true;
+    } else {
+      return c(n) > 0;
+    }
+  }
+
+  /**
+   * @param {number} n
+   * @returns {number}
+   */
+  passed(n) {
+    const c = this.#check;
+    if (c != null) {
+      return c(n);
+    } else {
+      return n;
+    }
   }
 }
 
@@ -225,3 +316,8 @@ function* fn8(doAwait) {
 
 drive(5, adaptAwaiter(fn8));
 console.log(`sum ${sumFrom(ns, 4)} doubles ${doubles("bookkeeper")}`);
+console.log(`climb ${climb(0)} ${climb(1)}`);
+const gate = new Gate();
+console.log(`gate ${gate.allows(0)} ${gate.passed(4)}`);
+gate.check = (x) => (x - 1) | 0;
+console.log(`gate ${gate.allows(1)} ${gate.allows(2)} ${gate.passed(4)}`);

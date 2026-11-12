@@ -89,6 +89,53 @@ public static class FunctionsGlobal
         return n;
     }
 
+    internal static int Climb(int x)
+    {
+        int d;
+        if (x == 0)
+        {
+            int down(int n)
+            {
+                if (n <= x)
+                {
+                    return 0;
+                }
+                else
+                {
+                    return down(n - 1) + 1;
+                }
+            }
+            d = down(3);
+        }
+        else
+        {
+            return -1;
+        }
+        d = d + 1;
+        {
+            if (d == 4)
+            {
+                int top = d + 1;
+                int up(int n)
+                {
+                    if (n >= top)
+                    {
+                        return n;
+                    }
+                    else
+                    {
+                        return up(n + 1);
+                    }
+                }
+                return up(d);
+            }
+            else
+            {
+                return d;
+            }
+        }
+    }
+
     static FunctionsGlobal()
     {
         console = Support.Logging.LoggingConsoleFactory.CreateConsole("Functions");
@@ -155,5 +202,10 @@ public static class FunctionsGlobal
         }
         Drive(5, fn8);
         console.Log(string.Create(CultureInfo.InvariantCulture, $"sum {SumFrom(ns, 4)} doubles {Doubles("bookkeeper")}"));
+        console.Log(string.Create(CultureInfo.InvariantCulture, $"climb {Climb(0)} {Climb(1)}"));
+        Gate gate = new Gate();
+        console.Log("gate " + (gate.Allows(0) ? "true" : "false") + " " + gate.Passed(4).ToString(CultureInfo.InvariantCulture));
+        gate.Check = (int x) => x - 1;
+        console.Log("gate " + (gate.Allows(1) ? "true" : "false") + " " + (gate.Allows(2) ? "true" : "false") + " " + gate.Passed(4).ToString(CultureInfo.InvariantCulture));
     }
 }

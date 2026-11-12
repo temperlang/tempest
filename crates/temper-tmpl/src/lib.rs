@@ -221,6 +221,17 @@ impl Program {
         found
     }
 
+    /// Where a span starts, as `path:line:column`, both from 1, the column
+    /// in UTF-16 units, as source maps count it; just the path without
+    /// its file's text; `None` for an unknown span.
+    pub fn location(&self, span: Span) -> Option<String> {
+        let file = self.files.get(span.file.index())?;
+        Some(match file.position(span.start) {
+            Some((line, column)) => format!("{}:{}:{}", file.path, line + 1, column + 1),
+            None => file.path.clone(),
+        })
+    }
+
     /// The library's version, or Kotlin's default, `0.0.1`, where it sets
     /// none (`0.0.0`, as the frontend gives it), for the package files
     /// that always name one.

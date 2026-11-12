@@ -1418,7 +1418,11 @@ so tmpl's translation doesn't resolve again (notes/tmpl/nodes.md,
   equality it negates, and `<` and the like the `<=>` method they
   compare with zero.
 - **A null check:** `a == null` or `a != null`, either way round.
-- **A call of a function value,** as `f(1)` for a parameter `f`.
+- **A call of a function value,** as `f(1)` for a parameter `f`, or
+  for a local `let f = field` that holds one: another name resolves to
+  what it names only for a function (an import's), so a local holding a
+  value is called as the value it holds, narrowed by a null check if one
+  narrows it, not read again from where it came from.
 
 `==` with nothing to call but identity, as for a type parameter's value,
 `AnyValue`, a function, or a class or interface with no `==` typing can

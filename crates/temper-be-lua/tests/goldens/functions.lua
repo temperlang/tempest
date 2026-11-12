@@ -135,6 +135,81 @@ local function doubles(s)
   return n
 end
 
+---@param x integer
+---@return integer
+local function climb(x)
+  ---@type integer
+  local d
+  if x == 0 then
+    ---@param n integer
+    ---@return integer
+    local function down(n)
+      if n <= x then
+        return 0
+      else
+        return temper.int32_add(down(temper.int32_sub(n, 1)), 1)
+      end
+    end
+    d = down(3)
+  else
+    return -1
+  end
+  d = temper.int32_add(d, 1)
+  if d == 4 then
+    local top = temper.int32_add(d, 1)
+    ---@param n integer
+    ---@return integer
+    local function up(n)
+      if n >= top then
+        return n
+      else
+        return up(temper.int32_add(n, 1))
+      end
+    end
+    return up(d)
+  else
+    return d
+  end
+end
+
+---@class functions.Gate
+---@field check (fun(arg0: integer): integer)|temper.Null
+---@field allows fun(self: functions.Gate, n: integer): boolean
+---@field passed fun(self: functions.Gate, n: integer): integer
+
+---@class functions.Gate.type: temper.Type
+---@operator call: functions.Gate
+local Gate = temper.type("functions.Gate")
+
+---@param this functions.Gate
+function Gate.constructor(this)
+  this.check = temper.null
+end
+
+---@param this functions.Gate
+---@param n integer
+---@return boolean
+function Gate.methods.allows(this, n)
+  local c = this.check
+  if temper.is_null(c) then
+    return true
+  else
+    return (c --[[@as fun(arg0: integer): integer]])(n) > 0
+  end
+end
+
+---@param this functions.Gate
+---@param n integer
+---@return integer
+function Gate.methods.passed(this, n)
+  local c = this.check
+  if not temper.is_null(c) then
+    return (c --[[@as fun(arg0: integer): integer]])(n)
+  else
+    return n
+  end
+end
+
 local counter = makeCounter(10)
 counter()
 print("count " .. counter())
@@ -192,5 +267,10 @@ end
 
 drive(5, temper.adapt_generator_fn(fn8))
 print("sum " .. sumFrom(ns, 4) .. " doubles " .. doubles("bookkeeper"))
+print("climb " .. climb(0) .. " " .. climb(1))
+local gate = Gate()
+print("gate " .. tostring(gate:allows(0)) .. " " .. gate:passed(4))
+gate.check = function(x) return temper.int32_sub(x, 1) end
+print("gate " .. tostring(gate:allows(1)) .. " " .. tostring(gate:allows(2)) .. " " .. gate:passed(4))
 
 return {}
