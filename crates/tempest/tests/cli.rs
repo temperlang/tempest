@@ -235,7 +235,7 @@ fn with_library(test: &str, files: &[(&str, &str)], f: impl FnOnce(&str)) {
 fn test_a_library() {
     let files = [("a.temper", "test(\"a\") { assert(1 + 1 == 2) }\n")];
     with_library("plain", &files, |dir| {
-        let std_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../vendor/temper/std");
+        let std_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../lib/std");
         let std_dir = std_dir.to_string_lossy();
         // Only the summary, as `temper test` prints when all pass.
         let (code, out, err) = tempest(&["test", "--std", &std_dir, dir]);
@@ -448,7 +448,7 @@ fn built_in_std() {
 /// Fibonacci, from Kotlin's functional tests, as a library of its name.
 fn with_fibonacci(test: &str, f: impl FnOnce(&str)) {
     let fib = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../vendor/temper/functional-tests/algos/fibonacci/fibonacci.temper.md");
+        .join("../temper-funtests/cases/algos/fibonacci/fibonacci.temper.md");
     let fib = fs::read_to_string(fib).unwrap();
     let files = [
         ("config.temper.md", "    export let name = \"fibonacci\";\n"),
@@ -572,7 +572,7 @@ fn build_writes_each_backend_to_a_directory() {
 #[cfg(all(feature = "py", feature = "lua", feature = "cpp"))]
 fn build_writes_temper_out() {
     let fib = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../vendor/temper/functional-tests/algos/fibonacci/fibonacci.temper.md");
+        .join("../temper-funtests/cases/algos/fibonacci/fibonacci.temper.md");
     let files = [
         ("fib.temper.md", fs::read_to_string(fib).unwrap()),
         (
@@ -713,7 +713,7 @@ fn cmake_builds_a_library() {
         return;
     }
     let fib = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../vendor/temper/functional-tests/algos/fibonacci/fibonacci.temper.md");
+        .join("../temper-funtests/cases/algos/fibonacci/fibonacci.temper.md");
     let files = [("fib.temper.md", fs::read_to_string(fib).unwrap())];
     let files: Vec<(&str, &str)> = files.iter().map(|(p, t)| (*p, t.as_str())).collect();
     with_library("cmake", &files, |dir| {

@@ -33,7 +33,7 @@ First guesses, to be checked against measurements:
   install. The Lua backend's harness does this (below, "Lua's fast path,
   as tried").
 - **JS:** link packages into one `node_modules` and run everything in one
-  Node process. The functional-test harness already copies the vendored
+  Node process. The functional-test harness already copies the
   runtime this way instead of running `npm install`.
 - **Rust:** a persistent target directory, `temper-core` built once per
   machine, one test binary per library, and a dev profile tuned for build

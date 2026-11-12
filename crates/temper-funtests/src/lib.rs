@@ -1,6 +1,5 @@
-//! Kotlin Temper's functional tests, from the vendored copy in
-//! `vendor/temper/functional-tests` (see `vendor/temper/SOURCE.md`), for
-//! crates that build or translate them in their tests.
+//! Temper's functional tests, in this crate's `cases/`, for crates that
+//! build or translate them in their tests.
 //!
 //! Each test is a directory whose main file is named after it
 //! (`algos/fibonacci/fibonacci.temper.md`). [`tests`] lists them;
@@ -15,20 +14,20 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// The vendored repository of Kotlin Temper's sources.
-fn vendor() -> PathBuf {
-    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../vendor/temper");
+/// The repository's root directory.
+fn repo() -> PathBuf {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     fs::canonicalize(&dir).unwrap_or(dir)
 }
 
-/// The functional tests' root directory.
+/// The functional tests' root directory, this crate's `cases/`.
 pub fn suite_dir() -> PathBuf {
-    vendor().join("functional-tests")
+    repo().join("crates/temper-funtests/cases")
 }
 
-/// The vendored std's root directory.
+/// std's root directory, the repository's `lib/std/`.
 pub fn std_dir() -> PathBuf {
-    vendor().join("std")
+    repo().join("lib/std")
 }
 
 /// One functional test.

@@ -1,5 +1,5 @@
 //! Members of builtin types, with their signatures read from Kotlin
-//! Temper's `core.temper` (vendored in `vendor/temper/core`): the final
+//! Temper's `core.temper` (the repository's `lib/core/`): the final
 //! ones (`Boolean`, `Int32`, `Int64`, `Float64` and `String`), as
 //! `s.toInt32()`, `x.toString()`, `s.isEmpty` or `String.fromCodePoint(c)`,
 //! and the generic ones, as `ls.length`, `ls.get(i)` or `m.keys()`, whose

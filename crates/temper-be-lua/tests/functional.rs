@@ -1,6 +1,6 @@
 //! The Lua backend on Kotlin Temper's functional tests that tmpl's
-//! translation covers so far, from the vendored copy
-//! (`temper-funtests`), its class tests among them (`kit::CLASSES`),
+//! translation covers so far, in `temper-funtests`'s
+//! `cases/`, its class tests among them (`kit::CLASSES`),
 //! those with nullable types and `orelse` (`kit::NULLABLES`), those
 //! with generics (`kit::GENERICS`), those with core's other types
 //! and members (`kit::CORE_TYPES`), and those with a library's own
@@ -34,8 +34,8 @@
 //! - `programs_log_as_the_interpreter_does`: Lua's own Temper programs
 //!   log, on tempest's interpreter, what the test expects of them.
 //! - `runs`: with `lua` (or `LUA`), from the directory holding the
-//!   generated libraries and the vendored runtime
-//!   (`vendor/temper/be-lua/temper-core`), with Kotlin's `LUA_PATH`
+//!   generated libraries and the runtime
+//!   (`crates/temper-be-lua/runtime/temper-core`), with Kotlin's `LUA_PATH`
 //!   (`?.lua;?/init.lua`), one process requires every library in turn,
 //!   and each logs what the test expects of Kotlin's `lua` backend (a
 //!   library named as one before it, as both `basics`, in a directory
@@ -454,7 +454,7 @@ fn tool(var: &str, name: &str, arg: &str) -> Option<String> {
 }
 
 fn runtime() -> PathBuf {
-    kit::vendored("be-lua/temper-core")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("runtime/temper-core")
 }
 
 /// Kotlin's `LUA_PATH`, for running from the directory that holds the
@@ -694,7 +694,11 @@ fn runs() {
         // Runs as tests, as Kotlin's `Lua51Specifics`: each tests file with
         // LuaUnit, `-o junit`, its failures compared with what's expected.
         for (case, here) in apart.iter().filter(|(c, _)| c.tests.is_some()) {
-            kit::copy_dir(&kit::vendored("be-lua/luaunit"), &here.join("luaunit"), &[]);
+            kit::copy_dir(
+                &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("runtime/luaunit"),
+                &here.join("luaunit"),
+                &[],
+            );
             let mut files = Vec::new();
             kit::files_with(&here.join(&case.library).join("tests"), "lua", &mut files);
             for file in files {

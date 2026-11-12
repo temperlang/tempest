@@ -11,7 +11,7 @@ Each entry where tempest fixes or avoids a Kotlin bug ends with
 are under `crates/`: `settle/X.cases` is
 `temper-frontend/tests/settle/X.cases`, its cases named by their `===`
 titles; `programs/X` is the backends' shared program in
-`temper-be-testkit/programs/`; a funtest is a vendored functional test,
+`temper-be-testkit/programs/`; a funtest is a functional test in `temper-funtests/cases/`,
 and `kit::X` a list of them, that each backend's `tests/functional.rs`
 runs. Entries without one aren't fixed yet, match Kotlin, or are
 proposals. A new fix gets its test in the same change.
@@ -1279,7 +1279,7 @@ Other differences we won't copy:
     `@returns {Generator<any>}`, as what it yields is the runtime's, and
     `yield;` yields nothing, where Kotlin's `yield null` fails strict
     tsc against `Generator<{}>`.
-  - **Lua:** the runtime has promises and `async` (vendored patch 0006),
+  - **Lua:** the runtime has promises and `async` (runtime [change 0006](../docs/internals/detail/06-backends.md#changes-from-kotlin-tempers-runtimes)),
     which Kotlin's Lua calls but lacks (its issue 144); a block starts
     at once and runs to its first pause.
   - **C#:** `Async` is `global::TemperLang.Core.Async`, in Program.cs
@@ -1289,7 +1289,7 @@ Other differences we won't copy:
     lasting locals are cells, as tempest's captured locals are, where
     Kotlin's share one class.
   - **C++:** settling a promise from outside any `async` block drains
-    the queue (vendored patch 0005), so `async-broken-early` and
+    the queue (runtime [change 0005](../docs/internals/detail/06-backends.md#changes-from-kotlin-tempers-runtimes)), so `async-broken-early` and
     `await-in-loop` pass, which Kotlin's C++ fails (its note 520); and
     C++20 code can `co_await` a Temper promise.
   - **State machines** (Rust, Java, C++) are tmpl's `if`/`else if`
@@ -1321,7 +1321,7 @@ Other differences we won't copy:
   result is each language's own (Python's 1-tuple or `None`, JS's
   `IteratorResult`, Lua's `{ true, v }` or `{}`, Rust's `Option`).
   Lua's runtime passes the value on, and a factory's arguments, which
-  it dropped (its TODO; vendored patch 0020). Typing gives a literal
+  it dropped (its TODO; runtime [change 0020](../docs/internals/detail/06-backends.md#changes-from-kotlin-tempers-runtimes)). Typing gives a literal
   its factory's type, `fn (T): SafeGenerator<Y>`, where Kotlin's
   leaves it unchecked, but not for one with optional parameters,
   which Kotlin accepts where a function type takes fewer.
@@ -2053,8 +2053,8 @@ copied Kotlin's:
   - **JS:** the runtime declares `listedReduceFrom`'s and
     `mappedToListWith`'s functions with the wrong parameters, and
     `mappedToMap`'s result as a `FreezeMap`, which isn't a `Map` to
-    `tsc`; tempest's copy of the runtime fixes their JSDoc
-    (`vendor/temper-patches/`), so calls need no casts.
+    `tsc`; tempest's runtime fixes their JSDoc
+    ([change 0001](../docs/internals/detail/06-backends.md#changes-from-kotlin-tempers-runtimes)), so calls need no casts.
   - **Python:** a one-expression literal passed where core's method
     wants a function that gives back the receiver's type parameter
     (`reduce`'s `fn (T, T): T`) is a `def`, as all of Kotlin's are,
@@ -2142,8 +2142,8 @@ copied Kotlin's:
   where Kotlin's aliases every import with a number (`Sequence as
   Sequence17`). Kotlin's runtime types four of its regex
   helpers wrong for `tsc` (`compiled` as a `RegExp`, `regexCompiledSplit`
-  without `regexRefs`, and `out` as `[string]`); tempest's copy fixes
-  their JSDoc (`vendor/temper-patches/`), so std calls them plainly.
+  without `regexRefs`, and `out` as `[string]`); tempest's runtime fixes
+  their JSDoc ([change 0001](../docs/internals/detail/06-backends.md#changes-from-kotlin-tempers-runtimes)), so std calls them plainly.
   Test: `kit::WITH_STD` (regex/match, regex/zero-advance), with `tsc`
   and the Python checkers.
 - **std's `regex`, in Rust, Java, C#, and C++** (2026-11-03): each
@@ -2237,8 +2237,8 @@ copied Kotlin's:
   dict)`), as Kotlin's `argless` types, and annotates a local a cast
   initializes, which pyright otherwise types as the cast's argument.
   `stringToInt64` gives a `bigint`, which Kotlin's JSDoc says is a
-  `number`; tempest's copy of the runtime says `bigint`
-  (`vendor/temper-patches/`), so `tsc` passes std's
+  `number`; tempest's runtime says `bigint`
+  ([change 0001](../docs/internals/detail/06-backends.md#changes-from-kotlin-tempers-runtimes)), so `tsc` passes std's
   `JsonNumericToken.asInt64`. Rust
   writes a value `orelse` whose fallback bubbles as `if let Ok(v) = … {
   v } else { … }`, and a constructor's statements that read fields
@@ -2268,9 +2268,8 @@ copied Kotlin's:
     concatenation too (`any_box(core::Str(…))`).
   - **JS:** be-js's `listBuilderSplice` JSDoc takes neither a null
     `index` nor a read-only `newValues`, so strict tsc rejects Kotlin's
-    own calls of it; tempest patches the types
-    (`vendor/temper-patches/0002-js-splice-jsdoc-types.patch`), a
-    Kotlin fix to make.
+    own calls of it; tempest fixes the types
+    ([change 0002](../docs/internals/detail/06-backends.md#changes-from-kotlin-tempers-runtimes)).
   - **Rust** casts a nullable value with `x.and_then(cast::<T>)`, as
     Kotlin's, where tempest had passed the `Option`, and clippy's
     `approx_constant` is allowed in the tests for as-expr's `3.14`.

@@ -1,6 +1,6 @@
 //! The Rust backend on Kotlin Temper's functional tests that tmpl's
-//! translation covers so far, from the vendored copy
-//! (`temper-funtests`), with the class tests (`kit::CLASSES`), those
+//! translation covers so far, in `temper-funtests`'s
+//! `cases/`, with the class tests (`kit::CLASSES`), those
 //! with nullable types and `orelse` (`kit::NULLABLES`), those with
 //! generics (`kit::GENERICS`), those with function values
 //! (`kit::FUNCTIONS`), those with parameters' defaults
@@ -31,8 +31,8 @@
 //!   review the diff.
 //! - `runs`: the generated crates, in one cargo workspace with one target
 //!   directory (under `CARGO_TARGET_TMPDIR`, kept between runs so builds
-//!   are incremental), build offline against the vendored `temper-core`
-//!   (`vendor/temper/be-rust/temper-core`, with its `Cargo.lock`), and
+//!   are incremental), build offline against `temper-core`
+//!   (`crates/temper-be-rust/runtime/temper-core`, with its `Cargo.lock`), and
 //!   each program logs what the test expects of Kotlin's `rust` backend;
 //!   a harness also runs `module-state` from 8 threads, with no `init`
 //!   first, which their first reads run, and another calls libraries
@@ -46,7 +46,7 @@
 //!   compared with its `expectedFailures`, as Kotlin's `RunRust` reads
 //!   them ([`cargo_test_failures`]). Skipped, with a message, without cargo
 //!   or clippy, or if `temper-core`'s one dependency, `indexmap`, isn't
-//!   in cargo's cache (`cargo fetch` in the vendored `temper-core` puts
+//!   in cargo's cache (`cargo fetch` in `temper-core` puts
 //!   it there); with `TEMPEST_REQUIRE_CHECKERS` set, as in CI, any of
 //!   those fails it instead.
 
@@ -277,7 +277,7 @@ fn goldens() {
             }
             goldens.check(&format!("{}.rs", case.key), &files[3].text);
             // `lib.rs` and `Cargo.toml` where modules or libraries show.
-            if !case.sources[0].0.contains("functional-tests")
+            if !case.sources[0].0.contains("temper-funtests/cases/")
                 && (files.len() > 5 || files[0].text.contains("std"))
                 || !case.libraries.is_empty()
             {
@@ -347,7 +347,7 @@ fn not_yet_says_where() {
 }
 
 fn runtime() -> PathBuf {
-    kit::vendored("be-rust/temper-core")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("runtime/temper-core")
 }
 
 /// The harness that runs `module-state` from several threads.
@@ -565,7 +565,7 @@ fn runs_and_lints() {
         if !fetch.status.success() {
             kit::missing(&format!(
                 "temper-core's dependencies aren't in cargo's cache (`cargo fetch` in \
-                 vendor/temper/be-rust/temper-core gets them):\n{}",
+                 crates/temper-be-rust/runtime/temper-core gets them):\n{}",
                 String::from_utf8_lossy(&fetch.stderr)
             ));
             return;

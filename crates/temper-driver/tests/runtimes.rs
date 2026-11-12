@@ -1,7 +1,7 @@
 //! Each backend's built-in runtime (`temper_be_*::runtime::FILES`), which
-//! `tempest build` writes beside the libraries, is the vendored one, as
-//! Kotlin copies it: every file of `vendor/temper/be-*/temper-core` but
-//! its dotfiles and its own tests and tools, with the same text.
+//! `tempest build` writes beside the libraries, is its crate's
+//! `runtime/temper-core`, copied as Kotlin copies it: every file but its
+//! dotfiles and its own tests and tools, with the same text.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -15,11 +15,11 @@ fn left_out(backend: &str, path: &str) -> bool {
         || (backend == "java" && path.starts_with("src/test/"))
 }
 
-fn vendored(backend: &str, dir: &Path, root: &Path, out: &mut Vec<(String, String)>) {
+fn source_files(backend: &str, dir: &Path, root: &Path, out: &mut Vec<(String, String)>) {
     for entry in fs::read_dir(dir).unwrap() {
         let path = entry.unwrap().path();
         if path.is_dir() {
-            vendored(backend, &path, root, out);
+            source_files(backend, &path, root, out);
             continue;
         }
         let rel = path
@@ -36,10 +36,9 @@ fn vendored(backend: &str, dir: &Path, root: &Path, out: &mut Vec<(String, Strin
 #[allow(dead_code)] // Unless every backend is left out.
 fn check(backend: &str, files: &[(&str, &str)]) {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../vendor/temper")
-        .join(format!("be-{backend}/temper-core"));
+        .join(format!("../temper-be-{backend}/runtime/temper-core"));
     let mut expected = Vec::new();
-    vendored(backend, &root, &root, &mut expected);
+    source_files(backend, &root, &root, &mut expected);
     expected.sort();
     let mut actual: Vec<(String, String)> = (files.iter())
         .map(|(p, t)| {
@@ -55,7 +54,7 @@ fn check(backend: &str, files: &[(&str, &str)]) {
 }
 
 #[test]
-fn runtimes_are_the_vendored_ones() {
+fn runtimes_are_the_crates_own() {
     #[cfg(feature = "cpp")]
     check("cpp", temper_be_cpp::runtime::FILES);
     #[cfg(feature = "csharp")]

@@ -1,10 +1,11 @@
 [workspace]
 resolver = "3"
 members = ["crates/*"]
-# Vendored runtimes (Rust's `temper-core`) build only with generated code.
-# `library` is where the nightly workflow checks out a Temper library, so
-# its generated crates build on their own.
-exclude = ["vendor", "library"]
+# The Rust backend's runtime (`temper-core`, with its own Cargo.lock)
+# builds on its own, as generated crates use it. `library` is where the
+# nightly workflow checks out a Temper library, so its generated crates
+# build on their own.
+exclude = ["crates/temper-be-rust/runtime", "library"]
 
 [workspace.package]
 edition = "2024"

@@ -1,6 +1,6 @@
 //! The Java backend on Kotlin Temper's functional tests that tmpl's
-//! translation covers so far, from the vendored copy
-//! (`temper-funtests`), and on the shared programs
+//! translation covers so far, in `temper-funtests`'s
+//! `cases/`, and on the shared programs
 //! (`crates/temper-be-testkit/programs/`), which cover operators,
 //! jumps, module state, several modules, imports, tests, classes, and
 //! nullables beyond those tests; with the class tests
@@ -28,8 +28,8 @@
 //!   too, as `functions-connected.WorkConnected.java`). To accept new or
 //!   changed output,
 //!   run with `UPDATE_SNAPSHOTS=1` and review the diff.
-//! - `runs`: without Maven, `javac` (or `JAVAC`) compiles the vendored
-//!   `temper-core` (`vendor/temper/be-java/temper-core`) once, for Java 8
+//! - `runs`: without Maven, `javac` (or `JAVAC`) compiles
+//!   `temper-core` (`crates/temper-be-java/runtime/temper-core`) once, for Java 8
 //!   as its `pom.xml` says, into `CARGO_TARGET_TMPDIR`, reused until its
 //!   sources or the JDK change; then every generated package, and a
 //!   harness that runs `module-state` from 8 threads, in one more `javac`,
@@ -205,7 +205,7 @@ fn goldens() {
 }
 
 fn runtime() -> PathBuf {
-    kit::vendored("be-java/temper-core/src/main/java")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("runtime/temper-core/src/main/java")
 }
 
 fn javac(

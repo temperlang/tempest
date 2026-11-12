@@ -13,8 +13,8 @@
    directory, linked from there, to keep them outside the work tree.
 3. Type-checks the TypeScript with tsc, the page and the workers apart.
 4. Bundles and minifies it with esbuild, with the examples as text and
-   the JavaScript backend's runtime from vendor/temper/be-js, and writes
-   the bundled packages' licenses beside it.
+   the JavaScript backend's runtime from crates/temper-be-js/runtime/,
+   and writes the bundled packages' licenses beside it.
 5. Copies in index.html, with the site's header and the About popover
    (site/shared/header.py, as on the docs pages, with the playground
    marked current), site/shared/header.js (the theme and the phone
@@ -51,7 +51,7 @@ sys.path.insert(0, str(HERE.parent / "shared"))
 import header as shared  # noqa: E402  (site/shared/header.py: the site's header and About)
 
 WASM = ROOT / "target/wasm32-unknown-unknown/small-wasm/temper_wasm.wasm"
-CORE = ROOT / "vendor/temper/be-js/temper-core/index.js"
+CORE = ROOT / "crates/temper-be-js/runtime/temper-core/index.js"
 MERMAID = ROOT / "site/docs/mermaid"
 ENTRIES = ["src/main.ts", "src/compiler-worker.ts", "src/repl-worker.ts", "src/js-worker.ts", "src/main.css"]
 

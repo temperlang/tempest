@@ -9,8 +9,8 @@
 //! under `--no-connected` (`CONNECTED`), and with divisions that can't
 //! fail and maps (`DIVISIONS`), and with labeled loops' jumps and classes
 //! declared in functions (`LOOPS_AND_CLASSES`), and with generators,
-//! `async`, and `await`, as iterators (`ASYNC`), from the vendored copy
-//! (`temper-funtests`), and on the shared programs
+//! `async`, and `await`, as iterators (`ASYNC`), in `temper-funtests`'s
+//! `cases/`, and on the shared programs
 //! (`crates/temper-be-testkit/programs/`), which cover operators,
 //! jumps, module state, string order, several modules, imports, tests,
 //! classes, and nullables beyond those tests.
@@ -24,8 +24,8 @@
 //!   `testing.tests.TestingTests.cs`). To accept new or changed output,
 //!   run with `UPDATE_SNAPSHOTS=1` and review the diff.
 //! - `runs`: without MSBuild or NuGet, Roslyn's `csc` (from the SDK that
-//!   `dotnet` finds, or `DOTNET`) compiles the vendored `TemperLang.Core`
-//!   (`vendor/temper/be-csharp/temper-core`) once, for .NET 6 as its
+//!   `dotnet` finds, or `DOTNET`) compiles `TemperLang.Core`
+//!   (`crates/temper-be-csharp/runtime/temper-core`) once, for .NET 6 as its
 //!   `.csproj` says, into `CARGO_TARGET_TMPDIR`, reused until its sources
 //!   or the SDK change; then every generated library's sources in one more
 //!   `csc` run, with nullable reference types on, every warning, and every
@@ -221,8 +221,8 @@ fn generate(case: &Case) -> Vec<OutFile> {
         .unwrap_or_else(|e| panic!("{}: {e}", case.key))
 }
 
-fn vendored() -> PathBuf {
-    kit::vendored("be-csharp")
+fn runtime_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("runtime")
 }
 
 #[test]
@@ -230,7 +230,8 @@ fn goldens() {
     kit::with_stack(|| {
         let mut goldens = Goldens::new(env!("CARGO_MANIFEST_DIR"));
         let template = |name: &str| {
-            let text = fs::read_to_string(vendored().join("library-template").join(name)).unwrap();
+            let text =
+                fs::read_to_string(runtime_dir().join("library-template").join(name)).unwrap();
             text.trim_start_matches('\u{feff}').to_string()
         };
         let program_template = template("Program.cs");
@@ -328,8 +329,8 @@ fn missing_host_code() {
 
 #[test]
 fn logging_template_is_kotlins() {
-    let vendored = fs::read_to_string(vendored().join("library-template/Logging.cs")).unwrap();
-    assert_eq!(LOGGING_TEMPLATE, vendored.trim_start_matches('\u{feff}'));
+    let template = fs::read_to_string(runtime_dir().join("library-template/Logging.cs")).unwrap();
+    assert_eq!(LOGGING_TEMPLATE, template.trim_start_matches('\u{feff}'));
 }
 
 /// What compiling and running C# needs, from the .NET SDK and NuGet's
@@ -459,7 +460,7 @@ fn find_dotnet() -> Result<Dotnet, String> {
         if !dll.is_file() {
             return Err(format!(
                 "no {id} 8.0.0 in NuGet's cache ({}); `dotnet restore` of \
-                 vendor/temper/be-csharp/temper-core's project, copied elsewhere, puts it there",
+                 crates/temper-be-csharp/runtime/temper-core's project, copied elsewhere, puts it there",
                 cache.display()
             ));
         }
@@ -516,7 +517,7 @@ fn runtime_assembly(dotnet: &Dotnet) -> PathBuf {
     let root = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("be-csharp-runtime");
     let dll = root.join("TemperLang.Core.dll");
     let mut sources = Vec::new();
-    kit::files_with(&vendored().join("temper-core"), "cs", &mut sources);
+    kit::files_with(&runtime_dir().join("temper-core"), "cs", &mut sources);
     let options = vec![
         "-target:library".to_string(),
         "-optimize+".into(),

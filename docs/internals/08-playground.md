@@ -75,7 +75,7 @@ two very different ways of running a program agree.
   tab, with its own wasm instance holding the session; Stop replaces
   that worker and replays the inputs before.
 - [`js-worker.ts`](../../site/playground/src/js-worker.ts): runs the
-  generated JavaScript, with the runtime from `vendor/temper/be-js/`.
+  generated JavaScript, with the runtime from `crates/temper-be-js/runtime/`.
 - [`build.py`](../../site/playground/build.py): builds the wasm and bundles
   the page. GitHub Pages publishes it from `main`.
 - [`smoke.mjs`](../../site/playground/smoke.mjs): CI's smoke test of the

@@ -1,6 +1,6 @@
 //! The Lua variant's tables: every operator spelled, every connection
 //! keyed by a connected declaration of core, every type connection by a
-//! type of core, every runtime helper defined by the vendored
+//! type of core, every runtime helper defined by
 //! `temper-core` and typed in LuaLS's view of it, and the runtime's
 //! version the one the rockspec names.
 
@@ -70,7 +70,7 @@ fn type_connections_name_core_types() {
 }
 
 fn runtime() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../vendor/temper/be-lua/temper-core")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("runtime/temper-core")
 }
 
 #[test]

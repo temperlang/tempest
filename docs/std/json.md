@@ -60,4 +60,4 @@ the request it's part of, such as a version header
 companion `@jsonExtra` are described with the other
 [decorators](../language/builtins.md).
 
-Source: [json.temper.md](../../vendor/temper/std/json/json.temper.md).
+Source: [json.temper.md](../../lib/std/json/json.temper.md).

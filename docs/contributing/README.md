@@ -45,18 +45,19 @@ This repository is tempest, Temper's compiler in Rust. Start with:
 | `temper-tmpl` | tmpl, the backend IR ([notes/tmpl/](../../notes/tmpl/README.md)), with shared lowerings such as coroutines |
 | `temper-be-*` | One crate per backend, tmpl in and source out, and how its language runs tests, each depending only on `temper-tmpl` |
 | `temper-be-testkit` | What the backends' tests share: programs, goldens, and tool discovery |
-| `temper-funtests` | Temper's functional tests, from `vendor/temper/` |
+| `temper-funtests` | Temper's functional tests, in its `cases/` |
 | `temper-driver` | The registry of backends, the one compile path, `build`, and running tests with each backend's tools |
 | `temper-lsp` | The language server, `tempest lsp` |
 | `tempest` | The command-line tool: argument parsing and output |
 | `temper-wasm` | The compiler for the browser, the base of the playground |
 | `temper-os` | The OS calls std lacks, behind safe functions: the only crate with unsafe code |
 
-Also: `docs/` (these docs), `compat/` (scripts comparing with Temper's
-first compiler, fuzzing, timing, and checking the docs), `vendor/temper/`
-(Temper's runtimes, std, and functional tests, synced with patches in
-`vendor/temper-patches/`), `editors/` (the VS Code extension), `site/`
-(the playground), and `notes/`.
+Also: `lib/std/` and `lib/core/` (Temper's std library and core, in
+Temper, which the frontend builds in), `docs/` (these docs), `compat/`
+(scripts comparing with Temper's first compiler, fuzzing, timing, and
+checking the docs), `editors/` (the VS Code extension), `site/` (the
+playground), and `notes/`. Each backend crate keeps its
+language's runtime in `runtime/`.
 
 ## Building
 
@@ -88,12 +89,11 @@ too, install the languages' tools: a C++ compiler and CMake, the .NET 6
 SDK or later, a JDK 17 or later with Maven, Node.js with npm, Lua 5.4
 or LuaJIT with LuaRocks, Python 3.11 or later, and Rust.
 
-Comparing with Temper's first compiler, using the copy in
-`vendor/temper/` (or `--temper DIR` for a checkout):
+On the functional tests in `crates/temper-funtests/cases/` (or, with
+`--temper DIR`, a Kotlin Temper checkout's):
 
     uv run compat/check_functional.py   # the functional tests, in-process
     uv run compat/count_tmpl.py         # which tests translate, and why not
-    uv run compat/sync_temper.py        # refresh vendor/temper/ (--check in CI)
 
 and `compat/check_*.py`, `fuzz_*.py`, and `bench_*.py` for each stage.
 For the docs:

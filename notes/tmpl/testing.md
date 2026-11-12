@@ -48,7 +48,7 @@ and settle tests use:
   reader's. With core's declarations (2026-10-29), `tests/qname.rs`
   checks qnames against Kotlin's examples and their derivation, and
   `tests/core_fixture.rs` checks `tests/fixtures/core.tmpl`, a `uses`
-  section for core's members, against the vendored `core.temper`. Beside them, `tests/model.rs` tests what text can't
+  section for core's members, against `lib/core/core.temper`. Beside them, `tests/model.rs` tests what text can't
   express (broken structure, spans), and `tests/round_trip.rs`
   generates random valid programs, which must validate without
   problems and round trip (`TMPL_FUZZ_SEED`, `TMPL_FUZZ_ROUNDS`).
@@ -96,7 +96,7 @@ As built with the Python backend (2026-10-30):
   `foo`, which Kotlin's output avoids only by numbering every name).
   The crates build offline in one cargo workspace with one target
   directory, kept under `CARGO_TARGET_TMPDIR` so builds are
-  incremental, against the vendored `temper-core` and its `Cargo.lock`;
+  incremental, against the runtime, `temper-core`, and its `Cargo.lock`;
   `temper-core`'s one dependency, `indexmap`, must be in cargo's cache
   (CI fetches it first). The goldens are also checked to be as rustfmt
   lays them out. A missing cargo, clippy, rustfmt, or `indexmap` skips
@@ -106,8 +106,8 @@ As built with the Python backend (2026-10-30):
   is hand-written tmpl, for constructs the frontend doesn't translate
   yet.
 - **JS** (2026-10-30): each generated package runs under Node (`node`,
-  or `NODE`) against the vendored `@temperlang/core`
-  (`vendor/temper/be-js/temper-core`), copied into a `node_modules`
+  or `NODE`) against the runtime, `@temperlang/core`
+  (`crates/temper-be-js/runtime/temper-core`), copied into a `node_modules`
   beside the packages, and TypeScript's checker, `tsc --checkJs --allowJs
   --noEmit --strict --module nodenext`, checks all of them in one run
   (`tsc`, or `TSC`), with JSDoc as their only annotations. It checks
@@ -140,8 +140,8 @@ As built with the Python backend (2026-10-30):
   these with the run test, on its Node 24, so a missing Node fails
   there.
 - **Java** (2026-10-30): the compiler is the checker. Without Maven,
-  `javac` (or `JAVAC`) compiles the vendored `temper-core`
-  (`vendor/temper/be-java/temper-core`) once, for Java 8 as its
+  `javac` (or `JAVAC`) compiles the runtime, `temper-core`
+  (`crates/temper-be-java/runtime/temper-core`) once, for Java 8 as its
   `pom.xml` says, into `CARGO_TARGET_TMPDIR`, kept until its sources or
   the JDK change; then every generated package and a harness that runs
   `module-state` from 8 threads, in one `javac` run, with `--release 17
@@ -158,8 +158,8 @@ As built with the Python backend (2026-10-30):
   (2026-11-03).
 - **C#** (2026-10-30): the compiler is the checker, with the .NET
   analyzers. Without MSBuild or NuGet, Roslyn's `csc` (from the newest
-  .NET 6 SDK that `dotnet`, or `DOTNET`, lists) compiles the vendored
-  `TemperLang.Core` (`vendor/temper/be-csharp/temper-core`) once, as
+  .NET 6 SDK that `dotnet`, or `DOTNET`, lists) compiles the runtime,
+  `TemperLang.Core` (`crates/temper-be-csharp/runtime/temper-core`) once, as
   its `.csproj` does for .NET 6, into `CARGO_TARGET_TMPDIR`, kept until
   its sources or the SDK change; then every generated library's sources
   in one `csc` run, against .NET 6's reference assemblies, with C# 10,
@@ -207,7 +207,7 @@ As built with the Python backend (2026-10-30):
 - **C++** (2026-10-30): the compiler is the checker, with sanitizers.
   Without CMake, `g++` (or `CXX`) compiles every generated `.cpp`
   (each library's `init.cpp` and `main.cpp`, and a runner) against the
-  vendored, header-only `temper-core` (`vendor/temper/be-cpp`), with
+  header-only runtime, `temper-core` (`crates/temper-be-cpp/runtime`), with
   `-std=c++14`, as Kotlin's, and `-Wall -Wextra -Wpedantic -Werror`
   plus 33 more warnings (the test's `STRICT`), through a precompiled
   header of the runtime per set of options, kept in `CARGO_TARGET_TMPDIR`
@@ -240,8 +240,8 @@ As built with the Python backend (2026-10-30):
   (`CLANG_STRICT`), which only CI checks.
 - **Lua** (2026-10-30): no compiler, so the checks are a run, a parse,
   and a type checker. With `lua` (or `LUA`), from one directory holding
-  every generated library and a copy of the vendored `temper-core`
-  (`vendor/temper/be-lua/temper-core`), with Kotlin's `LUA_PATH`
+  every generated library and a copy of the runtime, `temper-core`
+  (`crates/temper-be-lua/runtime/temper-core`), with Kotlin's `LUA_PATH`
   (`?.lua;?/init.lua`) and no LuaRocks, one process requires each
   library in turn, after a line naming it, and each must log what the
   test expects of `lua`; `fibonacci` also runs alone, as Kotlin's

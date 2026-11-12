@@ -290,7 +290,7 @@ understood; nothing warns. Every library we know of writes plain lines.
 ([`FILES`](../../../crates/temper-frontend/src/stdlib.rs)) under the
 path prefix [`DIR`](../../../crates/temper-frontend/src/stdlib.rs),
 `-std-`, which no library's files are likely to share. A test checks
-that `FILES` lists every vendored file. `--std DIR` reads another copy.
+that `FILES` lists every file in `lib/std/`. `--std DIR` reads another copy.
 For backends, std is also a library of its own
 ([`program`](../../../crates/temper-frontend/src/stdlib.rs)), settled
 from [`MODULES`](../../../crates/temper-frontend/src/stdlib.rs) once per
@@ -436,7 +436,7 @@ first, so no stale file survives a rename. C++ also gets a
 **Pros:** what's built can replace Kotlin's output, and tests compare
 them file by file ([Tests](#tests)).
 
-**Cons:** the runtime files say `0.6.0` but carry tempest's patches, so
+**Cons:** the runtime files say `0.6.0` but carry tempest's changes, so
 packages need runtime API that the published `0.6.0` lacks (the audit's
 A1). Emptying a directory is the one destructive step; it's limited to
 the library's own directory under `temper.out`.
@@ -584,10 +584,10 @@ have); crates such as `nix` or `ctrlc` (more code than the dozen calls
 need); hand-written `extern` declarations, as before (types and
 constants by hand, unchecked per platform).
 
-**Exempt:** `vendor/temper/`'s Rust runtime, whose one unsafe read
-(`cast`, after a `TypeId` check) is Temper's own, synced unchanged and
-built apart from the workspace; it's in the inventory, so a sync that
-changes it shows. The other backends' runtimes aren't Rust.
+**Exempt:** the Rust backend's runtime
+(`crates/temper-be-rust/runtime/`), whose one unsafe read (`cast`, after
+a `TypeId` check) came from Kotlin Temper's and is built apart from the
+workspace; it's in the inventory, so a change to it shows. The other backends' runtimes aren't Rust.
 
 **Cons:** `temper-tmpl` now has a dependency, though none on wasm.
 
@@ -794,7 +794,7 @@ What has to change first, found while writing this:
 - **The driver**, [`dependencies.rs`](../../../crates/temper-driver/tests/dependencies.rs):
   a dependency on another library in each backend's package files;
   [`runtimes.rs`](../../../crates/temper-driver/tests/runtimes.rs): each
-  built-in runtime is the vendored one.
+  built-in runtime is its crate's `runtime/temper-core`.
 - **The interpreter's tests**, [`library_tests.rs`](../../../crates/temper-frontend/tests/library_tests.rs):
   passing and failing tests, quiet output, the work root and skipped
   directories, `.gitignore` files, not-run tests and errors, std built
@@ -829,7 +829,7 @@ and a panic's exit code (no input is known to panic).
   and `-b`; Kotlin's `cppv`, `data`,
   `java8`, and `mypyc` backends; `serve --port`.
 - **Runtime version:** output names `temper-core` 0.6.0 but needs
-  tempest's patched runtimes; a distinct pre-release version is one
+  tempest's changed runtimes; a distinct pre-release version is one
   option.
 - **Dynamic backends:** naming, host files, and the descriptor first
   ([above](#dynamic-backends-planned)).

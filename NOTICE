@@ -3,9 +3,11 @@ Tempest
 Copyright (c) The Temper Project Contributors. Licensed under Apache 2.0
 or MIT, at your option; see COPYRIGHT.
 
-vendor/temper/ holds a copy of Kotlin Temper's functional tests, std, and core,
-also The Temper Project's, under the same licenses (see
-vendor/temper/SOURCE.md for the commit it came from).
+lib/core/, lib/std/, crates/temper-funtests/cases/, and each backend
+crate's runtime/ began as a copy of Kotlin Temper's (commit 69f1a5b0),
+also The Temper Project's, under the same licenses, except LuaUnit
+(crates/temper-be-lua/runtime/luaunit/), under the BSD license in its
+LICENSE.txt.
 
 Documentation. Much of docs/ (the guide, the language reference, the
 target language notes, the release notes, docs/internals/kotlin/, and

@@ -42,4 +42,4 @@ specials `Begin`, `End`, `Dot`, `WordBoundary`, `Digit`, `Space`, and
 `Word`. Any of them `compiled()` is a `Regex`. Character classes and
 Unicode properties aren't supported yet.
 
-Source: [regex.temper.md](../../vendor/temper/std/regex/regex.temper.md).
+Source: [regex.temper.md](../../lib/std/regex/regex.temper.md).

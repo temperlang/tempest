@@ -19,7 +19,8 @@ where they differ, why, and how they're tested.
   - [Profiles pick the shared lowerings](#profiles-pick-the-shared-lowerings)
   - [One naming pass, rules as data](#one-naming-pass-rules-as-data)
   - [Operators and connected declarations as tables](#operators-and-connected-declarations-as-tables)
-  - [Kotlin's runtimes, vendored, with patches](#kotlins-runtimes-vendored-with-patches)
+  - [The runtimes, from Kotlin Temper's](#the-runtimes-from-kotlin-tempers)
+  - [Changes from Kotlin Temper's runtimes](#changes-from-kotlin-tempers-runtimes)
   - [Pluggable: a description per backend](#pluggable-a-description-per-backend)
   - [Each language runs its own tests](#each-language-runs-its-own-tests)
 - [The pipeline each backend runs](#the-pipeline-each-backend-runs)
@@ -154,43 +155,69 @@ be shared or diffed across backends as data.
 **Kotlin Temper** keeps the same in each backend's `SupportNetwork` and
 helper files.
 
-### Kotlin's runtimes, vendored, with patches
+### The runtimes, from Kotlin Temper's
 
-**Chosen:** each language's `temper-core` (and parts of std's host
-code) is copied from Kotlin Temper into `vendor/temper/` by
-`compat/sync_temper.py`, with tempest's fixes kept as patches in
-`vendor/temper-patches/` (22 so far) that each sync re-applies. Each
-backend's `runtime.rs` embeds its runtime's files for `tempest build`
-to write beside the output. CI checks the copy is current
-(`sync_temper.py --check`).
+**Chosen:** each backend crate holds its language's runtime in
+`runtime/temper-core/`, with that backend's std host code in
+`runtime/std/` (Rust's, Java's, and C#'s), LuaUnit in Lua's
+`runtime/luaunit/`, and C#'s library template in
+`runtime/library-template/`. Each backend's `runtime.rs` embeds its
+runtime's files for `tempest build` to write beside the output. These,
+with `lib/std/`, `lib/core/`, and `temper-funtests`'s `cases/`, began
+as Kotlin Temper's at commit 69f1a5b0, with the changes below, and are
+tempest's own now. Rust's runtime and std are also published as crates
+of their own, `temper-core` and `temper-std` on crates.io, rather than
+packaged inside `temper-be-rust`.
 
 **Pros:** generated code calls the same runtime APIs as Kotlin's, so
-both compilers' output can mix; fixes are visible as patches and meant
-for upstream.
+both compilers' output can mix; each runtime sits in the crate that
+calls it, so a change to both is one change.
 
-**Cons:** the copy follows Kotlin's `main` only as often as someone
-syncs it ([`vendor/temper/SOURCE.md`](../../../vendor/temper/SOURCE.md)
-names the commit), and a runtime change there, such as C++'s strings
-becoming a shared `Str` (#654), needs the backend to follow it in the
-same change. And some patches add API (a top-level turn and `awakeUpon` for Java,
-`awake_upon` for Rust, async for Lua), while six backends' package
+**Cons:** some changes add API (a top-level turn and `awakeUpon` for
+Java, `awake_upon` for Rust, async for Lua), while six backends' package
 files still name `temper-core` 0.6.0, the version Kotlin publishes
 without them. A tempest-built package built against the published
 runtime may not compile (the audit's A1). C++ declares no runtime
 version at all. See [weaknesses](#known-weaknesses-and-plans).
 
-**Status:** vendoring is tempest's; each patch says whether it's
-upstream, in an open Kotlin PR (#532 for one turn at a time), or still
-to offer.
+### Changes from Kotlin Temper's runtimes
+
+What tempest changed in the runtimes it began with, numbered as the
+patches that made them (other docs cite these numbers):
+
+| Runtime | No. | Change |
+| --- | --- | --- |
+| C++ | 0005 | Drain the async queue when code outside any async block settles a promise; let C++20 coroutines `co_await` Temper promises |
+| C++ | 0012 | Let a range-for step generators (C++14); a failed step leaves a generator done |
+| C++ | 0019 | std/net through a pluggable client (`temper::core::net::set_client`), by default libcurl's multi interface on a `temper-io` thread where the build defines `TEMPER_NET_CURL`; other threads post work back to the async queue, which waits while any hold is out |
+| C++ | 0021 | `to_base`, an upcast of a never-null `shared_ptr`, so g++'s `-Wnull-dereference` has no null path to follow |
+| C++ | 0022 | Skip `List::make`'s `reserve` for Booleans, so g++'s false `-Warray-bounds` at -O3 in `vector<bool>` doesn't fail `-Werror` builds |
+| C# | 0009 | Run async steps one at a time on one thread, and hold top-level code in a turn |
+| C# | 0014 | Let host code swap the runner, block on a promise only where that can't deadlock, and resume after an await outside any turn |
+| Java | 0008 | Run async steps one at a time on one runner; add `Core.awakeUpon` and the top-level turn; make `Generator` `Iterable` |
+| Java | 0016 | Connect and send std/net requests on the common pool, never in the async step that calls `stdNetSend` |
+| JS | 0001 | Fix the JSDoc types of eight helpers, so strict `tsc` takes generated calls without casts |
+| JS | 0002 | Fix `listBuilderSplice`'s JSDoc types, likewise |
+| JS | 0004 | Make `breakPromise`'s reason optional in its JSDoc |
+| JS | 0015 | Type `sendRequest`'s method as any string in its JSDoc, for std/net's generated call |
+| Lua | 0006 | Add promises and async blocks, which Kotlin's Lua calls but its runtime lacks |
+| Lua | 0011 | Queue promise waiters behind one drain loop; make generators callable tables that `for`-`in` steps and a failed step leaves done |
+| Lua | 0018 | std/net through a pluggable client (`temper.set_net_client`), by default LuaSocket's `socket.http`, on sockets that never block a turn |
+| Lua | 0020 | Let generators yield values and take their factory's arguments |
+| Python | 0007 | Run async steps one at a time on one runner, settle promises by queueing waiters, and make promises awaitable from asyncio |
+| Python | 0013 | Annotate promises and std/net's futures as `TemperFuture`, so strict checkers take a bare `await` of them |
+| Rust | 0003 | Make `Promise` a std `Future`, so Rust code can `.await` Temper promises on any executor |
+| Rust | 0010 | Queue resumes on the runner (`AsyncRunner::awake_upon`), guard turns, and make `SafeGenerator` an `Iterator` |
+| Rust | 0017 | Let work outside any turn hold the runner (`AsyncRunner::hold`), so `run_all_blocking` waits for the tasks it will queue |
 
 ### The runtime version generated code names
 
 **Open, for the team.** Each backend's `Variant` names `temper-core`
 0.6.0 (`runtime_version`), and std is 0.6.0 too (`STD_VERSION`), but
-generated code calls API that only the patched runtimes have: Java's
+generated code calls API that only tempest's runtimes have: Java's
 and C#'s top-level turn, Python's `top_level_turn`, Rust's
 `awake_upon`, Lua's promises and `temper.async`, and C++'s `co_await`
-and net client. Only JS's patches are types alone. Inside `temper.out`
+and net client. Only JS's changes are types alone. Inside `temper.out`
 this works, since each runtime is written beside the libraries and
 Rust's and C#'s package files point there; a package published from
 it and installed against the registries' 0.6.0 fails to build or run.
@@ -203,17 +230,13 @@ Options:
    One constant for every backend's runtime and std (say 0.7.0, each
    ecosystem's pre-release form until released: `0.7.0-dev.1`, PEP 440's
    `0.7.0.dev1`; LuaRocks has none, so `dev` or the release), written
-   into the vendored runtimes' own package files by `sync_temper.py`.
+   into the runtimes' own package files.
    Generated packages then never claim a runtime that lacks their API.
    Needs: the version, and who publishes those runtimes.
-2. **Upstream the patches, and a Kotlin release with them.** Generated
-   code names that release, and both compilers share one runtime again.
-   Cleanest in the end, but waits on Kotlin PRs (#532 and the patches
-   still to offer) and a release.
-3. **Keep 0.6.0, and say output needs the runtime beside it.** No work,
+2. **Keep 0.6.0, and say output needs the runtime beside it.** No work,
    but published packages stay broken against the registries.
 
-**Recommended:** 1 now, as one shared constant, moving to 2's release
+**Recommended:** 1 now, as one shared constant, moving to the release
 when it exists; as this compiler replaces Kotlin's, that release may
 well be the first one built from it. C++ should name its runtime
 version in CMakeLists.txt either way.
@@ -390,7 +413,7 @@ tests: [`temper-be-testkit`](../../../crates/temper-be-testkit/src/lib.rs).
 | Test | What it pins | Where |
 |---|---|---|
 | Goldens | Each covered functional test's and shared program's output, file by file, in `tests/goldens/` (93 for C++ to 404 for C#); `UPDATE_SNAPSHOTS=1` rewrites them for review | each crate's `tests/functional.rs` |
-| Runs | The output runs with the language's own tools against the vendored runtime and logs what Kotlin's backend is expected to log; tests run as tests compare their failures with `expectedFailures` | each crate's `tests/functional.rs` |
+| Runs | The output runs with the language's own tools against its runtime and logs what Kotlin's backend is expected to log; tests run as tests compare their failures with `expectedFailures` | each crate's `tests/functional.rs` |
 | Strict checkers | The checkers in [the table above](#per-backend-choices), on every case; ill-typed programs' output is skipped, as Kotlin's | each crate's `tests/functional.rs` |
 | Strict at `-O2` | C++'s every generated file compiled at `-O2` with `STRICT` by g++ 12 and 14 (14 at `-O3` too), and in CI by clang++ too ([policy](#cs-warning-policy)) | `temper-be-cpp`'s `tests/functional.rs`, `strict` |
 | Sanitizers | C++ under ASan, UBSan, and TSan; `module-state` from 8 threads on every backend that has threads | `temper-be-cpp`'s `tests/functional.rs`; testkit's `threads_expected` |
@@ -425,13 +448,13 @@ The OS calls for this are `temper-os`'s
 **Not covered:** the declared MSRV (generated crates say 1.71.1; CI
 builds them with 1.85.0); PUC Lua 5.1 (LuaJIT runs the Lua tests);
 C#'s `net48` side, and Java 8; output built against the published
-0.6.0 runtimes rather than the patched copies; and `tempest test -b`
+0.6.0 runtimes rather than tempest's; and `tempest test -b`
 through each `tools.rs` in the backends' own test suites.
 
 ## Known weaknesses and plans
 
-- **Runtime version against patches.** Package files name `temper-core`
-  0.6.0 while the output needs patched API; the options are under
+- **Runtime version against changes.** Package files name `temper-core`
+  0.6.0 while the output needs tempest's added API; the options are under
   [the runtime version generated code names](#the-runtime-version-generated-code-names).
 - **Untested MSRV and older targets.** One CI job on Rust 1.71.1, or a
   newer MSRV (api-compat.md, proposed change 11); C#'s `net48` and .NET

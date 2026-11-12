@@ -1,6 +1,6 @@
 //! The JS backend on Kotlin Temper's functional tests that tmpl's
-//! translation covers so far, from the vendored copy
-//! (`temper-funtests`), with the class and interface tests
+//! translation covers so far, in `temper-funtests`'s
+//! `cases/`, with the class and interface tests
 //! (`temper_be_testkit::CLASSES`), and on the shared programs
 //! (`crates/temper-be-testkit/programs/`), which cover operators,
 //! jumps, module state, classes, and nullables beyond those tests, with
@@ -32,8 +32,8 @@
 //!   or member's name on its source name, and code the compiler made, on
 //!   what it's made for).
 //! - `runs`: each generated package runs under Node (`node`, or `NODE`),
-//!   against the vendored `@temperlang/core`
-//!   (`vendor/temper/be-js/temper-core`), and logs what the test expects
+//!   against `@temperlang/core`
+//!   (`crates/temper-be-js/runtime/temper-core`), and logs what the test expects
 //!   of Kotlin's `js` backend; and TypeScript's checker (`tsc`, or `TSC`)
 //!   finds no problems in it with `--checkJs --strict`, against
 //!   declarations it generates from the runtime. Node's own source map
@@ -501,7 +501,7 @@ fn source_maps() {
 }
 
 fn runtime() -> PathBuf {
-    kit::vendored("be-js/temper-core")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("runtime/temper-core")
 }
 
 /// The relative path from one directory to another, both absolute, with

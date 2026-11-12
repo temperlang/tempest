@@ -116,7 +116,7 @@ impl std::error::Error for NotYet {}
 /// needs, and the cargo feature named for the module, which a crate
 /// importing the module asks for (`features = ["regex"]`): implied by the
 /// dependency's name for `regex`, and declared for `net` and `temporal`.
-/// `regex`'s support is vendored from Kotlin's; `temporal`'s and `net`'s
+/// `regex`'s support began as Kotlin's; `temporal`'s and `net`'s
 /// are tempest's own: `today()` from Rust's std where Kotlin's uses the
 /// `time` crate, and `send_request` on a thread of its own, with `ureq`
 /// but no gzip, where Kotlin's blocks a turn
@@ -124,7 +124,7 @@ impl std::error::Error for NotYet {}
 pub const STD_SUPPORT: &[StdSupport] = &[
     StdSupport {
         module: "regex",
-        text: include_str!("../../../vendor/temper/be-rust/std/regex/support.rs"),
+        text: include_str!("../runtime/std/regex/support.rs"),
         optional: "regex = { version = \"=1.12.2\", optional = true }\n",
         feature: "",
         public: false,

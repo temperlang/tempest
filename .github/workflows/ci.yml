@@ -5,12 +5,11 @@
 # few jobs, each running many checks, a step each:
 #
 # - `lint`: formatting, clippy (with and without default features), the
-#   workflows parsed as YAML, the vendored Temper and its patches, the
-#   docs' links, Temper's functional tests (copied into vendor/temper/,
-#   which has its patches) on tempest's interpreter, and the size and
-#   speed charts; then `core`'s tests: every crate's but the backends'
-#   and `tempest`'s, and again without default features (no backends,
-#   no `net`), `tempest`'s included;
+#   workflows parsed as YAML, the docs' links, Temper's functional
+#   tests (crates/temper-funtests/cases/) on tempest's interpreter, and
+#   the size and speed charts; then `core`'s tests: every crate's but
+#   the backends' and `tempest`'s, and again without default features
+#   (no backends, no `net`), `tempest`'s included;
 # - `cli`: `tempest`'s tests with every backend, so with every
 #   toolchain: `tempest test`, `build`, and `run` on small libraries;
 # - `backends`, two jobs, each with only its backends' toolchains
@@ -170,12 +169,6 @@ jobs:
               yaml.safe_load(open(f))
               print("ok", f)
           ' .github/workflows/*.yml .github/actions/*/action.yml
-      # vendor/temper/ has every patch in vendor/temper-patches/, each
-      # listed in its SOURCE.md. Locally, with a Temper checkout, this
-      # also compares it file for file with its commit plus the patches.
-      - name: Vendored Temper and its patches
-        if: ${{ !cancelled() }}
-        run: uv run compat/sync_temper.py --check
       # Each docs/ and notes/ link leads to a file or heading that
       # exists, and each link to code links a file that defines the item
       # it names.
@@ -291,13 +284,13 @@ jobs:
           make -C "$RUNNER_TEMP/luajit-src" -j4 -s PREFIX="$RUNNER_TEMP/luajit"
           make -C "$RUNNER_TEMP/luajit-src" -s install PREFIX="$RUNNER_TEMP/luajit"
           LUA="$RUNNER_TEMP/luajit/bin/luajit" cargo test --locked -p temper-be-lua --test functional runs
-      # With the vendored Rust runtime's own unit tests, which the
-      # workspace (excluding vendor/) leaves out.
+      # With the Rust runtime's own unit tests, which the workspace
+      # (excluding crates/temper-be-rust/runtime/) leaves out.
       - name: Rust
         if: ${{ !cancelled() && contains(matrix.backends, 'rust') }}
         run: |
           cargo test --locked -p temper-be-rust
-          cargo test --locked --manifest-path vendor/temper/be-rust/temper-core/Cargo.toml --target-dir target/vendor-temper-core
+          cargo test --locked --manifest-path crates/temper-be-rust/runtime/temper-core/Cargo.toml --target-dir target/rust-runtime
       - name: Java
         if: ${{ !cancelled() && contains(matrix.backends, 'java') }}
         run: cargo test --locked -p temper-be-java

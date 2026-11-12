@@ -10,11 +10,11 @@ output it should give, checked in beside it.
 |---|---|
 | Lexer and parser tests | `.cases` files in `temper-syntax`: `tests/*.cases` for tokens ([`lex.rs`](../../crates/temper-syntax/tests/lex.rs)), `tests/parse/` for trees, `tests/ast/` for the grammar step, and `tests/module/` for what comes after it. `compat/check_lex.py`, `check_parse.py`, and `check_ast.py` compare the same inputs with Kotlin Temper |
 | Stage tests (`frontend/src/commonTest/resources/.../stage-tests/`) | `.cases` files in `temper-frontend`'s `tests/settle/` ([`settle.rs`](../../crates/temper-frontend/tests/settle.rs)): names, macros, and builtins; typing in `types.cases`, `class-types.cases`, `flow.cases`, and `fields-first.cases`; the interpreter in `run.cases`. A new `.cases` file there is picked up as it is |
-| The functional test suite (`functional-test-suite/src/commonMain/resources/`) | The same tests, vendored in [`vendor/temper/functional-tests/`](../../vendor/temper/SOURCE.md) and read through `temper-funtests`. `compat/check_functional.py` runs them all on the interpreter |
+| The functional test suite (`functional-test-suite/src/commonMain/resources/`) | The same tests, begun as Kotlin's, in [`temper-funtests`'s `cases/`](../../crates/temper-funtests/cases/config.temper.md), which that crate reads. `compat/check_functional.py` runs them all on the interpreter |
 | A backend's functional tests (`PyFunctionalTest` and the like) | The functional tests a backend covers, by the groups in [`temper-be-testkit`](../../crates/temper-be-testkit/src/lib.rs) (`CLASSES`, `NULLABLES`, …), with a golden per test in the backend crate's `tests/goldens/` |
 | Backend unit tests, Temper in and target code out (`PyTranslatorTest` and the like) | A shared program in [`temper-be-testkit/programs/`](../../crates/temper-be-testkit/programs/triple.temper.md), which the backends translate, run, and check; or, for one language's edge cases, a program in that backend's own `tests/programs/` (Java, JS, and Rust have some) |
 | TmpL tests (`be/src/commonTest/.../tmpl/`) | tmpl goldens: `temper-frontend`'s `tests/to_tmpl/` ([`to_tmpl.rs`](../../crates/temper-frontend/tests/to_tmpl.rs)), one per covered functional test, and the testkit's `tests/goldens/NAME.tmpl`, one per shared program. Hand-written tmpl goes in `temper-tmpl`'s `tests/text/*.cases` ([`text.rs`](../../crates/temper-tmpl/tests/text.rs)) |
-| The runtimes' own tests | Kept in the vendored runtimes; CI runs the Rust runtime's |
+| The runtimes' own tests | Kept in each backend crate's `runtime/`; CI runs the Rust runtime's |
 | Language server tests | `temper-analysis`'s [`analysis.rs`](../../crates/temper-analysis/tests/analysis.rs) for queries, and `temper-lsp`'s [`lsp.rs`](../../crates/temper-lsp/tests/lsp.rs) for a scripted session; the VS Code extension's in `editors/vscode/` ([its tests](detail/09-language-server.md#tests)) |
 | (none) | The playground: `temper-wasm`'s [`examples.rs`](../../crates/temper-wasm/tests/examples.rs), one line per example, and a smoke test in a browser ([its tests](detail/08-playground.md#tests)) |
 | (none) | The REPL: transcripts in `tests/repl/*.cases` in `temper-frontend` and `temper-driver`, and the docs' transcripts ([`repl_docs.rs`](../../crates/temper-frontend/tests/repl_docs.rs)) |
@@ -37,12 +37,11 @@ as Rust has them.
   `PROGRAMS` list, which six backends run as it is; Python runs those
   in its own list, in
   [`temper-be-py`'s `tests/functional.rs`](../../crates/temper-be-py/tests/functional.rs).
-- **A functional test:** the vendored copy is Kotlin's, replaced wholly
-  by `compat/sync_temper.py`, so a test added there by hand would be
-  lost (fixes to the copy go in `vendor/temper-patches/`). Add new
-  functional tests to Kotlin Temper, then sync. For a test only tempest
-  has, use a shared program or a settle case. A backend runs a
-  functional test once it's in one of the testkit's groups.
+- **A functional test:** add a directory under
+  `crates/temper-funtests/cases/` whose main file is named after it
+  (`algos/fibonacci/fibonacci.temper.md`), and its `import` in
+  `cases/config.temper.md`. A backend runs
+  a functional test once it's in one of the testkit's groups.
 - **Something one backend gets wrong:** a program in that backend's
   `tests/programs/`, or a shared program if the others could get it
   wrong too.

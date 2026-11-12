@@ -44,10 +44,10 @@ writes it by default, and its `tools.rs`'s
 backend means one crate, one line there, and its name among the known
 ones ([the command](07-cli.md#one-compile-path)).
 
-Each language's runtime is vendored from Temper in `vendor/temper/`,
-with a few fixes kept as patches in `vendor/temper-patches/`. So
-generated code calls the same runtime APIs as before
-([runtimes and their patches, in detail](detail/06-backends.md#kotlins-runtimes-vendored-with-patches)).
+Each language's runtime is in its backend crate's `runtime/`, begun as
+Kotlin Temper's with a few changes, so generated code calls the same
+runtime APIs as before
+([the runtimes and their changes, in detail](detail/06-backends.md#the-runtimes-from-kotlin-tempers)).
 
 ## Worked example
 

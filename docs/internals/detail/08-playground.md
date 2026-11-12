@@ -234,7 +234,7 @@ supported here". Backends are cargo features here too.
 
 **Pros:** the runtimes' sources and the HTTP stack would add megabytes
 for nothing the page uses; the JavaScript runtime the page needs is
-bundled by esbuild from `vendor/temper/be-js/` instead.
+bundled by esbuild from `crates/temper-be-js/runtime/` instead.
 
 ### A worker for the compiler, one per JavaScript run
 
@@ -328,8 +328,7 @@ licenses, and stamps every URL the page loads with `?v=` and a hash of
 the built files, so a normal reload picks up a new build. CI runs it
 with `--skip-wasm` after its own wasm build. The Pages workflow builds
 and publishes it on each push to `main` that touches the site, the
-crates, vendored Temper, or the README, at `playground/` beside the
-docs site.
+crates, `lib/`, or the README, at `playground/` beside the docs site.
 
 **Pros:** one script locally and in CI; caches never serve a mix of
 builds.

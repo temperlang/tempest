@@ -1,6 +1,6 @@
 //! The Python backend on Kotlin Temper's functional tests that tmpl's
-//! translation covers so far, from the vendored copy
-//! (`temper-funtests`), and on the shared programs
+//! translation covers so far, in `temper-funtests`'s
+//! `cases/`, and on the shared programs
 //! (`crates/temper-be-testkit/programs/`) that it covers so far:
 //! `string-order`, which every backend runs; `modules`,
 //! `imports-library`, and `testing`, for modules, imports, and tests;
@@ -29,8 +29,8 @@
 //!   (`modules.helpers.deep.py`, `testing.tests.test_testing.py`). To
 //!   accept new or changed output, run with `UPDATE_SNAPSHOTS=1` and
 //!   review the diff.
-//! - `runs`: each test's generated Python runs, against the vendored
-//!   `temper_core` runtime (`vendor/temper/be-py/temper-core`), and logs
+//! - `runs`: each test's generated Python runs, against the
+//!   `temper_core` runtime (`crates/temper-be-py/runtime/temper-core`), and logs
 //!   what the test expects of Kotlin's `py` backend; and type checkers
 //!   find no problems in it, in strict mode: mypy and pyright, each where
 //!   installed (on `PATH`, or named by `MYPY` or `PYRIGHT`), except for
@@ -225,7 +225,7 @@ fn run_alone(
          with top_level_turn():\n    import {package}\n\
          await_safe_to_exit()\n"
     );
-    // -B: write no bytecode into the vendored runtime.
+    // -B: write no bytecode into the runtime.
     Command::new(python)
         .args(["-B", "-c", &script])
         .env("PYTHONPATH", env::join_paths(projects).unwrap())
@@ -665,7 +665,7 @@ fn check_types(
 }
 
 fn runtime() -> PathBuf {
-    kit::vendored("be-py/temper-core")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("runtime/temper-core")
 }
 
 #[test]

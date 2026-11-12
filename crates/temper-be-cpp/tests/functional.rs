@@ -1,6 +1,6 @@
 //! The C++ backend on Kotlin Temper's functional tests that tmpl's
-//! translation covers so far, from the vendored copy
-//! (`temper-funtests`), with the class tests (`kit::CLASSES`) and those
+//! translation covers so far, in `temper-funtests`'s
+//! `cases/`, with the class tests (`kit::CLASSES`) and those
 //! with nullables and `orelse` (`kit::NULLABLES`), and those with
 //! core's other types and members (`kit::CORE_TYPES`: string indices,
 //! `StringBuilder`, `Empty`, `Deque`, `DenseBitVector`, and more of
@@ -24,7 +24,7 @@
 //!   file in its golden. To accept new or changed output, run with
 //!   `UPDATE_SNAPSHOTS=1` and review the diff.
 //! - `runs`: without CMake, `g++` (or `CXX`) compiles every generated
-//!   `.cpp` against the vendored runtime (`vendor/temper/be-cpp`), C++14
+//!   `.cpp` against the runtime (`crates/temper-be-cpp/runtime`), C++14
 //!   as Kotlin's, with every warning [`STRICT`] lists an error, through a
 //!   precompiled header of the runtime, built once per set of options
 //!   and kept under `CARGO_TARGET_TMPDIR` until the runtime, the options,
@@ -402,8 +402,8 @@ fn generate(case: &Case) -> Vec<OutFile> {
         .unwrap_or_else(|e| panic!("{}: {e}", case.key))
 }
 
-fn vendored() -> PathBuf {
-    kit::vendored("be-cpp")
+fn runtime_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("runtime")
 }
 
 #[test]
@@ -694,7 +694,7 @@ fn runtime_pch_with(
     let compiler = Path::new(gxx).file_name().unwrap().to_string_lossy();
     let root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
         .join(format!("be-cpp-runtime-{}-{compiler}", mode.name));
-    let mut headers: Vec<PathBuf> = fs::read_dir(vendored().join("temper-core"))
+    let mut headers: Vec<PathBuf> = fs::read_dir(runtime_dir().join("temper-core"))
         .unwrap()
         .map(|e| e.unwrap().path())
         .collect();
@@ -719,7 +719,7 @@ fn runtime_pch_with(
                     .args(runtime)
                     .args(mode.flags())
                     .arg("-I")
-                    .arg(vendored())
+                    .arg(runtime_dir())
                     .args(["-fsyntax-only"])
                     .arg(&probe);
                 check("g++, the runtime with its warnings", command);
@@ -734,7 +734,7 @@ fn runtime_pch_with(
                 .args(warnings)
                 .args(mode.flags())
                 .arg("-isystem")
-                .arg(vendored())
+                .arg(runtime_dir())
                 .args(["-x", "c++-header"])
                 .arg(root.join("runtime.hpp"))
                 .arg("-o")
@@ -814,7 +814,7 @@ fn compile_one(
         .args(allowed)
         .args(mode.flags())
         .arg("-isystem")
-        .arg(vendored())
+        .arg(runtime_dir())
         .arg("-I")
         .arg(src)
         .arg("-include")
@@ -1574,7 +1574,7 @@ fn co_await_interop() {
         .arg("-std=c++20")
         .args(ASAN.flags())
         .arg("-isystem")
-        .arg(vendored())
+        .arg(runtime_dir())
         .arg(&source)
         .arg("-o")
         .arg(&exe);
@@ -1625,7 +1625,7 @@ fn co_await_interop() {
             .arg("-std=c++20")
             .args(ASAN.flags())
             .arg("-isystem")
-            .arg(vendored())
+            .arg(runtime_dir())
             .arg("-I")
             .arg(&src)
             .args(&sources)
@@ -1706,7 +1706,7 @@ fn net_client_from_host() {
                 .args(STRICT)
                 .args(mode.flags())
                 .arg("-isystem")
-                .arg(vendored())
+                .arg(runtime_dir())
                 .arg("-I")
                 .arg(&src)
                 .args(&sources)

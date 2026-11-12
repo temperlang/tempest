@@ -145,28 +145,28 @@ pub const BACKEND: temper_tmpl::Backend = temper_tmpl::Backend {
 /// build` does too ([`runtime`]).
 /// std's modules with support code, as Kotlin's C# backend writes it
 /// into std's output: each module's path, and its support files
-/// (vendored from Kotlin's) beside its own, whose static methods its
+/// (begun as Kotlin's, in `runtime/std/`) beside its own, whose static methods its
 /// connected members call (`RegexSupport.CompiledFind(this, …)`).
 pub const STD_SUPPORT: &[(&str, &str, &str)] = &[
     (
         "regex",
         "IntRangeSet.cs",
-        include_str!("../../../vendor/temper/be-csharp/std/Regex/IntRangeSet.cs"),
+        include_str!("../runtime/std/Regex/IntRangeSet.cs"),
     ),
     (
         "regex",
         "RegexSupport.cs",
-        include_str!("../../../vendor/temper/be-csharp/std/Regex/RegexSupport.cs"),
+        include_str!("../runtime/std/Regex/RegexSupport.cs"),
     ),
     (
         "net",
         "NetSupport.cs",
-        include_str!("../../../vendor/temper/be-csharp/std/Net/NetSupport.cs"),
+        include_str!("../runtime/std/Net/NetSupport.cs"),
     ),
     (
         "temporal",
         "TemporalSupport.cs",
-        include_str!("../../../vendor/temper/be-csharp/std/Temporal/TemporalSupport.cs"),
+        include_str!("../runtime/std/Temporal/TemporalSupport.cs"),
     ),
 ];
 

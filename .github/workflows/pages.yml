@@ -14,7 +14,7 @@ on:
       - editors/vscode/syntaxes/**
       - editors/vscode/check_grammar.py
       - crates/**
-      - vendor/temper/**
+      - lib/**
       - Cargo.lock
       - README.md
       - .github/workflows/pages.yml

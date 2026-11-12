@@ -82,7 +82,7 @@
 //! writes too, reads what may be written, or may bubble), each operand
 //! before the last such one is computed first into a local named by
 //! [`naming::hints`] (`int32_t int32 = bump();`), in order. Kotlin's C++
-//! (at the vendored commit) leaves the order to the compiler, so
+//! (at 69f1a5b0) leaves the order to the compiler, so
 //! `module-state`'s `report()` logs `hi 1 of 3 10` under g++.
 //!
 //! **Objects** are `std::shared_ptr`s; a parameter of one is a `const &`,

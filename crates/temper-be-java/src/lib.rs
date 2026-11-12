@@ -146,13 +146,13 @@ pub const BACKEND: temper_tmpl::Backend = temper_tmpl::Backend {
 /// ([`runtime`]).
 /// std's modules with support code, as Kotlin's Java backend writes it
 /// into std's output: each module's path, and its support class's file
-/// (vendored from Kotlin's), in the module's package, whose static
+/// (begun as Kotlin's, in `runtime/std/`), in the module's package, whose static
 /// methods its connected members call
 /// ([`connected::Connection::StdStatic`]).
 pub const STD_SUPPORT: &[(&str, &str, &str)] = &[(
     "regex",
     "Core.java",
-    include_str!("../../../vendor/temper/be-java/temper-std/regex/Core.java"),
+    include_str!("../runtime/std/regex/Core.java"),
 )];
 
 pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet> {

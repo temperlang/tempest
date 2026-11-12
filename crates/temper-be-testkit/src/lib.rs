@@ -4,10 +4,10 @@
 //! dev-dependency; it knows no backend.
 //!
 //! - **Programs:** Kotlin Temper's functional tests that tmpl's
-//!   translation covers ([`COVERED`]), from the vendored copy
-//!   ([`temper_funtests`]), and the shared programs in this crate's
-//!   `programs/` ([`PROGRAMS`]), which cover module state, operators,
-//!   jumps, and string order beyond those tests, each a [`Case`] with the
+//!   translation covers ([`COVERED`]), from [`temper_funtests`]'s
+//!   `cases/`, and the shared programs in this crate's `programs/`
+//!   ([`PROGRAMS`]), which cover module state, operators, jumps, and
+//!   string order beyond those tests, each a [`Case`] with the
 //!   log a backend expects ([`cases`]). A backend adds programs of its
 //!   own as more [`Case`]s.
 //! - **To tmpl:** [`program`] settles a case's library and translates it,
@@ -296,14 +296,6 @@ pub const LIBRARIES: [&str; 4] = ["modules", "imports-library", "defaults", "ren
 /// The shared programs' directory.
 pub fn programs_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("programs")
-}
-
-/// A directory of the vendored copy of Kotlin Temper's sources, as
-/// `be-py/temper-core`.
-pub fn vendored(path: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../vendor/temper")
-        .join(path)
 }
 
 /// A program to translate: its library's name, its sources and their

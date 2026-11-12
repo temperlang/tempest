@@ -1,5 +1,5 @@
 //! Tests of the translation into tmpl ([`temper_frontend::to_tmpl`]) on
-//! Kotlin Temper's functional tests, from the vendored copy.
+//! Kotlin Temper's functional tests, in `temper-funtests`'s `cases/`.
 //!
 //! - `subset_a_goldens`: each test that subset A covers, and those with
 //!   classes, nullable types, generics, function values, parameters'
