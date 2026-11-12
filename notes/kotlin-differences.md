@@ -964,7 +964,11 @@ Other differences we won't copy:
   repository, which also goes in `RepositoryUrl` (Kotlin's is the
   repository). The rockspec's homepage, as the pom's URL, falls back to
   the repository. CMakeLists.txt's `project` has the description, where
-  Kotlin writes none.
+  Kotlin writes none. Each backend's names for a library (`pyName`,
+  `jsName`, `rustName`, `javaName`, `javaPackage`, `javaGroup`,
+  `javaArtifact`, and `csharpRootNamespace`) name its package and what
+  code that uses it imports, as Kotlin's, but an empty `javaPackage`,
+  which Kotlin takes as no package at all, counts as unset.
   Test: crates/temper-driver/tests/metadata.rs.
 
 - **Ignore files** (2026-11-06): Kotlin reads one, the nearest

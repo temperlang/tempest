@@ -54,6 +54,7 @@ use temper_frontend::project::{LibrarySources, library_of, load_library};
 use temper_frontend::settle::settle;
 use temper_frontend::sources::Sources;
 use temper_frontend::to_tmpl::gaps;
+use temper_tmpl::Tested;
 use temper_tmpl::host::HostFile;
 use temper_tmpl::naming::Interface;
 use temper_tmpl::{Backend, Program};
@@ -98,6 +99,24 @@ pub struct Built {
     /// Each library with errors in its own files, and how many, whether
     /// or not it built.
     pub errors: Vec<(String, usize)>,
+    /// What each library's config says, by its name.
+    pub metadata: Vec<(String, temper_tmpl::Metadata)>,
+}
+
+impl Built {
+    /// A library that built, for a backend's tools, with what its config
+    /// says.
+    pub fn tested(&self, name: &str, tests: usize) -> Tested {
+        let metadata = (self.metadata.iter())
+            .find(|(n, _)| n == name)
+            .map(|(_, m)| m.clone())
+            .unwrap_or_default();
+        Tested {
+            name: name.to_string(),
+            tests,
+            metadata,
+        }
+    }
 }
 
 impl Built {
@@ -229,10 +248,17 @@ pub fn build(
             let _ = writeln!(err, "{library}: {}", error_count(*count));
         }
     }
+    let metadata = (libraries.iter())
+        .map(|l| {
+            let exports = l.config.exports.clone();
+            (l.config.name.clone(), temper_tmpl::Metadata { exports })
+        })
+        .collect();
     Some(Built {
         results,
         tests,
         errors,
+        metadata,
     })
 }
 

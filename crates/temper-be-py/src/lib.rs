@@ -120,7 +120,7 @@ pub const BACKEND: temper_tmpl::Backend = temper_tmpl::Backend {
 fn dependencies(p: &Program, variant: &Variant) -> String {
     let mut lines = vec![format!("temper-core=={}", variant.runtime_version)];
     for (name, version) in p.dependencies() {
-        let name = translate::library_name(name);
+        let name = translate::library_name(p, name);
         let name = name.as_str();
         lines.push(match version {
             "0.0.0" | "" => name.to_string(),
@@ -181,9 +181,15 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
         .flatten();
     let p = chained.as_ref().unwrap_or(p);
     let names = assign_checked(p, &variant.rules).map_err(|what| NotYet { what })?;
-    // std's is `temper-std`, its package `temper_std`, as Kotlin's.
-    let library = &translate::library_name(&p.library.name);
-    let package = names::library_package(library);
+    // std's is `temper-std`, its package `temper_std`, as Kotlin's; a
+    // config's `pyName` names the project and its package, but not its
+    // directory, which has the library's name.
+    let project = translate::library_name(p, &p.library.name);
+    let package = names::library_package(&project);
+    let library = match p.library.name.as_str() {
+        "std" => &project,
+        name => name,
+    };
     let mut translator = translate::Translator::new(p, &names);
     let mut sources = Vec::new();
     let mut tests = Vec::new();
@@ -272,7 +278,7 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
     };
     let pyproject = format!(
         r#"[project]
-name = "{library}"
+name = "{project}"
 version = "{version}"
 description = {description}
 readme = {{text = "n/a", content-type = "text/plain"}}
@@ -288,6 +294,7 @@ dependencies = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 "#,
+        project = names::project_name(&project),
         version = p.version_or_default(),
         description = quoted(meta.get("description").unwrap_or("")),
         license = quoted(license),

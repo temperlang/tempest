@@ -18,8 +18,9 @@ pub const TOOLS: Tools = Tools {
 };
 
 fn run(dir: &Path, library: &Tested, _: &[Tested]) -> Result<bool, String> {
-    // Library names are dashed identifiers, which need no escaping.
-    let name = &library.name;
+    // Package names have no quotes or backslashes, which configs can't
+    // give, so they need no escaping.
+    let name = crate::translate::js_name(&library.name, &library.metadata);
     program(
         Command::new(tool("NODE", "node"))
             .args(["--input-type=module", "-e"])
@@ -37,7 +38,12 @@ fn link(dir: &Path, all: &[Tested]) -> Result<(), String> {
         ("@temperlang/core".to_string(), dir.join("temper-core")),
         ("@temperlang/std".to_string(), dir.join("std")),
     ];
-    links.extend(all.iter().map(|l| (l.name.clone(), dir.join(&l.name))));
+    links.extend((all.iter()).map(|l| {
+        (
+            crate::translate::js_name(&l.name, &l.metadata),
+            dir.join(&l.name),
+        )
+    }));
     for (name, target) in links {
         let link = modules.join(&name);
         if let Some(parent) = link.parent() {

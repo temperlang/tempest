@@ -514,6 +514,23 @@ pub fn package_name(name: &str) -> String {
     out
 }
 
+/// A project's name as pyproject.toml gives it, normalized as Python's
+/// packaging does and Kotlin's writes it: lowercase, each run of `-`, `_`,
+/// and `.` a `-` (`Geometry_Py` gives `geometry-py`).
+pub fn project_name(name: &str) -> String {
+    let mut out = String::new();
+    for c in name.chars() {
+        if matches!(c, '-' | '_' | '.') {
+            if !out.ends_with('-') {
+                out.push('-');
+            }
+        } else {
+            out.extend(c.to_lowercase());
+        }
+    }
+    out
+}
+
 /// A library's name as its top-level Python package: as
 /// [`package_name`], and with a trailing `_` if a standard module has
 /// its name (`types_`), which Kotlin leaves as it is, where the library

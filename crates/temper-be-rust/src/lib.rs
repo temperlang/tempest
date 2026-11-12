@@ -255,12 +255,9 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
     let p = copied.as_ref().unwrap_or(p);
     let names = assign_checked(p, &variant.rules).map_err(|what| NotYet { what })?;
     let package = &p.library.name;
-    // std's crate is `temper-std`, as Kotlin's, in `std/`.
-    let cargo_name = if package == "std" {
-        "temper-std"
-    } else {
-        package
-    };
+    // std's package is `temper-std`, as Kotlin's, in `std/`; a config's
+    // `rustName` names another's, in the library's directory still.
+    let cargo_name = &translate::rust_name(package, p.metadata());
     let krate = names::crate_name(cargo_name);
     let mut translator = translate::Translator::new(p, &names);
     // Each module's file, by its path; parents without a module of their
@@ -375,10 +372,8 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
     }
     std_features.sort();
     let dependency = |name: &str, version: &str| {
-        let (package, path) = match name {
-            "std" => ("temper-std", "std"),
-            name => (name, name),
-        };
+        let package = translate::rust_name(name, p.metadata_of(name));
+        let path = name;
         let version = temper_tmpl::version_or_default(version);
         let features = match name {
             "std" if !std_features.is_empty() => {
@@ -422,7 +417,7 @@ rust-version = "{rust}"
 [dependencies]
 temper-core = {{ path = "../temper-core", version = "={runtime}" }}
 {dependencies}{dev_dependencies}{bin}"#,
-        bin = bin_section(package),
+        bin = bin_section(cargo_name),
         name = cargo_name,
         version = p.version_or_default(),
         metadata = package_metadata(p),
@@ -450,7 +445,7 @@ temper-core = {{ path = "../temper-core", version = "={runtime}" }}
         .collect();
     let mut inits = String::new();
     for name in &used {
-        let krate = translate::library_crate(name);
+        let krate = translate::library_crate(p, name);
         inits.push_str(&format!(
             "        {krate}::init(Some(support::config().clone()))?;\n"
         ));

@@ -25,7 +25,8 @@ fn python_path(dir: &Path, all: &[Tested]) -> Result<std::ffi::OsString, String>
 }
 
 fn run(dir: &Path, library: &Tested, all: &[Tested]) -> Result<bool, String> {
-    let package = crate::names::library_package(&library.name);
+    let project = crate::translate::py_name(&library.name, &library.metadata);
+    let package = crate::names::library_package(&project);
     let top = format!(
         "from temper_core import init_simple_logging, await_safe_to_exit\n\
          init_simple_logging()\n\

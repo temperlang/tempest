@@ -3479,10 +3479,12 @@ fn jumps(body: &[Stmt], brk: bool) -> bool {
 }
 
 /// A library's root namespace: std's is `TemperLang.Std`, as Kotlin's;
-/// others are [`crate::names::root_namespace`]'s.
-pub fn library_namespace(library: &str) -> String {
-    match library {
-        "std" => "TemperLang.Std".into(),
+/// another's is its config's `csharpRootNamespace`, or else
+/// [`crate::names::root_namespace`]'s.
+pub fn library_namespace(p: &Program, library: &str) -> String {
+    match (library, p.metadata_of(library).get("csharpRootNamespace")) {
+        ("std", _) => "TemperLang.Std".into(),
+        (_, Some(namespace)) => namespace.into(),
         _ => crate::names::root_namespace(library),
     }
 }
@@ -3492,13 +3494,13 @@ pub fn library_namespace(library: &str) -> String {
 pub fn module_namespace(p: &Program, module: DeclId) -> String {
     let d = p.decls.get(module);
     let (root, path) = match d.kind {
-        DeclKind::Library => (library_namespace(p.name(module)), ""),
-        _ if !d.owner.is_none() => (library_namespace(p.name(d.owner)), p.name(module)),
+        DeclKind::Library => (library_namespace(p, p.name(module)), ""),
+        _ if !d.owner.is_none() => (library_namespace(p, p.name(d.owner)), p.name(module)),
         _ => {
             let path = (p.modules.iter())
                 .find(|m| m.decl == module)
                 .map_or("", |m| m.path.as_str());
-            (library_namespace(&p.library.name), path)
+            (library_namespace(p, &p.library.name), path)
         }
     };
     let mut out = root;

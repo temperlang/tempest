@@ -189,7 +189,7 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
     let p = spilled.as_ref().unwrap_or(p);
     let names = assign_checked(p, &variant.rules).map_err(|what| NotYet { what })?;
     let library = &p.library.name;
-    let root = translate::library_namespace(library);
+    let root = translate::library_namespace(p, library);
     let mut sources = Vec::new();
     let mut tests = Vec::new();
     let mut program_loads = Vec::new();
@@ -353,8 +353,8 @@ fn libraries_used(p: &Program, tests: bool) -> Vec<String> {
 
 /// A reference to a library's project beside this one's: std's as
 /// Kotlin's, `../../std/src/TemperLang.Std.csproj`.
-fn project_reference(name: &str) -> String {
-    let project = translate::library_namespace(name);
+fn project_reference(p: &Program, name: &str) -> String {
+    let project = translate::library_namespace(p, name);
     format!("\n    <ProjectReference Include=\"../../{name}/src/{project}.csproj\"/>")
 }
 
@@ -366,7 +366,7 @@ fn test_project(p: &Program, root: &str, variant: &Variant) -> String {
     let in_code = libraries_in_code(p);
     let dependencies: String = (p.dependencies().iter())
         .filter(|(name, _)| !in_code.iter().any(|l| l == name))
-        .map(|(name, _)| project_reference(name))
+        .map(|(name, _)| project_reference(p, name))
         .collect();
     format!(
         r#"<Project Sdk="Microsoft.NET.Sdk">
@@ -436,7 +436,7 @@ fn library_project(p: &Program, root: &str, variant: &Variant) -> String {
     let in_code = libraries_in_code(p);
     let dependencies: String = (p.dependencies().iter())
         .filter(|(name, _)| in_code.iter().any(|l| l == name))
-        .map(|(name, _)| project_reference(name))
+        .map(|(name, _)| project_reference(p, name))
         .collect();
     // std's `testing` throws MSTest's `AssertFailedException`, so std has
     // the packages its C# configuration lists.

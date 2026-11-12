@@ -72,15 +72,9 @@ pub fn run(
     let dir = std::path::absolute(&dir).unwrap_or(dir);
     let all: Vec<Tested> = (built.tests.iter())
         .filter(|(name, _)| !failed(name))
-        .map(|(name, _)| Tested {
-            name: name.clone(),
-            tests: 0,
-        })
+        .map(|(name, _)| built.tested(name, 0))
         .collect();
-    let this = Tested {
-        name: library.to_string(),
-        tests: 0,
-    };
+    let this = built.tested(library, 0);
     let ran = (tools.prepare)
         .map_or(Ok(()), |prepare| prepare(&dir, &all))
         .and_then(|()| (tools.run)(&dir, &this, &all));

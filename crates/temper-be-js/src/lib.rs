@@ -308,7 +308,7 @@ fn generate(p: &Program, variant: &Variant, maps: Option<&str>) -> Result<Vec<Ou
 }}
 "#,
         // std's is `@temperlang/std`, as its importers name it.
-        name = translate::package_of(package),
+        name = translate::package_of(p, package),
         metadata = package_metadata(p),
         entries = entries.join("\n"),
         dependencies = {
@@ -318,7 +318,7 @@ fn generate(p: &Program, variant: &Variant, maps: Option<&str>) -> Result<Vec<Ou
                 variant.runtime_version
             )];
             for (name, version) in p.dependencies() {
-                let name = translate::package_of(name);
+                let name = translate::package_of(p, name);
                 let version = if version == "0.0.0" { "*" } else { version };
                 lines.push(format!("        \"{name}\": \"{version}\""));
             }

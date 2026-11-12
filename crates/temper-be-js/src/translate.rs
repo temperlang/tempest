@@ -204,9 +204,9 @@ impl<'a> Translator<'a> {
         }
         let d = p.decls.get(module);
         let specifier = if d.kind == DeclKind::Library {
-            package_of(p.name(module))
+            package_of(p, p.name(module))
         } else if !d.owner.is_none() {
-            let package = package_of(p.name(d.owner));
+            let package = package_of(p, p.name(d.owner));
             match p.name(module) {
                 "" => package,
                 path => format!("{package}/{path}"),
@@ -2086,11 +2086,18 @@ fn is_constant(e: &Expr) -> bool {
     )
 }
 
-/// A library's package, as imports name it: std's is `@temperlang/std`.
-pub fn package_of(library: &str) -> String {
+/// A library's npm package, as imports name it: std's is
+/// `@temperlang/std`, as Kotlin's, and another's is its config's
+/// `jsName`, or else its own name.
+pub fn package_of(p: &Program, library: &str) -> String {
+    js_name(library, p.metadata_of(library))
+}
+
+/// [`package_of`], given what the library's config says.
+pub fn js_name(library: &str, metadata: &temper_tmpl::Metadata) -> String {
     match library {
         "std" => "@temperlang/std".into(),
-        _ => library.into(),
+        _ => metadata.get("jsName").unwrap_or(library).into(),
     }
 }
 

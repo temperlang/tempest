@@ -1,6 +1,8 @@
 //! A library's config metadata (its license, description, authors,
 //! homepage, and repository) in each backend's package files, as Kotlin
-//! writes them, and what each writes for a library without any.
+//! writes them, and what each writes for a library without any; and each
+//! backend's names for a library, in its package files and in the code
+//! of a library that uses it.
 
 use temper_tmpl::{Metadata, Program, text};
 
@@ -233,4 +235,182 @@ fn cpp() {
         "app/CMakeLists.txt",
     );
     assert!(text.contains("project(app LANGUAGES CXX)\n"), "{text}");
+}
+
+/// `app`, which uses `util`, each with every backend's name for it, but
+/// Lua's and C++'s, which take none.
+#[allow(dead_code)] // Unless every backend is left out.
+const USES: &str = "tmpl 1 model 1 library app 1.0.0
+
+uses `util`#5 1.2.0 {
+  module ``#8 {
+    fn u#9(): Void;
+  }
+}
+
+module app#0 {
+  export fn f#1(): Void {
+    u#9();
+  }
+
+  init {
+  }
+}
+";
+
+#[allow(dead_code)] // Unless every backend is left out.
+const UTIL: &str = "tmpl 1 model 1 library util 1.2.0
+
+module util#0 {
+  export fn u#1(): Void {
+  }
+
+  init {
+  }
+}
+";
+
+/// [`USES`]'s `app`, for a backend's naming rules, with names for it and
+/// `util` in their configs.
+#[allow(dead_code)] // Unless every backend is left out.
+fn named(rules: &temper_tmpl::naming::NamingRules) -> Program {
+    use temper_tmpl::naming::{self, Interface};
+    let mut program = text::read(USES).unwrap();
+    let util = text::read(UTIL).unwrap();
+    let names = naming::assign(&util, rules);
+    program.interfaces.push(Interface::of(&util, &names));
+    let config = |pairs: &[(&str, &str)]| Metadata {
+        exports: (pairs.iter())
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect(),
+    };
+    program.metadata = vec![
+        (
+            "app".into(),
+            config(&[
+                ("pyName", "App_Py"),
+                ("jsName", "@example/app-js"),
+                ("rustName", "app-rs"),
+                ("javaName", "app-java"),
+                ("javaPackage", "com.example.app"),
+                ("csharpRootNamespace", "Example.App"),
+            ]),
+        ),
+        (
+            "util".into(),
+            config(&[
+                ("pyName", "util-py"),
+                ("jsName", "util-js"),
+                ("rustName", "util-rs"),
+                ("javaName", "util-java"),
+                ("javaGroup", "com.example"),
+                ("javaArtifact", "util-lib"),
+                ("csharpRootNamespace", "Example.Util"),
+            ]),
+        ),
+    ];
+    program
+}
+
+/// A file's text, by its path, from what a backend made of [`named`].
+#[allow(dead_code)] // Unless every backend is left out.
+fn named_file(
+    backend: fn(&Program) -> Vec<temper_tmpl::OutFile>,
+    rules: &temper_tmpl::naming::NamingRules,
+    path: &str,
+) -> String {
+    file(backend(&named(rules)), path)
+}
+
+#[test]
+#[cfg(feature = "py")]
+fn python_names() {
+    use temper_be_py::{PY, translate};
+    let made = |p: &Program| translate(p, &PY).unwrap();
+    // The project, normalized, and its package, in the library's
+    // directory; and the other library by its project and package.
+    let text = named_file(made, &PY.rules, "app/pyproject.toml");
+    assert!(text.contains("name = \"app-py\"\n"), "{text}");
+    assert!(text.contains("    \"util-py==1.2.0\"\n"), "{text}");
+    let text = named_file(made, &PY.rules, "app/App_Py/App_Py.py");
+    assert!(text.contains("from util_py import u as _u\n"), "{text}");
+}
+
+#[test]
+#[cfg(feature = "js")]
+fn js_names() {
+    use temper_be_js::{JS, translate};
+    let made = |p: &Program| translate(p, &JS).unwrap();
+    let text = named_file(made, &JS.rules, "app/package.json");
+    assert!(text.contains("\"name\": \"@example/app-js\",\n"), "{text}");
+    assert!(text.contains("        \"util-js\": \"1.2.0\"\n"), "{text}");
+    let text = named_file(made, &JS.rules, "app/app.internal.js");
+    assert!(text.contains("import { u } from \"util-js\";\n"), "{text}");
+}
+
+#[test]
+#[cfg(feature = "rust")]
+fn rust_names() {
+    use temper_be_rust::{RUST, translate};
+    let made = |p: &Program| translate(p, &RUST).unwrap();
+    let text = named_file(made, &RUST.rules, "app/Cargo.toml");
+    assert!(text.contains("name = \"app-rs\"\n"), "{text}");
+    assert!(
+        text.contains("util-rs = { path = \"../util\", version = \"1.2.0\" }\n"),
+        "{text}"
+    );
+    let text = named_file(made, &RUST.rules, "app/src/mod.rs");
+    assert!(text.contains("    util_rs::u();\n"), "{text}");
+    let text = named_file(made, &RUST.rules, "app/src/main.rs");
+    assert!(text.contains("    app_rs::init(None)"), "{text}");
+}
+
+#[test]
+#[cfg(feature = "java")]
+fn java_names() {
+    use temper_be_java::{JAVA, translate};
+    let made = |p: &Program| translate(p, &JAVA).unwrap();
+    // The group is the package, where no `javaGroup` is given; the
+    // artifact the `javaName`; and for `util`, its group and artifact,
+    // and its package from its `javaName`.
+    let text = named_file(made, &JAVA.rules, "app/pom.xml");
+    assert!(
+        text.contains(
+            "  <groupId>com.example.app</groupId>\n  <artifactId>app-java</artifactId>\n"
+        ),
+        "{text}"
+    );
+    assert!(
+        text.contains(
+            "      <groupId>com.example</groupId>\n      <artifactId>util-lib</artifactId>\n"
+        ),
+        "{text}"
+    );
+    let text = named_file(
+        made,
+        &JAVA.rules,
+        "app/src/main/java/com/example/app/AppGlobal.java",
+    );
+    assert!(
+        text.starts_with("package com.example.app;\n\nimport util_java.UtilJavaGlobal;\n"),
+        "{text}"
+    );
+}
+
+#[test]
+#[cfg(feature = "csharp")]
+fn csharp_names() {
+    use temper_be_csharp::{CSHARP, translate};
+    let made = |p: &Program| translate(p, &CSHARP).unwrap();
+    let text = named_file(made, &CSHARP.rules, "app/src/Example.App.csproj");
+    assert!(
+        text.contains("<RootNamespace>Example.App</RootNamespace>")
+            && text.contains("<ProjectReference Include=\"../../util/src/Example.Util.csproj\"/>"),
+        "{text}"
+    );
+    let text = named_file(made, &CSHARP.rules, "app/src/AppGlobal.cs");
+    assert!(
+        text.starts_with("using Example.Util;\n\nnamespace Example.App;\n"),
+        "{text}"
+    );
 }

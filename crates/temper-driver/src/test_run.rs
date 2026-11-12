@@ -63,10 +63,7 @@ pub fn test_backend(
         .collect();
     let all: Vec<Tested> = (built.tests.iter())
         .filter(|(name, _)| !failed.contains(&name.as_str()))
-        .map(|(name, tests)| Tested {
-            name: name.clone(),
-            tests: if wanted(name) { *tests } else { 0 },
-        })
+        .map(|(name, tests)| built.tested(name, if wanted(name) { *tests } else { 0 }))
         .collect();
     let dir = build_options.out(root).join(backend.name);
     let mut ok = failed.iter().all(|l| !wanted(l)) && built.errors.is_empty();

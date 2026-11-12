@@ -241,7 +241,7 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
         let package = match p.modules.iter().find(|m| m.path == dir) {
             Some(m) => translate::module_package(p, m.decl),
             None => (dir.split('/').filter(|s| !s.is_empty()))
-                .fold(translate::library_package(library), |out, part| {
+                .fold(translate::library_package(p, library), |out, part| {
                     format!("{out}.{}", names::package(part))
                 }),
         };
@@ -329,14 +329,21 @@ public final class {main} {{
     )
 }
 
-/// A library's Maven group and artifact: its name as Java names a
-/// package, and its name, as Kotlin's default configuration has them, but
-/// for std's, which its Java configuration sets (`dev.temperlang` and
-/// `temper-std`).
-fn coordinates(library: &str) -> (String, &str) {
+/// A library's Maven group and artifact, as Kotlin's configuration has
+/// them: its config's `javaGroup`, or else its `javaPackage`, or else its
+/// Java name (its `javaName`, or else its own) as Java names a package;
+/// and its `javaArtifact`, or else its Java name. std's Java
+/// configuration sets them (`dev.temperlang` and `temper-std`).
+fn coordinates(p: &Program, library: &str) -> (String, String) {
+    let meta = p.metadata_of(library);
+    let name = meta.get("javaName").unwrap_or(library);
     match library {
-        "std" => ("dev.temperlang".to_string(), "temper-std"),
-        _ => (names::package(library), library),
+        "std" => ("dev.temperlang".to_string(), "temper-std".to_string()),
+        _ => (
+            (meta.get("javaGroup").or(meta.get("javaPackage")))
+                .map_or_else(|| names::package(name), temper_tmpl::xml_text),
+            temper_tmpl::xml_text(meta.get("javaArtifact").unwrap_or(name)),
+        ),
     }
 }
 
@@ -383,13 +390,13 @@ fn pom(
     variant: &Variant,
 ) -> String {
     let version = p.version_or_default();
-    let (group, artifact) = coordinates(library);
+    let (group, artifact) = coordinates(p, library);
     // Each library used, by its coordinates; for the tests alone, in
     // their scope.
     let in_code = libraries_in_code(p);
     let mut dependencies = (p.dependencies().iter())
         .map(|&(name, version)| {
-            let (group, artifact) = coordinates(name);
+            let (group, artifact) = coordinates(p, name);
             let scope = if in_code.iter().any(|l| l == name) {
                 "compile"
             } else {

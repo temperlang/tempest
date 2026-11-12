@@ -18,17 +18,21 @@ pub const TOOLS: Tools = Tools {
 
 fn run(dir: &Path, library: &Tested, _: &[Tested]) -> Result<bool, String> {
     let target = std::path::absolute(dir.join("target")).map_err(|e| e.to_string())?;
+    // The package's binary, as its config may name it ([`crate::bin_name`]).
+    let bin = crate::bin_name(&crate::translate::rust_name(
+        &library.name,
+        &library.metadata,
+    ));
     step(
         Command::new(tool("CARGO", "cargo"))
-            .args(["build", "--offline", "--bin", &library.name])
+            .args(["build", "--offline", "--bin", &bin])
             .env("CARGO_TARGET_DIR", &target)
             .current_dir(dir.join(&library.name)),
         "cargo build",
     )?;
-    let exe =
-        target
-            .join("debug")
-            .join(format!("{}{}", library.name, std::env::consts::EXE_SUFFIX));
+    let exe = target
+        .join("debug")
+        .join(format!("{bin}{}", std::env::consts::EXE_SUFFIX));
     program(&mut Command::new(exe), &library.name)
 }
 
