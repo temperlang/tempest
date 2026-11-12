@@ -82,6 +82,14 @@ pub fn program_of(
     let settled = crate::settle::settle(library(sources, modules));
     let mut program = crate::to_tmpl::to_tmpl(&settled, "std")?;
     program.library.version = crate::to_tmpl::STD_VERSION.to_string();
+    // Its config's metadata, for its package files, as Kotlin's.
+    if let Ok(text) = sources.read(&format!("{DIR}/config.temper.md")) {
+        let config = crate::project::Config::read(&text, DIR);
+        let metadata = temper_tmpl::Metadata {
+            exports: config.exports,
+        };
+        program.metadata = vec![("std".to_string(), metadata)];
+    }
     Ok(program)
 }
 

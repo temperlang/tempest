@@ -953,6 +953,20 @@ Other differences we won't copy:
   `content_tags_out_of_steps`, `compile_time_allowlist`;
   programs/content-tags.
 
+- **Package metadata** (2026-11-12): a library's `license`,
+  `description`, `authors`, `homepage`, and `repository` go into each
+  backend's package files as Kotlin's, with a few fixes for what those
+  formats expect. pyproject.toml has the links under `[project.urls]`
+  (Kotlin's `homepage` and `repository` keys in `[project]` aren't
+  valid there), and splits an author's `Name <email>` into its name and
+  email. package.json has the repository as git's, which Kotlin leaves
+  out. A .csproj's `PackageProjectUrl` is the homepage, or else the
+  repository, which also goes in `RepositoryUrl` (Kotlin's is the
+  repository). The rockspec's homepage, as the pom's URL, falls back to
+  the repository. CMakeLists.txt's `project` has the description, where
+  Kotlin writes none.
+  Test: crates/temper-driver/tests/metadata.rs.
+
 - **Ignore files** (2026-11-06): Kotlin reads one, the nearest
   `.temperignore` or `.gitignore` at or above where it starts (its
   "TODO Support multiple ignore files"). Tempest reads every

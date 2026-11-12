@@ -132,6 +132,27 @@ fn dependencies(p: &Program, variant: &Variant) -> String {
     quoted.join(",\n")
 }
 
+/// A config's `authors` as pyproject.toml's author: its name, without
+/// the commas a name there can't have, as Kotlin's, and its email apart
+/// where it ends with one, as `Name <name@example.com>`.
+fn author(authors: &str) -> String {
+    let quoted = temper_tmpl::json_string;
+    let (name, email) = match authors
+        .trim()
+        .strip_suffix('>')
+        .and_then(|a| a.rsplit_once('<'))
+    {
+        Some((name, email)) if email.contains('@') => (name.trim(), Some(email.trim())),
+        _ => (authors.trim(), None),
+    };
+    let name = name.replace(',', "");
+    match (name.as_str(), email) {
+        ("", Some(email)) => format!("{{ email = {} }}", quoted(email)),
+        (name, Some(email)) => format!("{{ name = {}, email = {} }}", quoted(name), quoted(email)),
+        (name, None) => format!("{{ name = {} }}", quoted(name)),
+    }
+}
+
 /// Translates a library, laid out as Kotlin's Python backend lays it out:
 ///
 /// ```text
@@ -232,25 +253,44 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
         String::new()
     };
     let init = format!("{}{root}", inits.concat());
+    let meta = p.metadata();
+    let quoted = temper_tmpl::json_string;
+    // A license as Kotlin's, which names none as proprietary.
+    let license = meta.get("license").unwrap_or("LicenseRef-Proprietary");
+    let authors = meta.get("authors").map_or(String::new(), author);
+    // The links, as `[project.urls]`, where pyproject.toml has them.
+    let urls: String = [("Homepage", "homepage"), ("Repository", "repository")]
+        .iter()
+        .filter_map(|(label, key)| {
+            meta.get(key)
+                .map(|url| format!("{label} = {}\n", quoted(url)))
+        })
+        .collect();
+    let urls = match urls.as_str() {
+        "" => String::new(),
+        urls => format!("\n[project.urls]\n{urls}"),
+    };
     let pyproject = format!(
         r#"[project]
 name = "{library}"
 version = "{version}"
-description = ""
+description = {description}
 readme = {{text = "n/a", content-type = "text/plain"}}
 requires-python = ">=3.11"
-license = {{ text = "LicenseRef-Proprietary" }}
-authors = [  ]
+license = {{ text = {license} }}
+authors = [ {authors} ]
 
 dependencies = [
 {dependencies}
 ]
-
+{urls}
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 "#,
         version = p.version_or_default(),
+        description = quoted(meta.get("description").unwrap_or("")),
+        license = quoted(license),
         dependencies = dependencies(p, variant),
     );
     // Host code's other files, beside the modules, as Kotlin copies them;

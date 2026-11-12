@@ -211,6 +211,24 @@ pub fn bin_name(package: &str) -> String {
 
 const FORBIDDEN_BINS: [&str; 4] = ["build", "deps", "examples", "incremental"];
 
+/// The config's metadata, as `[package]` fields in Kotlin's order, a line
+/// each: `license`, `description`, `homepage`, `repository`, and its
+/// `authors` as the one author.
+fn package_metadata(p: &Program) -> String {
+    let meta = p.metadata();
+    let quoted = temper_tmpl::json_string;
+    let mut out = String::new();
+    for key in ["license", "description", "homepage", "repository"] {
+        if let Some(value) = meta.get(key) {
+            out.push_str(&format!("{key} = {}\n", quoted(value)));
+        }
+    }
+    if let Some(authors) = meta.get("authors") {
+        out.push_str(&format!("authors = [{}]\n", quoted(authors)));
+    }
+    out
+}
+
 /// A `[[bin]]` section naming the binary, where its package's name won't
 /// do ([`bin_name`]).
 fn bin_section(package: &str) -> String {
@@ -398,7 +416,7 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
         r#"[package]
 name = "{name}"
 version = "{version}"
-edition = "2021"
+{metadata}edition = "2021"
 rust-version = "{rust}"
 
 [dependencies]
@@ -407,6 +425,7 @@ temper-core = {{ path = "../temper-core", version = "={runtime}" }}
         bin = bin_section(package),
         name = cargo_name,
         version = p.version_or_default(),
+        metadata = package_metadata(p),
         rust = variant.rust_version,
         runtime = variant.runtime_version,
     );

@@ -64,6 +64,7 @@ impl Builder {
                 has_spans: false,
                 host: Default::default(),
                 interfaces: Vec::new(),
+                metadata: Vec::new(),
             },
         }
     }

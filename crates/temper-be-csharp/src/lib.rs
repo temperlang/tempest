@@ -400,6 +400,28 @@ fn version_line(version: &str) -> String {
     }
 }
 
+/// The config's metadata, as Kotlin's `CsProj` writes it, a property a
+/// line: the authors and description before `IsPackable`, then the
+/// license and the project's URL after it. The URL is the homepage, or
+/// else the repository, which also goes in `RepositoryUrl`, where Kotlin
+/// gives only the repository, as the project's URL.
+fn package_metadata(p: &Program) -> (String, String) {
+    let meta = p.metadata();
+    let line = |tag: &str, value: Option<&str>| match value {
+        Some(value) => format!("    <{tag}>{}</{tag}>\n", temper_tmpl::xml_text(value)),
+        None => String::new(),
+    };
+    let about =
+        line("Authors", meta.get("authors")) + &line("Description", meta.get("description"));
+    let links = line("PackageLicenseExpression", meta.get("license"))
+        + &line(
+            "PackageProjectUrl",
+            meta.get("homepage").or(meta.get("repository")),
+        )
+        + &line("RepositoryUrl", meta.get("repository"));
+    (about, links)
+}
+
 /// The library's project, as Kotlin's `CsProj` writes it for a library
 /// without tests, and with a reference to each library it uses: its
 /// tests' project may see its
@@ -408,6 +430,7 @@ fn version_line(version: &str) -> String {
 fn library_project(p: &Program, root: &str, variant: &Variant) -> String {
     let framework = variant.target_framework;
     let version = version_line(&p.library.version);
+    let (about, links) = package_metadata(p);
     // Each library its code uses, by its project beside this one's
     // library; what only its tests use, their project refers to.
     let in_code = libraries_in_code(p);
@@ -432,8 +455,8 @@ fn library_project(p: &Program, root: &str, variant: &Variant) -> String {
   <PropertyGroup>
     <TargetFramework>{framework}</TargetFramework>
     <RootNamespace>{root}</RootNamespace>
-{version}    <IsPackable>true</IsPackable>
-    <Nullable>enable</Nullable>
+{version}{about}    <IsPackable>true</IsPackable>
+{links}    <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="{root}Test"/>

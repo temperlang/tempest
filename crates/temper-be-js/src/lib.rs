@@ -297,7 +297,7 @@ fn generate(p: &Program, variant: &Variant, maps: Option<&str>) -> Result<Vec<Ou
     let package_json = format!(
         r#"{{
     "name": "{name}",
-    "type": "module",
+{metadata}    "type": "module",
     "exports": {{
 {entries}
         ".": "./index.js"
@@ -309,6 +309,7 @@ fn generate(p: &Program, variant: &Variant, maps: Option<&str>) -> Result<Vec<Ou
 "#,
         // std's is `@temperlang/std`, as its importers name it.
         name = translate::package_of(package),
+        metadata = package_metadata(p),
         entries = entries.join("\n"),
         dependencies = {
             // Sorted, as Kotlin's: `@temperlang/core` first.
@@ -357,4 +358,37 @@ fn public_module(exports: &[String], leaf: &str) -> String {
         let list: String = exports.iter().map(|e| ["  ", e, ",\n"].concat()).collect();
         format!("export {{\n{list}}} from \"./{leaf}.internal.js\";\n")
     }
+}
+
+/// The library's version, where it sets one, and its config's metadata,
+/// as package.json's fields in Kotlin's order, a line each: `version`,
+/// `author`, `description`, `homepage`, `license`, and `repository`,
+/// as git's, which Kotlin leaves out.
+fn package_metadata(p: &Program) -> String {
+    let meta = p.metadata();
+    let quoted = temper_tmpl::json_string;
+    let mut out = String::new();
+    if !matches!(p.library.version.as_str(), "0.0.0" | "") {
+        out.push_str(&format!(
+            "    \"version\": {},\n",
+            quoted(&p.library.version)
+        ));
+    }
+    for (field, key) in [
+        ("author", "authors"),
+        ("description", "description"),
+        ("homepage", "homepage"),
+        ("license", "license"),
+    ] {
+        if let Some(value) = meta.get(key) {
+            out.push_str(&format!("    \"{field}\": {},\n", quoted(value)));
+        }
+    }
+    if let Some(url) = meta.get("repository") {
+        out.push_str(&format!(
+            "    \"repository\": {{ \"type\": \"git\", \"url\": {} }},\n",
+            quoted(url)
+        ));
+    }
+    out
 }

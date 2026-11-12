@@ -340,6 +340,37 @@ fn coordinates(library: &str) -> (String, &str) {
     }
 }
 
+/// The config's metadata, as Kotlin's `pomXml` writes it after the name:
+/// the description, which Maven Central requires, so the library's name
+/// where there's none; then the authors as the developer, the homepage
+/// (or else the repository) as the URL, the license, and the repository
+/// as the source's URL, for those set.
+fn pom_metadata(p: &Program, library: &str) -> String {
+    let meta = p.metadata();
+    let xml = temper_tmpl::xml_text;
+    let description = meta.get("description").unwrap_or(library);
+    let mut out = format!("  <description>{}</description>\n", xml(description));
+    if let Some(authors) = meta.get("authors") {
+        out.push_str(&format!(
+            "  <developers>\n    <developer>\n      <name>{}</name>\n    </developer>\n  </developers>\n",
+            xml(authors)
+        ));
+    }
+    if let Some(url) = meta.get("homepage").or(meta.get("repository")) {
+        out.push_str(&format!("  <url>{}</url>\n", xml(url)));
+    }
+    if let Some(license) = meta.get("license") {
+        out.push_str(&format!(
+            "  <licenses>\n    <license>\n      <name>{}</name>\n    </license>\n  </licenses>\n",
+            xml(license)
+        ));
+    }
+    if let Some(url) = meta.get("repository") {
+        out.push_str(&format!("  <scm>\n    <url>{}</url>\n  </scm>\n", xml(url)));
+    }
+    out
+}
+
 /// The package description, as Kotlin's `pomXml` writes it for a library
 /// without tests: Maven Central's metadata and plugins, the Java release,
 /// and the main class for the jar's manifest and `exec:java`.
@@ -449,6 +480,7 @@ fn pom(
     };
     let runtime = variant.runtime_version;
     let release = variant.java_release;
+    let metadata = pom_metadata(p, library);
     format!(
         r#"<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
@@ -456,8 +488,7 @@ fn pom(
   <artifactId>{artifact}</artifactId>
   <version>{version}</version>
   <name>{library}</name>
-  <description>{library}</description>
-  <properties>
+{metadata}  <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
   </properties>

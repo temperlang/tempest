@@ -317,12 +317,23 @@ fn program(
     }
     // The libraries it uses take their configs' versions, for package
     // files' dependencies.
+    // Their configs' metadata, and its own, for package files and each
+    // backend's names for them.
+    let metadata = |config: &temper_frontend::project::Config| temper_tmpl::Metadata {
+        exports: config.exports.clone(),
+    };
+    program.metadata = vec![(library.config.name.clone(), metadata(&library.config))];
     for uses in &mut program.uses {
         let name = program.decls.get(uses.decl).name;
         let name = program.strings.get(name);
         let config = all.iter().find(|l| l.config.name == name);
         if let Some(version) = config.and_then(|l| l.config.get("version")) {
             uses.version = version.to_string();
+        }
+        if let Some(config) = config {
+            program
+                .metadata
+                .push((name.to_string(), metadata(&config.config)));
         }
     }
     // Its host code, by paths relative to its root.

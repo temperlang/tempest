@@ -234,7 +234,7 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
 version = {version_q}
 rockspec_format = '3.0'
 description = {{
-}}
+{description}}}
 build = {{
     type = 'builtin',
     copy_directories = {{'.'}},
@@ -250,6 +250,22 @@ source = {{
 ",
         package = quoted(library),
         version_q = quoted(&version),
+        // The config's metadata, as Kotlin's: the description as the
+        // summary, and the authors, for want of a field, in `detailed`;
+        // the homepage, or else the repository; and the license.
+        description = {
+            let meta = p.metadata();
+            let detailed = meta.get("authors").map(|a| format!("Authors: {a}"));
+            [
+                ("summary", meta.get("description")),
+                ("detailed", detailed.as_deref()),
+                ("homepage", meta.get("homepage").or(meta.get("repository"))),
+                ("license", meta.get("license")),
+            ]
+            .iter()
+            .filter_map(|(key, value)| value.map(|v| format!("    {key} = {},\n", quoted(v))))
+            .collect::<String>()
+        },
         lua = variant.lua_version,
         runtime = variant.runtime_version,
         // Each library used, as Kotlin writes them, with its version where
