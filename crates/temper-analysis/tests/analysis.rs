@@ -637,6 +637,33 @@ fn hover_core_docs() {
         "{console}"
     );
     assert!(!console.contains("\n*"), "{console}");
+    // Core's docs-site directives go: included snippets, and links to
+    // them keep their text.
+    let typed = analyze(TYPED);
+    let string = typed
+        .hover(MAIN, at(TYPED, "String, box", 0, 0))
+        .unwrap()
+        .doc;
+    let string = string.unwrap();
+    assert!(
+        string.starts_with("A *String* is a chunk of textual content.\n\nTo"),
+        "{string}"
+    );
+    assert!(
+        !string.contains('⎀') && !string.contains("snippet/"),
+        "{string}"
+    );
+    assert!(
+        string.contains("documentation for string indices to see"),
+        "{string}"
+    );
+    assert!(!string.contains("\n\n\n"), "{string}");
+    let int = typed
+        .hover(MAIN, at(TYPED, "Int { 1", 0, 0))
+        .unwrap()
+        .doc
+        .unwrap();
+    assert!(!int.contains('⎀') && !int.ends_with('\n'), "{int}");
 }
 
 const TYPED: &str = r#"

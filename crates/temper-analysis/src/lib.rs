@@ -907,14 +907,43 @@ impl Analysis<'_> {
 type Rank = (bool, bool, u32);
 
 /// A doc comment's text, `/** … */`, without its markers or each line's
-/// leading `*`; None for another comment or an empty one.
+/// leading `*`; None for another comment or an empty one. Core's
+/// docs-site directives go: a snippet included, `⎀ syntax/StringExpr`,
+/// and a link to one, `[string indices][snippet/type/StringIndex]`,
+/// which keeps its text.
 pub(crate) fn doc_text(comment: &str) -> Option<String> {
     let body = comment.strip_prefix("/**")?.trim_end_matches("*/");
-    let lines: Vec<&str> = (body.lines())
-        .map(|l| l.trim().trim_start_matches('*').trim())
-        .collect();
+    let mut lines: Vec<String> = Vec::new();
+    for line in body.lines() {
+        let line = line.trim().trim_start_matches('*').trim();
+        if line.starts_with('⎀') {
+            continue;
+        }
+        // One blank line between paragraphs, where a snippet went.
+        if line.is_empty() && lines.last().is_some_and(|l| l.is_empty()) {
+            continue;
+        }
+        lines.push(without_snippet_links(line));
+    }
     let doc = lines.join("\n").trim().to_string();
     (!doc.is_empty()).then_some(doc)
+}
+
+/// `[text][snippet/…]` as its `text`.
+fn without_snippet_links(line: &str) -> String {
+    let mut out = String::new();
+    let mut rest = line;
+    while let Some(at) = rest.find("][snippet/") {
+        let after = &rest[at + 2..];
+        let (Some(open), Some(close)) = (rest[..at].rfind('['), after.find(']')) else {
+            break;
+        };
+        out.push_str(&rest[..open]);
+        out.push_str(&rest[open + 1..at]);
+        rest = &after[close + 1..];
+    }
+    out.push_str(rest);
+    out
 }
 
 /// What a name at a position names.
