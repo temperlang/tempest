@@ -17,14 +17,41 @@
 //   earlier inputs quietly; the page keeps the list. A trap (a panic, or
 //   the memory cap) restores the session the same way. So does a changed
 //   editor, the next time the REPL is used.
+// - The cell has the editor's completion, hover (also Ctrl or Cmd+I at
+//   the cursor), and signature help, from `repl_query` over the session:
+//   the cell's text is read against what earlier inputs declared, never
+//   settled or run. While an input runs, the worker is busy, so the
+//   cell has no help until it ends. The completion menu opens with
+//   nothing picked, so Enter still runs; Down or Up picks, then Enter
+//   accepts, as Ctrl+Space opens it.
+// - The transcript keeps the latest `MAX_BLOCKS` inputs, folds long
+//   output after `FOLD_LINES` lines, with "Show all", and links each
+//   `interactive#N` to that input's block, putting its text in the cell.
 
+import {
+  type Completion,
+  type CompletionContext,
+  type CompletionResult,
+  autocompletion,
+} from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, indentWithTab, insertNewlineAndIndent } from "@codemirror/commands";
 import { type HighlightStyle, type Language, bracketMatching } from "@codemirror/language";
-import { EditorState, type Extension } from "@codemirror/state";
-import { EditorView, drawSelection, keymap, placeholder } from "@codemirror/view";
+import { EditorState, type Extension, StateEffect, StateField } from "@codemirror/state";
+import { EditorView, type Tooltip, drawSelection, hoverTooltip, keymap, placeholder, showTooltip } from "@codemirror/view";
 import { highlightCode } from "@lezer/highlight";
 
-import type { FromRepl, ReplAnswer, ReplCompletion, ReplReplay, ToRepl } from "./api";
+import type {
+  CompletionItem,
+  FromRepl,
+  HoverInfo,
+  ReplAnswer,
+  ReplCompletion,
+  ReplQuery,
+  ReplReplay,
+  SignatureInfo,
+  ToRepl,
+} from "./api";
+import { toHover, toReplCompletions, toSignature } from "./api";
 
 /** Steps per input, as for a compile (temper-frontend's `interp::FUEL`). */
 export const FUEL = 50_000_000;
@@ -34,6 +61,12 @@ const MORE = 10;
 const FAIL_FAST = 1;
 const HISTORY_KEY = "repl-history";
 const HISTORY_SIZE = 200;
+/** Inputs the transcript keeps; older ones are dropped, with a note. */
+const MAX_BLOCKS = 300;
+/** Lines of an input's output shown before "Show all". */
+const FOLD_LINES = 40;
+/** A name being typed, before the cursor. */
+const WORD = /[\p{L}_][\p{L}\p{N}_]*$/u;
 
 export interface ReplHost {
   /** The editor's code, for input 0. */
@@ -44,7 +77,35 @@ export interface ReplHost {
   extensions: Extension[];
   highlight: HighlightStyle;
   language: Language;
+  /** The editor's tooltips and completion options, for the cell's. */
+  help: {
+    hover(value: HoverInfo): HTMLElement;
+    signature(help: SignatureInfo): HTMLElement;
+    options(items: CompletionItem[]): Completion[];
+  };
 }
+
+// Tooltips the cell shows until the text or cursor moves on: signature
+// help, and hover asked for from the keyboard.
+const setSignature = StateEffect.define<Tooltip | null>();
+const signatureField = StateField.define<Tooltip | null>({
+  create: () => null,
+  update(tooltip, tr) {
+    for (const effect of tr.effects) if (effect.is(setSignature)) return effect.value;
+    // Kept where it was until the next answer, which may be a while.
+    return tooltip && tr.docChanged ? { ...tooltip, pos: tr.changes.mapPos(tooltip.pos) } : tooltip;
+  },
+  provide: (field) => showTooltip.from(field),
+});
+const setInfo = StateEffect.define<Tooltip | null>();
+const infoField = StateField.define<Tooltip | null>({
+  create: () => null,
+  update(tooltip, tr) {
+    for (const effect of tr.effects) if (effect.is(setInfo)) return effect.value;
+    return tr.docChanged || tr.selection ? null : tooltip;
+  },
+  provide: (field) => showTooltip.from(field),
+});
 
 /** An input waiting for, or having, its turn in the worker. */
 interface Job {
@@ -93,6 +154,7 @@ export function createRepl(host: ReplHost): { show(): void } {
   let running: (Job & { id: number }) | null = null;
   const queue: Job[] = [];
   const completions = new Map<number, (c: ReplCompletion | null) => void>();
+  const queries = new Map<number, (value: unknown) => void>();
   /** Lines streamed for the running input, before its answer. */
   let streamed: HTMLElement | null = null;
 
@@ -144,19 +206,34 @@ export function createRepl(host: ReplHost): { show(): void } {
         history(),
         drawSelection(),
         bracketMatching(),
+        autocompletion({ override: [completeCell], selectOnOpen: false }),
+        hoverTooltip(hoverCell, { hoverTime: 300 }),
+        signatureField,
+        infoField,
         keymap.of([
           { key: "Enter", run: (view) => (touch ? insertNewlineAndIndent(view) : (void enter(view, false), true)) },
           { key: "Shift-Enter", run: insertNewlineAndIndent },
           { key: "Mod-Enter", run: (view) => (void enter(view, true), true) },
           { key: "ArrowUp", run: (view) => walk(view, -1) },
           { key: "ArrowDown", run: (view) => walk(view, 1) },
-          { key: "Escape", run: () => (running || starting ? (stop(), true) : false) },
+          { key: "Escape", run: escape },
+          { key: "Mod-i", run: (view) => (void infoAt(view), true) },
         ]),
         keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
         ...host.extensions,
         placeholder(touch ? "Temper, then Run" : "Temper, then Enter"),
         EditorView.lineWrapping,
         EditorView.contentAttributes.of({ "aria-label": "REPL input", "aria-multiline": "true" }),
+        EditorView.updateListener.of((update) => {
+          // Signature help opens on `(` or `,`, and follows the cursor while open.
+          const head = update.state.selection.main.head;
+          const typed = update.transactions.some((tr) => tr.isUserEvent("input.type"));
+          const inserted = typed ? update.state.sliceDoc(head - 1, head) : "";
+          const open = update.startState.field(signatureField) !== null;
+          if (inserted === "(" || inserted === "," || (open && (update.docChanged || update.selectionSet))) {
+            void updateSignature(update.view);
+          }
+        }),
       ],
     }),
   });
@@ -197,6 +274,79 @@ export function createRepl(host: ReplHost): { show(): void } {
     const answer = new Promise<ReplCompletion | null>((resolve) => completions.set(id, resolve));
     worker?.postMessage(message);
     return answer;
+  }
+
+  // The cell's help, asked of the session; nothing while it's busy.
+
+  function ask(what: ReplQuery, text: string, at: number): Promise<unknown> {
+    if (!worker || running || starting) return Promise.resolve(null);
+    const id = nextId++;
+    const answer = new Promise<unknown>((resolve) => queries.set(id, resolve));
+    worker.postMessage({ type: "query", id, what, text, at } satisfies ToRepl);
+    return answer;
+  }
+
+  async function completeCell(context: CompletionContext): Promise<CompletionResult | null> {
+    const word = context.matchBefore(WORD);
+    const afterDot = context.matchBefore(/\.[\p{L}\p{N}_]*$/u);
+    // A REPL function's string argument, as `describe(1, "`.
+    const argument = context.matchBefore(/\(\s*(\d+\s*,\s*)?"[^"\\$]*$/u);
+    if (!word && !afterDot && !argument && !context.explicit) return null;
+    const value = await ask("completions", context.state.doc.toString(), context.pos);
+    const answer = toReplCompletions(value);
+    if (context.aborted || !answer || answer.items.length === 0) return null;
+    return { from: answer.from, options: host.help.options(answer.items), validFor: /^[\p{L}\p{N}_]*$/u };
+  }
+
+  async function hoverCell(view: EditorView, at: number, side: -1 | 1): Promise<Tooltip | null> {
+    // Between characters, the one the pointer's over.
+    const value = toHover(await ask("hover", view.state.doc.toString(), side < 0 && at > 0 ? at - 1 : at));
+    if (!value?.type) return null;
+    return { pos: value.from, end: value.to, above: true, create: () => ({ dom: host.help.hover(value) }) };
+  }
+
+  /** Ctrl or Cmd+I: hover's tooltip for the name at the cursor. */
+  async function infoAt(view: EditorView): Promise<void> {
+    const doc = view.state.doc.toString();
+    const head = view.state.selection.main.head;
+    const value = toHover(await ask("hover", doc, head > 0 && !/[\p{L}\p{N}_]/u.test(doc[head] ?? "") ? head - 1 : head));
+    if (view.state.doc.toString() !== doc || view.state.selection.main.head !== head) return;
+    const tooltip: Tooltip | null = value?.type
+      ? {
+          pos: value.from,
+          end: value.to,
+          above: true,
+          create: () => {
+            // Styled as the pointer's hover is.
+            const dom = document.createElement("div");
+            dom.className = "cm-tooltip-hover";
+            dom.append(host.help.hover(value));
+            return { dom };
+          },
+        }
+      : null;
+    if (!tooltip) status("Nothing to show here");
+    view.dispatch({ effects: setInfo.of(tooltip) });
+  }
+
+  async function updateSignature(view: EditorView): Promise<void> {
+    const doc = view.state.doc.toString();
+    const at = view.state.selection.main.head;
+    const help = toSignature(await ask("signature", doc, at));
+    if (view.state.doc.toString() !== doc || view.state.selection.main.head !== at) return;
+    const tooltip: Tooltip | null = help && { pos: at, above: true, create: () => ({ dom: host.help.signature(help) }) };
+    view.dispatch({ effects: setSignature.of(tooltip) });
+  }
+
+  /** Escape: stops a run; else closes the cell's tooltips. */
+  function escape(view: EditorView): boolean {
+    if (running || starting) {
+      stop();
+      return true;
+    }
+    const shown = view.state.field(signatureField) !== null || view.state.field(infoField) !== null;
+    if (shown) view.dispatch({ effects: [setSignature.of(null), setInfo.of(null)] });
+    return shown;
   }
 
   runButton.addEventListener("click", () => {
@@ -245,14 +395,135 @@ export function createRepl(host: ReplHost): { show(): void } {
 
   function block(text: string): HTMLElement {
     const div = element("div", "repl-block");
+    div.dataset.text = text;
     div.append(echo(text));
     log.append(div);
+    trim();
     scrollDown();
     return div;
   }
 
-  function line(target: HTMLElement, kind: string, text: string, level?: string): void {
-    target.append(element("pre", `repl-event repl-${kind}${level ? ` ${level}` : ""}`, text));
+  /** Past `MAX_BLOCKS` inputs, drops the oldest, saying how many. */
+  let dropped = 0;
+  function trim(): void {
+    const blocks = log.querySelectorAll(":scope > .repl-block");
+    const over = blocks.length - MAX_BLOCKS;
+    if (over <= 0) return;
+    for (const b of Array.from(blocks).slice(0, over)) b.remove();
+    dropped += over;
+    let first = log.querySelector<HTMLElement>(":scope > .repl-dropped");
+    if (!first) {
+      first = element("p", "repl-banner repl-dropped");
+      log.prepend(first);
+    }
+    first.textContent = `${plural(dropped, "earlier input")} dropped from the transcript, to keep the page quick; the session still has them.`;
+  }
+
+  /** The latest block for input `n`, if the transcript has it. */
+  function blockOf(n: number): HTMLElement | null {
+    const all = log.querySelectorAll<HTMLElement>(`.repl-block[data-input="${n}"]`);
+    return all[all.length - 1] ?? null;
+  }
+
+  /** `text`, with each `interactive#N` that has a block, other than `own`'s, a link to it. */
+  function linked(target: HTMLElement, text: string, own: number | null): void {
+    const pattern = /interactive#(\d+)/g;
+    let at = 0;
+    for (const match of text.matchAll(pattern)) {
+      const n = Number(match[1]);
+      const to = n === own ? null : blockOf(n);
+      if (!to) continue;
+      target.append(text.slice(at, match.index));
+      const link = element("button", "repl-ref", match[0]) as HTMLButtonElement;
+      link.type = "button";
+      link.title = n === 0 ? "Show input 0" : `Show input ${n}, and put it in the cell`;
+      link.addEventListener("click", () => goTo(n));
+      target.append(link);
+      at = match.index + match[0].length;
+    }
+    target.append(text.slice(at));
+  }
+
+  /** Scrolls to input `n`'s block, marks it, and puts its text in the cell (not input 0's, the editor's). */
+  function goTo(n: number): void {
+    const to = blockOf(n);
+    if (!to) return;
+    to.scrollIntoView({ block: "nearest" });
+    to.classList.remove("repl-marked");
+    void to.offsetWidth;
+    to.classList.add("repl-marked");
+    const text = to.dataset.text;
+    if (n !== 0 && text !== undefined) {
+      cell.dispatch({ changes: { from: 0, to: cell.state.doc.length, insert: text }, selection: { anchor: text.length } });
+    }
+    cell.focus();
+  }
+
+  function line(target: HTMLElement, kind: string, text: string, level?: string, own: number | null = null): HTMLElement {
+    const pre = element("pre", `repl-event repl-${kind}${level ? ` ${level}` : ""}`);
+    linked(pre, text, own);
+    target.append(pre);
+    return pre;
+  }
+
+  /** A "Show all" button that shows `hidden`, or a long event's whole `text`. */
+  function showAll(label: string, reveal: () => void): HTMLButtonElement {
+    const button = element("button", "repl-more", label) as HTMLButtonElement;
+    button.type = "button";
+    button.addEventListener("click", () => {
+      reveal();
+      button.remove();
+    });
+    return button;
+  }
+
+  /**
+   * The events, folded after `FOLD_LINES` lines: a long event shows its
+   * first lines, and events past the limit wait behind "Show all"; the
+   * result line always shows.
+   */
+  function events(div: HTMLElement, answer: ReplAnswer): void {
+    let shown = 0;
+    let rest: HTMLElement | null = null;
+    let restLines = 0;
+    for (const event of answer.events) {
+      const lines = event.text.split("\n");
+      if (event.kind === "result") {
+        line(div, event.kind, event.text, event.level, answer.input);
+        continue;
+      }
+      if (shown >= FOLD_LINES) {
+        rest ??= element("div", "repl-folded");
+        line(rest, event.kind, event.text, event.level, answer.input);
+        restLines += lines.length;
+        continue;
+      }
+      if (shown + lines.length <= FOLD_LINES) {
+        line(div, event.kind, event.text, event.level, answer.input);
+        shown += lines.length;
+        continue;
+      }
+      const keep = FOLD_LINES - shown;
+      const pre = line(div, event.kind, lines.slice(0, keep).join("\n"), event.level, answer.input);
+      const more = lines.length - keep;
+      div.append(
+        showAll(`Show all (${plural(more, "more line")})`, () => {
+          pre.replaceChildren();
+          linked(pre, event.text, answer.input);
+        }),
+      );
+      shown = FOLD_LINES;
+    }
+    if (rest) {
+      const folded = rest;
+      folded.hidden = true;
+      const result = div.querySelector(":scope > .repl-result");
+      const button = showAll(`Show all (${plural(restLines, "more line")})`, () => {
+        folded.hidden = false;
+      });
+      div.insertBefore(folded, result);
+      div.insertBefore(button, folded);
+    }
   }
 
   function render(job: Job, answer: ReplAnswer): void {
@@ -260,7 +531,7 @@ export function createRepl(host: ReplHost): { show(): void } {
     streamed?.remove();
     streamed = null;
     div.dataset.input = String(answer.input);
-    for (const event of answer.events) line(div, event.kind, event.text, event.level);
+    events(div, answer);
     if (answer.out_of_steps) {
       const more = job.fuel * MORE;
       const button = element("button", "repl-more", `Keep going (${steps(more)} steps)`) as HTMLButtonElement;
@@ -301,6 +572,8 @@ export function createRepl(host: ReplHost): { show(): void } {
     worker?.terminate();
     for (const resolve of completions.values()) resolve(null);
     completions.clear();
+    for (const resolve of queries.values()) resolve(null);
+    queries.clear();
     running = null;
     streamed?.remove();
     streamed = null;
@@ -359,6 +632,12 @@ export function createRepl(host: ReplHost): { show(): void } {
         line(streamed, "log", message.line);
         scrollDown();
         return;
+      case "query": {
+        const resolve = queries.get(message.id);
+        queries.delete(message.id);
+        resolve?.(message.value);
+        return;
+      }
       case "complete": {
         const resolve = completions.get(message.id);
         completions.delete(message.id);

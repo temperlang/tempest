@@ -14,8 +14,11 @@
 // Then the REPL tab: the editor's tests run as input 0, `1 + 2`, a
 // function typed over several lines with Enter, a log streamed while
 // its input runs, Stop with the session restored (and the numbering
-// kept), an input that runs out of steps and then keeps going, and
-// `translate`.
+// kept), an input that runs out of steps and then keeps going,
+// `translate`, completion in the cell offering a name an earlier input
+// declared and `runTests`, hover over it by pointer and by Ctrl+I,
+// signature help, an `interactive#N` link putting that input in the
+// cell, and `runTests()` after a redefinition failing the editor's test.
 // Then the site's header (site/shared): its sections, with Playground
 // current; About, opened and closed from the keyboard; the theme toggle,
 // kept across a reload; and at 390 px, the sections behind Menu, with
@@ -300,6 +303,88 @@ try {
   await replStep("REPL: translate", async () => {
     const text = await run(`translate(${sqInput}, "py")`);
     return [...expect("translation", text, /def _?sq\b/), ...expect("result", await lastResult(), /: void$/)];
+  });
+
+  /** Empties the cell, with any tooltip closed. */
+  async function clearCell() {
+    await page.click("#repl-cell .cm-content");
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("ControlOrMeta+a");
+    await page.keyboard.press("Backspace");
+  }
+  await replStep("REPL: completion in the cell", async () => {
+    await clearCell();
+    await page.keyboard.type("s");
+    await page.waitForSelector("#repl-cell .cm-tooltip-autocomplete li");
+    const names = await page.$$eval("#repl-cell .cm-tooltip-autocomplete li .cm-completionLabel", (ls) => ls.map((l) => l.textContent));
+    await clearCell();
+    await page.keyboard.type("runT");
+    await page.waitForSelector("#repl-cell .cm-tooltip-autocomplete li");
+    const own = await page.$$eval("#repl-cell .cm-tooltip-autocomplete li .cm-completionLabel", (ls) => ls.map((l) => l.textContent));
+    // From the keyboard: Down picks the first, Enter accepts it.
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
+    const accepted = await page.$eval("#repl-cell .cm-content", (c) => c.textContent ?? "");
+    await clearCell();
+    return [
+      ...(names.includes("sq") ? [] : [`no sq in ${JSON.stringify(names.slice(0, 12))}`]),
+      ...(own.includes("runTests") ? [] : [`no runTests in ${JSON.stringify(own)}`]),
+      ...(accepted === "runTests" ? [] : [`accepted ${JSON.stringify(accepted)}`]),
+    ];
+  });
+  await replStep("REPL: hover and signature help in the cell", async () => {
+    await clearCell();
+    await page.keyboard.type("sq(2)");
+    await page.keyboard.press("Escape");
+    // The pointer over `sq`.
+    const at = await page.$eval("#repl-cell .cm-line", (line) => {
+      const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+      const text = walker.nextNode();
+      const range = document.createRange();
+      range.setStart(text, 0);
+      range.setEnd(text, 1);
+      const r = range.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    });
+    await page.mouse.move(at.x, at.y);
+    await page.waitForSelector("#repl-cell .cm-tooltip-hover");
+    const pointer = await page.$eval("#repl-cell .cm-tooltip-hover", (t) => t.textContent ?? "");
+    await page.mouse.move(0, 0);
+    await page.waitForSelector("#repl-cell .cm-tooltip-hover", { state: "detached" });
+    // Ctrl+I at the cursor, in the name.
+    await page.keyboard.press("Home");
+    await page.keyboard.press("ControlOrMeta+i");
+    await page.waitForSelector("#repl-cell .cm-tooltip-hover .cm-hover");
+    const keyed = await page.$eval("#repl-cell .cm-tooltip-hover .cm-hover", (t) => t.textContent ?? "");
+    await page.keyboard.press("Escape");
+    await clearCell();
+    await page.keyboard.type("sq(");
+    await page.waitForSelector("#repl-cell .cm-signature");
+    const signature = await page.$eval("#repl-cell .cm-signature", (t) => t.textContent ?? "");
+    await clearCell();
+    return [
+      ...expect("hover", pointer, /sq\(n: Int32\): Int32/),
+      ...expect("Ctrl+I", keyed, /sq\(n: Int32\): Int32/),
+      ...expect("signature", signature, /^sq\(n: Int32\): Int32$/),
+    ];
+  });
+  await replStep("REPL: an interactive#N link puts that input in the cell", async () => {
+    await run(`describe(${sqInput}, "module")`);
+    const link = await page.$(`#repl-transcript .repl-block:last-child .repl-ref`);
+    if (!link) return ["no link"];
+    await link.click();
+    const cell = await page.$eval("#repl-cell .cm-content", (c) => c.textContent ?? "");
+    await clearCell();
+    return expect("cell", cell, /^let sq\(n: Int\): Int \{/);
+  });
+  await replStep("REPL: runTests after a redefinition", async () => {
+    await clearCell();
+    await run('let greet(name: String): String { "Hi, ${name}" }');
+    const text = await run("runTests()");
+    return [
+      ...expect("tests", text, /Test failed: greets by name[^]*Tests passed: 0 of 1/),
+      ...expect("result", await lastResult(), /: void$/),
+    ];
   });
 
   // The Temper link: the header's logo, to the site, one level up.

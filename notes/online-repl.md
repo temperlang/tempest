@@ -48,8 +48,9 @@ open questions it ended with are at the end, with their answers.
   cell a line at a time as the page would
   (`crates/temper-wasm/tests/repl.rs`); unit tests of the exports for
   streaming, keep going, cut logs, and Enter's answer.
-- **Not yet:** `repl_query`, `repl_translate`, and `repl_describe`
-  (chunk 3); a stop flag (chunk 5). A panic traps in wasm (the
+- **Not yet:** `repl_translate` and `repl_describe` (structured
+  output for panes); a stop flag (chunk 5). `repl_query` came in
+  chunk 3. A panic traps in wasm (the
   `small-wasm` profile aborts), so the page restores a session by
   replaying it, as for Stop. The REPL's tools settle std's tmpl apart
   from the compiler's copy, once per session's first `translate`.
@@ -80,17 +81,43 @@ open questions it ended with are at the end, with their answers.
 - **`help()`'s footer** names the page's keys.
 - **Tests:** `smoke.mjs` runs a sum, a multi-line function, a streamed
   log, Stop with replay and numbering, "Keep going", and `translate`.
-- **Left for chunk 3:** completion, hover, and signature help in the
-  cell need queries over the session (`repl_query`): the compiler
-  worker's analysis is of the editor's source alone, so it can't see
-  earlier inputs. Also `translate` in panes, links from
-  `interactive#N` labels, and folding long output.
+- **Left for chunk 3:** done there, but `translate` in panes, which
+  waits.
 - **Tests in input 0** (t361, 2026-11-11): they run once, after it,
   reporting each failure and `tempest test`'s summary; the tab shows
   input 0's block when it says more than logs, once per editor code.
-  The session keeps the tests' expression for a later `test()` (t362).
+  The session keeps their source for `runTests()` (t362, chunk 3).
   Tests in later inputs are still refused (t363). The smoke test checks
   that the first example's tests pass as input 0.
+
+**Chunk 3, done for now** (2026-11-11; the last round for a while):
+
+- **`repl_query(kind, at, ptr, len)`**: completion, hover, and
+  signature help for the cell's text against the session, from
+  temper-analysis's `pending_*` queries, as `tempest repl`'s Tab and
+  hint: the text is lexed, never settled or run, so it's quick per
+  keystroke and runs no user code. New there: `pending_hover`, and
+  `pending_argument_completions` (`describe`'s steps, `translate`'s
+  languages, `help`'s names), moved from the CLI so both share it.
+- **The cell:** CodeMirror completion (opens with nothing picked, so
+  Enter still runs; Down or Up picks, Enter accepts), hover, Ctrl or
+  Cmd+I for hover from the keyboard, and signature help on `(` and
+  `,`, with the editor's tooltip builders. While an input runs, the
+  cell has no help, rather than queuing behind it.
+- **`runTests()`** (t362), a REPL function in the CLI and the page:
+  input 0's tests settled again as a hidden round after the latest
+  input, once the calling input ends, so names mean the newest
+  declarations; same failure lines and summary. A changed signature
+  gives type errors, located in input 0; old instances keep old
+  classes. Named `runTests`, not `test`, as std's `test("name") {}`
+  declares tests.
+- **Transcript:** capped at 300 inputs, the oldest dropped with a
+  note; output past 40 lines folds behind "Show all"; `interactive#N`
+  links scroll to that input and put it in the cell.
+- **Left:** `translate` in panes; sharing and persistence (chunk 4);
+  the stop flag (chunk 5); help for what the cell's text declares
+  itself, and members of expressions (`f(x).`), which need a
+  speculative settle.
 
 The CLI REPL's decisions hold here too:
 

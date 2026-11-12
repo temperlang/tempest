@@ -2,11 +2,13 @@
 //! input as it's typed, against what earlier inputs declared. With no
 //! tree for the text, these read it as signature help does (the brackets
 //! open, the name before a `(` or `.`), and resolve names from the
-//! scope, through members' declared types.
+//! scope, through members' declared types. Nothing is settled or run,
+//! so they're quick enough for every keystroke.
 
 use super::members::{Named, Receiver};
 use super::*;
 use temper_frontend::builtins::TYPES;
+use temper_frontend::repl::STEPS;
 use temper_frontend::typing::builtin_members;
 use temper_syntax::lex::{SourceKind, TokenKind, lex};
 
@@ -102,6 +104,116 @@ impl Analysis<'_> {
             active: call.commas,
             doc: callee.doc,
         })
+    }
+
+    /// In a string that's an argument of one of the REPL's functions,
+    /// at byte `offset` of `text`, typed in `scope`: where the string's
+    /// text starts, and what may go there that starts with what's typed:
+    /// `describe(n, "` its steps, `translate(n, "` the `languages`, and
+    /// `help("` the names in scope. `None` anywhere else.
+    pub fn pending_argument_completions(
+        &self,
+        scope: ScopeId,
+        text: &str,
+        offset: usize,
+        languages: &[String],
+    ) -> Option<(usize, Vec<String>)> {
+        let before = text.get(..floor_boundary(text, offset))?;
+        let quote = before.rfind('"')?;
+        let typed = &before[quote + 1..];
+        if typed.contains(['"', '\\', '$']) {
+            return None;
+        }
+        let call = before[..quote].trim_end();
+        let words: Vec<String> = match call.strip_suffix('(').map(str::trim_end) {
+            Some(call) if ends_with_name(call, "help") => {
+                let (_, names) = self.pending_completions(scope, typed, typed.len());
+                (names.into_iter())
+                    .map(|c| c.name)
+                    .filter(|n| !KEYWORDS.contains(&n.as_str()))
+                    .collect()
+            }
+            Some(_) => return None,
+            None => {
+                // `describe(0, "` or `translate(0, "`.
+                let call = call.strip_suffix(',')?.trim_end();
+                let call = call.trim_end_matches(|c: char| c.is_ascii_digit());
+                let call = call.trim_end().strip_suffix('(')?.trim_end();
+                if ends_with_name(call, "describe") {
+                    STEPS.iter().map(|(s, _)| s.to_string()).collect()
+                } else if ends_with_name(call, "translate") {
+                    languages.to_vec()
+                } else {
+                    return None;
+                }
+            }
+        };
+        let words = words.into_iter().filter(|w| w.starts_with(typed)).collect();
+        Some((quote + 1, words))
+    }
+
+    /// What hovering at byte `offset` of `text`, typed in `scope`, shows:
+    /// the name there, as a name in scope, or a member after `x.`, with
+    /// its span in `text`. `None` for a keyword, a name the text declares
+    /// itself, or one that isn't found.
+    pub fn pending_hover(&self, scope: ScopeId, text: &str, offset: usize) -> Option<Hover> {
+        let offset = floor_boundary(text, offset);
+        let start = word_start(text, offset);
+        let end = offset
+            + (text[offset..].char_indices())
+                .take_while(|&(_, c)| c.is_alphanumeric() || c == '_')
+                .last()
+                .map_or(0, |(i, c)| i + c.len_utf8());
+        let name = &text[start..end];
+        if !name.starts_with(|c: char| c.is_alphabetic() || c == '_')
+            || KEYWORDS.contains(&name)
+            || in_string_or_comment(text, start)
+            || own_declarations(&text[..end])
+                .iter()
+                .any(|(n, _)| n == name)
+        {
+            return None;
+        }
+        let mut hover = match text[..start].trim_end().strip_suffix('.') {
+            Some(object) => self.member_hover(&self.before_dot(scope, object)?, name)?,
+            None => self.symbol_hover(self.lookup_in(scope, name)?),
+        };
+        hover.span = Span {
+            start: start as u32,
+            end: end as u32,
+        };
+        Some(hover)
+    }
+
+    /// What hover shows of the member `name` of what's before a `.`.
+    fn member_hover(&self, before: &Before, name: &str) -> Option<Hover> {
+        let declared = |(decl, subst): (NodeId, Subst)| Hover {
+            span: Span { start: 0, end: 0 },
+            name: Some(name.to_string()),
+            kind: Some(self.decl_kind(decl, None)),
+            ty: self.decl_type_in(decl, name, decl, &subst),
+            doc: self.doc(decl),
+        };
+        let builtin = |m: temper_frontend::typing::BuiltinMember| Hover {
+            span: Span { start: 0, end: 0 },
+            name: Some(name.to_string()),
+            kind: Some(match m.is_method {
+                true => DeclKind::Method,
+                false => DeclKind::Field,
+            }),
+            ty: Some(m.detail),
+            doc: None,
+        };
+        match before {
+            Before::Value(receiver) => match self.find_member(receiver, name) {
+                Some(found) => Some(declared(found)),
+                None => self.builtin_member(receiver, name).map(builtin),
+            },
+            Before::Type(Named::Class(class)) => self.static_member(*class, name).map(declared),
+            Before::Type(Named::Builtin(ty)) => (builtin_members(ty, &[]).into_iter())
+                .find(|m| m.is_static && m.name == name)
+                .map(builtin),
+        }
     }
 
     /// What hover shows of a symbol, as at its declaration: its kind,
@@ -282,6 +394,14 @@ fn word_start(text: &str, offset: usize) -> usize {
         .take_while(|&(_, c)| c.is_alphanumeric() || c == '_')
         .last()
         .map_or(offset, |(i, _)| i)
+}
+
+/// Whether `text` ends with a name, not as the end of a longer name or
+/// a member.
+fn ends_with_name(text: &str, name: &str) -> bool {
+    text.strip_suffix(name).is_some_and(|ahead| {
+        !(ahead.chars().next_back()).is_some_and(|c| c.is_alphanumeric() || c == '_' || c == '.')
+    })
 }
 
 /// Where a chain of names, `a.b.c`, ending `text`, starts.

@@ -8,6 +8,9 @@
 //!   Enter asks, and how it splits into inputs, as pasted lines split
 //!   in `tempest repl`;
 //! - [`repl_input`] settles and runs one input;
+//! - [`repl_query`] answers completion, hover, and signature help for
+//!   the text being typed, against the session, without settling or
+//!   running it;
 //! - [`repl_reset`] drops the session.
 //!
 //! What an input logs also goes to the page as it's logged, through the
@@ -15,10 +18,11 @@
 //! shows while it runs; the run itself can't yield to the page. Each
 //! input's answer lists everything it reported, logs too, in order.
 
-use super::{OUTPUT, input_text, json_string};
+use super::{OUTPUT, built_in, input_text, json_string};
 use std::cell::RefCell;
 use std::fmt::Write;
 use std::rc::Rc;
+use temper_analysis::{Analysis, DeclKind, Position, byte_offset};
 use temper_frontend::interp::OUTPUT_LIMIT;
 use temper_frontend::repl::{
     Chunker, OUT_OF_STEPS, ReplEvent, ReplOptions, ReplSession, Separator,
@@ -31,6 +35,8 @@ pub const HELP_FOOTER: &str = "Keys: Enter runs the input once it's whole, or el
      always runs; Up and Down, on the first or last line, go through earlier\n\
      inputs; Escape or Stop ends the input running, and the inputs before it\n\
      run again. On a touch screen, Enter starts a new line and Run runs.\n\
+     Completion opens as you type, or with Ctrl+Space: Down picks, Enter\n\
+     accepts. Ctrl+I (Cmd+I) shows the type and docs of the name at the cursor.\n\
      Each input may take 50 million steps; \"Keep going\" runs it again with more.\n";
 
 /// The session and what its inputs report.
@@ -101,6 +107,114 @@ pub extern "C" fn repl_complete(ptr: *const u8, len: usize) -> u32 {
     let (json, complete) = complete(&text);
     OUTPUT.with_borrow_mut(|out| *out = json);
     complete as u32
+}
+
+/// What [`repl_query`] answers.
+pub const COMPLETIONS: u32 = 0;
+pub const HOVER: u32 = 1;
+pub const SIGNATURE: u32 = 2;
+
+/// Answers a question about the input buffer's text, as the REPL's cell
+/// holds it, at UTF-16 offset `at`, as if it were the next input: it's
+/// read, not settled or run, against what the session's inputs
+/// declared. Keeps, by `kind`:
+///
+/// - [`COMPLETIONS`]: `{"from": 3, "items": [{"name": "twice", "kind":
+///   "function", "type": "twice(n: Int32): Int32"}, …]}`, where the word
+///   being typed starts, and the names that may go there, innermost
+///   first; after `x.`, `x`'s members; in a REPL function's string
+///   argument, as `describe(1, "`, its words, of kind `text`;
+/// - [`HOVER`]: as `hover`'s, `{"from": 0, "to": 5, "name": "twice", …}`;
+/// - [`SIGNATURE`]: as `signature_help`'s.
+///
+/// `null` if there's no session or nothing to say.
+#[allow(unsafe_code)]
+#[unsafe(no_mangle)]
+pub extern "C" fn repl_query(kind: u32, at: u32, ptr: *const u8, len: usize) {
+    let text = input_text(ptr, len);
+    let json = query(kind, &text, at as usize);
+    OUTPUT.with_borrow_mut(|out| *out = json);
+}
+
+/// What [`repl_query`] does, at UTF-16 offset `at` of `text`.
+pub fn query(kind: u32, text: &str, at: usize) -> String {
+    let offset = byte_offset(text, at);
+    let utf16 = |byte: usize| Position::of(text, byte).utf16;
+    let opt = |s: Option<&str>| s.map_or("null".into(), json_string);
+    REPL.with_borrow_mut(|repl| {
+        let Some(repl) = repl.as_mut() else {
+            return "null".into();
+        };
+        repl.session.view(|s, scope| {
+            let analysis = Analysis::of(s);
+            match kind {
+                COMPLETIONS => {
+                    let languages: Vec<String> = built_in().map(String::from).collect();
+                    let (from, items) = match analysis
+                        .pending_argument_completions(scope, text, offset, &languages)
+                    {
+                        Some((from, words)) => {
+                            let items = (words.iter())
+                                .map(|w| {
+                                    format!(
+                                        "{{\"name\":{},\"kind\":\"text\",\"type\":null}}",
+                                        json_string(w)
+                                    )
+                                })
+                                .collect();
+                            (from, items)
+                        }
+                        None => {
+                            let (from, found) = analysis.pending_completions(scope, text, offset);
+                            let items: Vec<String> = (found.iter())
+                                .map(|c| {
+                                    format!(
+                                        "{{\"name\":{},\"kind\":{},\"type\":{}}}",
+                                        json_string(&c.name),
+                                        json_string(c.kind.label()),
+                                        opt(c.detail.as_deref())
+                                    )
+                                })
+                                .collect();
+                            (from, items)
+                        }
+                    };
+                    format!(
+                        "{{\"from\":{},\"items\":[{}]}}",
+                        utf16(from),
+                        items.join(",")
+                    )
+                }
+                HOVER => match analysis.pending_hover(scope, text, offset) {
+                    Some(h) => format!(
+                        "{{\"from\":{},\"to\":{},\"name\":{},\"kind\":{},\"type\":{},\"doc\":{}}}",
+                        utf16(h.span.start as usize),
+                        utf16(h.span.end as usize),
+                        opt(h.name.as_deref()),
+                        opt(h.kind.map(DeclKind::label)),
+                        opt(h.ty.as_deref()),
+                        opt(h.doc.as_deref()),
+                    ),
+                    None => "null".into(),
+                },
+                SIGNATURE => match analysis.pending_signature(scope, text, offset) {
+                    Some(help) => {
+                        let params: Vec<String> =
+                            help.params.iter().map(|p| json_string(p)).collect();
+                        format!(
+                            "{{\"label\":{},\"params\":[{}],\"active\":{},\"doc\":{}}}",
+                            json_string(&help.label),
+                            params.join(","),
+                            help.active,
+                            opt(help.doc.as_deref())
+                        )
+                    }
+                    None => "null".into(),
+                },
+                _ => "null".into(),
+            }
+        })
+    })
 }
 
 /// Drops the session, and the memory it holds.
@@ -482,6 +596,112 @@ mod tests {
                 "{\"complete\":false,\"inputs\":[],\"brackets\":0}",
                 "{\"complete\":true,\"inputs\":[],\"brackets\":0}",
             ]
+        );
+    }
+
+    /// Runs `f` on a thread with room to recurse.
+    fn deep<R: Send + 'static>(f: impl FnOnce() -> R + Send + 'static) -> R {
+        std::thread::Builder::new()
+            .stack_size(64 << 20)
+            .spawn(f)
+            .unwrap()
+            .join()
+            .unwrap()
+    }
+
+    /// Completion, hover, and signature help in the cell see what
+    /// earlier inputs declared, and the REPL's functions, without
+    /// running the text asked about.
+    #[test]
+    fn answers_queries_about_the_cell() {
+        let out = deep(|| {
+            let mut out = Vec::new();
+            out.push(query(COMPLETIONS, "tw", 2));
+            start_with(
+                page_options(None),
+                "/** Doubles. */\nlet twice(n: Int): Int { n * 2 }",
+            );
+            input("class Box(public width: Int) {}", None);
+            input("let box = new Box(3)", None);
+            let ask = |kind, text: &str, at| {
+                let answer = query(kind, text, at);
+                streamed();
+                answer
+            };
+            out.push(ask(COMPLETIONS, "tw", 2));
+            out.push(ask(COMPLETIONS, "box.wi", 6));
+            out.push(ask(COMPLETIONS, "runT", 4));
+            out.push(ask(COMPLETIONS, "describe(1, \"t", 14));
+            out.push(ask(HOVER, "1 + twice(2)", 6));
+            out.push(ask(HOVER, "box.width", 6));
+            out.push(ask(HOVER, "let twice = 1", 6));
+            out.push(ask(SIGNATURE, "twice(", 6));
+            // A query runs nothing: this would log, and fail.
+            out.push(ask(HOVER, "console.log(\"no\"); twice(1 / 0)", 22));
+            out.push(streamed().join("|"));
+            out.push(input("twice(4)", None));
+            out
+        });
+        assert_eq!(out[0], "null");
+        assert!(
+            out[1].starts_with(
+                "{\"from\":0,\"items\":[{\"name\":\"twice\",\"kind\":\"function\",\
+                 \"type\":\"twice(n: Int32): Int32\"}"
+            ),
+            "{}",
+            out[1]
+        );
+        assert!(
+            out[2].starts_with("{\"from\":4,\"items\":[{\"name\":\"width\""),
+            "{}",
+            out[2]
+        );
+        assert!(out[3].contains("\"name\":\"runTests\""), "{}", out[3]);
+        assert_eq!(
+            out[4],
+            "{\"from\":13,\"items\":[{\"name\":\"types\",\"kind\":\"text\",\"type\":null},\
+             {\"name\":\"tmpl\",\"kind\":\"text\",\"type\":null}]}"
+        );
+        assert_eq!(
+            out[5],
+            "{\"from\":4,\"to\":9,\"name\":\"twice\",\"kind\":\"function\",\
+             \"type\":\"twice(n: Int32): Int32\",\"doc\":\"Doubles.\"}"
+        );
+        assert!(
+            out[6].starts_with("{\"from\":4,\"to\":9,\"name\":\"width\""),
+            "{}",
+            out[6]
+        );
+        assert_eq!(out[7], "null");
+        assert_eq!(
+            out[8],
+            "{\"label\":\"twice(n: Int32): Int32\",\"params\":[\"n: Int32\"],\"active\":0,\
+             \"doc\":\"Doubles.\"}"
+        );
+        assert!(out[9].contains("\"name\":\"twice\""), "{}", out[9]);
+        assert_eq!(out[10], "");
+        assert!(out[11].starts_with("{\"input\":3,"), "{}", out[11]);
+    }
+
+    /// `runTests()` runs input 0's tests again against a redefinition.
+    #[test]
+    fn runs_tests_again() {
+        let out = session(&[
+            (
+                "start",
+                "let twice(n: Int): Int { n * 2 }\ntest(\"three\") { assert(twice(3) == 6) }\n",
+                0.0,
+            ),
+            ("input", "let twice(n: Int): Int { n + 1 }", 0.0),
+            ("input", "runTests()", 0.0),
+        ]);
+        assert_eq!(
+            out[2],
+            "{\"input\":2,\"events\":[{\"kind\":\"failure\",\
+             \"text\":\"Test failed: three - expected twice(3) == (6) not (4)\"},\
+             {\"kind\":\"note\",\"text\":\"Tests passed: 0 of 1\"},\
+             {\"kind\":\"result\",\"text\":\"interactive#2: void\"}],\
+             \"value\":\"void\",\"out_of_steps\":false}"
         );
     }
 }

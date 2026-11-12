@@ -158,7 +158,10 @@ impl Incremental {
         // tests, if any, are already reported.
         let declared = s.tests[tests_before..].iter().any(|&(m, _)| m == repl);
         let (tests, test_cases) = match declared {
-            true => (s.test_run(repl), s.test_cases(repl)),
+            true => (
+                s.test_run(repl, tests_before),
+                s.test_cases(repl, tests_before),
+            ),
             false => (None, Vec::new()),
         };
         let input = SettledModule {

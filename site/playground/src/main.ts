@@ -62,12 +62,15 @@ import { xml } from "@codemirror/legacy-modes/mode/xml";
 import type {
   BackendOutput,
   CompileResult,
+  CompletionItem,
   Diagnostic,
   FromCompiler,
   FromJsRunner,
   GeneratedFile,
+  HoverInfo,
   Query,
   RunOutput,
+  SignatureInfo,
   TestResult,
   ToCompiler,
   ToJsRunner,
@@ -179,7 +182,8 @@ const signature = StateField.define<Tooltip | null>({
   create: () => null,
   update(tooltip, tr) {
     for (const effect of tr.effects) if (effect.is(setSignature)) return effect.value;
-    return tooltip;
+    // Kept where it was until the next answer, which may be a while.
+    return tooltip && tr.docChanged ? { ...tooltip, pos: tr.changes.mapPos(tooltip.pos) } : tooltip;
   },
   provide: (field) => showTooltip.from(field),
 });
@@ -776,33 +780,31 @@ async function hover(_view: EditorView, at: number, side: -1 | 1) {
   // Between characters, the one the pointer's over.
   const value = toHover(await ask("hover", side < 0 && at > 0 ? at - 1 : at));
   if (!value || !value.type) return null;
-  return {
-    pos: value.from,
-    end: value.to,
-    above: true,
-    create: () => {
-      const dom = document.createElement("div");
-      dom.className = "cm-hover";
-      const type = document.createElement("div");
-      type.className = "cm-hover-type";
-      if (value.kind) {
-        const kind = document.createElement("span");
-        kind.className = "cm-hover-kind";
-        kind.textContent = `${value.kind} `;
-        type.append(kind);
-      }
-      const isSignature = value.name !== null && value.type?.startsWith(`${value.name}`);
-      type.append(value.name && !isSignature ? `${value.name}: ${value.type}` : (value.type ?? ""));
-      dom.append(type);
-      if (value.doc) {
-        const doc = document.createElement("div");
-        doc.className = "cm-hover-doc";
-        doc.textContent = value.doc;
-        dom.append(doc);
-      }
-      return { dom };
-    },
-  };
+  return { pos: value.from, end: value.to, above: true, create: () => ({ dom: hoverDom(value) }) };
+}
+
+/** A hover's tooltip: the kind, the name and type or signature, and docs. */
+function hoverDom(value: HoverInfo): HTMLElement {
+  const dom = document.createElement("div");
+  dom.className = "cm-hover";
+  const type = document.createElement("div");
+  type.className = "cm-hover-type";
+  if (value.kind) {
+    const kind = document.createElement("span");
+    kind.className = "cm-hover-kind";
+    kind.textContent = `${value.kind} `;
+    type.append(kind);
+  }
+  const isSignature = value.name !== null && value.type?.startsWith(`${value.name}`);
+  type.append(value.name && !isSignature ? `${value.name}: ${value.type}` : (value.type ?? ""));
+  dom.append(type);
+  if (value.doc) {
+    const doc = document.createElement("div");
+    doc.className = "cm-hover-doc";
+    doc.textContent = value.doc;
+    dom.append(doc);
+  }
+  return dom;
 }
 
 async function goToDefinition(at: number): Promise<void> {
@@ -873,34 +875,33 @@ async function updateSignature(): Promise<void> {
   const at = editor.state.selection.main.head;
   const help = toSignature(await ask("signature_help", at));
   if (editor.state.selection.main.head !== at) return;
-  const tooltip: Tooltip | null = help && {
-    pos: at,
-    above: true,
-    create: () => {
-      const dom = document.createElement("div");
-      dom.className = "cm-signature";
-      const line = document.createElement("div");
-      const active = help.params[help.active];
-      const start = active === undefined ? -1 : help.label.indexOf(active, help.label.indexOf("("));
-      if (start >= 0 && active !== undefined) {
-        const bold = document.createElement("span");
-        bold.className = "cm-signature-active";
-        bold.textContent = active;
-        line.append(help.label.slice(0, start), bold, help.label.slice(start + active.length));
-      } else {
-        line.textContent = help.label;
-      }
-      dom.append(line);
-      if (help.doc) {
-        const doc = document.createElement("div");
-        doc.className = "cm-signature-doc";
-        doc.textContent = help.doc;
-        dom.append(doc);
-      }
-      return { dom };
-    },
-  };
+  const tooltip: Tooltip | null = help && { pos: at, above: true, create: () => ({ dom: signatureDom(help) }) };
   editor.dispatch({ effects: setSignature.of(tooltip) });
+}
+
+/** Signature help's tooltip: the label, its active parameter bold, and docs. */
+function signatureDom(help: SignatureInfo): HTMLElement {
+  const dom = document.createElement("div");
+  dom.className = "cm-signature";
+  const line = document.createElement("div");
+  const active = help.params[help.active];
+  const start = active === undefined ? -1 : help.label.indexOf(active, help.label.indexOf("("));
+  if (start >= 0 && active !== undefined) {
+    const bold = document.createElement("span");
+    bold.className = "cm-signature-active";
+    bold.textContent = active;
+    line.append(help.label.slice(0, start), bold, help.label.slice(start + active.length));
+  } else {
+    line.textContent = help.label;
+  }
+  dom.append(line);
+  if (help.doc) {
+    const doc = document.createElement("div");
+    doc.className = "cm-signature-doc";
+    doc.textContent = help.doc;
+    dom.append(doc);
+  }
+  return dom;
 }
 
 const COMPLETION_TYPES: Record<string, string> = {
@@ -916,6 +917,8 @@ const COMPLETION_TYPES: Record<string, string> = {
   setter: "property",
   "type parameter": "type",
   builtin: "keyword",
+  // A REPL function's string argument, as `describe(1, "tmpl`.
+  text: "text",
 };
 
 async function complete(context: CompletionContext): Promise<CompletionResult | null> {
@@ -925,14 +928,18 @@ async function complete(context: CompletionContext): Promise<CompletionResult | 
   const from = afterDot ? afterDot.from + 1 : (word?.from ?? context.pos);
   const items = toCompletions(await ask("completions", context.pos));
   if (context.aborted) return null;
-  const options: Completion[] = items.map((c, i) => ({
+  return { from, options: completionOptions(items), validFor: /^[\p{L}\p{N}_]*$/u };
+}
+
+/** Completions as CodeMirror's options, in the order given. */
+function completionOptions(items: CompletionItem[]): Completion[] {
+  return items.map((c, i) => ({
     label: c.name,
     type: COMPLETION_TYPES[c.kind] ?? "variable",
     // A signature without the name the label already shows.
-    detail: c.type?.startsWith(`${c.name}(`) ? c.type.slice(c.name.length) : (c.type ?? c.kind),
+    detail: c.type?.startsWith(`${c.name}(`) ? c.type.slice(c.name.length) : (c.type ?? (c.kind === "text" ? undefined : c.kind)),
     boost: -i / items.length,
   }));
-  return { from, options, validFor: /^[\p{L}\p{N}_]*$/u };
 }
 
 // Examples and links.
@@ -987,6 +994,7 @@ const repl = createRepl({
   extensions: [temper, syntaxHighlighting(highlight), looks],
   highlight,
   language: temper,
+  help: { hover: hoverDom, signature: signatureDom, options: completionOptions },
 });
 const views = { editor: $<HTMLButtonElement>("#view-editor"), repl: $<HTMLButtonElement>("#view-repl") };
 

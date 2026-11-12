@@ -272,6 +272,22 @@ pre { margin: 0; font: 0.95rem/1.5 var(--mono); white-space: pre-wrap; overflow-
 /* Translations keep their lines, scrolling sideways on their own. */
 .repl-output { color: var(--text); white-space: pre; overflow-wrap: normal; overflow-x: auto; }
 .repl-more { margin: 0.3rem 0 0 1.2rem; font-size: 0.9rem; }
+/* interactive#N, a link to that input's block. */
+.repl-ref {
+  padding: 0;
+  border: none;
+  border-radius: 2px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.repl-ref:hover { color: var(--accent); text-decoration-style: solid; }
+.repl-marked { animation: repl-mark 1.2s ease-out; }
+@keyframes repl-mark { from { background: var(--match); } to { background: transparent; } }
+@media (prefers-reduced-motion: reduce) { .repl-marked { animation: none; outline: 2px solid var(--match); } }
 .repl-entry { display: flex; align-items: flex-start; gap: 0.5rem; padding: 0.5rem var(--inset); border-top: 1px solid var(--border); background: var(--surface); }
 .repl-entry > .repl-prompt { font: 16px/1.55 var(--mono); padding-top: 4px; }
 .repl-cell { flex: 1; min-width: 0; border: 1px solid var(--border); border-radius: 6px; font-size: 16px; }

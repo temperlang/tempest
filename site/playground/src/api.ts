@@ -320,6 +320,21 @@ export interface ReplCompletion {
   brackets: number;
 }
 
+/** What the cell asks about its text (crates/temper-wasm's `repl_query`). */
+export type ReplQuery = "completions" | "hover" | "signature";
+
+/** The names that may go where the cell's word starts, at `from`. */
+export interface ReplCompletions {
+  from: number;
+  items: CompletionItem[];
+}
+
+export function toReplCompletions(value: Json): ReplCompletions | null {
+  if (value === null) return null;
+  if (!isRecord(value)) return fail("completions");
+  return { from: num(value.from, "from"), items: toCompletions(value.items) };
+}
+
 /** An input to run again, quietly, with the steps it had. */
 export interface ReplReplay {
   text: string;
@@ -332,7 +347,9 @@ export type ToRepl =
   /** A new session, the editor's source as input 0, then `replay` quietly. */
   | { type: "start"; id: number; source: string; fuel: number; replay: ReplReplay[] }
   | { type: "input"; id: number; text: string; fuel: number }
-  | { type: "complete"; id: number; text: string };
+  | { type: "complete"; id: number; text: string }
+  /** Help for the cell's text at `at`, read against the session, never run. */
+  | { type: "query"; id: number; what: ReplQuery; text: string; at: number };
 
 /** The REPL's worker to the page. */
 export type FromRepl =
@@ -342,6 +359,8 @@ export type FromRepl =
   | { type: "started"; id: number; answer: ReplAnswer | null; replayed: number }
   | { type: "answer"; id: number; answer: ReplAnswer }
   | { type: "complete"; id: number; completion: ReplCompletion }
+  /** A query's answer, as `repl_query` gives it, to check with `toHover` and the like. */
+  | { type: "query"; id: number; value: unknown }
   /**
    * The wasm trapped (a panic, or the memory cap), so the instance is
    * gone; `replaying` is the replayed input it trapped on, if any.

@@ -309,25 +309,26 @@ impl Settle {
         None
     }
 
-    /// For a module with tests, `r#([t#test, …])`, which runs them.
-    /// A module's tests' `let`s, in source order.
-    pub(crate) fn test_cases(&self, module: ModuleId) -> Vec<NodeId> {
-        (self.tests.iter())
+    /// A module's tests' `let`s, in source order, of those declared
+    /// from the `from`th test on (as a REPL round's own).
+    pub(crate) fn test_cases(&self, module: ModuleId, from: usize) -> Vec<NodeId> {
+        (self.tests[from..].iter())
             .filter(|&&(m, _)| m == module)
             .filter_map(|&(_, t)| self.scopes.symbol(self.scopes.resolved(t)?).decl)
             .collect()
     }
 
-    pub(crate) fn test_run(&mut self, module: ModuleId) -> Option<NodeId> {
+    /// For a module with tests, `r#([t#test, …])`, which runs them: of
+    /// those declared from the `from`th test on.
+    pub(crate) fn test_run(&mut self, module: ModuleId, from: usize) -> Option<NodeId> {
         let &(_, runner) = self.test_runners.iter().find(|&&(m, _)| m == module)?;
         let runner = self.scopes.resolved(runner)?;
-        let tests: Vec<NodeId> = self
-            .tests
+        let tests: Vec<NodeId> = self.tests[from..]
             .iter()
             .filter(|&&(m, _)| m == module)
             .map(|&(_, t)| t)
             .collect();
-        let span = self.lib.tree.span(tests[0]);
+        let span = self.lib.tree.span(*tests.first()?);
         let list = self.scopes.hidden(Builtin::Function(Function::List));
         let mut items = vec![self.builtin_name(list, span, tests[0])];
         for test in tests {

@@ -230,7 +230,9 @@ pub fn command(name: &str) -> Option<String> {
              a signature hint, and highlighting. The REPL's own functions:\n\
              help() says what it offers, and help(\"name\") a declaration's\n\
              docs; describe(n, step) shows input n at one of tempest's steps;\n\
-             translate(n, lang) prints it translated (docs/tools/repl.md).\n\
+             translate(n, lang) prints it translated; runTests() runs input\n\
+             0's tests again, against the newest declarations\n\
+             (docs/tools/repl.md).\n\
              \n\
              Inputs import std, the work root's libraries by name, and\n\
              directories relative to the current one, as import(\"./shapes\");\n\

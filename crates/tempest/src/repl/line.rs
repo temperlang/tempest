@@ -26,8 +26,8 @@ use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::rc::Rc;
-use temper_analysis::{Analysis, Completion, KEYWORDS};
-use temper_frontend::repl::{Chunker, ReplSession, STEPS, Separator};
+use temper_analysis::{Analysis, KEYWORDS};
+use temper_frontend::repl::{Chunker, ReplSession, Separator};
 use temper_syntax::lex::{SourceKind, TokenKind, lex};
 
 /// The helper rustyline asks as a line is edited.
@@ -86,39 +86,8 @@ impl Line {
     /// In a string that's a REPL function's argument: `describe`'s steps,
     /// `translate`'s languages, or `help`'s names.
     fn argument_completions(&self, line: &str, pos: usize) -> Option<(usize, Vec<String>)> {
-        let before = line.get(..pos)?;
-        let quote = before.rfind('"')?;
-        let typed = &before[quote + 1..];
-        if typed.contains(['"', '\\', '$']) {
-            return None;
-        }
-        let call = before[..quote].trim_end();
-        let words: Vec<String> = match call.strip_suffix('(').map(str::trim_end) {
-            Some(call) if ends_with_name(call, "help") => {
-                let names: Vec<Completion> =
-                    self.analyze(|a, scope| a.pending_completions(scope, typed, typed.len()).1);
-                (names.into_iter())
-                    .map(|c| c.name)
-                    .filter(|n| !KEYWORDS.contains(&n.as_str()))
-                    .collect()
-            }
-            Some(_) => return None,
-            None => {
-                // `describe(0, "` or `translate(0, "`.
-                let call = call.strip_suffix(',')?.trim_end();
-                let call = call.trim_end_matches(|c: char| c.is_ascii_digit());
-                let call = call.trim_end().strip_suffix('(')?.trim_end();
-                if ends_with_name(call, "describe") {
-                    STEPS.iter().map(|(s, _)| s.to_string()).collect()
-                } else if ends_with_name(call, "translate") {
-                    self.languages.clone()
-                } else {
-                    return None;
-                }
-            }
-        };
-        let words = words.into_iter().filter(|w| w.starts_with(typed)).collect();
-        Some((quote + 1, words))
+        let languages = &self.languages;
+        self.analyze(|a, scope| a.pending_argument_completions(scope, line, pos, languages))
     }
 
     /// The signature of the call being typed at the end of `line`.
@@ -203,14 +172,6 @@ impl Line {
     pub fn completes(&self, text: &str) -> bool {
         Chunker::completes(self.separator, text)
     }
-}
-
-/// Whether `text` ends with a name, not as the end of a longer name or
-/// a member.
-fn ends_with_name(text: &str, name: &str) -> bool {
-    text.strip_suffix(name).is_some_and(|ahead| {
-        !(ahead.chars().next_back()).is_some_and(|c| c.is_alphanumeric() || c == '_' || c == '.')
-    })
 }
 
 /// The bracket at or just before byte `pos` and its match, by their

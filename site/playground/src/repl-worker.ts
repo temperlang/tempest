@@ -7,10 +7,13 @@
 // can't be interrupted from here: the page stops one by terminating this
 // worker and starting another, which replays the earlier inputs quietly.
 // A trap (a panic, or the memory cap) leaves the instance unusable, so
-// it's reported and the page does the same.
+// it's reported and the page does the same. The cell's completion,
+// hover, and signature help are `repl_query`'s, which reads the cell's
+// text against the session without settling or running it.
 
 import {
   type FromRepl,
+  type ReplQuery,
   type ReplReplay,
   type ToRepl,
   toReplAnswer,
@@ -24,6 +27,7 @@ interface Exports {
   repl_start(ptr: number, len: number, fuel: number): void;
   repl_input(ptr: number, len: number, fuel: number): void;
   repl_complete(ptr: number, len: number): number;
+  repl_query(kind: number, at: number, ptr: number, len: number): void;
   output_ptr(): number;
   output_len(): number;
 }
@@ -64,6 +68,7 @@ function instantiate(m: WebAssembly.Module): Exports {
     repl_start: fn("repl_start"),
     repl_input: fn("repl_input"),
     repl_complete: fn("repl_complete"),
+    repl_query: fn("repl_query"),
     output_ptr: fn("output_ptr"),
     output_len: fn("output_len"),
   };
@@ -125,6 +130,18 @@ function complete(id: number, text: string): void {
   post({ type: "complete", id, completion: toReplCompletion(output(e)) });
 }
 
+/** `repl_query`'s kinds. */
+const QUERIES: Record<ReplQuery, number> = { completions: 0, hover: 1, signature: 2 };
+
+function query(id: number, what: ReplQuery, text: string, at: number): void {
+  // Before a session starts, there's nothing to ask: not even a new one.
+  if (!exports) return post({ type: "query", id, value: null });
+  const e = exports;
+  const [ptr, len] = put(e, text);
+  e.repl_query(QUERIES[what], at, ptr, len);
+  post({ type: "query", id, value: output(e) });
+}
+
 self.onmessage = (event: MessageEvent<ToRepl>) => {
   const message = event.data;
   if (message.type === "init") {
@@ -134,6 +151,7 @@ self.onmessage = (event: MessageEvent<ToRepl>) => {
   try {
     if (message.type === "start") start(message.id, message.source, message.fuel, message.replay);
     else if (message.type === "input") input(message.id, message.text, message.fuel);
+    else if (message.type === "query") query(message.id, message.what, message.text, message.at);
     else complete(message.id, message.text);
   } catch (error) {
     exports = null;

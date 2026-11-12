@@ -18,9 +18,10 @@ The REPL's own functions:
       "tmpl"    that module as tmpl, what backends translate
   translate(n, lang)  that module translated into lang, which is cpp, csharp,
                       java, js, lua, py, or rust; translate(n) into each
+  runTests()          input 0's tests again, against the newest declarations
 
-An input's own help, describe, or translate shadows the REPL's for later
-inputs.
+An input's own help, describe, translate, or runTests shadows the REPL's
+for later inputs.
 
 (The front end's keys and options.)
 interactive#0: void

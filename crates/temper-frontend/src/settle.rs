@@ -279,8 +279,8 @@ impl Settle {
             .collect();
         let top_levels =
             crate::order::sort_top_levels(&mut self.lib.tree, &self.scopes, scope, &roots);
-        let tests = self.test_run(id);
-        let test_cases = self.test_cases(id);
+        let tests = self.test_run(id, 0);
+        let test_cases = self.test_cases(id, 0);
         SettledModule {
             id,
             scope,

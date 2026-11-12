@@ -368,6 +368,7 @@ REPL's transcript text:
 | `repl_start(ptr, len, fuel)` | source for input 0 (the editor's), steps | a new session; input 0's answer, or `null` if the source has no code |
 | `repl_input(ptr, len, fuel)` | one input, steps | its answer, below; starts a session if there's none |
 | `repl_complete(ptr, len) -> u32` | the input cell's text | 1 if it's whole, so Enter runs it; `{"complete": true, "inputs": [...], "brackets": 0}` |
+| `repl_query(kind, at, ptr, len)` | 0, 1, or 2; a UTF-16 offset; the cell's text | completion, `{"from": 3, "items": [...]}`; hover; or signature help, as the editor's queries give them; `null` with no session |
 | `repl_reset()` | | drops the session |
 
 An input's answer lists what it reported, in order, each with the
@@ -391,6 +392,25 @@ buffer into inputs as the CLI splits piped lines
 ([`Chunker`](../../../crates/temper-frontend/src/repl.rs)); the page
 feeds each to `repl_input` in turn, and uses `brackets` for the next
 line's indent.
+
+`repl_query` reads the cell's text as if it were the next input, with
+temper-analysis's
+[`pending_*` queries](../../../crates/temper-analysis/src/pending.rs),
+as `tempest repl`'s Tab and hint do: no tree for the text, just its
+tokens (the brackets open, the name before `(` or `.`), with names
+looked up from the latest input's scope, through members' declared
+types. Nothing is settled or run, so it's quick on every keystroke
+and can't run user code. Completion offers the REPL's own functions
+too, and in a string argument, `describe`'s steps, `translate`'s
+languages, or `help`'s names, of kind `text`. A name the text declares
+itself isn't hovered, as it isn't declared yet.
+
+`runTests()` asks the session to run input 0's tests again once the
+input calling it ends, as nothing can settle while an input runs:
+input 0's source with all but its tests blanked (lines and byte
+offsets kept) is settled as a hidden round after the latest input, so
+the tests' names mean the newest declarations, then run and reported
+as input 0's were, in the same answer, before its result.
 
 **Limits:** `fuel` is the steps one input may take (less than 1 for
 none); the page gives 50 million, as for a compile, and when an answer
@@ -474,6 +494,10 @@ sequenceDiagram
   M->>R: host_log, a line at a time
   R-->>P: log: id, line
   R-->>P: answer: id, events
+  Note over P: typing in the cell
+  P->>R: query: id, completions, text, offset
+  R->>M: repl_query
+  R-->>P: query: id, value
 ```
 
 - **One input at a time:** the page queues the inputs Enter splits
@@ -499,8 +523,22 @@ sequenceDiagram
   Cmd+Enter, and Run, run the text as one input when it isn't whole.
   Up and Down on the first and last line walk history, kept in
   `localStorage`. On a coarse pointer, Enter only adds lines. Escape
-  stops a run. Brackets don't close themselves in the cell, since
-  Enter would then run `{}` as typed.
+  stops a run, or else closes the cell's tooltips. Brackets don't close
+  themselves in the cell, since Enter would then run `{}` as typed.
+- **Language help in the cell:** CodeMirror's completion, hover, and a
+  signature tooltip, as the editor's (`main.ts` lends its tooltip
+  builders through `ReplHost.help`), asked with `query` messages.
+  While an input runs, or the session starts, the page asks nothing
+  and shows none, so a query never waits behind a run or starts a
+  session. The completion menu opens with nothing picked
+  (`selectOnOpen: false`), so Enter still runs while it's open; Down
+  or Up picks, Enter accepts, Escape closes. Ctrl or Cmd+I shows the
+  hover for the name at the cursor, for the keyboard.
+- **Transcript:** at most 300 inputs, the oldest dropped with a note;
+  past 40 lines an input's output folds behind "Show all"; and an
+  `interactive#N` in an event's text, for an input with a block other
+  than its own, is a button that scrolls to that block, flashes it, and
+  puts its text in the cell (input 0's, the editor's, isn't put in).
 
 ## Main types and functions
 
@@ -605,7 +643,9 @@ with `--limit` on builds.
   `generates_std`, and `runs_with_built_in_std`; and in its `repl`
   module, the REPL's exports: a session with the editor's source as
   input 0, logs streamed, a reset, running out of steps then keeping
-  going, long logs cut, and Enter's answer.
+  going, long logs cut, Enter's answer, `repl_query`'s completion,
+  hover, and signature help over earlier inputs (running nothing), and
+  `runTests()` after a redefinition.
 - **The CLI REPL's transcripts**, temper-frontend's and
   temper-driver's `tests/repl/*.cases`, in
   [`repl.rs`](../../../crates/temper-wasm/tests/repl.rs): typed into
@@ -632,7 +672,11 @@ with `--limit` on builds.
   function typed over several lines with Enter, a log seen while its
   input still runs, an input that runs out of steps and then keeps
   going, Stop during a run with the session restored and its numbering
-  kept, and `translate`. Then the site's header: its sections, with
+  kept, `translate`, completion in the cell offering an earlier input's
+  name and `runTests` (accepted from the keyboard), hover by pointer and
+  by Ctrl+I, signature help, an `interactive#N` link filling the cell,
+  and `runTests()` failing the editor's test after a redefinition.
+  Then the site's header: its sections, with
   Playground current; About from the keyboard; the theme toggle kept
   across a reload; and at 390 px, the sections behind Menu with the
   page's controls in view. With `--site`, the docs build around it,
@@ -658,7 +702,8 @@ the REPL's history, Restart, the touch keys, and a trap's restore.
   after each Pages deploy would catch a broken deploy too.
 - **Permalinks name no compiler version.**
 - **`watch`** is planned, as a loop first.
-- **The REPL tab** has no completion, hover, or signature help yet
-  (they need queries over the session, `repl_query`), shows
-  `translate` as the CLI's text rather than in panes, and stops a run
-  only by replacing its worker, which replays every earlier input.
+- **The REPL tab** shows `translate` as the CLI's text rather than in
+  panes, and stops a run only by replacing its worker, which replays
+  every earlier input. Its cell's help reads text without settling it,
+  so it misses what the text declares itself and expressions' types
+  (`f(x).` offers nothing), and has no help while an input runs.

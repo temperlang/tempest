@@ -52,7 +52,7 @@ pub const INTERRUPTED: &str = crate::interp::INTERRUPTED;
 pub const OUT_OF_STEPS: &str = crate::interp::OUT_OF_STEPS;
 
 use crate::interp::repl::{Outcome, Runner, render};
-use crate::library::{Level, Library, Message};
+use crate::library::{FileId, Level, Library, Message};
 use crate::library_tests::Tally;
 use crate::project::load_imports;
 use crate::scope::{Lookup, ScopeId};
@@ -60,7 +60,7 @@ use crate::settle::{Incremental, Settled};
 use crate::sources::Sources;
 use specials::{HOST_NAME, PRELUDE, PRELUDE_PATH, Specials};
 use std::borrow::Cow;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::rc::Rc;
@@ -209,10 +209,13 @@ pub struct ReplSession {
     /// Names an input found undeclared, with the first such input, so a
     /// later input declaring one can note it.
     undeclared: HashMap<String, usize>,
-    /// Input 0's tests, if it has any: its scope, the expression that
-    /// runs them ([`crate::settle::SettledModule::tests`]), and how many.
-    /// Kept so they could run again against later inputs' declarations.
-    tests: Option<(ScopeId, NodeId, usize)>,
+    /// Input 0's text with all but its tests blanked, lines and byte
+    /// offsets kept, so `runTests()` can settle them again against later
+    /// inputs' declarations.
+    test_source: Option<String>,
+    /// Input 0's file, and the files `runTests()` settled its tests from,
+    /// whose diagnostics show input 0's lines.
+    test_files: (FileId, Vec<FileId>),
     /// Makes the next input panic, to test that a panic is caught.
     #[cfg(test)]
     panic_next: bool,
@@ -238,6 +241,8 @@ impl ReplSession {
             interrupt: options.interrupt.clone(),
             prelude: None,
             host: None,
+            has_tests: false,
+            run_tests: Cell::new(false),
         }));
         let host = specials::host(specials.clone(), sink.clone());
         let mut session = ReplSession {
@@ -249,7 +254,8 @@ impl ReplSession {
             inputs: 0,
             segments: HashMap::new(),
             undeclared: HashMap::new(),
-            tests: None,
+            test_source: None,
+            test_files: (FileId(0), Vec::new()),
             #[cfg(test)]
             panic_next: false,
         };
@@ -328,9 +334,7 @@ impl ReplSession {
         let value = match fed {
             Ok(value) => value,
             Err(payload) => {
-                let why = (payload.downcast_ref::<&str>().map(|s| s.to_string()))
-                    .or_else(|| payload.downcast_ref::<String>().cloned())
-                    .unwrap_or_else(|| "a panic".into());
+                let why = panic_text(payload);
                 // Settling panicked, if the input isn't registered: the
                 // round is abandoned, and the modules it loaded, never to
                 // run, get globals that say why when read. A panic as it
@@ -381,6 +385,11 @@ impl ReplSession {
         (self.specials.borrow_mut().inputs).push(Some((file, round.input.scope)));
         let errors = self.report_diagnostics(input, diagnostics_before);
         self.note_late_declarations(input, round.input.scope);
+        if input == 0 && round.input.tests.is_some() {
+            self.test_source = Some(self.tests_only(file, &round.input.test_cases));
+            self.test_files.0 = file;
+            self.specials.borrow_mut().has_tests = true;
+        }
 
         let root = self.settle.library().files[file.0 as usize].root;
         let semicolon = ends_with_semicolon(text);
@@ -461,20 +470,120 @@ impl ReplSession {
                 }
             }
         });
-        if let Some(tests) = tests {
-            self.tests = Some(tests);
-            self.run_tests(value.is_some());
+        if let Some((scope, run, defined)) = tests {
+            self.run_tests(scope, run, defined, value.is_some());
+        }
+        if self.specials.borrow().run_tests.take() {
+            self.rerun_tests(input);
         }
         value
     }
 
-    /// Runs input 0's tests, if `ran`, as the input ran to its end, and
-    /// reports each failure and then `tempest test`'s summary, as
-    /// `Tests passed: 2 of 3`; if not, that none ran.
-    fn run_tests(&mut self, ran: bool) {
-        let Some((scope, run, defined)) = self.tests else {
+    /// Input 0's source, `file`, with all but its tests, `cases`, blanked,
+    /// keeping lines and byte offsets, and a `;` after each test that a
+    /// line doesn't end.
+    fn tests_only(&self, file: FileId, cases: &[NodeId]) -> String {
+        let library = self.settle.library();
+        let source = library.files[file.0 as usize].parsed.source();
+        let mut keep = vec![false; source.len()];
+        let mut ends = Vec::new();
+        for &case in cases {
+            let span = library.tree.span(case);
+            let (at, start) = library.locate(span.start);
+            let start = start as usize;
+            let end = (start + span.end.saturating_sub(span.start) as usize).min(source.len());
+            if at == file && start <= end {
+                keep[start..end].fill(true);
+                ends.push(end);
+            }
+        }
+        let mut out = String::with_capacity(source.len());
+        for (i, c) in source.char_indices() {
+            match c {
+                _ if keep[i] || c == '\n' => out.push(c),
+                _ => {
+                    out.push(if ends.contains(&i) { ';' } else { ' ' });
+                    // Each byte kept, so offsets are input 0's.
+                    out.extend(std::iter::repeat_n(' ', c.len_utf8() - 1));
+                }
+            }
+        }
+        out
+    }
+
+    /// `runTests()`, once input `input` ends: input 0's tests settled
+    /// again as a round of their own, chained after it, so their names
+    /// mean the newest declarations, then run and reported as input 0's
+    /// were. Diagnostics are located in input 0, where the tests are.
+    fn rerun_tests(&mut self, input: usize) {
+        let Some(source) = self.test_source.clone() else {
             return;
         };
+        let scopes_before = self.settle.scopes().scopes.len();
+        let settled = catch_unwind(AssertUnwindSafe(|| {
+            let library = self.settle.library_mut();
+            let before = library.diagnostics.len();
+            let path = format!("{DIR}/interactive#0");
+            let file = library.add_file(&path, &source, SourceKind::Standalone);
+            self.settle.allow_tests(true);
+            let round = self.settle.settle_input(file);
+            self.settle.allow_tests(false);
+            (file, round, before)
+        }));
+        if let Ok((file, ..)) = &settled {
+            self.test_files.1.push(*file);
+        }
+        let (file, round, before) = match settled {
+            Ok(settled) => settled,
+            Err(payload) => {
+                self.settle.allow_tests(false);
+                let modules = self.settle.abandon_round(scopes_before);
+                let runner = &mut self.runner;
+                self.settle.view(|s| {
+                    for scope in modules {
+                        runner.add_module(s, scope);
+                    }
+                });
+                self.runner.recover();
+                return self.emit(&ReplEvent::InternalError(panic_text(payload)));
+            }
+        };
+        self.report_diagnostics(input, before);
+        let Some(run) = round.input.tests else {
+            return;
+        };
+        let root = self.settle.library().files[file.0 as usize].root;
+        let scope = round.input.scope;
+        let (runner, sink) = (&mut self.runner, &self.sink);
+        let ran = self.settle.view(|s| {
+            for module in &round.modules {
+                runner.add_module(s, module.scope);
+            }
+            runner.add_module(s, scope);
+            for module in &round.modules {
+                runner.run_module(s, module);
+            }
+            match runner.run_input(s, &round.input, root, false, input) {
+                Outcome::Value(_) => true,
+                Outcome::Failed(why) => {
+                    (*sink.borrow_mut())(&ReplEvent::Failure(why));
+                    false
+                }
+                Outcome::Interrupted => {
+                    (*sink.borrow_mut())(&ReplEvent::Interrupted);
+                    false
+                }
+                Outcome::Unresolved => false,
+            }
+        });
+        self.run_tests(scope, run, round.input.test_cases.len(), ran);
+    }
+
+    /// Runs tests, `run` in `scope` ([`crate::settle::SettledModule::tests`]), `defined`
+    /// of them, if `ran`, as their input ran to its end, and reports each
+    /// failure and then `tempest test`'s summary, as `Tests passed: 2 of
+    /// 3`; if not, that none ran.
+    fn run_tests(&mut self, scope: ScopeId, run: NodeId, defined: usize, ran: bool) {
         let runner = &mut self.runner;
         let results = match ran {
             true => self.settle.view(|s| runner.run_tests(s, scope, run)),
@@ -548,13 +657,16 @@ impl ReplSession {
             if let Message::UndeclaredName(name) = &d.message {
                 undeclared.push(name.to_string());
             }
-            let (file, start) = lib.locate(d.span.start);
-            let file = &lib.files[file.0 as usize];
+            let (id, start) = lib.locate(d.span.start);
+            let file = &lib.files[id.0 as usize];
             let location = match file.path.strip_prefix(&format!("{DIR}/")) {
                 Some(name) => name.to_string(),
                 None => file.path.clone(),
             };
-            let source = file.parsed.source();
+            let source = match self.test_files.1.contains(&id) {
+                true => lib.files[self.test_files.0.0 as usize].parsed.source(),
+                false => file.parsed.source(),
+            };
             let length = d.span.end.saturating_sub(d.span.start) as usize;
             let (line, column, snippet) = snippet(source, start as usize, length);
             self.emit(&ReplEvent::Diagnostic(ReplDiagnostic {
@@ -571,6 +683,13 @@ impl ReplSession {
         }
         errors
     }
+}
+
+/// What a caught panic says.
+fn panic_text(payload: Box<dyn std::any::Any + Send>) -> String {
+    (payload.downcast_ref::<&str>().map(|s| s.to_string()))
+        .or_else(|| payload.downcast_ref::<String>().cloned())
+        .unwrap_or_else(|| "a panic".into())
 }
 
 /// A class's or interface's name as a result shows it: plain, as `C`,

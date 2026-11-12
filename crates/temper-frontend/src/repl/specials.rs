@@ -1,10 +1,10 @@
-//! The REPL's own functions, `help`, `describe`, and `translate`:
-//! declared before the first input, in a scope of their own, as Temper
-//! functions calling a bodiless `@connected` one that the session
-//! implements ([`crate::interp::repl::Host`]), whose name no input can
-//! write. Being ordinary declarations, they
-//! complete and type check as any other, and an input's own `help`
-//! shadows the REPL's for later inputs, as any redefinition does.
+//! The REPL's own functions, `help`, `describe`, `translate`, and
+//! `runTests`: declared before the first input, in a scope of their
+//! own, as Temper functions calling a bodiless `@connected` one that the
+//! session implements ([`crate::interp::repl::Host`]), whose name no
+//! input can write. Being ordinary declarations, they complete and type
+//! check as any other, and an input's own `help` shadows the REPL's for
+//! later inputs, as any redefinition does.
 //!
 //! What needs more than the frontend, hover's text for `help("name")`,
 //! tmpl for `describe(n, "tmpl")`, and the backends for `translate`,
@@ -26,7 +26,7 @@ use crate::project::load_imports;
 use crate::scope::{BUILTINS, Lookup, ScopeId, SymbolId};
 use crate::settle::Settled;
 use crate::sources::Sources;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::rc::Rc;
@@ -52,6 +52,11 @@ let describe(n: Int, step: String = "settled"): Void { replHost(1, n, step) }
  * backend's language, as "py"; without one, into each.
  */
 let translate(n: Int, language: String = ""): Void { replHost(2, n, language) }
+/**
+ * Runs input 0's tests again, once this input ends, against the newest
+ * declarations of the names they use.
+ */
+let runTests(): Void { replHost(3, null, null) }
 "#;
 
 /// The name of the prelude's function that the host implements, which
@@ -122,6 +127,11 @@ pub(super) struct Specials {
     /// implements.
     pub prelude: Option<ScopeId>,
     pub host: Option<NodeId>,
+    /// Whether input 0 declared tests, which `runTests()` runs again.
+    pub has_tests: bool,
+    /// Set by `runTests()`, for the session to run input 0's tests again
+    /// once the input running ends.
+    pub run_tests: Cell<bool>,
 }
 
 /// The host that runs the functions, printing what they show to `sink`.
@@ -137,14 +147,17 @@ pub(super) fn host(state: Rc<RefCell<Specials>>, sink: Sink) -> Host {
             match arg(which) {
                 Arg::Int(0) => state.help(s, args),
                 Arg::Int(1) => state.describe(s, args),
-                _ => state.translate(s, args),
+                Arg::Int(2) => state.translate(s, args),
+                _ => state.request_tests(),
             }
         }));
         let shown = shown.unwrap_or_else(|_| {
             Err("tempest: internal error (a bug in tempest, not in your code)".into())
         });
         Some(shown.map(|text| {
-            (*sink.borrow_mut())(&ReplEvent::Output(text));
+            if !text.is_empty() {
+                (*sink.borrow_mut())(&ReplEvent::Output(text));
+            }
             Val::Void
         }))
     })
@@ -195,14 +208,25 @@ impl Specials {
         );
         out.push_str(&wrap("  translate(n, lang)  ", &translate, 78));
         out.push_str(
-            "\nAn input's own help, describe, or translate shadows the REPL's for later\n\
-             inputs.\n",
+            "  runTests()          input 0's tests again, against the newest declarations\n\
+             \nAn input's own help, describe, translate, or runTests shadows the REPL's\n\
+             for later inputs.\n",
         );
         if !self.help_footer.is_empty() {
             out.push('\n');
             out.push_str(&self.help_footer);
         }
         out.trim_end().to_string()
+    }
+
+    /// `runTests()`: asks for input 0's tests to run once the input
+    /// ends, as they can't be settled while it runs; shows nothing.
+    fn request_tests(&self) -> Result<String, String> {
+        if !self.has_tests {
+            return Err("runTests: input 0 declared no tests".into());
+        }
+        self.run_tests.set(true);
+        Ok(String::new())
     }
 
     /// `describe(n, step)`.

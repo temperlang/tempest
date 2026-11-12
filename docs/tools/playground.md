@@ -20,7 +20,9 @@ errors, and its warnings. The editor's code is input 0, so inputs can
 call what it declares; edit it, and the REPL starts again from it, with
 your inputs run again. The editor's tests run once, as input 0's, and
 the REPL shows their summary, `Tests passed: 3 of 3`, with any failures;
-tests typed into the REPL don't run.
+`runTests()` runs them again against your newest definitions, as in
+[`tempest repl`](repl.md#running-input-0s-tests-again). Tests typed into
+the REPL don't run.
 
 - **Enter** runs the input once it's whole, or else starts a new line,
   so a function can be typed over several lines. **Shift+Enter** always
@@ -28,8 +30,19 @@ tests typed into the REPL don't run.
   always runs. On a touch screen, Enter starts a new line, and Run runs.
 - **Up** and **Down**, on the first or last line, go through earlier
   inputs.
-- `help()` lists what the REPL offers, and `translate(n, "py")` shows
-  input `n` in Python (or `cpp`, `csharp`, `java`, `js`, `lua`, `rust`).
+- **Completion, hover, and signature help** work in the input cell as
+  in the editor, and know what earlier inputs declared, and the REPL's
+  own functions. The completion menu opens as you type, with nothing
+  picked, so Enter still runs: **Down** or **Up** picks, **Enter**
+  accepts, **Ctrl+Space** opens it, and **Escape** closes it. **Ctrl+I**
+  (Cmd+I on a Mac) shows the type and docs of the name at the cursor.
+  They read the cell without running it, and wait while an input runs.
+- **The transcript** folds long output after 40 lines, with **Show
+  all**, and keeps the latest 300 inputs. Click an `interactive#N` to
+  go to that input and put it in the cell.
+- `help()` lists what the REPL offers, `translate(n, "py")` shows
+  input `n` in Python (or `cpp`, `csharp`, `java`, `js`, `lua`, `rust`),
+  and `runTests()` runs the editor's tests again.
 - **Limits:** each input may take 50 million steps; one that runs out
   offers **Keep going**, which runs it again, as the next input, with
   ten times as many. **Stop** (or Escape) ends an input that's running;

@@ -166,11 +166,11 @@ interactive#3: "yes"
 
 ## The REPL's own functions
 
-Three functions are declared before the first input. They're Temper
+Four functions are declared before the first input. They're Temper
 functions, so they complete and check as any other, and an input that
-declares its own `help`, `describe`, or `translate` hides the REPL's
-for the inputs after it, as any redefinition does; there's no other
-name to reach them by then.
+declares its own `help`, `describe`, `translate`, or `runTests` hides
+the REPL's for the inputs after it, as any redefinition does; there's
+no other name to reach them by then.
 
 - **`help()`** says what the REPL offers: these functions, `describe`'s
   steps, the keys, and where the history is. **`help("name")`** shows a
@@ -186,6 +186,8 @@ name to reach them by then.
   `csharp`, `java`, `js`, `lua`, `py`, or `rust`, each file of its own
   code after a line with its path; `translate(n)` gives every
   language.
+- **`runTests()`** runs input 0's tests again, once the input calling
+  it ends, as [below](#running-input-0s-tests-again).
 
 What `describe(n, "module")` and `translate(n)` show is one module:
 input `n` after the earlier inputs it uses, through the names they
@@ -242,6 +244,33 @@ What they show is printed when they run, so an input's other output
 comes before or after it as the calls are. A failed call, as
 `describe(99)`, fails the input, saying why. Ctrl-C stops them, as it
 stops any input.
+
+### Running input 0's tests again
+
+Tests declared in input 0, as `test("name") { … }`, run once, after
+it, printing each failure and `tempest test`'s summary. `runTests()`
+runs them again: their source is settled afresh as a hidden input
+after the latest one, so the names they use mean the newest
+declarations, and they print the same lines.
+
+<!-- repl: restart -->
+```console
+$ let twice(n: Int): Int { n * 2 }; test("three") { assert(twice(3) == 6) }
+Tests passed: 1 of 1
+interactive#0: void
+$ let twice(n: Int): Int { n + 1 }
+interactive#1: void
+$ runTests()
+Test failed: three - expected twice(3) == (6) not (4)
+Tests passed: 0 of 1
+interactive#2: void
+```
+
+- **A changed signature** gives type errors, located in input 0, where
+  the tests are; the tests still run as far as they can.
+- **Old instances keep old classes:** a value made before a class was
+  redeclared is still the old class's, with its old methods.
+- **Only input 0's tests:** a later input can't declare tests.
 
 ## On a terminal
 

@@ -89,7 +89,8 @@
 }
 .top .sections a:hover { background: var(--top-hover); }
 .top .sections a[aria-current] { background: var(--top-hover); color: var(--top-accent); font-weight: 600; }
-.top .sections a.play { color: var(--top-accent); font-weight: 600; }
+/* The playground's link (.play) is styled as any other: it's last, and
+   marked only when current, so it never looks selected elsewhere. */
 
 .top-tools { display: flex; flex: none; align-items: center; gap: 6px; margin-left: auto; }
 

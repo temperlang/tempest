@@ -18,7 +18,7 @@ interactive#1: void
 interactive#2: 3
 (Call #desugarOperation + (Call twice x) 1)
 interactive#3: void
-(Block (Call + (Call twice:10 x:9) 1))
+(Block (Call + (Call twice:11 x:10) 1))
 interactive#4: void
 twice: fn (Int32): Int32
 interactive#5: void
@@ -298,3 +298,41 @@ let { Date } = import("std/temporal");
 // interactive#13
 new Date(2022, 5, 6).toString();
 interactive#14: void
+
+=== runTests runs input 0's tests again, against the newest declarations
+let twice(n: Int): Int { n * 2 }; test("three") { assert(twice(3) == 6) }; test("zero") { assert(twice(0) == 0) }
+let twice(n: Int): Int { n + 3 }
+runTests()
+let twice(n: Int): Int { n * 2 }
+runTests(); console.log("before the tests")
+let twice(s: String): String { s }
+runTests()
+--- transcript
+Tests passed: 2 of 2
+interactive#0: void
+interactive#1: void
+Test failed: zero - expected twice(0) == (0) not (3)
+Tests passed: 1 of 2
+interactive#2: void
+interactive#3: void
+before the tests
+Tests passed: 2 of 2
+interactive#4: void
+interactive#5: void
+interactive#0:1:64: error: Expected subtype of String, but got Int32
+    let twice(n: Int): Int { n * 2 }; test("three") { assert(twice(3) == 6) }; test("zero") { assert(twice(0) == 0) }
+                                                                   ^
+interactive#0:1:104: error: Expected subtype of String, but got Int32
+    let twice(n: Int): Int { n * 2 }; test("three") { assert(twice(3) == 6) }; test("zero") { assert(twice(0) == 0) }
+                                                                                                           ^
+Test failed: three - expected twice(3) == (6) not (3)
+Tests passed: 1 of 2
+interactive#6: void
+
+=== runTests needs input 0's tests
+let twice(n: Int): Int { n * 2 }
+runTests()
+--- transcript
+interactive#0: void
+Failed: runTests: input 0 declared no tests
+interactive#1: fail
