@@ -78,8 +78,9 @@ result:
 
     cargo test
 
-runs every crate's tests, needing no other checkout. Backends' tests
-compare goldens of generated code (`UPDATE_SNAPSHOTS=1` accepts
+runs every crate's tests, needing no other checkout.
+[Where tests go](../internals/10-tests.md) says where to add one, and
+how to run a few. Backends' tests compare goldens of generated code (`UPDATE_SNAPSHOTS=1` accepts
 changes) and run the generated code with each language's own tools,
 skipping with a message when a tool is missing;
 [test speed](../../notes/test-speed.md) has the details. To run those

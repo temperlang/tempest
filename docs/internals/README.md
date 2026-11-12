@@ -88,6 +88,8 @@ flowchart LR
    the same compiler in a browser, and in an editor.
 9. [The language server and editors](09-language-server.md): `tempest
    lsp`, its queries, and the VS Code extension.
+10. [Where tests go](10-tests.md): a cheat sheet for adding tests, for
+    readers who know Kotlin Temper's.
 
 ## The running example
 
