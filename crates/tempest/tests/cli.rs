@@ -330,7 +330,9 @@ fn imported_errors_are_reported_once() {
         fs::write(path, text).unwrap();
     }
     let root = dir.to_string_lossy().to_string();
-    let error = format!("{root}/a/a.temper:2:19: error: Cannot assign to String from Int32\n");
+    // Diagnostics name files with `/`, on Windows too.
+    let shown = root.replace('\\', "/");
+    let error = format!("{shown}/a/a.temper:2:19: error: Cannot assign to String from Int32\n");
     let error = error.as_str();
     for args in [
         &["test", "-w", &root][..],
@@ -1100,9 +1102,11 @@ fn logformat_json() {
          test(\"t2\") { assert(f(2) == 7); }\n",
     )];
     with_library("json", &files, |dir| {
+        // Records name files with `/`, on Windows too, as JSON wants.
+        let shown = dir.replace('\\', "/");
         let undeclared = format!(
             "{{ \"level\": \"error\", \"template\": \"UndeclaredName\", \"pos\": {{ \"loc\": \
-             \"{dir}/a.temper\", \"left\": 51, \"right\": 57 }}, \"values\": [], \"message\": \
+             \"{shown}/a.temper\", \"left\": 51, \"right\": 57 }}, \"values\": [], \"message\": \
              \"tripel has not been declared\" }}"
         );
         // A build needs a backend; one built without js (as CI's
@@ -1327,8 +1331,12 @@ fn test_flags() {
         fs::write(&list, "b/\n").unwrap();
         let (code, out, _) = tempest(&["test", "-w", dir, "-ign", &list]);
         assert_eq!((code, out.as_str()), (0, "Tests passed: 1 of 1\n"));
-        let (code, out, _) = tempest(&["test", "-w", dir, "--ignorefile", "/dev/null"]);
-        assert!(out.ends_with("Tests passed: 1 of 2\n"), "{out}");
+        // An empty one ignores nothing. (Not /dev/null, which Windows lacks.)
+        let empty = Path::new(dir).join("empty-ignore");
+        fs::write(&empty, "").unwrap();
+        let empty = empty.to_string_lossy();
+        let (code, out, err) = tempest(&["test", "-w", dir, "--ignorefile", &empty]);
+        assert!(out.ends_with("Tests passed: 1 of 2\n"), "{out}{err}");
         assert_eq!(code, 1);
         let (code, _, err) = tempest(&["test", "-w", dir, "-ign", &format!("{list}-not")]);
         assert_eq!(code, 1);
