@@ -22,7 +22,7 @@ page doesn't repeat those.
 | [I7](#i7-rust-warnings) | getting started | Rust output warns | Drop the advice once tempest ships |
 | [I8](#i8-numbered-names-in-output-samples) | home page | `x__4` in samples | Done here |
 | [I9](#i9-the-command-line) | guide, tools | `temper` commands tempest lacks | CLI parity, then one name |
-| [I10](#i10-examples-tempest-doesnt-run-as-marked) | builtins, types, std | 13 examples | Fix tempest, one by one |
+| [I10](#i10-examples-tempest-doesnt-run-as-marked) | builtins, types | 9 examples | Fix tempest, one by one |
 | [I11](#i11-playground-addresses) | terms, Kotlin README | Old playground addresses | Links done here; terms left |
 | [I12](#i12-the-functional-test-matrix) | `functional-test-matrix.md` | Failures tempest doesn't have | Regenerate, or retire |
 | [I13](#i13-lua-versions) | target languages | "Lua 5.1" | State what's tested |
@@ -37,6 +37,7 @@ page doesn't repeat those.
 | [I22](#i22-named-groups-in-regular-expressions) | std/regex | `(?<name>…)` | Pick one syntax, or both |
 | [I23](#i23-integer-literals-too-big-for-int32) | builtins | Four bit examples wrap | Decide literal typing, then fix |
 | [I24](#i24-tutorial-examples-tempest-doesnt-run) | tutorial 3 | `fn` without a declared type; `do(fn …)` | Fix the examples, or tempest |
+| [I25](#i25-json-adapters) | builtins, std/json | `@json` makes no `jsonAdapter()` | Generate adapters in tempest |
 
 ## Licensing and community
 
@@ -188,7 +189,7 @@ page doesn't repeat those.
 The reference's examples carry the result the Kotlin compiler gave when
 its docs were generated, and `compat/check_doc_examples.py` runs them
 with tempest ([writing these docs](contributing/docs.md#examples-that-are-checked)).
-These 13 disagree; each was checked on the Kotlin compiler, which runs
+These 9 disagree; each was checked on the Kotlin compiler, which runs
 them as marked. Each has a `<!-- known: I10 -->` comment before its
 fence, so the checker, which runs in CI, counts it as known.
 
@@ -198,8 +199,6 @@ fence, so the checker, which runs in CI, counts it as known.
 | [builtins](language/builtins.md#macro-datafile) | `dataFile(…)` | "dataFile has not been declared" (see [I4](#i4-backends-that-tempest-doesnt-have)) |
 | [builtins](language/builtins.md#defining-functions) | A named function expression, `fn f(): String { … }` | "Use of builtin fn is malformed" |
 | [builtins](language/builtins.md#inlineunrealizedgoal-decorator) | `return` from a block lambda passed to `forEach`, inlined | "Expected subtype of Void, but got Boolean" |
-| [builtins](language/builtins.md#json-decorator) (two), [std/json](std/json.md) | `@json` classes' `jsonAdapter()` on the interpreter | "No member jsonAdapter" when run; the backends translate it |
-| [builtins](language/builtins.md#private-visibility) | Reading a private member from outside its class | An error when run, not when compiled |
 | [builtins](language/builtins.md#builtins-keyword) | Subclassing `Console`; `builtins.console` | "Console has not been declared" |
 | [types](language/types.md#float64-syntax-examples) | `1.` is an error | Accepted, as `1` and a dot |
 | [builtins](language/builtins.md#assignment--builtin), [`++`](language/builtins.md#-operator-increment), and [`--`](language/builtins.md#---operator-decrement) | Logging a top-level `var` around assignments | See [I20](#i20-top-level-statements-run-out-of-order); both compilers agree |
@@ -309,3 +308,16 @@ out of it, as tempest rejects them:
 
 **Suggested:** decide whether tempest should accept them, or show
 what it accepts in the tutorial.
+
+### I25: `@json` adapters
+
+- **Docs:** six `@json` examples, five in
+  [builtins](language/builtins.md#json-decorator) (generated, custom,
+  and sealed adapters, `@jsonExtra`, and `@jsonName`) and one in
+  [std/json](std/json.md), call a class's static `jsonAdapter()`.
+- **Kotlin:** its frontend generates `jsonAdapter()`, and, unless the
+  class writes them, `encodeToJson` and `decodeFromJson`.
+- **tempest:** generates neither yet: "No member jsonAdapter".
+- **Suggested:** generate them in tempest's frontend, as Kotlin does;
+  then remove these examples' `<!-- known: I25 -->` comments and this
+  entry.
