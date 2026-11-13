@@ -61,19 +61,19 @@ Circle of radius 2
 Circle of radius 1
 ```
 
-## Custom and overloaded constructors
+## Custom constructors
 
 Object literals correspond to constructor calls, not to classes and their named
-properties. Unfortunately, at present, even if we recognize a matching class, we
-don't handle incompatible overloaded constructors well in other stages, so the
-test for now sticks to single custom constructors rather than overloads.
+properties. A class has only one constructor, so the inert one below would be an
+error beside the other. A static method or an object literal gives other ways to
+make one.
 
-TODO Update text in this functional test once we finalize plans.
+The custom constructor's parameter names are what an object literal gives.
 
     class Whatever {
       public blah: String;
 
-TODO Test overloaded constructors or factories if/when we support them.
+Only one of these two constructors can be in the class.
 
 ```temper inert
       public constructor(blah: String) {

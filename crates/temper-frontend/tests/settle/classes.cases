@@ -796,7 +796,7 @@ class HasConstructorAndInitializedProperty {
     i + (if (b) { 1 } else { 0 })
   }
 }
-// Each would need a copy of the initializer; a static one's fine.
+// A second constructor is an error, initializer or not; the first is used.
 class HasTooManyConstructors {
   private var b: Boolean = false;
   public static s: Int = 1;
@@ -863,10 +863,89 @@ console.log("${new NeedsConstructor(1).k} ${new HasConstructorAndInitializedProp
       " "
       (Call (Call . (Call new HasConstructorAndInitializedProperty:1 2) \f))))
   #void)
-error 530..548: More than one constructor needs to adopt initializer for property b
-error 796..805: Constructor input s specified but there is already a constructor
-error 821..830: Constructor input t specified but there is already a constructor
+error 622..633: A class can have only one constructor; for other ways to make instances, use a static method or an object literal
+error 805..814: Constructor input s specified but there is already a constructor
+error 830..839: Constructor input t specified but there is already a constructor
 log 2 3
+
+=== a class has one constructor, by a team decision; Kotlin accepts several
+// OK: one constructor.
+class One {
+  public n: Int;
+  public constructor(n: Int) { this.n = n; }
+}
+// OK: header parameters only.
+class Header(public n: Int) {}
+// Each constructor after the first is an error; the first is used.
+class TwoBare {
+  public n: Int = 1;
+  public constructor() {}
+  public constructor() {}
+}
+class TwoWithParams {
+  public n: Int;
+  public constructor(hi: Int) { n = hi; }
+  public constructor(lo: Int) { n = lo + 1; }
+}
+class Three {
+  public n: Int = 3;
+  public constructor() {}
+  public constructor(a: Int) {}
+  public constructor(a: Int, b: Int) {}
+}
+let literal: TwoWithParams = { hi: 5 };
+console.log("${new One(1).n} ${new Header(2).n} ${new TwoBare().n} ${new TwoWithParams(4).n} ${literal.n} ${new Three().n}");
+--- settled
+(Block
+  (Class
+    ^One:0
+    (Let ^n:7 Int)
+    (Constructor
+      ^constructor:8
+      (Fn (Let ^n:9 Int) (Block (Assign (Call . this#6 \n) n:9) #void))))
+  (Class ^Header:1 (Param ^n:11 Int))
+  (Class
+    ^TwoBare:2
+    (Let ^n:13 Int 1)
+    (Constructor ^constructor:14 (Fn (Block)))
+    (Constructor ^constructor:15 (Fn (Block))))
+  (Class
+    ^TwoWithParams:3
+    (Let ^n:17 Int)
+    (Constructor
+      ^constructor:18
+      (Fn (Let ^hi:20 Int) (Block (Assign n:17 hi:20) #void)))
+    (Constructor
+      ^constructor:19
+      (Fn (Let ^lo:21 Int) (Block (Assign n:17 (Call + lo:21 1)) #void))))
+  (Class
+    ^Three:4
+    (Let ^n:23 Int 3)
+    (Constructor ^constructor:24 (Fn (Block)))
+    (Constructor ^constructor:25 (Fn (Let ^a:27 Int) (Block)))
+    (Constructor ^constructor:26 (Fn (Let ^a:28 Int) (Let ^b:29 Int) (Block))))
+  (Let ^literal:5 TwoWithParams:3 (Call new TwoWithParams:3 5))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call . (Call new One:0 1) \n)
+      " "
+      (Call . (Call new Header:1 2) \n)
+      " "
+      (Call . (Call new TwoBare:2) \n)
+      " "
+      (Call . (Call new TwoWithParams:3 4) \n)
+      " "
+      (Call . literal:5 \n)
+      " "
+      (Call . (Call new Three:4) \n)))
+  #void)
+error 302..313: A class can have only one constructor; for other ways to make instances, use a static method or an object literal
+error 411..422: A class can have only one constructor; for other ways to make instances, use a static method or an object literal
+error 520..531: A class can have only one constructor; for other ways to make instances, use a static method or an object literal
+error 552..563: A class can have only one constructor; for other ways to make instances, use a static method or an object literal
+log 1 2 1 4 5 3
 
 === connected functions that list backends need a body, as Kotlin's connected-backends
 // Fine: backends not listed use the body.

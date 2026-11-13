@@ -144,9 +144,8 @@ pub enum Message {
     SealedSubtypeTypeParam(String),
     /// `static get p` or `static set p`: `get` or `set`, and the name.
     StaticAccessor(String, String),
-    /// A field's initializer in a class with several constructors, which
-    /// each would need: the field.
-    InitializerWithConstructors(String),
+    /// A class's constructor after its first, as a class has one.
+    SeveralConstructors,
     /// A header parameter, `class C(x: Int)`, beside an explicit
     /// constructor: the parameter.
     InputWithConstructor(String),
@@ -400,9 +399,9 @@ impl Message {
             Message::StaticAccessor(kind, name) => {
                 format!("`static {kind} {name}` is not supported; use a static method instead")
             }
-            Message::InitializerWithConstructors(name) => {
-                format!("More than one constructor needs to adopt initializer for property {name}")
-            }
+            Message::SeveralConstructors => "A class can have only one constructor; \
+                for other ways to make instances, use a static method or an object literal"
+                .to_string(),
             Message::InputWithConstructor(name) => {
                 format!("Constructor input {name} specified but there is already a constructor")
             }

@@ -702,35 +702,38 @@ impl Settle {
         }
     }
 
-    /// An explicit constructor can't take on header parameters, nor
-    /// several constructors a field's initializer, which each would need
-    /// a copy of, as Kotlin's `TypeSyntaxMacro` checks.
+    /// A class has at most one constructor, by a team decision (Kotlin
+    /// accepts several), and an explicit one can't take on header
+    /// parameters, as Kotlin's `TypeSyntaxMacro` checks. Each constructor
+    /// after the first is an error, and the first is the one used.
     fn check_constructors(&mut self, members: &[NodeId]) {
         let tree = &self.lib.tree;
         let role = |m: NodeId| tree.data(m) & ROLE_MASK;
         let is_static = |m: NodeId| tree.data(m) & MEMBER_STATIC != 0;
-        let constructors = (members.iter())
-            .filter(|&&m| role(m) == ROLE_CONSTRUCTOR && !is_static(m))
-            .count();
-        if constructors == 0 {
+        let constructors: Vec<NodeId> = (members.iter().copied())
+            .filter(|&m| role(m) == ROLE_CONSTRUCTOR && !is_static(m))
+            .collect();
+        if constructors.is_empty() {
             return;
         }
         let mut problems = Vec::new();
         for &m in members {
-            let message = match role(m) {
-                ROLE_PARAM => Message::InputWithConstructor,
-                0 if constructors > 1 && !is_static(m) && let_parts(tree, m).2.is_some() => {
-                    Message::InitializerWithConstructors
-                }
-                _ => continue,
-            };
+            if role(m) != ROLE_PARAM {
+                continue;
+            }
             // From its name: a `var`'s span starts after the `var`.
             let span = Span {
                 start: tree.span(tree.children(m)[0]).start,
                 end: tree.span(m).end,
             };
-            problems.push((message(self.member_text(m).to_string()), span));
+            let name = self.member_text(m).to_string();
+            problems.push((Message::InputWithConstructor(name), span));
         }
+        for &m in &constructors[1..] {
+            let span = tree.span(tree.children(m)[0]);
+            problems.push((Message::SeveralConstructors, span));
+        }
+        problems.sort_by_key(|(_, span)| span.start);
         for (message, span) in problems {
             self.lib.report(Level::Error, message, span);
         }
@@ -753,8 +756,7 @@ impl Settle {
 
     /// Reports what's wrong with a class's or interface's own members:
     /// an interface's backed properties and generic methods, a class's
-    /// constructors that can't take on its header parameters or
-    /// initializers, and its members without a visibility, listed as Kotlin's
+    /// constructors after its first or beside its header parameters, and its members without a visibility, listed as Kotlin's
     /// `checkForMissingVisibility` does, fields first, then methods, then
     /// static members.
     fn check_members(&mut self, name: NodeId, members: &[NodeId], interface: bool) {

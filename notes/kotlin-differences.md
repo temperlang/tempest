@@ -452,24 +452,28 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   `missing_host_code` and `kit::CONNECTED` runs, as is and under
   `--no-connected`.
 - **Declaration errors' positions** (2026-11-13): tempest reports
-  Kotlin's "More than one constructor needs to adopt initializer for
-  property b" and "Constructor input s specified but there is already a
+  Kotlin's "Constructor input s specified but there is already a
   constructor" without the constructors' positions Kotlin appends ("at
   test/test.temper+687-698"), as its messages don't name places; the
-  error is at the field or parameter, from its name. "Override has lower
+  error is at the parameter, from its name. "Override has lower
   visibility than in I", for a property, or a getter overriding one, is
   at the member, where Kotlin's is at its `protected` or `private`.
   Test: settle/classes.cases, "constructors beside header parameters or
   initializers, as Kotlin's constructors-and-property-initialization";
   settle/class-types.cases, "a property narrower than what it
   overrides, as Kotlin's hide-override-property".
-- **Several constructors** without a field initializer they'd each
-  need, `class Thing { public constructor(hi: Int) {} public
-  constructor(lo: Int) {} }`, are accepted by Kotlin, which generates
-  both (two `constructor`s in one JS class, a syntax error), and an
-  object literal, `{ lo: 5 }`, becomes `new Thing(5)`. Tempest silently uses the first, so `{ lo: 5
-  }` and `new Thing(…)` match only `hi` ("No signature matches").
-  Either an error or real overloads is up to the team; not fixed yet.
+- **Several constructors** (2026-11-13): a class has one constructor,
+  by a team decision, so tempest rejects each constructor after the
+  first, "A class can have only one constructor; for other ways to make
+  instances, use a static method or an object literal", and keeps going
+  with the first. Kotlin accepts several,
+  `class Thing { public constructor(hi: Int) {} public constructor(lo:
+  Int) {} }`, and generates both (two `constructor`s in one JS class, a
+  syntax error), reporting "More than one constructor needs to adopt
+  initializer for property b" only when a field has an initializer;
+  tempest's one error per extra constructor replaces that one.
+  Test: settle/classes.cases, "a class has one constructor, by a team
+  decision; Kotlin accepts several".
 - **Connected wrappers' null defaults in JS:** Kotlin's wrapper for
   `@connected let f(s: String? = null)` passes `undefined` to host code
   for a left-out `s`, which strict `tsc` rejects against host code

@@ -12,6 +12,7 @@
 - [`++ls[i]` gives the new value](#lsi-gives-the-new-value)
 - [Unassigned locals in `for … of` bodies are errors](#unassigned-locals-in-for--of-bodies-are-errors)
 - [`@json` adapters](#json-adapters)
+- [A class has only one constructor](#a-class-has-only-one-constructor)
 
 ## 🚨Breaking change: Rest parameter syntax removed.
 
@@ -334,3 +335,18 @@ let firsts(xs: List<Int>): Int {
 describe, with `@jsonName` and `@jsonExtra`; before, it gave "No member
 jsonAdapter". A module with `@json` needn't import `std/json` for them.
 Not yet for generic types, nor std's `Date`.
+
+## A class has only one constructor
+
+Several constructors were never portable (Kotlin's JS output, for
+one, was invalid), and now each one after the first is an error. For
+other ways to make instances, use a static method, or an object literal
+with the one constructor.
+
+```temper inert
+class Thing {
+  public n: Int;
+  public constructor(hi: Int) { n = hi; }
+  public constructor(lo: Int) { n = lo + 1; } // ERROR: only one constructor
+}
+```
