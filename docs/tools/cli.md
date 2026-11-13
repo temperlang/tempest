@@ -211,8 +211,14 @@ with 3. It takes `--tokens` but sends no semantic tokens yet.
     tempest license
     tempest licenses
 
-`version` prints tempest's version and the commit it was built from;
-`tempest --version` too (`temper` has only `version`). `license` prints
+`version` prints tempest's version, the commit it was built from, and
+whether that commit's files had changes, as `tempest 0.7.0-alpha.0.123
+(3f2b063, modified)`; `tempest --version` too (`temper` has only
+`version`). Between releases, the version is a dev build named by the
+commits since the last release (`alpha.0.123`); the runtimes and std in
+`temper.out` name the same version, in each ecosystem's spelling
+([Versions](../internals/detail/06-backends.md#versions-one-version-spelled-for-each-ecosystem)).
+`license` prints
 the copyright, the notices, and the license texts, as `temper license`
 does. `licenses` lists the third-party Rust crates built into the
 binary, each with its license, made from Cargo's metadata when tempest

@@ -56,6 +56,7 @@ use std::fmt;
 use temper_tmpl::coroutines::CoroutineStrategy;
 use temper_tmpl::naming::{NamingRules, assign_checked};
 use temper_tmpl::source_map::source_map;
+use temper_tmpl::version::{self, Spelling};
 use temper_tmpl::{DeclId, Facts, Features, Node, Profile, Program};
 
 /// A named set of translation choices for JavaScript.
@@ -65,8 +66,6 @@ pub struct Variant {
     /// What it handles natively, which lowering and validation read.
     pub profile: Profile,
     pub rules: NamingRules,
-    /// The `@temperlang/core` version its output depends on.
-    pub runtime_version: &'static str,
 }
 
 /// The first variant: Kotlin-compatible API and names, pretty bodies.
@@ -79,7 +78,6 @@ pub static JS: Variant = Variant {
         coroutines: CoroutineStrategy::TranslateToGenerator,
     },
     rules: names::RULES,
-    runtime_version: "0.6.0",
 };
 
 /// Every variant, by name.
@@ -110,6 +108,7 @@ pub const BACKEND: temper_tmpl::Backend = temper_tmpl::Backend {
     } else {
         runtime::FILES
     },
+    runtime_version: &runtime::VERSION,
     rules: &JS.rules,
     translate: |p, maps| generate(p, &JS, maps).map_err(|e| e.to_string()),
     default: true,
@@ -315,11 +314,14 @@ fn generate(p: &Program, variant: &Variant, maps: Option<&str>) -> Result<Vec<Ou
             // Sorted, as Kotlin's: `@temperlang/core` first.
             let mut lines = vec![format!(
                 "        \"@temperlang/core\": \"{}\"",
-                variant.runtime_version
+                version::current().spell(Spelling::SemVer)
             )];
             for (name, version) in p.dependencies() {
                 let name = translate::package_of(p, name);
-                let version = if version == "0.0.0" { "*" } else { version };
+                let version = match version {
+                    "0.0.0" => "*".to_string(),
+                    v => version::respell(v, Spelling::SemVer),
+                };
                 lines.push(format!("        \"{name}\": \"{version}\""));
             }
             lines.join(",\n")
@@ -371,7 +373,7 @@ fn package_metadata(p: &Program) -> String {
     if !matches!(p.library.version.as_str(), "0.0.0" | "") {
         out.push_str(&format!(
             "    \"version\": {},\n",
-            quoted(&p.library.version)
+            quoted(&version::respell(&p.library.version, Spelling::SemVer))
         ));
     }
     for (field, key) in [

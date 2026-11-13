@@ -3,10 +3,11 @@
   <PropertyGroup>
     <TargetFrameworks>net48;net6.0</TargetFrameworks>
     <RootNamespace>TemperLang.Core</RootNamespace>
-    <Version>0.6.0</Version>
+    <Version>0.0.0</Version>
     <Authors>Temper Contributors</Authors>
     <Description>Core runtime support for Temper-built C# libraries</Description>
-    <IsPackable>true</IsPackable>
+    <!-- tempest build drops this and the next line only for a release. -->
+    <IsPackable>false</IsPackable>
     <PackageLicenseExpression>Apache-2.0 OR MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/temperlang/temper</PackageProjectUrl>
     <!-- TODO Try the following once we've updated everything. -->

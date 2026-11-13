@@ -227,14 +227,20 @@ fn cpp() {
         "app/CMakeLists.txt",
     );
     assert!(
-        text.contains("project(app DESCRIPTION \"Apps & more, for \\$5\" LANGUAGES CXX)\n"),
+        text.contains(
+            "project(app VERSION 1.2.3 DESCRIPTION \"Apps & more, for \\$5\" LANGUAGES CXX)\n\
+             set(app_VERSION_FULL \"1.2.3\")\n"
+        ),
         "{text}"
     );
     let text = file(
         translate(&program(false), &CPP).unwrap(),
         "app/CMakeLists.txt",
     );
-    assert!(text.contains("project(app LANGUAGES CXX)\n"), "{text}");
+    assert!(
+        text.contains("project(app VERSION 1.2.3 LANGUAGES CXX)\n"),
+        "{text}"
+    );
 }
 
 /// `app`, which uses `util`, each with every backend's name for it, but

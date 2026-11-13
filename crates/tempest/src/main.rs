@@ -90,6 +90,8 @@ const NOT_YET_CODE: u8 = 3;
 const PANICKED: u8 = 101;
 
 fn main() -> ExitCode {
+    // Runtimes, std, and core name this build's version, from git.
+    temper_driver::version::init();
     // Calls and lowering recurse; give them room (see `interp`).
     let thread = std::thread::Builder::new().stack_size(64 << 20).spawn(|| {
         let args: Vec<String> = std::env::args().skip(1).collect();
@@ -690,15 +692,14 @@ fn serve(name: &str, args: &[String]) -> u8 {
     temper_lsp::serve(io::stdin(), io::stdout().lock(), flags.std_dir)
 }
 
-/// `tempest version`: its version and the commit it was built from.
+/// `tempest version`: its version and the commit it was built from, with
+/// a mark where the tree had changes: `tempest 0.7.0-alpha.0.123
+/// (3f2b063, modified)`.
 fn version(args: &[String]) -> u8 {
     if let Err(code) = parse("version", args, &[], 0) {
         return code;
     }
-    match option_env!("TEMPEST_COMMIT") {
-        Some(commit) => println!("tempest {} ({commit})", env!("CARGO_PKG_VERSION")),
-        None => println!("tempest {}", env!("CARGO_PKG_VERSION")),
-    }
+    println!("tempest {}", temper_driver::version::describe());
     0
 }
 

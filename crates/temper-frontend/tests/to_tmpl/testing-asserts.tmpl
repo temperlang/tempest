@@ -1,6 +1,6 @@
 tmpl 1 model 1 library asserts 0.0.0
 
-uses std#13 0.6.0 {
+uses std#13 0.0.0-alpha.0.0 {
   module testing#14 {
     class Test#15 {
       connected method assert#40(success: Boolean, message: fn (): String): Void;
@@ -8,7 +8,7 @@ uses std#13 0.6.0 {
   }
 }
 
-uses `temper-core`#16 0.1.0 {
+uses `temper-core`#16 0.0.0-alpha.0.0 {
   class List#17<T#18> extends Listed#19<T#18> {
     connected get length#34(): Int32;
     connected method get#37(index: Int32): T#18;

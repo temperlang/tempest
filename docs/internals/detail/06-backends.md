@@ -174,11 +174,11 @@ both compilers' output can mix; each runtime sits in the crate that
 calls it, so a change to both is one change.
 
 **Cons:** some changes add API (a top-level turn and `awakeUpon` for
-Java, `awake_upon` for Rust, async for Lua), while six backends' package
-files still name `temper-core` 0.6.0, the version Kotlin publishes
-without them. A tempest-built package built against the published
-runtime may not compile (the audit's A1). C++ declares no runtime
-version at all. See [weaknesses](#known-weaknesses-and-plans).
+Java, `awake_upon` for Rust, async for Lua), which Kotlin's published
+0.6.0 runtimes lack, so output needs the runtime of its own build;
+it names that build's version
+([Versions](#versions-one-version-spelled-for-each-ecosystem)), which
+isn't published yet.
 
 ### Changes from Kotlin Temper's runtimes
 
@@ -211,36 +211,93 @@ patches that made them (other docs cite these numbers):
 | Rust | 0010 | Queue resumes on the runner (`AsyncRunner::awake_upon`), guard turns, and make `SafeGenerator` an `Iterator` |
 | Rust | 0017 | Let work outside any turn hold the runner (`AsyncRunner::hold`), so `run_all_blocking` waits for the tasks it will queue |
 
-### The runtime version generated code names
+### Versions: one version, spelled for each ecosystem
 
-**Open, for the team.** Each backend's `Variant` names `temper-core`
-0.6.0 (`runtime_version`), and std is 0.6.0 too (`STD_VERSION`), but
-generated code calls API that only tempest's runtimes have: Java's
-and C#'s top-level turn, Python's `top_level_turn`, Rust's
-`awake_upon`, Lua's promises and `temper.async`, and C++'s `co_await`
-and net client. Only JS's changes are types alone. Inside `temper.out`
-this works, since each runtime is written beside the libraries and
-Rust's and C#'s package files point there; a package published from
-it and installed against the registries' 0.6.0 fails to build or run.
-Version metadata (`0.6.0+tempest`) doesn't help: Cargo, npm, and NuGet
-ignore it when resolving, and PyPI rejects local versions.
+**Chosen:** Temper's version is written once, as the root `Cargo.toml`'s
+`[workspace.package] version` (0.7.0), and every runtime, std, core,
+generated package, and `tempest --version` names it. `temper-tmpl`'s
+[`version.rs`](../../../crates/temper-tmpl/src/version.rs) has the
+rules: a `Version` is that base, a stage (dev, `alpha.K`, `beta.K`,
+`rc.K`, or release), and the commits since the stage's tag, spelled
+for each ecosystem so that every one sorts dev builds, pre-releases,
+and releases in the same order:
 
-Options:
+| Stage | SemVer: npm, Cargo, NuGet, Maven, vcpkg, Conan | Python (PEP 440) | LuaRocks |
+| --- | --- | --- | --- |
+| dev build | `0.7.0-alpha.0.123` | `0.7.0.dev123` | `0.7.0.alpha.0.123-1` |
+| alpha 1 | `0.7.0-alpha.1` | `0.7.0a1` | `0.7.0.alpha.1-1` |
+| alpha 1 plus 5 commits | `0.7.0-alpha.1.5` | `0.7.0a2.dev5` | `0.7.0.alpha.1.5-1` |
+| beta 1, rc 1 | `0.7.0-beta.1`, `0.7.0-rc.1` | `0.7.0b1`, `0.7.0rc1` | `0.7.0.beta.1-1`, `0.7.0.rc.1-1` |
+| release | `0.7.0` | `0.7.0` | `0.7.0-1` |
+| dev build after it | `0.7.1-alpha.0.5` | `0.7.1.dev5` | `0.7.1.alpha.0.5-1` |
 
-1. **The next release's version, as a pre-release, until it ships.**
-   One constant for every backend's runtime and std (say 0.7.0, each
-   ecosystem's pre-release form until released: `0.7.0-dev.1`, PEP 440's
-   `0.7.0.dev1`; LuaRocks has none, so `dev` or the release), written
-   into the runtimes' own package files.
-   Generated packages then never claim a runtime that lacks their API.
-   Needs: the version, and who publishes those runtimes.
-2. **Keep 0.6.0, and say output needs the runtime beside it.** No work,
-   but published packages stay broken against the registries.
+Go would add `v`; CMake's `project(VERSION)` takes the numbers alone,
+so generated `CMakeLists.txt` also sets `LIBRARY_VERSION_FULL`, and the
+C++ runtime defines `TEMPER_CORE_VERSION`. `dev` appears nowhere, as
+SemVer, Maven, and LuaRocks sort it above alphas or even releases; and
+no spelling relies on build metadata (`+…`), which registries ignore or
+reject. `temper-tmpl`'s
+[`version_order`](../../../crates/temper-tmpl/tests/version_order.rs)
+test sorts each spelling with its ecosystem's own comparator where one
+is installed (pip's `packaging`, node-semver, Maven's
+`ComparableVersion`, `NuGet.Versioning`, and LuaRocks' `vers`).
 
-**Recommended:** 1 now, as one shared constant, moving to the release
-when it exists; as this compiler replaces Kotlin's, that release may
-well be the first one built from it. C++ should name its runtime
-version in CMakeLists.txt either way.
+Where the version comes from:
+
+- `temper-driver`'s `build.rs` reads git: the last `v` tag
+  (`v0.7.0-beta.1`) and the commits since it, or since the first commit
+  before any tag. After a release tag, dev builds are of the next
+  patch; a workspace version ahead of the tag wins. `TEMPER_VERSION`
+  (`0.7.0-rc.1`) overrides git; without git, outside this repository,
+  or in a shallow clone without tags, the version is a dev build with
+  no commits counted, `0.7.0-alpha.0.0`. It reruns only when HEAD or the
+  tags move, so `--version`'s "modified" mark is as of then.
+- `tempest` sets that as the process's version first thing
+  (`temper_driver::version::init`); the backends and the frontend read
+  `temper_tmpl::version::current()`, which is otherwise the version
+  with no commits counted. Tests, the playground, and other library
+  users therefore get the same output at every commit, and a commit
+  rebuilds only `temper-driver` and what uses it.
+- Runtimes' package files say `0.0.0`, a version every ecosystem
+  takes, so they build and test where they are; each backend's
+  `runtime::VERSION` lists those spots, which `tempest build` fills in
+  `temper.out` (Lua's rockspec is renamed for it). std's
+  `config.temper.md` says none, and std and core take Temper's in tmpl.
+- Nothing is published by accident. The workspace's crates all say
+  `publish = false` (`temper-driver`'s `version_guard` test checks).
+  Runtimes' package files refuse publishing as they stand, and
+  `tempest build` drops that only for a release (no pre-release part),
+  so a dev build's runtimes can't be published either
+  (`runtime::VERSION`'s `unpublished`): Cargo's `publish = false`,
+  npm's `"private": true`, a `Private :: Do Not Upload` classifier,
+  which PyPI rejects, C#'s `IsPackable` false, and Maven's
+  `skipPublishing` and `maven.deploy.skip`. LuaRocks has no such marker,
+  and C++'s runtime no package file.
+- Goldens of functional tests and shared programs show the version as a
+  sentinel, a dev build of 0.0.0 (`0.0.0-alpha.0.0`, `0.0.0.dev0`,
+  `0.0.0.alpha.0.0-1`), valid in each file, so a release changes only
+  std's goldens and the version's own tests; std's, and one package file
+  per backend (the `modules` program's), keep the real spellings
+  (`temper-be-testkit`'s `Goldens`).
+- `tempest --version` prints `tempest 0.7.0-alpha.0.123 (3f2b063,
+  modified)`.
+
+**Pros:** one place to change; packages built together name each
+other's exact versions; every ecosystem orders builds the same way; a
+version names the runtime API the output needs.
+
+**Cons:** local tools that cache by version (Maven's `~/.m2`, NuGet's
+global packages, pip) can mix two builds with the same version, as
+uncommitted changes since a commit; output refers to runtimes by path
+where the ecosystem allows. Commit counts can repeat across branches,
+which is fine while only tagged releases are published.
+
+Releases are tag-driven: a release comes only from a `v` tag whose
+version is the workspace's (`v0.7.0`, or a pre-release of it as
+`v0.7.0-beta.1`, for `version = "0.7.0"`), and
+only tagged builds are published; the release workflow, still to be
+written, checks that before it publishes anything
+([contributing](../../contributing/README.md#versions-and-releases)).
 
 ### Pluggable: a description per backend
 
@@ -448,15 +505,15 @@ The OS calls for this are `temper-os`'s
 
 **Not covered:** the declared MSRV (generated crates say 1.71.1; CI
 builds them with 1.85.0); PUC Lua 5.1 (LuaJIT runs the Lua tests);
-C#'s `net48` side, and Java 8; output built against the published
-0.6.0 runtimes rather than tempest's; and `tempest test -b`
+C#'s `net48` side, and Java 8; output built against published
+runtimes rather than those beside it; and `tempest test -b`
 through each `tools.rs` in the backends' own test suites.
 
 ## Known weaknesses and plans
 
-- **Runtime version against changes.** Package files name `temper-core`
-  0.6.0 while the output needs tempest's added API; the options are under
-  [the runtime version generated code names](#the-runtime-version-generated-code-names).
+- **Unpublished runtimes.** Output names its own build's runtime
+  version ([Versions](#versions-one-version-spelled-for-each-ecosystem)),
+  which no registry has until the first tagged release publishes them.
 - **Untested MSRV and older targets.** One CI job on Rust 1.71.1, or a
   newer MSRV (api-compat.md, proposed change 11); C#'s `net48` and .NET
   8 are a to-do in [roadmap.md](../../../notes/tmpl/roadmap.md)

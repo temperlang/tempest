@@ -143,7 +143,12 @@ fn goldens() {
             );
             assert!(paths.contains(&root.as_str()), "{}", case.key);
             assert!(files[0].text.contains("\"type\": \"module\""));
-            assert!(files[0].text.contains("\"@temperlang/core\": \"0.6.0\""));
+            let core = temper_tmpl::version::current();
+            assert!(
+                files[0]
+                    .text
+                    .contains(&format!("\"@temperlang/core\": \"{core}\""))
+            );
             let single = files.len() == 4;
             if single {
                 assert_eq!(files[1].text, format!("export * from \"./{file}.js\";\n"));

@@ -1,6 +1,6 @@
 tmpl 1 model 1 library `json-adapters` 0.0.0
 
-uses std#19 0.6.0 {
+uses std#19 0.0.0-alpha.0.0 {
   module json#20 {
     interface JsonAdapter#21<T#22> {
       method encodeToJson#24(x: T#22, p: JsonProducer#23): Void;
@@ -52,7 +52,7 @@ uses std#19 0.6.0 {
   }
 }
 
-uses `temper-core`#45 0.1.0 {
+uses `temper-core`#45 0.0.0-alpha.0.0 {
   class List#46<T#47> extends Listed#48<T#47> {
     connected get length#282(): Int32;
   }

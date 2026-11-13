@@ -133,13 +133,24 @@ fn helpers_are_the_runtimes_and_typed() {
     }
 }
 
+/// The rockspec `tempest build` writes names the version generated
+/// rockspecs depend on, in its name and its text.
 #[test]
 fn runtime_version_is_the_rockspecs() {
-    let spec = fs::read_to_string(runtime().join("temper-core-dev-1.rockspec")).unwrap();
-    assert!(
-        spec.contains(&format!("version = \"{}-1\"", LUA.runtime_version)),
-        "{spec}"
+    use temper_tmpl::version::{Spelling, current, fill_runtime};
+    let filled = fill_runtime(
+        temper_be_lua::runtime::FILES,
+        &temper_be_lua::runtime::VERSION,
+        current(),
     );
+    let rock = current().spell(Spelling::Rockspec);
+    let name = format!("temper-core-{rock}.rockspec");
+    let (_, written) = (filled.iter()).find(|(p, _)| *p == name).unwrap();
+    assert!(
+        written.contains(&format!("version = \"{rock}\"")),
+        "{written}"
+    );
+    let spec = fs::read_to_string(runtime().join("temper-core-dev-1.rockspec")).unwrap();
     assert!(
         spec.contains(&format!("\"lua >= {}\"", LUA.lua_version)),
         "{spec}"

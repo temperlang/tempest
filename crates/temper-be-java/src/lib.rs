@@ -55,8 +55,6 @@ pub struct Variant {
     /// What it handles natively, which lowering and validation read.
     pub profile: Profile,
     pub rules: NamingRules,
-    /// The `temper-core` version its output depends on.
-    pub runtime_version: &'static str,
     /// The Java release its output targets, as `javac --release` and
     /// Maven's compiler plugin take it.
     pub java_release: &'static str,
@@ -73,7 +71,6 @@ pub static JAVA: Variant = Variant {
         coroutines: CoroutineStrategy::TranslateToRegularFunction,
     },
     rules: names::RULES,
-    runtime_version: "0.6.0",
     java_release: "17",
 };
 
@@ -105,6 +102,7 @@ pub const BACKEND: temper_tmpl::Backend = temper_tmpl::Backend {
     } else {
         runtime::FILES
     },
+    runtime_version: &runtime::VERSION,
     rules: &JAVA.rules,
     translate: |p, _| translate(p, &JAVA).map_err(|e| e.to_string()),
     default: true,
@@ -485,7 +483,7 @@ fn pom(
       </plugin>"#
         )
     };
-    let runtime = variant.runtime_version;
+    let runtime = temper_tmpl::version::current();
     let release = variant.java_release;
     let metadata = pom_metadata(p, library);
     format!(

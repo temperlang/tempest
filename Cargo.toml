@@ -10,7 +10,9 @@ exclude = ["crates/temper-be-rust/runtime", "library"]
 [workspace.package]
 edition = "2024"
 rust-version = "1.85"
-version = "0.0.0"
+# The next release's version; builds between releases are 0.7.0-alpha.0.N,
+# N commits since the last `v` tag (docs/internals/detail/06-backends.md).
+version = "0.7.0"
 publish = false
 license = "Apache-2.0 OR MIT"
 

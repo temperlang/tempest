@@ -4,7 +4,10 @@ This library holds code that we distribute with Temper but which can be broken
 out from core builtins and also implemented primarily in the Temper language.
 
     export let name = "std";
-    export let version = "0.6.0";
+    export let version = "0.0.0";
+
+std's version is Temper's own, which the compiler gives it, so this says
+none.
 
 ## Metadata
 

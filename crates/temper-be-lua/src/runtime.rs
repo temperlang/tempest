@@ -3,8 +3,12 @@
 //! there. A test in `temper-driver` checks that [`FILES`] lists every file of
 //! it that Kotlin copies: not its
 //! dotfiles, nor its own tests and tools (JS's `package-lock.json`,
-//! Python's `mypyc/`, and Java's `src/test/`); and Lua's rockspec is
-//! named for the runtime's version, as Kotlin names it.
+//! Python's `mypyc/`, and Java's `src/test/`). [`VERSION`] says where
+//! its files name its version, which `tempest build` fills in (and
+//! Lua's rockspec is renamed for it, as Kotlin names it); the sources say
+//! `0.0.0`, so the runtime still builds and tests where it is.
+
+use temper_tmpl::version::{RuntimeVersion, Spelling, VersionSpot};
 
 /// Each file, by path from the runtime's directory, with its text.
 pub const FILES: &[(&str, &str)] = &[
@@ -34,10 +38,25 @@ pub const FILES: &[(&str, &str)] = &[
         include_str!("../runtime/temper-core/regex/runtime.lua"),
     ),
     (
-        "temper-core-0.6.0-1.rockspec",
+        "temper-core-dev-1.rockspec",
         include_str!("../runtime/temper-core/temper-core-dev-1.rockspec"),
     ),
 ];
+
+/// Where the runtime names its version, which `tempest build` fills with
+/// the build's, in LuaRocks' spelling.
+///
+/// Nothing keeps it from being published: LuaRocks has no marker that
+/// refuses an upload.
+pub const VERSION: RuntimeVersion = RuntimeVersion {
+    spots: &[VersionSpot {
+        path: "temper-core-dev-1.rockspec",
+        text: "version = \"0.0.0-1\"",
+        spelling: Spelling::LuaRocks,
+        rename: Some("temper-core-{}-1.rockspec"),
+    }],
+    unpublished: &[],
+};
 
 /// LuaUnit, in `runtime/luaunit` beside the runtime, which libraries' tests use, and
 /// which Kotlin copies beside the libraries to run them, as `luaunit`.

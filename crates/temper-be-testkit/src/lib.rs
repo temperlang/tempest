@@ -15,7 +15,10 @@
 //!   files and whether it runs under `--no-connected` ([`CONNECTED`]).
 //! - **Goldens:** [`Goldens`] compares output with the files in a
 //!   backend's `tests/goldens/`, and with `UPDATE_SNAPSHOTS=1` writes new
-//!   output there instead.
+//!   output there instead. Goldens show Temper's version as a sentinel,
+//!   `0.0.0-alpha.0.0` in each ecosystem's spelling, but std's and a
+//!   package file per backend ([`pins_version`]), so a release changes
+//!   few of them.
 //! - **Tools:** [`tool`] finds one named by an environment variable or on
 //!   `PATH` ([`temper_tmpl::tools`], which backends' own test runners
 //!   share, as they share its JUnit XML reading); a missing one skips its test with a message ([`missing`]),
@@ -763,6 +766,28 @@ pub fn with_stack(test: impl FnOnce() + Send + 'static) {
         .unwrap();
 }
 
+/// The goldens, beside std's, that show Temper's version as it is rather
+/// than as the sentinel, so each backend's spellings of it in a package
+/// file stay pinned: the `modules` program's, which depends on core and
+/// std. C++'s and C#'s output names no version (it refers to the runtime
+/// by path); Python's is pinned by std's `std.pyproject.toml`.
+pub const VERSION_PINNED: [&str; 4] = [
+    "modules.Cargo.toml",
+    "modules.modules-dev-1.rockspec",
+    "modules.package.json",
+    "modules.pom.xml",
+];
+
+/// Whether a golden shows Temper's version as it is: std's (`std.…`),
+/// which change with each release anyway, and [`VERSION_PINNED`]; the
+/// rest show the sentinel version in its place
+/// ([`temper_tmpl::version::sentinel`]: `0.0.0-alpha.0.0`, Python's
+/// `0.0.0.dev0`, a rockspec's `0.0.0.alpha.0.0-1`), which each file's
+/// ecosystem takes, so goldens stay valid in their language.
+pub fn pins_version(name: &str) -> bool {
+    name.starts_with("std.") || VERSION_PINNED.contains(&name)
+}
+
 /// Goldens in a directory: output compared with them, or with
 /// `UPDATE_SNAPSHOTS=1`, written over them.
 pub struct Goldens {
@@ -789,13 +814,29 @@ impl Goldens {
     /// Compares output with the golden of this file name, or updates it.
     /// In the goldens of [`NET`]'s tests, the test server's port reads as
     /// [`TEST_SERVER_PORT`] ([`as_fixed_port`]); only there, so a number
-    /// elsewhere that happens to be the port stays.
+    /// elsewhere that happens to be the port stays. Temper's version
+    /// reads as the sentinel `0.0.0-alpha.0.0`, in each spelling
+    /// ([`temper_tmpl::version::current_as_sentinel`]),
+    /// but in the goldens that pin it ([`pins_version`]), so a release
+    /// doesn't change every golden; a golden named in
+    /// [`VERSION_PINNED`] must name it.
     pub fn check(&mut self, name: &str, actual: &str) {
         let net = NET.iter().any(|t| name.starts_with(&t.replace('/', "-")));
         let actual = match net {
             true => as_fixed_port(actual),
             false => actual.into(),
         };
+        let actual = match pins_version(name) {
+            true => actual.into_owned(),
+            false => temper_tmpl::version::current_as_sentinel(&actual),
+        };
+        if VERSION_PINNED.contains(&name) {
+            let version = temper_tmpl::version::current();
+            if temper_tmpl::version::as_sentinel(&actual, version) == actual {
+                self.differ
+                    .push(format!("{name} pins the version but names none:\n{actual}"));
+            }
+        }
         let actual = &*actual;
         let golden = self.path(name);
         let expected = fs::read_to_string(&golden).unwrap_or_default();

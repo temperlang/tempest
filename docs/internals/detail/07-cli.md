@@ -436,10 +436,11 @@ first, so no stale file survives a rename. C++ also gets a
 **Pros:** what's built can replace Kotlin's output, and tests compare
 them file by file ([Tests](#tests)).
 
-**Cons:** the runtime files say `0.6.0` but carry tempest's changes, so
-packages need runtime API that the published `0.6.0` lacks (the audit's
-A1). Emptying a directory is the one destructive step; it's limited to
-the library's own directory under `temper.out`.
+**Cons:** emptying a directory is the one destructive step; it's
+limited to the library's own directory under `temper.out`. The
+runtimes and std name the build's own version
+([Versions](06-backends.md#versions-one-version-spelled-for-each-ecosystem)),
+which isn't published yet.
 
 **Status:** Kotlin's layout is part of the public API tempest keeps
 ([notes/api-compat.md](../../../notes/api-compat.md), each backend's
@@ -828,8 +829,5 @@ and a panic's exit code (no input is known to panic).
 - **Parity:** `watch` and `doc`; the REPL's line editing, functions,
   and `-b`; Kotlin's `cppv`, `data`,
   `java8`, and `mypyc` backends; `serve --port`.
-- **Runtime version:** output names `temper-core` 0.6.0 but needs
-  tempest's changed runtimes; a distinct pre-release version is one
-  option.
 - **Dynamic backends:** naming, host files, and the descriptor first
   ([above](#dynamic-backends-planned)).

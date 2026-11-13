@@ -51,6 +51,7 @@ pub mod tree;
 use std::fmt;
 use temper_tmpl::coroutines::CoroutineStrategy;
 use temper_tmpl::naming::{NamingRules, assign_checked};
+use temper_tmpl::version::{self, Spelling};
 use temper_tmpl::{Features, Profile, Program};
 
 /// A named set of translation choices for Python.
@@ -60,8 +61,6 @@ pub struct Variant {
     /// What it handles natively, which lowering and validation read.
     pub profile: Profile,
     pub rules: NamingRules,
-    /// The `temper-core` version its output depends on.
-    pub runtime_version: &'static str,
 }
 
 /// The first variant: Kotlin-compatible API and names, pretty bodies.
@@ -74,7 +73,6 @@ pub static PY: Variant = Variant {
         coroutines: CoroutineStrategy::TranslateToGenerator,
     },
     rules: names::RULES,
-    runtime_version: "0.6.0",
 };
 
 /// Every variant, by name.
@@ -105,6 +103,7 @@ pub const BACKEND: temper_tmpl::Backend = temper_tmpl::Backend {
     } else {
         runtime::FILES
     },
+    runtime_version: &runtime::VERSION,
     rules: &PY.rules,
     translate: |p, _| translate(p, &PY).map_err(|e| e.to_string()),
     default: true,
@@ -116,15 +115,16 @@ pub const BACKEND: temper_tmpl::Backend = temper_tmpl::Backend {
 
 /// `pyproject.toml`'s dependencies, as Kotlin writes them: the runtime
 /// and each library used, by its name, with `==` its version where it
-/// sets one, a quoted line each, sorted.
-fn dependencies(p: &Program, variant: &Variant) -> String {
-    let mut lines = vec![format!("temper-core=={}", variant.runtime_version)];
+/// sets one, in PEP 440's spelling, a quoted line each, sorted.
+fn dependencies(p: &Program) -> String {
+    let runtime = version::current().spell(Spelling::Python);
+    let mut lines = vec![format!("temper-core=={runtime}")];
     for (name, version) in p.dependencies() {
         let name = translate::library_name(p, name);
         let name = name.as_str();
         lines.push(match version {
             "0.0.0" | "" => name.to_string(),
-            v => format!("{name}=={v}"),
+            v => format!("{name}=={}", version::respell(v, Spelling::Python)),
         });
     }
     lines.sort();
@@ -295,10 +295,10 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 "#,
         project = names::project_name(&project),
-        version = p.version_or_default(),
+        version = version::respell(p.version_or_default(), Spelling::Python),
         description = quoted(meta.get("description").unwrap_or("")),
         license = quoted(license),
-        dependencies = dependencies(p, variant),
+        dependencies = dependencies(p),
     );
     // Host code's other files, beside the modules, as Kotlin copies them;
     // each `__connected__.py` starts its module's file instead.

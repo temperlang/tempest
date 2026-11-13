@@ -226,7 +226,7 @@ pub fn build(
     }
     for &backend in backends {
         let dir = temper_out.join(backend.name);
-        if let Err(why) = write_runtime(&dir, backend.runtime) {
+        if let Err(why) = write_runtime(&dir, backend) {
             results.push(("temper-core".into(), backend.name, Err(why)));
         }
     }
@@ -395,14 +395,17 @@ fn write_library(dir: &Path, library: &str, files: &[(String, String)]) -> Resul
 }
 
 /// Writes a backend's runtime as `temper-core` in its directory, replacing
-/// what was there, as Kotlin does.
-fn write_runtime(dir: &Path, files: &[(&str, &str)]) -> Result<(), String> {
+/// what was there, as Kotlin does, naming the build's version.
+fn write_runtime(dir: &Path, backend: &temper_tmpl::Backend) -> Result<(), String> {
     let core = dir.join("temper-core");
     if core.exists() {
         std::fs::remove_dir_all(&core).map_err(|e| format!("{}: {e}", core.display()))?;
     }
-    let pairs: Vec<(String, String)> = (files.iter())
-        .map(|(p, t)| (format!("temper-core/{p}"), t.to_string()))
+    let version = temper_tmpl::version::current();
+    let files =
+        temper_tmpl::version::fill_runtime(backend.runtime, backend.runtime_version, version);
+    let pairs: Vec<(String, String)> = (files.into_iter())
+        .map(|(p, t)| (format!("temper-core/{p}"), t))
         .collect();
     write_library(dir, "temper-core", &pairs)
 }

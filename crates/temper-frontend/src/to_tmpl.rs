@@ -117,8 +117,9 @@ fn catalog() -> &'static Catalog {
             };
             keys.insert(key, d);
         }
-        let version = program.uses.first().map_or("0.1.0", |u| &u.version);
-        let version = version.to_string();
+        // Core's version is Temper's, as std's is, whatever the
+        // fixture says.
+        let version = temper_tmpl::version::current().to_string();
         Catalog {
             program,
             keys,
@@ -127,8 +128,11 @@ fn catalog() -> &'static Catalog {
     })
 }
 
-/// std's version, as its config gives it, for `uses std` sections.
-pub const STD_VERSION: &str = "0.6.0";
+/// std's version, for `uses std` sections and std's own packages:
+/// Temper's ([`temper_tmpl::version::current`]), as core's is.
+pub fn std_version() -> String {
+    temper_tmpl::version::current().to_string()
+}
 
 /// Where a settled module comes from: the library being translated, std,
 /// or another library under the work root, with its path from that
@@ -1074,11 +1078,11 @@ impl Translator<'_> {
             Some(&u) => u,
             None => {
                 let version = if library == "std" {
-                    STD_VERSION
+                    std_version()
                 } else {
-                    "0.0.0"
+                    "0.0.0".to_string()
                 };
-                let u = self.b.uses(library, version);
+                let u = self.b.uses(library, &version);
                 self.libraries.insert(library.to_string(), u);
                 u
             }

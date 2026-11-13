@@ -166,7 +166,10 @@ fn goldens() {
             let pom = &files[0].text;
             for part in [
                 format!("<groupId>{package}</groupId>\n  <artifactId>{library}</artifactId>"),
-                "<artifactId>temper-core</artifactId>\n      <version>0.6.0</version>".into(),
+                format!(
+                    "<artifactId>temper-core</artifactId>\n      <version>{}</version>",
+                    temper_tmpl::version::current()
+                ),
                 "<release>17</release>".into(),
                 format!("<mainClass>{package}.{class}Main</mainClass>"),
             ] {

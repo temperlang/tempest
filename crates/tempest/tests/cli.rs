@@ -117,14 +117,24 @@ fn help() {
     }
 }
 
-/// `version` names the build's version, and the commit where git says.
+/// `version` names the build's version, and the commit where git says,
+/// marked where the tree had changes: `tempest 0.7.0-alpha.0.123
+/// (3f2b063, modified)`.
 #[test]
 fn version() {
+    let expected = format!("tempest {}\n", temper_driver::version::describe());
+    let workspace = temper_tmpl::version::workspace();
+    assert!(
+        temper_driver::version::built().base >= workspace,
+        "{expected}"
+    );
+    if let Some(commit) = temper_driver::version::commit() {
+        assert!(expected.contains(&format!(" ({commit}")), "{expected}");
+    }
     for flag in ["version", "--version"] {
         let (code, out, err) = tempest(&[flag]);
         assert_eq!((code, err.as_str()), (0, ""));
-        assert!(out.starts_with("tempest 0."), "{out}");
-        assert!(out.ends_with('\n') && out.lines().count() == 1, "{out}");
+        assert_eq!(out, expected);
     }
 }
 
@@ -626,12 +636,16 @@ fn build_writes_temper_out() {
             "py/temper-core/temper_core/__init__.py",
             "lua/a/init.lua",
             "lua/other/other-1.2.0-1.rockspec",
-            "lua/temper-core/temper-core-0.6.0-1.rockspec",
             "cpp/a/CMakeLists.txt",
             "cpp/temper-core/core.hpp",
         ] {
             assert!(out_dir.join(file).is_file(), "{file}");
         }
+        // The runtime's rockspec, named for the build's version.
+        let rock = temper_driver::version::built().spell(temper_tmpl::version::Spelling::Rockspec);
+        let rockspec = out_dir.join(format!("lua/temper-core/temper-core-{rock}.rockspec"));
+        let text = fs::read_to_string(&rockspec).unwrap();
+        assert!(text.contains(&format!("version = \"{rock}\"")), "{text}");
         let pyproject = fs::read_to_string(out_dir.join("py/other/pyproject.toml")).unwrap();
         assert!(pyproject.contains("version = \"1.2.0\"\n"), "{pyproject}");
         let pyproject = fs::read_to_string(out_dir.join("py/a/pyproject.toml")).unwrap();

@@ -5,7 +5,8 @@
 //! playground's wasm (`temper-wasm`) both take; and, natively, running
 //! built libraries' tests ([`test_run`]) and top levels ([`run`]) with
 //! each language's own tools, as each backend says
-//! ([`temper_tmpl::Tools`]); and `tempest init`'s skeleton ([`init`]).
+//! ([`temper_tmpl::Tools`]); `tempest init`'s skeleton ([`init`]); and
+//! the build's version, from git ([`version`]).
 //!
 //! Each built-in backend is a cargo feature (`cpp`, `csharp`, `java`,
 //! `js`, `lua`, `py`, and `rust`), all on by default.
@@ -18,6 +19,7 @@ pub mod repl;
 pub mod run;
 #[cfg(any(unix, windows))]
 pub mod test_run;
+pub mod version;
 
 use std::path::Path;
 use temper_frontend::settle::Settled;

@@ -26,7 +26,8 @@
 //!   each backend takes from it;
 //! - [`source_map`], Source Map v3 files from spans, for backends;
 //! - shared lowerings that backends pick by their profiles:
-//!   [`coroutines`], [`errors`], [`spill`], and [`switches`].
+//!   [`coroutines`], [`errors`], [`spill`], and [`switches`];
+//! - [`version`], Temper's version and its spelling in each ecosystem.
 
 pub mod analysis;
 mod backend;
@@ -55,6 +56,7 @@ pub mod text;
 pub mod tools;
 mod types;
 pub mod validate;
+pub mod version;
 
 pub use backend::{Backend, OutFile, Run, TestResults, Tested, Tools};
 pub use builder::Builder;

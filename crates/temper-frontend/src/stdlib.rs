@@ -81,7 +81,7 @@ pub fn program_of(
 ) -> Result<temper_tmpl::Program, crate::to_tmpl::NotYet> {
     let settled = crate::settle::settle(library(sources, modules));
     let mut program = crate::to_tmpl::to_tmpl(&settled, "std")?;
-    program.library.version = crate::to_tmpl::STD_VERSION.to_string();
+    program.library.version = crate::to_tmpl::std_version();
     // Its config's metadata, for its package files, as Kotlin's.
     if let Ok(text) = sources.read(&format!("{DIR}/config.temper.md")) {
         let config = crate::project::Config::read(&text, DIR);

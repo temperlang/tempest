@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>dev.temperlang</groupId>
   <artifactId>temper-core</artifactId>
-  <version>0.6.0</version>
+  <version>0.0.0</version>
   <!-- See also: https://central.sonatype.org/publish/requirements/ -->
   <name>temper-core</name>
   <description>Core runtime support for Temper-built Java libraries</description>
@@ -23,6 +23,9 @@
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+    <!-- tempest build drops this and the next two lines only for a release. -->
+    <skipPublishing>true</skipPublishing>
+    <maven.deploy.skip>true</maven.deploy.skip>
   </properties>
   <dependencies>
     <dependency>

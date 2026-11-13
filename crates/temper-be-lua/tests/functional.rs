@@ -392,12 +392,13 @@ build = {{
 }}
 dependencies = {{
     'lua >= 5.1',
-    'temper-core == 0.6.0',
+    'temper-core == {core}',
 }}
 source = {{
     url = 'file://{library}.zip',
 }}
-"
+",
+        core = temper_tmpl::version::current().spell(temper_tmpl::version::Spelling::LuaRocks),
     )
 }
 

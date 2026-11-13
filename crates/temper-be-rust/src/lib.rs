@@ -55,8 +55,6 @@ pub struct Variant {
     /// What it handles natively, which lowering and validation read.
     pub profile: Profile,
     pub rules: NamingRules,
-    /// The `temper-core` version its output depends on.
-    pub runtime_version: &'static str,
     /// The `rust-version` its crates declare, as Kotlin's.
     pub rust_version: &'static str,
 }
@@ -71,7 +69,6 @@ pub static RUST: Variant = Variant {
         coroutines: CoroutineStrategy::TranslateToRegularFunction,
     },
     rules: names::RULES,
-    runtime_version: "0.6.0",
     rust_version: "1.71.1",
 };
 
@@ -170,6 +167,7 @@ pub const BACKEND: temper_tmpl::Backend = temper_tmpl::Backend {
     } else {
         runtime::FILES
     },
+    runtime_version: &runtime::VERSION,
     rules: &RUST.rules,
     translate: |p, _| translate(p, &RUST).map_err(|e| e.to_string()),
     default: true,
@@ -438,7 +436,7 @@ temper-core = {{ path = "../temper-core", version = "={runtime}" }}
         version = p.version_or_default(),
         metadata = package_metadata(p),
         rust = variant.rust_version,
-        runtime = variant.runtime_version,
+        runtime = temper_tmpl::version::current(),
     );
     // The root module's host code, at the crate root, as Kotlin's, so
     // `super::` there names the root module's declarations, through its

@@ -13,7 +13,7 @@
         ".": "./index.js"
     },
     "dependencies": {
-        "@temperlang/core": "0.6.0",
-        "@temperlang/std": "0.6.0"
+        "@temperlang/core": "0.7.0-alpha.0.0",
+        "@temperlang/std": "0.7.0-alpha.0.0"
     }
 }

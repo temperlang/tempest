@@ -17,6 +17,11 @@ pub struct Backend {
     /// libraries, by paths in its `temper-core` directory; none in wasm,
     /// which writes no runtime, so the playground's download stays small.
     pub runtime: &'static [(&'static str, &'static str)],
+    /// Where its runtime's files name the runtime's version, which
+    /// `tempest build` fills with the build's, and what keeps the runtime
+    /// from being published but in a release
+    /// ([`crate::version::fill_runtime`]).
+    pub runtime_version: &'static crate::version::RuntimeVersion,
     /// Its naming rules, which also name what other libraries use of a
     /// library ([`crate::naming::Interface`]).
     pub rules: &'static NamingRules,

@@ -65,6 +65,7 @@ pub mod tree;
 use std::fmt;
 use temper_tmpl::coroutines::CoroutineStrategy;
 use temper_tmpl::naming::{NamingRules, assign_checked};
+use temper_tmpl::version::{self, Spelling};
 use temper_tmpl::{Features, Profile, Program};
 
 /// A named set of translation choices for Lua.
@@ -74,8 +75,6 @@ pub struct Variant {
     /// What it handles natively, which lowering and validation read.
     pub profile: Profile,
     pub rules: NamingRules,
-    /// The `temper-core` version its output depends on.
-    pub runtime_version: &'static str,
     /// The oldest Lua its rockspec accepts, as Kotlin's says (`lua >=
     /// 5.1`), though `goto` needs 5.2 or LuaJIT, and exact `Int64`s 5.3.
     pub lua_version: &'static str,
@@ -91,7 +90,6 @@ pub static LUA: Variant = Variant {
         coroutines: CoroutineStrategy::TranslateToGenerator,
     },
     rules: names::RULES,
-    runtime_version: "0.6.0",
     lua_version: "5.1",
 };
 
@@ -123,6 +121,7 @@ pub const BACKEND: temper_tmpl::Backend = temper_tmpl::Backend {
     } else {
         runtime::FILES
     },
+    runtime_version: &runtime::VERSION,
     rules: &LUA.rules,
     translate: |p, _| translate(p, &LUA).map_err(|e| e.to_string()),
     default: true,
@@ -132,13 +131,13 @@ pub const BACKEND: temper_tmpl::Backend = temper_tmpl::Backend {
     tools: None,
 };
 
-/// The rockspec's version: the library's, or `dev` for one that doesn't
-/// set it (the frontend gives it `0.0.0`), with rockspec revision 1, as
-/// Kotlin's.
+/// The rockspec's version: the library's, in LuaRocks' spelling, or
+/// `dev` for one that doesn't set it (the frontend gives it `0.0.0`),
+/// with rockspec revision 1, as Kotlin's.
 pub fn rock_version(p: &Program) -> String {
     let version = match p.library.version.as_str() {
-        "0.0.0" | "" => "dev",
-        v => v,
+        "0.0.0" | "" => "dev".to_string(),
+        v => version::respell(v, Spelling::LuaRocks),
     };
     format!("{version}-1")
 }
@@ -267,13 +266,16 @@ source = {{
             .collect::<String>()
         },
         lua = variant.lua_version,
-        runtime = variant.runtime_version,
+        runtime = version::current().spell(Spelling::LuaRocks),
         // Each library used, as Kotlin writes them, with its version where
         // it sets one.
         dependencies = (p.dependencies().iter())
             .map(|(name, version)| match *version {
                 "0.0.0" | "" => format!("    {},\n", quoted(name)),
-                v => format!("    {},\n", quoted(&format!("{name} == {v}"))),
+                v => {
+                    let v = version::respell(v, Spelling::LuaRocks);
+                    format!("    {},\n", quoted(&format!("{name} == {v}")))
+                }
             })
             .collect::<Vec<_>>()
             .concat(),

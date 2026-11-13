@@ -209,7 +209,7 @@ pub fn command(name: &str) -> Option<String> {
              \n\
              Prints the commands, or a command's options.\n"
             .to_string(),
-        "version" => "usage: tempest version\n\nReports tempest's version.\n".to_string(),
+        "version" => "usage: tempest version\n\nReports tempest's version, the commit it was built from, and whether\nthat commit's files had changes, as in 1.2.0-alpha.0.34 (3f2b063, modified).\n".to_string(),
         "license" => "usage: tempest license\n\n\
              Displays the copyright and license attributions for the Temper\n\
              toolchain and documentation.\n"

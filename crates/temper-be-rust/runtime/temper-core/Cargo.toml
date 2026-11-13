@@ -1,6 +1,8 @@
 [package]
 name = "temper-core"
-version = "0.6.0"
+version = "0.0.0"
+# `tempest build` drops this and the next line only for a release.
+publish = false
 license = "Apache-2.0 OR MIT"
 edition = "2021"
 rust-version = "1.71.1"

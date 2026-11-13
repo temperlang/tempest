@@ -260,10 +260,11 @@ fn goldens() {
                 main.starts_with(&format!("fn main() {{\n    {krate}::init(None)")),
                 "{main}"
             );
+            let core = temper_tmpl::version::current();
             assert!(
-                files[0].text.contains(
-                    "\n[dependencies]\ntemper-core = { path = \"../temper-core\", version = \"=0.6.0\" }\n"
-                ),
+                files[0].text.contains(&format!(
+                    "\n[dependencies]\ntemper-core = {{ path = \"../temper-core\", version = \"={core}\" }}\n"
+                )),
                 "{}",
                 files[0].text
             );
@@ -553,7 +554,16 @@ fn runs_and_lints() {
                 list.join(", ")
             ),
         );
-        kit::copy_dir(&runtime(), &root.join("temper-core"), &["target"]);
+        // The runtime as `tempest build` writes it, naming the version
+        // the libraries depend on.
+        let filled = temper_tmpl::version::fill_runtime(
+            temper_be_rust::runtime::FILES,
+            &temper_be_rust::runtime::VERSION,
+            temper_tmpl::version::current(),
+        );
+        for (path, text) in &filled {
+            kit::write_if_changed(&root.join("temper-core").join(path), text);
+        }
         if !root.join("Cargo.lock").exists() {
             // indexmap and its dependencies at the versions temper-core
             // was tested with.

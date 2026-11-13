@@ -63,10 +63,6 @@ pub struct Variant {
     /// What it handles natively, which lowering and validation read.
     pub profile: Profile,
     pub rules: NamingRules,
-    /// The `TemperLang.Core` version its output depends on, as a project
-    /// beside the library's (`../../temper-core/TemperLang.Core.csproj`),
-    /// as Kotlin's.
-    pub runtime_version: &'static str,
     /// The .NET target framework, `<TargetFramework>` in each `.csproj`.
     pub target_framework: &'static str,
 }
@@ -82,7 +78,6 @@ pub static CSHARP: Variant = Variant {
         coroutines: CoroutineStrategy::TranslateToGenerator,
     },
     rules: names::RULES,
-    runtime_version: "0.6.0",
     target_framework: "net6.0",
 };
 
@@ -114,6 +109,7 @@ pub const BACKEND: temper_tmpl::Backend = temper_tmpl::Backend {
     } else {
         runtime::FILES
     },
+    runtime_version: &runtime::VERSION,
     rules: &CSHARP.rules,
     translate: |p, _| translate(p, &CSHARP).map_err(|e| e.to_string()),
     default: true,

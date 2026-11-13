@@ -140,6 +140,22 @@ A change users would notice gets a note in
 [the release notes](../release-notes/README.md#writing-a-release-note).
 Docs changes keep the links working (`compat/check_anchors.py`).
 
+## Versions and releases
+
+Temper's version is written once, as the root `Cargo.toml`'s
+`[workspace.package] version`; the compiler, runtimes, std, and
+generated packages all take it, each in its ecosystem's spelling
+([Versions](../internals/detail/06-backends.md#versions-one-version-spelled-for-each-ecosystem)).
+Between releases, builds are dev builds named by the commits since the
+last release tag (`0.7.0-alpha.0.123`), which `tempest --version` shows
+with the commit.
+
+Releases are tag-driven: a signed `v` tag on `main` (`v0.7.0-beta.1`,
+`v0.7.0`) names the release, and only tagged builds are published. CI
+needs the whole history and the tags (`fetch-depth: 0`) to name dev
+builds. The release steps and the workflow that publishes each
+ecosystem's packages are still to come.
+
 ## Questions?
 
 - [Discord][discord]: chat with the community.
