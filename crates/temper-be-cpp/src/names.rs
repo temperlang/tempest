@@ -195,6 +195,8 @@ pub const RULES: NamingRules = NamingRules {
     members_prefixed: false,
     fields_apart: false,
     types_apart: false,
+    // Every module's declarations are the library namespace's.
+    modules_share_names: true,
 };
 
 /// Whether C++ reserves a name for its implementation: one with `__`, or

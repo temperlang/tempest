@@ -1763,6 +1763,33 @@ copied Kotlin's:
   Test: temper-be-cpp/tests/functional.rs, `strict` (libraries with
   tests compiled without `TEMPER_TESTS` too), and the
   `testing-asserts` golden.
+- **C++ names shared by modules** (2026-11-13, regex engine): every
+  module's declarations are in the library's one namespace, so in
+  Kotlin's C++ a module's private `class Engine` and another's exported
+  `Engine` are one struct, defined twice (a compile error where one
+  includes the other, and an ODR violation where not), as are two
+  modules' private globals of one name. Tempest's naming gives a
+  module's private module-level declarations names no other module's
+  take (`NamingRules::modules_share_names`), so the private one is
+  `Engine2`; exports keep their names, and two modules exporting one
+  name are still an error. A module's init locals and tests are its
+  own. And where a generic function, defined in the header, calls a
+  private function of its module (secure-composition's
+  `propagateOver`), the private one isn't `static` and the header
+  declares it; Kotlin's declares every function in the header. A
+  template that takes its module's lock is not yet supported, since
+  the lock is the `.cpp`'s.
+  Test: programs/modules/ (`Engine`) and programs/generics.temper.md
+  (`noneIn`), on every backend.
+- **C# names a namespace hides** (2026-11-13, regex engine): C# looks a
+  simple name up in each enclosing namespace before `using`s, so in
+  `Lib.Machine` a class `State` of module `state` is the namespace
+  `Lib.State`, and `Parts` the namespace `Lib.Parts` that `parts/regex`
+  is in; and two modules' classes of one name, as `regex`'s and std's
+  `RegexGlobal`, are ambiguous where both are `using`ed. Kotlin's
+  aliases every other namespace (`using S2 = …;`, `S2::State`);
+  tempest's keeps simple names and qualifies just these from `global::`.
+  Test: programs/modules/, on C#.
 - **C++ temporaries:** Kotlin's C++ returns lists as `shared_ptr`s, so
   iterating one in place (`for (auto const &x : *obj->list())`) reads a
   vector already freed. Tempest's C++ will name such a list first

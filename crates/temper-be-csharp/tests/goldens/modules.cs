@@ -1,6 +1,7 @@
 using Modules.Core;
 using Modules.Helpers;
 using Modules.Helpers.Deep;
+using Modules.Machine;
 using System.Globalization;
 using TemperLang.Core;
 
@@ -23,6 +24,7 @@ public static class ModulesGlobal
         console.Log(DeepGlobal.Greet("modules"));
         console.Log("sum " + Sum(3).ToString(CultureInfo.InvariantCulture));
         console.Log("share " + CoreGlobal.Share(7, 2).ToString(CultureInfo.InvariantCulture));
+        console.Log(new Engine("own").Name + ", " + MachineGlobal.Describe());
         HelpersGlobal.Bump();
         HelpersGlobal.Bump();
         console.Log("calls " + calls.ToString(CultureInfo.InvariantCulture));

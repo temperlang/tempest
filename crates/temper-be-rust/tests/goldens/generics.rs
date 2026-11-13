@@ -359,12 +359,16 @@ pub(crate) fn relayed<
     tagged::<S, T>(x.clone())
 }
 
+pub(crate) fn none_in(length: i32) -> bool {
+    length == 0
+}
+
 pub fn first<T: Clone + Send + Sync + 'static>(
     items: impl temper_core::ToListed<T>,
     fallback: T,
 ) -> T {
     let items = items.to_listed();
-    if temper_core::ListedTrait::is_empty(&*items) {
+    if none_in(temper_core::ListedTrait::len(&*items)) {
         fallback.clone()
     } else {
         temper_core::ListedTrait::get(&*items, 0)

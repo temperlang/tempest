@@ -134,12 +134,18 @@ local function relayed(x)
   return tagged(x)
 end
 
+---@param length integer
+---@return boolean
+local function noneIn(length)
+  return length == 0
+end
+
 ---@generic T
 ---@param items T[]
 ---@param fallback T
 ---@return T
 local function first(items, fallback)
-  if temper.listed_isempty(items) then
+  if noneIn(temper.listed_length(items)) then
     return fallback
   else
     return temper.listed_get(items, 0)

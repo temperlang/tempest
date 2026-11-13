@@ -453,12 +453,25 @@ temper-core = {{ path = "../temper-core", version = "={runtime}" }}
         true => format!("{}\nmod _connected;\n", tree::HOST_ALLOW),
         false => String::new(),
     };
-    let mods: String = (children("").iter())
-        .map(|m| match m {
-            tree::Item::Mod(name) => format!("pub mod {name};\n"),
-            _ => String::new(),
+    let mut mods: Vec<(String, String)> = (children("").iter())
+        .filter_map(|m| match m {
+            tree::Item::Mod(name) => Some((name.clone(), format!("pub mod {name};\n"))),
+            _ => None,
         })
         .collect();
+    // The private modules, which rustfmt sorts by name among the public
+    // ones (`r#mod` as `mod`), unless host code's, with its attribute,
+    // comes between.
+    let private = "mod r#mod;\nmod support;\n";
+    let mods = match root_host {
+        true => (mods.into_iter().map(|(_, m)| m).collect::<String>()) + &host_mod + private,
+        false => {
+            mods.push(("mod".into(), "mod r#mod;\n".into()));
+            mods.push(("support".into(), "mod support;\n".into()));
+            mods.sort_by_key(|(name, _)| name.trim_start_matches("r#").to_string());
+            mods.into_iter().map(|(_, m)| m).collect()
+        }
+    };
     let mut inits = String::new();
     for name in &used {
         let krate = translate::library_crate(p, name);
@@ -521,9 +534,7 @@ temper-core = {{ path = "../temper-core", version = "={runtime}" }}
         _ => "",
     };
     let lib = format!(
-        r#"{allow}{mods}{host_mod}mod r#mod;
-mod support;
-{reexport}
+        r#"{allow}{mods}{reexport}
 /// Initializes the library, once, with `config` or the default
 /// configuration, and gives the runner of its async tasks.
 pub fn init(config: Option<temper_core::Config>) -> temper_core::Result<temper_core::AsyncRunner> {{

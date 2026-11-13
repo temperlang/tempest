@@ -24,7 +24,10 @@
 //! their accessors give copies, it keeps Temper's
 //! left-to-right order of evaluation where the order would show, and its
 //! shifts are defined for every count. It also declares only exports in
-//! the header, which Kotlin's fills with every function, and it keeps
+//! the header, and the private functions its templates call, where
+//! Kotlin's fills it with every function; it names a module's private
+//! declarations apart from other modules', which share the library's
+//! namespace (`Engine2`), where Kotlin's redefines one; and it keeps
 //! objects alive while they're used where Kotlin's can refer to one a
 //! call replaces ([`translate`]'s classes). It compiles
 //! without warnings under `-Wall -Wextra -Wpedantic` and more (its tests
@@ -286,9 +289,9 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
 
 /// What C++ can't tell apart, which the naming pass doesn't see: two
 /// modules' init functions of one name (Kotlin names them by their
-/// paths' last parts), two modules exporting one name into the library's
-/// namespace, or a module's private name that a module it includes
-/// exports, which C++ would read as the same declaration.
+/// paths' last parts), or two modules exporting one name into the
+/// library's namespace. A private name avoids every other module's
+/// names ([`names::RULES`]' `modules_share_names`).
 fn check_modules(p: &Program, names: &NameMap) -> Result<(), NotYet> {
     use std::collections::HashMap;
     let mut inits: HashMap<String, &str> = HashMap::new();
@@ -311,28 +314,6 @@ fn check_modules(p: &Program, names: &NameMap) -> Result<(), NotYet> {
                         });
                     }
                 }
-            }
-        }
-    }
-    for module in &p.modules {
-        let included: Vec<DeclId> = (analysis::module_imports(p, module).iter())
-            .filter(|i| p.modules.iter().any(|m| m.decl == i.from))
-            .flat_map(|i| {
-                let m = p.modules.iter().find(|m| m.decl == i.from);
-                m.map(|m| module_level(p, m)).unwrap_or_default()
-            })
-            .collect();
-        for d in module_level(p, module) {
-            let clash = (included.iter()).any(|&o| {
-                names.get(o) == names.get(d) && p.decls.get(o).facts.contains(Facts::EXPORTED)
-            });
-            if clash && !p.decls.get(d).facts.contains(Facts::EXPORTED) {
-                return Err(NotYet {
-                    what: format!(
-                        "a private name that an imported module exports, {}",
-                        names.get(d)
-                    ),
-                });
             }
         }
     }

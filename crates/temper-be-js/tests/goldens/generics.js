@@ -45,13 +45,21 @@ function relayed(x) {
 }
 
 /**
+ * @param {number} length
+ * @returns {boolean}
+ */
+function noneIn(length) {
+  return length === 0;
+}
+
+/**
  * @template T
  * @param {readonly T[]} items
  * @param {T} fallback
  * @returns {T}
  */
 export function first(items, fallback) {
-  if (!items.length) {
+  if (noneIn(items.length)) {
     return fallback;
   } else {
     return listedGet(/** @type {T[]} */ (items), 0);

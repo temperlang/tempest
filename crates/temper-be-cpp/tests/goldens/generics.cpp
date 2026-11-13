@@ -63,6 +63,8 @@ struct Stage : public virtual Scene {
   static std::shared_ptr<Stage> make();
 };
 
+bool noneIn(int32_t length);
+
 template <class T>
 std::shared_ptr<Box<T>> Box<T>::make(T value) {
   global_init_init();
@@ -117,7 +119,7 @@ std::shared_ptr<std::vector<T>> Shelf<T>::get_items() const {
 template <class T>
 T first(std::shared_ptr<std::vector<T>> const & items, T fallback) {
   global_init_init();
-  if (temper::core::List::isEmpty<T>(items)) {
+  if (noneIn(temper::core::List::length<T>(items))) {
     return fallback;
   } else {
     return temper::core::List::get<T>(items, 0);
@@ -182,6 +184,10 @@ static int32_t countOf(int32_t n) {
 template <class S, class T>
 static T relayed(T x) {
   return generics::tagged<S, T>(x);
+}
+
+bool noneIn(int32_t length) {
+  return length == 0;
 }
 
 template <class T>
@@ -313,28 +319,28 @@ void global_init_init() {
     core::ListBuilder::add<core::Str>(builder, TEMPER_STR("x"));
     core::ListBuilder::add<core::Str>(builder, TEMPER_STR("y"));
     core::ListBuilder::add<core::Str>(builder, TEMPER_STR("w"), 0);
-    int32_t length = core::List::length<core::Str>(builder);
+    int32_t int32 = core::List::length<core::Str>(builder);
     core::Str get = core::List::get<core::Str>(builder, 0);
-    core::Console::log(temper_globals::console.value, std::to_string(length) + " " + get + " " + core::ListBuilder::removeLast<core::Str>(builder));
+    core::Console::log(temper_globals::console.value, std::to_string(int32) + " " + get + " " + core::ListBuilder::removeLast<core::Str>(builder));
     std::shared_ptr<std::vector<core::Str>> built = core::List::toList<core::Str>(builder);
-    int32_t int32 = core::List::length<core::Str>(built);
+    int32_t value2 = core::List::length<core::Str>(built);
     core::Str string = core::List::getOr<core::Str>(built, 5, TEMPER_STR("?"));
-    core::Console::log(temper_globals::console.value, std::to_string(int32) + " " + string + " " + core::List::get<core::Str>(core::List::slice<core::Str>(built, 1, 2), 0));
-    std::shared_ptr<core::Pair<core::Str, int32_t>> value2 = core::PairFactory::make<core::Str, int32_t>(TEMPER_STR("a"), 1);
-    std::shared_ptr<core::Mapped::Ordered<core::Str, int32_t>> m = core::Map::make<core::Str, int32_t>(core::List::make<std::shared_ptr<core::Pair<core::Str, int32_t>>>(value2, core::PairFactory::make<core::Str, int32_t>(TEMPER_STR("b"), 2)));
-    int32_t value3;
-    try {
-      value3 = core::Mapped::get<core::Str, int32_t>(m, TEMPER_STR("b"));
-    } catch (core::TemperBubble const &) {
-      value3 = -1;
-    }
+    core::Console::log(temper_globals::console.value, std::to_string(value2) + " " + string + " " + core::List::get<core::Str>(core::List::slice<core::Str>(built, 1, 2), 0));
+    std::shared_ptr<core::Pair<core::Str, int32_t>> value3 = core::PairFactory::make<core::Str, int32_t>(TEMPER_STR("a"), 1);
+    std::shared_ptr<core::Mapped::Ordered<core::Str, int32_t>> m = core::Map::make<core::Str, int32_t>(core::List::make<std::shared_ptr<core::Pair<core::Str, int32_t>>>(value3, core::PairFactory::make<core::Str, int32_t>(TEMPER_STR("b"), 2)));
     int32_t value4;
     try {
-      value4 = core::Mapped::get<core::Str, int32_t>(m, TEMPER_STR("c"));
+      value4 = core::Mapped::get<core::Str, int32_t>(m, TEMPER_STR("b"));
     } catch (core::TemperBubble const &) {
       value4 = -1;
     }
-    core::Console::log(temper_globals::console.value, std::to_string(value3) + " " + std::to_string(value4) + " " + core::Boolean::toString(core::Mapped::has<core::Str, int32_t>(m, TEMPER_STR("a"))) + " " + std::to_string(core::Mapped::length<core::Str, int32_t>(m)));
+    int32_t value5;
+    try {
+      value5 = core::Mapped::get<core::Str, int32_t>(m, TEMPER_STR("c"));
+    } catch (core::TemperBubble const &) {
+      value5 = -1;
+    }
+    core::Console::log(temper_globals::console.value, std::to_string(value4) + " " + std::to_string(value5) + " " + core::Boolean::toString(core::Mapped::has<core::Str, int32_t>(m, TEMPER_STR("a"))) + " " + std::to_string(core::Mapped::length<core::Str, int32_t>(m)));
     std::shared_ptr<core::Mapped::Ordered<core::Str, core::NullableParam<int32_t>>> mb = core::Map::make<core::Str, core::NullableParam<int32_t>>();
     core::MapBuilder::set<core::Str, core::NullableParam<int32_t>>(mb, TEMPER_STR("q"), 5);
     core::MapBuilder::set<core::Str, core::NullableParam<int32_t>>(mb, TEMPER_STR("n"), nullptr);
@@ -354,27 +360,27 @@ void global_init_init() {
     both();
     temper_globals::tally.value = core::Map::make<core::Str, int32_t>();
     core::MapBuilder::set<core::Str, int32_t>(temper_globals::tally.value, TEMPER_STR("k"), 2);
-    int32_t value5;
+    int32_t value6;
     try {
-      value5 = generics::bump(TEMPER_STR("k"));
+      value6 = generics::bump(TEMPER_STR("k"));
     } catch (core::TemperBubble const &) {
-      value5 = -1;
+      value6 = -1;
     }
-    int32_t value6 = value5;
-    int32_t value7;
+    int32_t value7 = value6;
+    int32_t value8;
     try {
-      value7 = generics::bump(TEMPER_STR("z"));
+      value8 = generics::bump(TEMPER_STR("z"));
     } catch (core::TemperBubble const &) {
-      value7 = -1;
+      value8 = -1;
     }
-    int32_t value8 = value7;
-    int32_t value9;
+    int32_t value9 = value8;
+    int32_t value10;
     try {
-      value9 = core::Mapped::get<core::Str, int32_t>(temper_globals::tally.value, TEMPER_STR("k"));
+      value10 = core::Mapped::get<core::Str, int32_t>(temper_globals::tally.value, TEMPER_STR("k"));
     } catch (core::TemperBubble const &) {
-      value9 = -1;
+      value10 = -1;
     }
-    core::Console::log(temper_globals::console.value, std::to_string(value6) + " " + std::to_string(value8) + " " + std::to_string(value9));
+    core::Console::log(temper_globals::console.value, std::to_string(value7) + " " + std::to_string(value9) + " " + std::to_string(value10));
     core::Console::log(temper_globals::console.value, core::Boolean::toString(generics::firstSame(core::List::make<int32_t>(1000), core::List::make<int32_t>(1000))) + " " + core::Boolean::toString(generics::firstSame(core::List::make<int32_t>(1000), core::List::make<int32_t>(7))));
   });
 }

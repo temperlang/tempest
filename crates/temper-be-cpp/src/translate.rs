@@ -40,7 +40,8 @@
 //! translate yet, and a test build ([`crate::test_main`]) has them; the
 //! private functions only they call are in that `#ifdef` too
 //! ([`Item::TestsOnly`]), where they are in the module. Functions are
-//! functions, `static` unless exported, which the header declares; the
+//! functions, `static` unless exported or called by a template in the
+//! header (a generic function's body), which the header declares; the
 //! init block is the body of the module's init function,
 //! `global_init_init()`, declared first in the header, which runs it
 //! once, through the runtime's `init_once`, as Kotlin's (#636): threads
@@ -1004,6 +1005,29 @@ impl<'a> Translator<'a> {
             }
             _ => self.stmt(module.init, &mut init)?,
         }
+        // The private functions that templates in the header call: not
+        // `static`, and declared there, where the templates can call
+        // them. Their names are the library's alone ([`names::RULES`]).
+        let header_called: HashSet<String> = (module.items.iter())
+            .filter_map(|&item| match p.nodes.get(item) {
+                Node::Function { decl, .. } => Some(decl),
+                _ => None,
+            })
+            .filter(|d| {
+                template_refs.contains(d)
+                    && p.decls.type_params(*d).is_empty()
+                    && !self.exported(*d)
+            })
+            .map(|d| self.name(d))
+            .collect();
+        for item in &mut functions {
+            if let Item::Function(f) = item {
+                if !f.exported && f.template.is_empty() && header_called.contains(&f.name) {
+                    f.exported = true;
+                    exported_functions.push(header_signature(f));
+                }
+            }
+        }
         // Entry points run the init first, if there's anything to run.
         let init = reachable(init);
         if !init.is_empty() {
@@ -1087,6 +1111,11 @@ impl<'a> Translator<'a> {
         let templates: String = (templates.iter())
             .map(|f| tree::header_definition(f) + "\n")
             .collect();
+        // The module's lock and its helpers are the `.cpp`'s alone.
+        let locks = [&self.mutex, &self.load, &self.store];
+        if (locks.iter().copied().flatten()).any(|name| mentions(&templates, name)) {
+            return not_yet("a template in a header that takes its module's lock");
+        }
         let mut header_includes = includes(p, &imports);
         if mentions_type(p) {
             header_includes.push("<typeindex>".into());
@@ -3195,6 +3224,16 @@ fn includes(p: &Program, imports: &[Import]) -> Vec<String> {
             format!("<{library}/{}.hpp>", module_stem(p, import.from))
         })
         .collect()
+}
+
+/// Whether C++ text mentions a name, as a whole identifier.
+fn mentions(text: &str, name: &str) -> bool {
+    let ident = |c: char| c == '_' || c.is_alphanumeric();
+    text.match_indices(name).any(|(i, _)| {
+        let before = text[..i].chars().next_back();
+        let after = text[i + name.len()..].chars().next();
+        !before.is_some_and(ident) && !after.is_some_and(ident)
+    })
 }
 
 fn header_signature(f: &tree::Function) -> String {

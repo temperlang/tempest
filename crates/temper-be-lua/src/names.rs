@@ -72,4 +72,5 @@ pub const RULES: NamingRules = NamingRules {
     members_prefixed: false,
     fields_apart: false,
     types_apart: false,
+    modules_share_names: false,
 };

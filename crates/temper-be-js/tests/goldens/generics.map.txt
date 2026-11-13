@@ -16,302 +16,307 @@
 43:10 -> ../generics.temper.md:41:9 (relayed)  relayed(x) { <- relayed<S extends Scene, T>(
 43:17 -> ../generics.temper.md:41:5  (x) { <- let relayed<S extends Scene,
 44:3 -> ../generics.temper.md:41:48  return tagged(x); <- tagged<S, T>(x) }
-47:1 -> ../generics.temper.md:43:5  /** <- export let first<T>(items: L
-53:1 -> ../generics.temper.md:43:5  export function first(items, <- export let first<T>(items: L
-53:17 -> ../generics.temper.md:43:16 (first)  first(items, fallback) { <- first<T>(items: Listed<T>, f
-53:22 -> ../generics.temper.md:43:5  (items, fallback) { <- export let first<T>(items: L
-54:3 -> ../generics.temper.md:44:7  if (!items.length) { <- if (items.isEmpty) { fallbac
-55:5 -> ../generics.temper.md:44:28  return fallback; <- fallback } else { items[0] }
-57:5 -> ../generics.temper.md:44:46  return listedGet(/** @type { <- items[0] }
-61:1 -> ../generics.temper.md:47:5  /** <- let held<T>(h: Holder<T>): T
-66:1 -> ../generics.temper.md:47:5  function held(h) { <- let held<T>(h: Holder<T>): T
-66:10 -> ../generics.temper.md:47:9 (held)  held(h) { <- held<T>(h: Holder<T>): T { h
-66:14 -> ../generics.temper.md:47:5  (h) { <- let held<T>(h: Holder<T>): T
-67:3 -> ../generics.temper.md:47:36  return h.held; <- h.held }
-70:1 -> ../generics.temper.md:49:5  /** <- let total(ns: List<Int>): In
-74:1 -> ../generics.temper.md:49:5  function total(ns) { <- let total(ns: List<Int>): In
-74:10 -> ../generics.temper.md:49:9 (total)  total(ns) { <- total(ns: List<Int>): Int {
-74:15 -> ../generics.temper.md:49:5  (ns) { <- let total(ns: List<Int>): In
-75:3 -> ../generics.temper.md:50:7  let sum = 0; <- var sum = 0;
-76:3 -> ../generics.temper.md:51:7  { <- for (var i = 0; i < ns.lengt
-77:5 -> ../generics.temper.md:51:12  let i = 0; <- var i = 0; i < ns.length; i
-78:5 -> ../generics.temper.md:51:7  while (i < ns.length) { <- for (var i = 0; i < ns.lengt
-79:7 -> ../generics.temper.md:52:9  sum = (sum + listedGet(/** @ <- sum += ns[i];
-80:7 -> ../generics.temper.md:51:38  i = (i + 1) | 0; <- i += 1) {
-83:3 -> ../generics.temper.md:54:7  return sum; <- sum
-86:1 -> ../generics.temper.md:90:5  function indexed() { <- let indexed(): Void {
-86:10 -> ../generics.temper.md:90:9 (indexed)  indexed() { <- indexed(): Void {
-86:17 -> ../generics.temper.md:90:5  () { <- let indexed(): Void {
-87:3 -> ../generics.temper.md:91:7  /** @type {number[]} */ <- let counts = new ListBuilder
-88:3 -> ../generics.temper.md:91:7  const counts = []; <- let counts = new ListBuilder
-89:3 -> ../generics.temper.md:92:7  counts.push(1); <- counts.add(1);
-90:3 -> ../generics.temper.md:93:7  counts.push(10); <- counts.add(10);
-91:3 -> ../generics.temper.md:94:7  let at = 0; <- var at = 0;
-92:3 -> ../generics.temper.md:95:7  { <- counts[at] += 4;
-93:5 -> ../generics.temper.md:95:14  const k = at; <- at] += 4;
-94:5 -> ../generics.temper.md:95:7  listBuilderSet(counts, k, (l <- counts[at] += 4;
-96:3 -> ../generics.temper.md:96:7  { <- counts[1] *= 3;
-97:5 -> ../generics.temper.md:96:7  listBuilderSet(counts, 1, Ma <- counts[1] *= 3;
-99:3 -> ../generics.temper.md:97:7  /** @type {number} */ <- let was = counts[at++]++;
-100:3 -> ../generics.temper.md:97:7  let t$0; <- let was = counts[at++]++;
-101:3 -> ../generics.temper.md:97:7  { <- let was = counts[at++]++;
-102:5 -> ../generics.temper.md:97:24  /** @type {number} */ <- at++]++;
-103:5 -> ../generics.temper.md:97:24  let t$1; <- at++]++;
-104:5 -> ../generics.temper.md:97:24  { <- at++]++;
-105:7 -> ../generics.temper.md:97:24  const t = at; <- at++]++;
-106:7 -> ../generics.temper.md:97:24  at = (t + 1) | 0; <- at++]++;
-109:5 -> ../generics.temper.md:97:24  const k2 = t$1; <- at++]++;
-110:5 -> ../generics.temper.md:97:17  const t2 = listedGet(counts, <- counts[at++]++;
-111:5 -> ../generics.temper.md:97:17  listBuilderSet(counts, k2, ( <- counts[at++]++;
-114:3 -> ../generics.temper.md:97:7  const was = t$0; <- let was = counts[at++]++;
-115:3 -> ../generics.temper.md:98:7  /** @type {number} */ <- let pre = ++counts[at];
-116:3 -> ../generics.temper.md:98:7  let t$2; <- let pre = ++counts[at];
-117:3 -> ../generics.temper.md:98:7  { <- let pre = ++counts[at];
-118:5 -> ../generics.temper.md:98:26  const k3 = at; <- at];
-119:5 -> ../generics.temper.md:98:17  const t3 = (listedGet(counts <- ++counts[at];
-120:5 -> ../generics.temper.md:98:17  listBuilderSet(counts, k3, t <- ++counts[at];
-123:3 -> ../generics.temper.md:98:7  const pre = t$2; <- let pre = ++counts[at];
-124:3 -> ../generics.temper.md:99:7  /** @type {number} */ <- let post = counts[0]--;
-125:3 -> ../generics.temper.md:99:7  let t$3; <- let post = counts[0]--;
-126:3 -> ../generics.temper.md:99:7  { <- let post = counts[0]--;
-127:5 -> ../generics.temper.md:99:18  const t4 = listedGet(counts, <- counts[0]--;
-128:5 -> ../generics.temper.md:99:18  listBuilderSet(counts, 0, (t <- counts[0]--;
-131:3 -> ../generics.temper.md:99:7  const post = t$3; <- let post = counts[0]--;
-132:3 -> ../generics.temper.md:100:7  /** @type {number} */ <- let down = --counts[0];
-133:3 -> ../generics.temper.md:100:7  let t$4; <- let down = --counts[0];
-134:3 -> ../generics.temper.md:100:7  { <- let down = --counts[0];
-135:5 -> ../generics.temper.md:100:18  const t5 = (listedGet(counts <- --counts[0];
-136:5 -> ../generics.temper.md:100:18  listBuilderSet(counts, 0, t5 <- --counts[0];
-139:3 -> ../generics.temper.md:100:7  const down = t$4; <- let down = --counts[0];
-140:3 -> ../generics.temper.md:101:7  console.log(`${was} ${pre} $ <- console.log("${was} ${pre} $
-143:1 -> ../generics.temper.md:106:5  function both() { <- let both(): Void {
-143:10 -> ../generics.temper.md:106:9 (both)  both() { <- both(): Void {
-143:14 -> ../generics.temper.md:106:5  () { <- let both(): Void {
-144:3 -> ../generics.temper.md:107:7  let x = 1; <- var x = 1;
-145:3 -> ../generics.temper.md:108:7  let y = 10; <- var y = 10;
-146:3 -> ../generics.temper.md:109:7  /** @type {number} */ <- let locals = x++ + y++;
-147:3 -> ../generics.temper.md:109:7  let t$5; <- let locals = x++ + y++;
-148:3 -> ../generics.temper.md:109:7  { <- let locals = x++ + y++;
-149:5 -> ../generics.temper.md:109:20  const t = x; <- x++ + y++;
-150:5 -> ../generics.temper.md:109:20  x = (t + 1) | 0; <- x++ + y++;
-153:3 -> ../generics.temper.md:109:7  const t$7 = t$5; <- let locals = x++ + y++;
-154:3 -> ../generics.temper.md:109:7  /** @type {number} */ <- let locals = x++ + y++;
-155:3 -> ../generics.temper.md:109:7  let t$6; <- let locals = x++ + y++;
-156:3 -> ../generics.temper.md:109:7  { <- let locals = x++ + y++;
-157:5 -> ../generics.temper.md:109:26  const t2 = y; <- y++;
-158:5 -> ../generics.temper.md:109:26  y = (t2 + 1) | 0; <- y++;
-161:3 -> ../generics.temper.md:109:7  const locals = (t$7 + t$6) | <- let locals = x++ + y++;
-162:3 -> ../generics.temper.md:110:7  const p = new Counter(100); <- let p = new Counter(100);
-163:3 -> ../generics.temper.md:111:7  const q = new Counter(1000); <- let q = new Counter(1000);
-164:3 -> ../generics.temper.md:112:7  /** @type {number} */ <- let fields = p.n++ + q.n++;
-165:3 -> ../generics.temper.md:112:7  let t$8; <- let fields = p.n++ + q.n++;
-166:3 -> ../generics.temper.md:112:7  { <- let fields = p.n++ + q.n++;
-167:5 -> ../generics.temper.md:112:20  const t3 = p.n; <- p.n++ + q.n++;
-168:5 -> ../generics.temper.md:112:20  p.n = (t3 + 1) | 0; <- p.n++ + q.n++;
-171:3 -> ../generics.temper.md:112:7  const t$10 = t$8; <- let fields = p.n++ + q.n++;
-172:3 -> ../generics.temper.md:112:7  /** @type {number} */ <- let fields = p.n++ + q.n++;
-173:3 -> ../generics.temper.md:112:7  let t$9; <- let fields = p.n++ + q.n++;
-174:3 -> ../generics.temper.md:112:7  { <- let fields = p.n++ + q.n++;
-175:5 -> ../generics.temper.md:112:28  const t4 = q.n; <- q.n++;
-176:5 -> ../generics.temper.md:112:28  q.n = (t4 + 1) | 0; <- q.n++;
-179:3 -> ../generics.temper.md:112:7  const fields = (t$10 + t$9) <- let fields = p.n++ + q.n++;
-180:3 -> ../generics.temper.md:113:7  /** @type {number} */ <- let same = p.n++ + p.n++;
-181:3 -> ../generics.temper.md:113:7  let t$11; <- let same = p.n++ + p.n++;
-182:3 -> ../generics.temper.md:113:7  { <- let same = p.n++ + p.n++;
-183:5 -> ../generics.temper.md:113:18  const t5 = p.n; <- p.n++ + p.n++;
-184:5 -> ../generics.temper.md:113:18  p.n = (t5 + 1) | 0; <- p.n++ + p.n++;
-187:3 -> ../generics.temper.md:113:7  const t$13 = t$11; <- let same = p.n++ + p.n++;
-188:3 -> ../generics.temper.md:113:7  /** @type {number} */ <- let same = p.n++ + p.n++;
-189:3 -> ../generics.temper.md:113:7  let t$12; <- let same = p.n++ + p.n++;
-190:3 -> ../generics.temper.md:113:7  { <- let same = p.n++ + p.n++;
-191:5 -> ../generics.temper.md:113:26  const t6 = p.n; <- p.n++;
-192:5 -> ../generics.temper.md:113:26  p.n = (t6 + 1) | 0; <- p.n++;
-195:3 -> ../generics.temper.md:113:7  const same = (t$13 + t$12) | <- let same = p.n++ + p.n++;
-196:3 -> ../generics.temper.md:114:7  /** @type {number[]} */ <- let a = new ListBuilder<Int>
-197:3 -> ../generics.temper.md:114:7  const a = []; <- let a = new ListBuilder<Int>
-198:3 -> ../generics.temper.md:115:7  a.push(3); <- a.add(3);
-199:3 -> ../generics.temper.md:116:7  /** @type {number[]} */ <- let b = new ListBuilder<Int>
-200:3 -> ../generics.temper.md:116:7  const b = []; <- let b = new ListBuilder<Int>
-201:3 -> ../generics.temper.md:117:7  b.push(30); <- b.add(30);
-202:3 -> ../generics.temper.md:118:7  const i = 0; <- var i = 0;
-203:3 -> ../generics.temper.md:119:7  /** @type {number} */ <- let items = a[i]++ + b[i]++;
-204:3 -> ../generics.temper.md:119:7  let t$14; <- let items = a[i]++ + b[i]++;
-205:3 -> ../generics.temper.md:119:7  { <- let items = a[i]++ + b[i]++;
-206:5 -> ../generics.temper.md:119:21  const k = i; <- i]++ + b[i]++;
-207:5 -> ../generics.temper.md:119:19  const t7 = listedGet(a, k); <- a[i]++ + b[i]++;
-208:5 -> ../generics.temper.md:119:19  listBuilderSet(a, k, (t7 + 1 <- a[i]++ + b[i]++;
-211:3 -> ../generics.temper.md:119:7  const t$16 = t$14; <- let items = a[i]++ + b[i]++;
-212:3 -> ../generics.temper.md:119:7  /** @type {number} */ <- let items = a[i]++ + b[i]++;
-213:3 -> ../generics.temper.md:119:7  let t$15; <- let items = a[i]++ + b[i]++;
-214:3 -> ../generics.temper.md:119:7  { <- let items = a[i]++ + b[i]++;
-215:5 -> ../generics.temper.md:119:30  const k2 = i; <- i]++;
-216:5 -> ../generics.temper.md:119:28  const t8 = listedGet(b, k2); <- b[i]++;
-217:5 -> ../generics.temper.md:119:28  listBuilderSet(b, k2, (t8 + <- b[i]++;
-220:3 -> ../generics.temper.md:119:7  const items = (t$16 + t$15) <- let items = a[i]++ + b[i]++;
-221:3 -> ../generics.temper.md:120:7  console.log(`${locals} ${x} <- console.log("${locals} ${x}
-224:1 -> ../generics.temper.md:125:5  /** <- let bump(key: String): Int t
-228:1 -> ../generics.temper.md:125:5  function bump(key) { <- let bump(key: String): Int t
-228:10 -> ../generics.temper.md:125:9 (bump)  bump(key) { <- bump(key: String): Int throw
-228:14 -> ../generics.temper.md:125:5  (key) { <- let bump(key: String): Int t
-229:3 -> ../generics.temper.md:126:7  { <- tally[key] -= 1;
-230:5 -> ../generics.temper.md:126:7  tally.set(key, (mappedGet(ta <- tally[key] -= 1;
-232:3 -> ../generics.temper.md:127:7  /** @type {number} */ <- let before = tally[key]++;
-233:3 -> ../generics.temper.md:127:7  let t$17; <- let before = tally[key]++;
-234:3 -> ../generics.temper.md:127:7  { <- let before = tally[key]++;
-235:5 -> ../generics.temper.md:127:20  const t = mappedGet(tally, k <- tally[key]++;
-236:5 -> ../generics.temper.md:127:20  tally.set(key, (t + 1) | 0); <- tally[key]++;
-239:3 -> ../generics.temper.md:127:7  const before = t$17; <- let before = tally[key]++;
-240:3 -> ../generics.temper.md:128:7  /** @type {number} */ <- let after = ++tally[key];
-241:3 -> ../generics.temper.md:128:7  let t$18; <- let after = ++tally[key];
-242:3 -> ../generics.temper.md:128:7  { <- let after = ++tally[key];
-243:5 -> ../generics.temper.md:128:19  const t2 = (mappedGet(tally, <- ++tally[key];
-244:5 -> ../generics.temper.md:128:19  tally.set(key, t2); <- ++tally[key];
-247:3 -> ../generics.temper.md:128:7  const after = t$18; <- let after = ++tally[key];
-248:3 -> ../generics.temper.md:129:7  return (before + after) | 0; <- before + after
-251:1 -> ../generics.temper.md:134:5  /** <- let firstSame(a: List<Int>,
-256:1 -> ../generics.temper.md:134:5  function firstSame(a, b) { <- let firstSame(a: List<Int>,
-256:10 -> ../generics.temper.md:134:9 (firstSame)  firstSame(a, b) { <- firstSame(a: List<Int>, b: L
-256:19 -> ../generics.temper.md:134:5  (a, b) { <- let firstSame(a: List<Int>,
-257:3 -> ../generics.temper.md:134:58  return listedGet(/** @type { <- a[0] == b[0] }
-260:1 -> ../generics.temper.md:12:5  /** @template T */ <- export interface Holder<T> {
-261:14 -> ../generics.temper.md:12:22 (Holder)  Holder extends type() { <- Holder<T> {
-261:20 -> ../generics.temper.md:12:5   extends type() { <- export interface Holder<T> {
-262:3 -> ../generics.temper.md:13:14  /** @type {T} */ <- get held(): T;
-263:3 -> ../generics.temper.md:13:14  held = /** @type {any} */ (u <- get held(): T;
-266:1 -> ../generics.temper.md:16:5  /** @template T */ <- export class Box<T>(public v
-267:14 -> ../generics.temper.md:16:18 (Box)  Box extends type(Holder) { <- Box<T>(public value: T) exte
-267:17 -> ../generics.temper.md:16:5   extends type(Holder) { <- export class Box<T>(public v
-268:3 -> ../generics.temper.md:16:32  /** @type {T} */ <- value: T) extends Holder<T>
-269:3 -> ../generics.temper.md:16:32  #value; <- value: T) extends Holder<T>
-271:3 -> ../generics.temper.md:16:5  /** @param {T} value */ <- export class Box<T>(public v
-272:3 -> ../generics.temper.md:16:5  constructor(value) { <- export class Box<T>(public v
-274:5 -> ../generics.temper.md:16:32  this.#value = value; <- value: T) extends Holder<T>
-277:3 -> ../generics.temper.md:16:32  /** @returns {T} */ <- value: T) extends Holder<T>
-278:3 -> ../generics.temper.md:16:32  get value() { <- value: T) extends Holder<T>
-278:7 -> ../generics.temper.md:16:32 (value)  value() { <- value: T) extends Holder<T>
-282:3 -> ../generics.temper.md:17:14  /** @returns {T} */ <- get held(): T { value }
-283:3 -> ../generics.temper.md:17:14  get held() { <- get held(): T { value }
-283:7 -> ../generics.temper.md:17:18 (held)  held() { <- held(): T { value }
-284:5 -> ../generics.temper.md:17:30  return this.#value; <- value }
-287:3 -> ../generics.temper.md:18:14  /** <- pairWith(other: Int): Pair<T
-291:3 -> ../generics.temper.md:18:14 (pairWith)  pairWith(other) { <- pairWith(other: Int): Pair<T
-292:5 -> ../generics.temper.md:18:51  return pairConstructor(this. <- new Pair(value, other) }
-296:1 -> ../generics.temper.md:21:5  export class Named extends t <- export class Named(public na
-296:14 -> ../generics.temper.md:21:18 (Named)  Named extends type() { <- Named(public name: String) {
-296:19 -> ../generics.temper.md:21:5   extends type() { <- export class Named(public na
-297:3 -> ../generics.temper.md:21:31  /** @type {string} */ <- name: String) {}
-298:3 -> ../generics.temper.md:21:31  #name; <- name: String) {}
-300:3 -> ../generics.temper.md:21:5  /** @param {string} name */ <- export class Named(public na
-301:3 -> ../generics.temper.md:21:5  constructor(name) { <- export class Named(public na
-303:5 -> ../generics.temper.md:21:31  this.#name = name; <- name: String) {}
-306:3 -> ../generics.temper.md:21:31  /** @returns {string} */ <- name: String) {}
-307:3 -> ../generics.temper.md:21:31  get name() { <- name: String) {}
-307:7 -> ../generics.temper.md:21:31 (name)  name() { <- name: String) {}
-312:1 -> ../generics.temper.md:23:5  export class Counter extends <- export class Counter(public
-312:14 -> ../generics.temper.md:23:18 (Counter)  Counter extends type() { <- Counter(public var n: Int) {
-312:21 -> ../generics.temper.md:23:5   extends type() { <- export class Counter(public
-313:3 -> ../generics.temper.md:23:36  /** @type {number} */ <-  n: Int) {}
-314:3 -> ../generics.temper.md:23:36  #n; <-  n: Int) {}
-316:3 -> ../generics.temper.md:23:5  /** @param {number} n */ <- export class Counter(public
-317:3 -> ../generics.temper.md:23:5  constructor(n) { <- export class Counter(public
-319:5 -> ../generics.temper.md:23:36  this.#n = n; <-  n: Int) {}
-322:3 -> ../generics.temper.md:23:36  /** @returns {number} */ <-  n: Int) {}
-323:3 -> ../generics.temper.md:23:36  get n() { <-  n: Int) {}
-323:7 -> ../generics.temper.md:23:37 (n)  n() { <- n: Int) {}
-327:3 -> ../generics.temper.md:23:36  /** @param {number} value */ <-  n: Int) {}
-328:3 -> ../generics.temper.md:23:36  set n(value) { <-  n: Int) {}
-328:7 -> ../generics.temper.md:23:37 (n)  n(value) { <- n: Int) {}
-333:1 -> ../generics.temper.md:25:5  /** @template {Named} T */ <- export class Shelf<T extends
-334:14 -> ../generics.temper.md:25:18 (Shelf)  Shelf extends type() { <- Shelf<T extends Named>(publi
-334:19 -> ../generics.temper.md:25:5   extends type() { <- export class Shelf<T extends
-335:3 -> ../generics.temper.md:25:48  /** @type {readonly T[]} */ <- items: List<T>) {
-336:3 -> ../generics.temper.md:25:48  #items; <- items: List<T>) {
-338:3 -> ../generics.temper.md:25:5  /** @param {readonly T[]} it <- export class Shelf<T extends
-339:3 -> ../generics.temper.md:25:5  constructor(items) { <- export class Shelf<T extends
-341:5 -> ../generics.temper.md:25:48  this.#items = items; <- items: List<T>) {
-344:3 -> ../generics.temper.md:25:48  /** @returns {readonly T[]} <- items: List<T>) {
-345:3 -> ../generics.temper.md:25:48  get items() { <- items: List<T>) {
-345:7 -> ../generics.temper.md:25:48 (items)  items() { <- items: List<T>) {
-349:3 -> ../generics.temper.md:26:14  /** @returns {string | null} <- firstName(): String? {
-350:3 -> ../generics.temper.md:26:14 (firstName)  firstName() { <- firstName(): String? {
-351:5 -> ../generics.temper.md:27:9  if (!this.#items.length) { <- if (items.isEmpty) { null }
-352:7 -> ../generics.temper.md:27:30  return null; <- null } else { items[0].name
-354:7 -> ../generics.temper.md:27:44  return listedGet(/** @type { <- items[0].name }
-358:3 -> ../generics.temper.md:29:14  /** <- tally<TName extends Named>(e
-363:3 -> ../generics.temper.md:29:14 (tally)  tally(extra) { <- tally<TName extends Named>(e
-364:5 -> ../generics.temper.md:29:60  return (this.#items.length + <- items.length + extra }
-368:1 -> ../generics.temper.md:32:5  export class Scene extends t <- export interface Scene {}
-368:14 -> ../generics.temper.md:32:22 (Scene)  Scene extends type() {} <- Scene {}
-368:19 -> ../generics.temper.md:32:5   extends type() {} <- export interface Scene {}
-370:1 -> ../generics.temper.md:33:5  export class Stage extends t <- export class Stage extends S
-370:14 -> ../generics.temper.md:33:18 (Stage)  Stage extends type(Scene) {} <- Stage extends Scene {}
-370:19 -> ../generics.temper.md:33:5   extends type(Scene) {} <- export class Stage extends S
-372:1 -> ../generics.temper.md:57:5  /** @type {readonly number[] <- let ns: List<Int> = [1, 2, 3
-373:1 -> ../generics.temper.md:57:5  const ns = Object.freeze([1, <- let ns: List<Int> = [1, 2, 3
-374:1 -> ../generics.temper.md:58:5  /** @type {readonly number[] <- let none: List<Int> = [];
-375:1 -> ../generics.temper.md:58:5  const none = Object.freeze([ <- let none: List<Int> = [];
-376:1 -> ../generics.temper.md:59:5  console.log(`${total(ns)} ${ <- console.log("${total(ns)} ${
-377:1 -> ../generics.temper.md:60:5  console.log(first(Object.fre <- console.log(first(["a", "b"]
-378:1 -> ../generics.temper.md:61:5  /** @type {Box<string>} */ <- let box = new Box<String>("b
-379:1 -> ../generics.temper.md:61:5  const box = new Box("boxed") <- let box = new Box<String>("b
-380:1 -> ../generics.temper.md:62:5  console.log(held(box)); <- console.log(held(box));
-381:1 -> ../generics.temper.md:63:5  /** @type {import("@temperla <- let pair = box.pairWith(7);
-382:1 -> ../generics.temper.md:63:5  const pair = box.pairWith(7) <- let pair = box.pairWith(7);
-383:1 -> ../generics.temper.md:64:5  console.log(`${pair.key} ${p <- console.log("${pair.key} ${p
-384:1 -> ../generics.temper.md:65:5  /** @type {Shelf<Named>} */ <- let shelf = new Shelf([new N
-385:1 -> ../generics.temper.md:65:5  const shelf = new Shelf(Obje <- let shelf = new Shelf([new N
-386:1 -> ../generics.temper.md:66:5  console.log(shelf.firstName( <- console.log(shelf.firstName(
-387:1 -> ../generics.temper.md:67:5  /** @type {readonly Named[]} <- let noNames: List<Named> = [
-388:1 -> ../generics.temper.md:67:5  const noNames = Object.freez <- let noNames: List<Named> = [
-389:1 -> ../generics.temper.md:68:5  /** @type {Shelf<Named>} */ <- let empty = new Shelf(noName
-390:1 -> ../generics.temper.md:68:5  const empty_ = new Shelf(noN <- let empty = new Shelf(noName
-391:1 -> ../generics.temper.md:69:5  console.log(empty_.firstName <- console.log(empty.firstName(
-392:1 -> ../generics.temper.md:70:5  const n = (shelf.tally(1) + <- let n = shelf.tally(1) + she
-393:1 -> ../generics.temper.md:71:5  console.log(`${tagged(4)} ${ <- console.log("${tagged(4)} ${
-394:1 -> ../generics.temper.md:72:5  /** @type {string[]} */ <- let builder = new ListBuilde
-395:1 -> ../generics.temper.md:72:5  const builder = []; <- let builder = new ListBuilde
-396:1 -> ../generics.temper.md:73:5  builder.push("x"); <- builder.add("x");
-397:1 -> ../generics.temper.md:74:5  builder.push("y"); <- builder.add("y");
-398:1 -> ../generics.temper.md:75:5  listBuilderAdd(builder, "w", <- builder.add("w", 0);
-399:1 -> ../generics.temper.md:76:5  console.log(`${builder.lengt <- console.log("${builder.lengt
-400:1 -> ../generics.temper.md:77:5  /** @type {readonly string[] <- let built = builder.toList()
-401:1 -> ../generics.temper.md:77:5  const built = listBuilderToL <- let built = builder.toList()
-402:1 -> ../generics.temper.md:78:5  console.log(`${built.length} <- console.log("${built.length}
-403:1 -> ../generics.temper.md:79:5  /** @type {Map<string, numbe <- let m = new Map([new Pair("a
-404:1 -> ../generics.temper.md:79:5  const m = mapConstructor(/** <- let m = new Map([new Pair("a
-405:1 -> ../generics.temper.md:80:5  /** @type {number} */ <- console.log("${m["b"] orelse
-406:1 -> ../generics.temper.md:80:5  let t$19; <- console.log("${m["b"] orelse
-407:1 -> ../generics.temper.md:80:5  try { <- console.log("${m["b"] orelse
-412:1 -> ../generics.temper.md:80:5  /** @type {number} */ <- console.log("${m["b"] orelse
-413:1 -> ../generics.temper.md:80:5  let t$20; <- console.log("${m["b"] orelse
-414:1 -> ../generics.temper.md:80:5  try { <- console.log("${m["b"] orelse
-419:1 -> ../generics.temper.md:80:5  console.log(`${t$19} ${t$20} <- console.log("${m["b"] orelse
-420:1 -> ../generics.temper.md:81:5  /** @type {Map<string, numbe <- let mb = new MapBuilder<Stri
-421:1 -> ../generics.temper.md:81:5  const mb = new Map(); <- let mb = new MapBuilder<Stri
-422:1 -> ../generics.temper.md:82:5  mb.set("q", 5); <- mb.set("q", 5);
-423:1 -> ../generics.temper.md:83:5  mb.set("n", null); <- mb.set("n", null);
-424:1 -> ../generics.temper.md:84:5  console.log(`${(mb.has("q") <- console.log("${mb.getOr("q",
-425:1 -> ../generics.temper.md:85:5  /** @type {string | null} */ <- console.log((mb.remove("q")
-426:1 -> ../generics.temper.md:85:5  let t$21; <- console.log((mb.remove("q")
-427:1 -> ../generics.temper.md:85:5  { <- console.log((mb.remove("q")
-428:3 -> ../generics.temper.md:85:18  /** @type {number | null} */ <- mb.remove("q") orelse 0)?.to
-429:3 -> ../generics.temper.md:85:18  let subject6; <- mb.remove("q") orelse 0)?.to
-430:3 -> ../generics.temper.md:85:18  try { <- mb.remove("q") orelse 0)?.to
-437:1 -> ../generics.temper.md:85:5  console.log(t$21 ?? "null"); <- console.log((mb.remove("q")
-438:1 -> ../generics.temper.md:86:5  console.log(Object.freeze(Ar <- console.log(mb.keys().length
-439:1 -> ../generics.temper.md:103:5  indexed(); <- indexed();
-440:1 -> ../generics.temper.md:122:5  both(); <- both();
-441:1 -> ../generics.temper.md:123:5  /** @type {Map<string, numbe <- let tally = new MapBuilder<S
-442:1 -> ../generics.temper.md:123:5  const tally = new Map(); <- let tally = new MapBuilder<S
-443:1 -> ../generics.temper.md:124:5  tally.set("k", 2); <- tally.set("k", 2);
-444:1 -> ../generics.temper.md:131:5  /** @type {number} */ <- console.log("${bump("k") ore
-445:1 -> ../generics.temper.md:131:5  let t$22; <- console.log("${bump("k") ore
-446:1 -> ../generics.temper.md:131:5  try { <- console.log("${bump("k") ore
-451:1 -> ../generics.temper.md:131:5  /** @type {number} */ <- console.log("${bump("k") ore
-452:1 -> ../generics.temper.md:131:5  let t$23; <- console.log("${bump("k") ore
-453:1 -> ../generics.temper.md:131:5  try { <- console.log("${bump("k") ore
-458:1 -> ../generics.temper.md:131:5  /** @type {number} */ <- console.log("${bump("k") ore
-459:1 -> ../generics.temper.md:131:5  let t$24; <- console.log("${bump("k") ore
-460:1 -> ../generics.temper.md:131:5  try { <- console.log("${bump("k") ore
-465:1 -> ../generics.temper.md:131:5  console.log(`${t$22} ${t$23} <- console.log("${bump("k") ore
-466:1 -> ../generics.temper.md:135:5  console.log(`${firstSame(Obj <- console.log("${firstSame([10
+47:1 -> ../generics.temper.md:45:5  /** <- let noneIn(length: Int): Boo
+51:1 -> ../generics.temper.md:45:5  function noneIn(length) { <- let noneIn(length: Int): Boo
+51:10 -> ../generics.temper.md:45:9 (noneIn)  noneIn(length) { <- noneIn(length: Int): Boolean
+51:16 -> ../generics.temper.md:45:5  (length) { <- let noneIn(length: Int): Boo
+52:3 -> ../generics.temper.md:45:40  return length === 0; <- length == 0 }
+55:1 -> ../generics.temper.md:47:5  /** <- export let first<T>(items: L
+61:1 -> ../generics.temper.md:47:5  export function first(items, <- export let first<T>(items: L
+61:17 -> ../generics.temper.md:47:16 (first)  first(items, fallback) { <- first<T>(items: Listed<T>, f
+61:22 -> ../generics.temper.md:47:5  (items, fallback) { <- export let first<T>(items: L
+62:3 -> ../generics.temper.md:48:7  if (noneIn(items.length)) { <- if (noneIn(items.length)) {
+63:5 -> ../generics.temper.md:48:35  return fallback; <- fallback } else { items[0] }
+65:5 -> ../generics.temper.md:48:53  return listedGet(/** @type { <- items[0] }
+69:1 -> ../generics.temper.md:51:5  /** <- let held<T>(h: Holder<T>): T
+74:1 -> ../generics.temper.md:51:5  function held(h) { <- let held<T>(h: Holder<T>): T
+74:10 -> ../generics.temper.md:51:9 (held)  held(h) { <- held<T>(h: Holder<T>): T { h
+74:14 -> ../generics.temper.md:51:5  (h) { <- let held<T>(h: Holder<T>): T
+75:3 -> ../generics.temper.md:51:36  return h.held; <- h.held }
+78:1 -> ../generics.temper.md:53:5  /** <- let total(ns: List<Int>): In
+82:1 -> ../generics.temper.md:53:5  function total(ns) { <- let total(ns: List<Int>): In
+82:10 -> ../generics.temper.md:53:9 (total)  total(ns) { <- total(ns: List<Int>): Int {
+82:15 -> ../generics.temper.md:53:5  (ns) { <- let total(ns: List<Int>): In
+83:3 -> ../generics.temper.md:54:7  let sum = 0; <- var sum = 0;
+84:3 -> ../generics.temper.md:55:7  { <- for (var i = 0; i < ns.lengt
+85:5 -> ../generics.temper.md:55:12  let i = 0; <- var i = 0; i < ns.length; i
+86:5 -> ../generics.temper.md:55:7  while (i < ns.length) { <- for (var i = 0; i < ns.lengt
+87:7 -> ../generics.temper.md:56:9  sum = (sum + listedGet(/** @ <- sum += ns[i];
+88:7 -> ../generics.temper.md:55:38  i = (i + 1) | 0; <- i += 1) {
+91:3 -> ../generics.temper.md:58:7  return sum; <- sum
+94:1 -> ../generics.temper.md:94:5  function indexed() { <- let indexed(): Void {
+94:10 -> ../generics.temper.md:94:9 (indexed)  indexed() { <- indexed(): Void {
+94:17 -> ../generics.temper.md:94:5  () { <- let indexed(): Void {
+95:3 -> ../generics.temper.md:95:7  /** @type {number[]} */ <- let counts = new ListBuilder
+96:3 -> ../generics.temper.md:95:7  const counts = []; <- let counts = new ListBuilder
+97:3 -> ../generics.temper.md:96:7  counts.push(1); <- counts.add(1);
+98:3 -> ../generics.temper.md:97:7  counts.push(10); <- counts.add(10);
+99:3 -> ../generics.temper.md:98:7  let at = 0; <- var at = 0;
+100:3 -> ../generics.temper.md:99:7  { <- counts[at] += 4;
+101:5 -> ../generics.temper.md:99:14  const k = at; <- at] += 4;
+102:5 -> ../generics.temper.md:99:7  listBuilderSet(counts, k, (l <- counts[at] += 4;
+104:3 -> ../generics.temper.md:100:7  { <- counts[1] *= 3;
+105:5 -> ../generics.temper.md:100:7  listBuilderSet(counts, 1, Ma <- counts[1] *= 3;
+107:3 -> ../generics.temper.md:101:7  /** @type {number} */ <- let was = counts[at++]++;
+108:3 -> ../generics.temper.md:101:7  let t$0; <- let was = counts[at++]++;
+109:3 -> ../generics.temper.md:101:7  { <- let was = counts[at++]++;
+110:5 -> ../generics.temper.md:101:24  /** @type {number} */ <- at++]++;
+111:5 -> ../generics.temper.md:101:24  let t$1; <- at++]++;
+112:5 -> ../generics.temper.md:101:24  { <- at++]++;
+113:7 -> ../generics.temper.md:101:24  const t = at; <- at++]++;
+114:7 -> ../generics.temper.md:101:24  at = (t + 1) | 0; <- at++]++;
+117:5 -> ../generics.temper.md:101:24  const k2 = t$1; <- at++]++;
+118:5 -> ../generics.temper.md:101:17  const t2 = listedGet(counts, <- counts[at++]++;
+119:5 -> ../generics.temper.md:101:17  listBuilderSet(counts, k2, ( <- counts[at++]++;
+122:3 -> ../generics.temper.md:101:7  const was = t$0; <- let was = counts[at++]++;
+123:3 -> ../generics.temper.md:102:7  /** @type {number} */ <- let pre = ++counts[at];
+124:3 -> ../generics.temper.md:102:7  let t$2; <- let pre = ++counts[at];
+125:3 -> ../generics.temper.md:102:7  { <- let pre = ++counts[at];
+126:5 -> ../generics.temper.md:102:26  const k3 = at; <- at];
+127:5 -> ../generics.temper.md:102:17  const t3 = (listedGet(counts <- ++counts[at];
+128:5 -> ../generics.temper.md:102:17  listBuilderSet(counts, k3, t <- ++counts[at];
+131:3 -> ../generics.temper.md:102:7  const pre = t$2; <- let pre = ++counts[at];
+132:3 -> ../generics.temper.md:103:7  /** @type {number} */ <- let post = counts[0]--;
+133:3 -> ../generics.temper.md:103:7  let t$3; <- let post = counts[0]--;
+134:3 -> ../generics.temper.md:103:7  { <- let post = counts[0]--;
+135:5 -> ../generics.temper.md:103:18  const t4 = listedGet(counts, <- counts[0]--;
+136:5 -> ../generics.temper.md:103:18  listBuilderSet(counts, 0, (t <- counts[0]--;
+139:3 -> ../generics.temper.md:103:7  const post = t$3; <- let post = counts[0]--;
+140:3 -> ../generics.temper.md:104:7  /** @type {number} */ <- let down = --counts[0];
+141:3 -> ../generics.temper.md:104:7  let t$4; <- let down = --counts[0];
+142:3 -> ../generics.temper.md:104:7  { <- let down = --counts[0];
+143:5 -> ../generics.temper.md:104:18  const t5 = (listedGet(counts <- --counts[0];
+144:5 -> ../generics.temper.md:104:18  listBuilderSet(counts, 0, t5 <- --counts[0];
+147:3 -> ../generics.temper.md:104:7  const down = t$4; <- let down = --counts[0];
+148:3 -> ../generics.temper.md:105:7  console.log(`${was} ${pre} $ <- console.log("${was} ${pre} $
+151:1 -> ../generics.temper.md:110:5  function both() { <- let both(): Void {
+151:10 -> ../generics.temper.md:110:9 (both)  both() { <- both(): Void {
+151:14 -> ../generics.temper.md:110:5  () { <- let both(): Void {
+152:3 -> ../generics.temper.md:111:7  let x = 1; <- var x = 1;
+153:3 -> ../generics.temper.md:112:7  let y = 10; <- var y = 10;
+154:3 -> ../generics.temper.md:113:7  /** @type {number} */ <- let locals = x++ + y++;
+155:3 -> ../generics.temper.md:113:7  let t$5; <- let locals = x++ + y++;
+156:3 -> ../generics.temper.md:113:7  { <- let locals = x++ + y++;
+157:5 -> ../generics.temper.md:113:20  const t = x; <- x++ + y++;
+158:5 -> ../generics.temper.md:113:20  x = (t + 1) | 0; <- x++ + y++;
+161:3 -> ../generics.temper.md:113:7  const t$7 = t$5; <- let locals = x++ + y++;
+162:3 -> ../generics.temper.md:113:7  /** @type {number} */ <- let locals = x++ + y++;
+163:3 -> ../generics.temper.md:113:7  let t$6; <- let locals = x++ + y++;
+164:3 -> ../generics.temper.md:113:7  { <- let locals = x++ + y++;
+165:5 -> ../generics.temper.md:113:26  const t2 = y; <- y++;
+166:5 -> ../generics.temper.md:113:26  y = (t2 + 1) | 0; <- y++;
+169:3 -> ../generics.temper.md:113:7  const locals = (t$7 + t$6) | <- let locals = x++ + y++;
+170:3 -> ../generics.temper.md:114:7  const p = new Counter(100); <- let p = new Counter(100);
+171:3 -> ../generics.temper.md:115:7  const q = new Counter(1000); <- let q = new Counter(1000);
+172:3 -> ../generics.temper.md:116:7  /** @type {number} */ <- let fields = p.n++ + q.n++;
+173:3 -> ../generics.temper.md:116:7  let t$8; <- let fields = p.n++ + q.n++;
+174:3 -> ../generics.temper.md:116:7  { <- let fields = p.n++ + q.n++;
+175:5 -> ../generics.temper.md:116:20  const t3 = p.n; <- p.n++ + q.n++;
+176:5 -> ../generics.temper.md:116:20  p.n = (t3 + 1) | 0; <- p.n++ + q.n++;
+179:3 -> ../generics.temper.md:116:7  const t$10 = t$8; <- let fields = p.n++ + q.n++;
+180:3 -> ../generics.temper.md:116:7  /** @type {number} */ <- let fields = p.n++ + q.n++;
+181:3 -> ../generics.temper.md:116:7  let t$9; <- let fields = p.n++ + q.n++;
+182:3 -> ../generics.temper.md:116:7  { <- let fields = p.n++ + q.n++;
+183:5 -> ../generics.temper.md:116:28  const t4 = q.n; <- q.n++;
+184:5 -> ../generics.temper.md:116:28  q.n = (t4 + 1) | 0; <- q.n++;
+187:3 -> ../generics.temper.md:116:7  const fields = (t$10 + t$9) <- let fields = p.n++ + q.n++;
+188:3 -> ../generics.temper.md:117:7  /** @type {number} */ <- let same = p.n++ + p.n++;
+189:3 -> ../generics.temper.md:117:7  let t$11; <- let same = p.n++ + p.n++;
+190:3 -> ../generics.temper.md:117:7  { <- let same = p.n++ + p.n++;
+191:5 -> ../generics.temper.md:117:18  const t5 = p.n; <- p.n++ + p.n++;
+192:5 -> ../generics.temper.md:117:18  p.n = (t5 + 1) | 0; <- p.n++ + p.n++;
+195:3 -> ../generics.temper.md:117:7  const t$13 = t$11; <- let same = p.n++ + p.n++;
+196:3 -> ../generics.temper.md:117:7  /** @type {number} */ <- let same = p.n++ + p.n++;
+197:3 -> ../generics.temper.md:117:7  let t$12; <- let same = p.n++ + p.n++;
+198:3 -> ../generics.temper.md:117:7  { <- let same = p.n++ + p.n++;
+199:5 -> ../generics.temper.md:117:26  const t6 = p.n; <- p.n++;
+200:5 -> ../generics.temper.md:117:26  p.n = (t6 + 1) | 0; <- p.n++;
+203:3 -> ../generics.temper.md:117:7  const same = (t$13 + t$12) | <- let same = p.n++ + p.n++;
+204:3 -> ../generics.temper.md:118:7  /** @type {number[]} */ <- let a = new ListBuilder<Int>
+205:3 -> ../generics.temper.md:118:7  const a = []; <- let a = new ListBuilder<Int>
+206:3 -> ../generics.temper.md:119:7  a.push(3); <- a.add(3);
+207:3 -> ../generics.temper.md:120:7  /** @type {number[]} */ <- let b = new ListBuilder<Int>
+208:3 -> ../generics.temper.md:120:7  const b = []; <- let b = new ListBuilder<Int>
+209:3 -> ../generics.temper.md:121:7  b.push(30); <- b.add(30);
+210:3 -> ../generics.temper.md:122:7  const i = 0; <- var i = 0;
+211:3 -> ../generics.temper.md:123:7  /** @type {number} */ <- let items = a[i]++ + b[i]++;
+212:3 -> ../generics.temper.md:123:7  let t$14; <- let items = a[i]++ + b[i]++;
+213:3 -> ../generics.temper.md:123:7  { <- let items = a[i]++ + b[i]++;
+214:5 -> ../generics.temper.md:123:21  const k = i; <- i]++ + b[i]++;
+215:5 -> ../generics.temper.md:123:19  const t7 = listedGet(a, k); <- a[i]++ + b[i]++;
+216:5 -> ../generics.temper.md:123:19  listBuilderSet(a, k, (t7 + 1 <- a[i]++ + b[i]++;
+219:3 -> ../generics.temper.md:123:7  const t$16 = t$14; <- let items = a[i]++ + b[i]++;
+220:3 -> ../generics.temper.md:123:7  /** @type {number} */ <- let items = a[i]++ + b[i]++;
+221:3 -> ../generics.temper.md:123:7  let t$15; <- let items = a[i]++ + b[i]++;
+222:3 -> ../generics.temper.md:123:7  { <- let items = a[i]++ + b[i]++;
+223:5 -> ../generics.temper.md:123:30  const k2 = i; <- i]++;
+224:5 -> ../generics.temper.md:123:28  const t8 = listedGet(b, k2); <- b[i]++;
+225:5 -> ../generics.temper.md:123:28  listBuilderSet(b, k2, (t8 + <- b[i]++;
+228:3 -> ../generics.temper.md:123:7  const items = (t$16 + t$15) <- let items = a[i]++ + b[i]++;
+229:3 -> ../generics.temper.md:124:7  console.log(`${locals} ${x} <- console.log("${locals} ${x}
+232:1 -> ../generics.temper.md:129:5  /** <- let bump(key: String): Int t
+236:1 -> ../generics.temper.md:129:5  function bump(key) { <- let bump(key: String): Int t
+236:10 -> ../generics.temper.md:129:9 (bump)  bump(key) { <- bump(key: String): Int throw
+236:14 -> ../generics.temper.md:129:5  (key) { <- let bump(key: String): Int t
+237:3 -> ../generics.temper.md:130:7  { <- tally[key] -= 1;
+238:5 -> ../generics.temper.md:130:7  tally.set(key, (mappedGet(ta <- tally[key] -= 1;
+240:3 -> ../generics.temper.md:131:7  /** @type {number} */ <- let before = tally[key]++;
+241:3 -> ../generics.temper.md:131:7  let t$17; <- let before = tally[key]++;
+242:3 -> ../generics.temper.md:131:7  { <- let before = tally[key]++;
+243:5 -> ../generics.temper.md:131:20  const t = mappedGet(tally, k <- tally[key]++;
+244:5 -> ../generics.temper.md:131:20  tally.set(key, (t + 1) | 0); <- tally[key]++;
+247:3 -> ../generics.temper.md:131:7  const before = t$17; <- let before = tally[key]++;
+248:3 -> ../generics.temper.md:132:7  /** @type {number} */ <- let after = ++tally[key];
+249:3 -> ../generics.temper.md:132:7  let t$18; <- let after = ++tally[key];
+250:3 -> ../generics.temper.md:132:7  { <- let after = ++tally[key];
+251:5 -> ../generics.temper.md:132:19  const t2 = (mappedGet(tally, <- ++tally[key];
+252:5 -> ../generics.temper.md:132:19  tally.set(key, t2); <- ++tally[key];
+255:3 -> ../generics.temper.md:132:7  const after = t$18; <- let after = ++tally[key];
+256:3 -> ../generics.temper.md:133:7  return (before + after) | 0; <- before + after
+259:1 -> ../generics.temper.md:138:5  /** <- let firstSame(a: List<Int>,
+264:1 -> ../generics.temper.md:138:5  function firstSame(a, b) { <- let firstSame(a: List<Int>,
+264:10 -> ../generics.temper.md:138:9 (firstSame)  firstSame(a, b) { <- firstSame(a: List<Int>, b: L
+264:19 -> ../generics.temper.md:138:5  (a, b) { <- let firstSame(a: List<Int>,
+265:3 -> ../generics.temper.md:138:58  return listedGet(/** @type { <- a[0] == b[0] }
+268:1 -> ../generics.temper.md:12:5  /** @template T */ <- export interface Holder<T> {
+269:14 -> ../generics.temper.md:12:22 (Holder)  Holder extends type() { <- Holder<T> {
+269:20 -> ../generics.temper.md:12:5   extends type() { <- export interface Holder<T> {
+270:3 -> ../generics.temper.md:13:14  /** @type {T} */ <- get held(): T;
+271:3 -> ../generics.temper.md:13:14  held = /** @type {any} */ (u <- get held(): T;
+274:1 -> ../generics.temper.md:16:5  /** @template T */ <- export class Box<T>(public v
+275:14 -> ../generics.temper.md:16:18 (Box)  Box extends type(Holder) { <- Box<T>(public value: T) exte
+275:17 -> ../generics.temper.md:16:5   extends type(Holder) { <- export class Box<T>(public v
+276:3 -> ../generics.temper.md:16:32  /** @type {T} */ <- value: T) extends Holder<T>
+277:3 -> ../generics.temper.md:16:32  #value; <- value: T) extends Holder<T>
+279:3 -> ../generics.temper.md:16:5  /** @param {T} value */ <- export class Box<T>(public v
+280:3 -> ../generics.temper.md:16:5  constructor(value) { <- export class Box<T>(public v
+282:5 -> ../generics.temper.md:16:32  this.#value = value; <- value: T) extends Holder<T>
+285:3 -> ../generics.temper.md:16:32  /** @returns {T} */ <- value: T) extends Holder<T>
+286:3 -> ../generics.temper.md:16:32  get value() { <- value: T) extends Holder<T>
+286:7 -> ../generics.temper.md:16:32 (value)  value() { <- value: T) extends Holder<T>
+290:3 -> ../generics.temper.md:17:14  /** @returns {T} */ <- get held(): T { value }
+291:3 -> ../generics.temper.md:17:14  get held() { <- get held(): T { value }
+291:7 -> ../generics.temper.md:17:18 (held)  held() { <- held(): T { value }
+292:5 -> ../generics.temper.md:17:30  return this.#value; <- value }
+295:3 -> ../generics.temper.md:18:14  /** <- pairWith(other: Int): Pair<T
+299:3 -> ../generics.temper.md:18:14 (pairWith)  pairWith(other) { <- pairWith(other: Int): Pair<T
+300:5 -> ../generics.temper.md:18:51  return pairConstructor(this. <- new Pair(value, other) }
+304:1 -> ../generics.temper.md:21:5  export class Named extends t <- export class Named(public na
+304:14 -> ../generics.temper.md:21:18 (Named)  Named extends type() { <- Named(public name: String) {
+304:19 -> ../generics.temper.md:21:5   extends type() { <- export class Named(public na
+305:3 -> ../generics.temper.md:21:31  /** @type {string} */ <- name: String) {}
+306:3 -> ../generics.temper.md:21:31  #name; <- name: String) {}
+308:3 -> ../generics.temper.md:21:5  /** @param {string} name */ <- export class Named(public na
+309:3 -> ../generics.temper.md:21:5  constructor(name) { <- export class Named(public na
+311:5 -> ../generics.temper.md:21:31  this.#name = name; <- name: String) {}
+314:3 -> ../generics.temper.md:21:31  /** @returns {string} */ <- name: String) {}
+315:3 -> ../generics.temper.md:21:31  get name() { <- name: String) {}
+315:7 -> ../generics.temper.md:21:31 (name)  name() { <- name: String) {}
+320:1 -> ../generics.temper.md:23:5  export class Counter extends <- export class Counter(public
+320:14 -> ../generics.temper.md:23:18 (Counter)  Counter extends type() { <- Counter(public var n: Int) {
+320:21 -> ../generics.temper.md:23:5   extends type() { <- export class Counter(public
+321:3 -> ../generics.temper.md:23:36  /** @type {number} */ <-  n: Int) {}
+322:3 -> ../generics.temper.md:23:36  #n; <-  n: Int) {}
+324:3 -> ../generics.temper.md:23:5  /** @param {number} n */ <- export class Counter(public
+325:3 -> ../generics.temper.md:23:5  constructor(n) { <- export class Counter(public
+327:5 -> ../generics.temper.md:23:36  this.#n = n; <-  n: Int) {}
+330:3 -> ../generics.temper.md:23:36  /** @returns {number} */ <-  n: Int) {}
+331:3 -> ../generics.temper.md:23:36  get n() { <-  n: Int) {}
+331:7 -> ../generics.temper.md:23:37 (n)  n() { <- n: Int) {}
+335:3 -> ../generics.temper.md:23:36  /** @param {number} value */ <-  n: Int) {}
+336:3 -> ../generics.temper.md:23:36  set n(value) { <-  n: Int) {}
+336:7 -> ../generics.temper.md:23:37 (n)  n(value) { <- n: Int) {}
+341:1 -> ../generics.temper.md:25:5  /** @template {Named} T */ <- export class Shelf<T extends
+342:14 -> ../generics.temper.md:25:18 (Shelf)  Shelf extends type() { <- Shelf<T extends Named>(publi
+342:19 -> ../generics.temper.md:25:5   extends type() { <- export class Shelf<T extends
+343:3 -> ../generics.temper.md:25:48  /** @type {readonly T[]} */ <- items: List<T>) {
+344:3 -> ../generics.temper.md:25:48  #items; <- items: List<T>) {
+346:3 -> ../generics.temper.md:25:5  /** @param {readonly T[]} it <- export class Shelf<T extends
+347:3 -> ../generics.temper.md:25:5  constructor(items) { <- export class Shelf<T extends
+349:5 -> ../generics.temper.md:25:48  this.#items = items; <- items: List<T>) {
+352:3 -> ../generics.temper.md:25:48  /** @returns {readonly T[]} <- items: List<T>) {
+353:3 -> ../generics.temper.md:25:48  get items() { <- items: List<T>) {
+353:7 -> ../generics.temper.md:25:48 (items)  items() { <- items: List<T>) {
+357:3 -> ../generics.temper.md:26:14  /** @returns {string | null} <- firstName(): String? {
+358:3 -> ../generics.temper.md:26:14 (firstName)  firstName() { <- firstName(): String? {
+359:5 -> ../generics.temper.md:27:9  if (!this.#items.length) { <- if (items.isEmpty) { null }
+360:7 -> ../generics.temper.md:27:30  return null; <- null } else { items[0].name
+362:7 -> ../generics.temper.md:27:44  return listedGet(/** @type { <- items[0].name }
+366:3 -> ../generics.temper.md:29:14  /** <- tally<TName extends Named>(e
+371:3 -> ../generics.temper.md:29:14 (tally)  tally(extra) { <- tally<TName extends Named>(e
+372:5 -> ../generics.temper.md:29:60  return (this.#items.length + <- items.length + extra }
+376:1 -> ../generics.temper.md:32:5  export class Scene extends t <- export interface Scene {}
+376:14 -> ../generics.temper.md:32:22 (Scene)  Scene extends type() {} <- Scene {}
+376:19 -> ../generics.temper.md:32:5   extends type() {} <- export interface Scene {}
+378:1 -> ../generics.temper.md:33:5  export class Stage extends t <- export class Stage extends S
+378:14 -> ../generics.temper.md:33:18 (Stage)  Stage extends type(Scene) {} <- Stage extends Scene {}
+378:19 -> ../generics.temper.md:33:5   extends type(Scene) {} <- export class Stage extends S
+380:1 -> ../generics.temper.md:61:5  /** @type {readonly number[] <- let ns: List<Int> = [1, 2, 3
+381:1 -> ../generics.temper.md:61:5  const ns = Object.freeze([1, <- let ns: List<Int> = [1, 2, 3
+382:1 -> ../generics.temper.md:62:5  /** @type {readonly number[] <- let none: List<Int> = [];
+383:1 -> ../generics.temper.md:62:5  const none = Object.freeze([ <- let none: List<Int> = [];
+384:1 -> ../generics.temper.md:63:5  console.log(`${total(ns)} ${ <- console.log("${total(ns)} ${
+385:1 -> ../generics.temper.md:64:5  console.log(first(Object.fre <- console.log(first(["a", "b"]
+386:1 -> ../generics.temper.md:65:5  /** @type {Box<string>} */ <- let box = new Box<String>("b
+387:1 -> ../generics.temper.md:65:5  const box = new Box("boxed") <- let box = new Box<String>("b
+388:1 -> ../generics.temper.md:66:5  console.log(held(box)); <- console.log(held(box));
+389:1 -> ../generics.temper.md:67:5  /** @type {import("@temperla <- let pair = box.pairWith(7);
+390:1 -> ../generics.temper.md:67:5  const pair = box.pairWith(7) <- let pair = box.pairWith(7);
+391:1 -> ../generics.temper.md:68:5  console.log(`${pair.key} ${p <- console.log("${pair.key} ${p
+392:1 -> ../generics.temper.md:69:5  /** @type {Shelf<Named>} */ <- let shelf = new Shelf([new N
+393:1 -> ../generics.temper.md:69:5  const shelf = new Shelf(Obje <- let shelf = new Shelf([new N
+394:1 -> ../generics.temper.md:70:5  console.log(shelf.firstName( <- console.log(shelf.firstName(
+395:1 -> ../generics.temper.md:71:5  /** @type {readonly Named[]} <- let noNames: List<Named> = [
+396:1 -> ../generics.temper.md:71:5  const noNames = Object.freez <- let noNames: List<Named> = [
+397:1 -> ../generics.temper.md:72:5  /** @type {Shelf<Named>} */ <- let empty = new Shelf(noName
+398:1 -> ../generics.temper.md:72:5  const empty_ = new Shelf(noN <- let empty = new Shelf(noName
+399:1 -> ../generics.temper.md:73:5  console.log(empty_.firstName <- console.log(empty.firstName(
+400:1 -> ../generics.temper.md:74:5  const n = (shelf.tally(1) + <- let n = shelf.tally(1) + she
+401:1 -> ../generics.temper.md:75:5  console.log(`${tagged(4)} ${ <- console.log("${tagged(4)} ${
+402:1 -> ../generics.temper.md:76:5  /** @type {string[]} */ <- let builder = new ListBuilde
+403:1 -> ../generics.temper.md:76:5  const builder = []; <- let builder = new ListBuilde
+404:1 -> ../generics.temper.md:77:5  builder.push("x"); <- builder.add("x");
+405:1 -> ../generics.temper.md:78:5  builder.push("y"); <- builder.add("y");
+406:1 -> ../generics.temper.md:79:5  listBuilderAdd(builder, "w", <- builder.add("w", 0);
+407:1 -> ../generics.temper.md:80:5  console.log(`${builder.lengt <- console.log("${builder.lengt
+408:1 -> ../generics.temper.md:81:5  /** @type {readonly string[] <- let built = builder.toList()
+409:1 -> ../generics.temper.md:81:5  const built = listBuilderToL <- let built = builder.toList()
+410:1 -> ../generics.temper.md:82:5  console.log(`${built.length} <- console.log("${built.length}
+411:1 -> ../generics.temper.md:83:5  /** @type {Map<string, numbe <- let m = new Map([new Pair("a
+412:1 -> ../generics.temper.md:83:5  const m = mapConstructor(/** <- let m = new Map([new Pair("a
+413:1 -> ../generics.temper.md:84:5  /** @type {number} */ <- console.log("${m["b"] orelse
+414:1 -> ../generics.temper.md:84:5  let t$19; <- console.log("${m["b"] orelse
+415:1 -> ../generics.temper.md:84:5  try { <- console.log("${m["b"] orelse
+420:1 -> ../generics.temper.md:84:5  /** @type {number} */ <- console.log("${m["b"] orelse
+421:1 -> ../generics.temper.md:84:5  let t$20; <- console.log("${m["b"] orelse
+422:1 -> ../generics.temper.md:84:5  try { <- console.log("${m["b"] orelse
+427:1 -> ../generics.temper.md:84:5  console.log(`${t$19} ${t$20} <- console.log("${m["b"] orelse
+428:1 -> ../generics.temper.md:85:5  /** @type {Map<string, numbe <- let mb = new MapBuilder<Stri
+429:1 -> ../generics.temper.md:85:5  const mb = new Map(); <- let mb = new MapBuilder<Stri
+430:1 -> ../generics.temper.md:86:5  mb.set("q", 5); <- mb.set("q", 5);
+431:1 -> ../generics.temper.md:87:5  mb.set("n", null); <- mb.set("n", null);
+432:1 -> ../generics.temper.md:88:5  console.log(`${(mb.has("q") <- console.log("${mb.getOr("q",
+433:1 -> ../generics.temper.md:89:5  /** @type {string | null} */ <- console.log((mb.remove("q")
+434:1 -> ../generics.temper.md:89:5  let t$21; <- console.log((mb.remove("q")
+435:1 -> ../generics.temper.md:89:5  { <- console.log((mb.remove("q")
+436:3 -> ../generics.temper.md:89:18  /** @type {number | null} */ <- mb.remove("q") orelse 0)?.to
+437:3 -> ../generics.temper.md:89:18  let subject6; <- mb.remove("q") orelse 0)?.to
+438:3 -> ../generics.temper.md:89:18  try { <- mb.remove("q") orelse 0)?.to
+445:1 -> ../generics.temper.md:89:5  console.log(t$21 ?? "null"); <- console.log((mb.remove("q")
+446:1 -> ../generics.temper.md:90:5  console.log(Object.freeze(Ar <- console.log(mb.keys().length
+447:1 -> ../generics.temper.md:107:5  indexed(); <- indexed();
+448:1 -> ../generics.temper.md:126:5  both(); <- both();
+449:1 -> ../generics.temper.md:127:5  /** @type {Map<string, numbe <- let tally = new MapBuilder<S
+450:1 -> ../generics.temper.md:127:5  const tally = new Map(); <- let tally = new MapBuilder<S
+451:1 -> ../generics.temper.md:128:5  tally.set("k", 2); <- tally.set("k", 2);
+452:1 -> ../generics.temper.md:135:5  /** @type {number} */ <- console.log("${bump("k") ore
+453:1 -> ../generics.temper.md:135:5  let t$22; <- console.log("${bump("k") ore
+454:1 -> ../generics.temper.md:135:5  try { <- console.log("${bump("k") ore
+459:1 -> ../generics.temper.md:135:5  /** @type {number} */ <- console.log("${bump("k") ore
+460:1 -> ../generics.temper.md:135:5  let t$23; <- console.log("${bump("k") ore
+461:1 -> ../generics.temper.md:135:5  try { <- console.log("${bump("k") ore
+466:1 -> ../generics.temper.md:135:5  /** @type {number} */ <- console.log("${bump("k") ore
+467:1 -> ../generics.temper.md:135:5  let t$24; <- console.log("${bump("k") ore
+468:1 -> ../generics.temper.md:135:5  try { <- console.log("${bump("k") ore
+473:1 -> ../generics.temper.md:135:5  console.log(`${t$22} ${t$23} <- console.log("${bump("k") ore
+474:1 -> ../generics.temper.md:139:5  console.log(`${firstSame(Obj <- console.log("${firstSame([10

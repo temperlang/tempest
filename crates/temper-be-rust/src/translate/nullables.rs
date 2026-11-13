@@ -385,9 +385,14 @@ impl Translator<'_> {
         // `Ok(e?)` is `e`, after statements too (clippy's
         // `needless_question_mark`); `e`'s type gives the closure's. With
         // no other `?`, a block will do (clippy's `redundant_closure_call`).
+        // A `?` inside `e` itself, as `div(to_int(x)? as f64, 100.0)`,
+        // needs the closure too, or it would be the function's.
+        let inner_bubble = self.bubbles_below(value);
         let tail = match v {
-            Expr::Try(e) if stmts.is_empty() => return Ok(*e),
-            Expr::Try(e) if !stmts_bubble => return Ok(Expr::Block(Block::new(stmts, Some(*e)))),
+            Expr::Try(e) if stmts.is_empty() && !inner_bubble => return Ok(*e),
+            Expr::Try(e) if !stmts_bubble && !inner_bubble => {
+                return Ok(Expr::Block(Block::new(stmts, Some(*e))));
+            }
             Expr::Try(e) => *e,
             v => Expr::path("Ok::<_, temper_core::Error>").call(vec![v]),
         };

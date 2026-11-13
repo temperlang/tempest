@@ -126,6 +126,7 @@ pub const RULES: NamingRules = NamingRules {
     members_prefixed: false,
     fields_apart: false,
     types_apart: true,
+    modules_share_names: false,
 };
 
 /// A library's package, as Kotlin's `safeIdentifier` makes it from the

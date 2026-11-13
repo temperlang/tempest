@@ -645,6 +645,14 @@ fn runs() {
             } else {
                 let own = out.join(format!("lua-{}", case.key));
                 kit::copy_dir(&runtime(), &own.join("temper-core"), &[]);
+                // The shared libraries it imports, beside it there too
+                // (checked where they're generated on their own).
+                for library in kit::libraries(case, "lua") {
+                    kit::write_files(
+                        &own,
+                        (generate(&library).iter()).map(|f| (f.path.as_str(), f.text.as_str())),
+                    );
+                }
                 apart.push((case, own.clone()));
                 own
             };

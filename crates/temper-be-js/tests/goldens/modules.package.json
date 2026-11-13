@@ -5,11 +5,15 @@
         "./helpers/deep": "./helpers/deep.js",
         "./helpers": "./helpers.js",
         "./core": "./core.js",
+        "./state": "./state.js",
+        "./parts/regex": "./parts/regex.js",
+        "./machine": "./machine.js",
         "./modules": "./modules.js",
         "./client": "./client.js",
         ".": "./index.js"
     },
     "dependencies": {
-        "@temperlang/core": "0.6.0"
+        "@temperlang/core": "0.6.0",
+        "@temperlang/std": "0.6.0"
     }
 }

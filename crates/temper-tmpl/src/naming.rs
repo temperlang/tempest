@@ -112,6 +112,12 @@ pub struct NamingRules {
     /// `Digit` is named as its module `let` `Digit` is
     /// (`RegexGlobal.Digit`), as Kotlin's, and its support code names it.
     pub types_apart: bool,
+    /// Whether every module's module-level declarations share one
+    /// namespace, as C++'s share the library's: then a private one
+    /// avoids the names of other modules' declarations, so the private
+    /// `class Engine` of one doesn't redefine another's exported
+    /// `Engine`, and only exports can clash.
+    pub modules_share_names: bool,
 }
 
 /// Output names, by [`DeclId`].
@@ -590,10 +596,72 @@ pub fn assign(p: &Program, rules: &NamingRules) -> NameMap {
             }
         };
     }
-    for module in &p.modules {
-        name_module(p, rules, &reserved, &member_reserved, module, &mut map);
+    // Where modules share names, each module's exports, which others'
+    // private declarations avoid, and those private declarations' names,
+    // as they're given.
+    let exports: Vec<HashSet<String>> = match rules.modules_share_names {
+        true => (p.modules.iter())
+            .map(|m| {
+                (module_level(p, m).into_iter())
+                    .filter(|&d| claims_first(p, d))
+                    .map(|d| escape(rules, &reserved, candidates(p, rules, d, true)[0].clone()))
+                    .collect()
+            })
+            .collect(),
+        false => Vec::new(),
+    };
+    let mut privates: HashSet<String> = HashSet::new();
+    for (i, module) in p.modules.iter().enumerate() {
+        let mut shared = HashSet::new();
+        if rules.modules_share_names {
+            shared.extend(privates.iter().cloned());
+            for (j, names) in exports.iter().enumerate() {
+                if j != i {
+                    shared.extend(names.iter().cloned());
+                }
+            }
+        }
+        name_module(
+            p,
+            rules,
+            &reserved,
+            &member_reserved,
+            module,
+            &shared,
+            &mut map,
+        );
+        if rules.modules_share_names {
+            for d in module_level(p, module) {
+                if !claims_first(p, d) {
+                    privates.insert(map.get(d).to_string());
+                }
+            }
+        }
     }
     map
+}
+
+/// A module's functions, `let`s, classes, and interfaces.
+fn module_level(p: &Program, module: &Module) -> Vec<DeclId> {
+    (module.items.iter())
+        .filter_map(|&item| match p.nodes.get(item) {
+            Node::Function { decl, .. }
+            | Node::BodilessFunction { decl, .. }
+            | Node::ModuleLet { decl }
+            | Node::Class { decl, .. }
+            | Node::Interface { decl, .. } => Some(decl),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Whether a declaration's name is fixed, so it claims its name before
+/// others: exported, connected, or kept.
+fn claims_first(p: &Program, d: DeclId) -> bool {
+    let facts = p.decls.get(d).facts;
+    facts.contains(Facts::EXPORTED)
+        || facts.contains(Facts::CONNECTED)
+        || facts.contains(Facts::KEEP)
 }
 
 /// The module-level declarations a function refers to, as
@@ -691,23 +759,13 @@ fn name_module(
     reserved: &HashSet<&str>,
     member_reserved: &HashSet<&str>,
     module: &Module,
+    shared: &HashSet<String>,
     map: &mut NameMap,
 ) {
     // Module-level declarations: the items, then the init block's locals,
     // in the claiming order (exported, connected, and kept first, then
     // source names, then compiler-made ones).
-    let mut level: Vec<DeclId> = module
-        .items
-        .iter()
-        .filter_map(|&item| match p.nodes.get(item) {
-            Node::Function { decl, .. }
-            | Node::BodilessFunction { decl, .. }
-            | Node::ModuleLet { decl }
-            | Node::Class { decl, .. }
-            | Node::Interface { decl, .. } => Some(decl),
-            _ => None,
-        })
-        .collect();
+    let mut level = module_level(p, module);
     for &test in &module.tests {
         if let Node::Test { decl, .. } = p.nodes.get(test) {
             level.push(decl);
@@ -733,13 +791,9 @@ fn name_module(
         stack.extend(p.nodes.kids(id).iter().rev());
     }
     let rank = |d: DeclId| {
-        let facts = p.decls.get(d).facts;
-        if facts.contains(Facts::EXPORTED)
-            || facts.contains(Facts::CONNECTED)
-            || facts.contains(Facts::KEEP)
-        {
+        if claims_first(p, d) {
             0
-        } else if facts.contains(Facts::COMPILER_MADE) {
+        } else if p.decls.get(d).facts.contains(Facts::COMPILER_MADE) {
             2
         } else {
             1
@@ -762,13 +816,17 @@ fn name_module(
     // the others but types.
     let is_type = |d: DeclId| matches!(p.decls.get(d).kind, DeclKind::Class | DeclKind::Interface);
     let imported = taken.clone();
+    // Nor do its items take the names other modules' declarations share
+    // with them; its tests and the init's locals are its own.
+    let items: HashSet<DeclId> = module_level(p, module).into_iter().collect();
     let (mut types, mut values) = (HashSet::new(), HashSet::new());
     for d in level {
         let cands = candidates(p, rules, d, true);
         let own = if is_type(d) { &types } else { &values };
+        let elsewhere = |c: &str| items.contains(&d) && shared.contains(c);
         let free = |c: &str| match rules.types_apart {
-            true => !imported.contains(c) && !own.contains(c),
-            false => !taken.contains(c),
+            true => !imported.contains(c) && !own.contains(c) && !elsewhere(c),
+            false => !taken.contains(c) && !elsewhere(c),
         };
         let (name, suffixed) = choose(rules, reserved, &cands, free);
         if suffixed {

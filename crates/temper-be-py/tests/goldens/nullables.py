@@ -2,6 +2,7 @@ from temper_core import (
     LoggingConsole as _LoggingConsole,
     boolean_to_string as _boolean_to_string,
     int_add as _int_add,
+    int_div as _int_div,
     string_to_int32 as _string_to_int32,
 )
 
@@ -61,6 +62,13 @@ def _parse(s: str, /) -> int:
         return -1
 
 
+def _halved(s: str, d: int, /) -> int:
+    try:
+        return _int_div(_string_to_int32(s), d)
+    except Exception:
+        return -1
+
+
 def _positive(n: int, /) -> int:
     if n < 0:
         raise RuntimeError()
@@ -109,6 +117,7 @@ _console.log('nothing' if (_subject2 := first_word('')) is None else _subject2)
 _console.log(f"{_boolean_to_string(_same(None, None))} {_boolean_to_string(_same('a', None))} {_boolean_to_string(_same(None, 'a'))} {_boolean_to_string(_same('a', 'a'))}")
 _console.log(f'{_boolean_to_string(_same_int(1, 2))} {_boolean_to_string(_same_int(3, 3))} {_boolean_to_string(_same_int(None, 3))}')
 _console.log(f"{_parse('12')} {_parse('x')}")
+_console.log(f"{_halved('12', 2)} {_halved('x', 2)} {_halved('12', 0)}")
 _console.log(str(_checked(7)))
 _console.log(f'{_or_zero(None)} {_or_zero(5)}')
 _varying()

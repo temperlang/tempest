@@ -30,8 +30,12 @@ public final class GenericsGlobal {
         return tagged(x);
     }
 
+    static boolean noneIn(int length) {
+        return length == 0;
+    }
+
     public static <T> T first(List<T> items, T fallback) {
-        if (items.isEmpty()) {
+        if (noneIn(items.size())) {
             return fallback;
         } else {
             return Core.listGet(items, 0);

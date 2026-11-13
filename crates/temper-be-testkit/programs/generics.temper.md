@@ -6,8 +6,8 @@ literals, `Listed`'s and `List`'s members, `ListBuilder`, `Pair`, `Map`,
 and `MapBuilder`, with nullables mixed in; and generic functions and a
 method with a type parameter that no parameter's type mentions, which
 the frontend binds to its bound unless the call says, and which Rust,
-C#, and C++ then spell out. The log is what tempest's interpreter
-gives.
+C#, and C++ then spell out; and an exported generic function that calls
+a private one. The log is what tempest's interpreter gives.
 
     export interface Holder<T> {
       public get held(): T;
@@ -40,8 +40,12 @@ gives.
     }
     let relayed<S extends Scene, T>(x: T): T { tagged<S, T>(x) }
 
+    // A private function that an exported generic one calls, which C++
+    // declares in the header that defines the generic one.
+    let noneIn(length: Int): Boolean { length == 0 }
+
     export let first<T>(items: Listed<T>, fallback: T): T {
-      if (items.isEmpty) { fallback } else { items[0] }
+      if (noneIn(items.length)) { fallback } else { items[0] }
     }
 
     let held<T>(h: Holder<T>): T { h.held }

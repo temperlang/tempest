@@ -1,4 +1,5 @@
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
+use temper_core::ToArcString;
 
 pub(crate) fn init() -> temper_core::Result<()> {
     static INIT_ONCE: OnceLock<temper_core::Result<()>> = OnceLock::new();
@@ -9,6 +10,11 @@ pub(crate) fn init() -> temper_core::Result<()> {
             println!("{}", crate::helpers::deep::greet("modules"));
             println!("sum {}", sum(3));
             println!("share {}", crate::core::share(7, 2));
+            println!(
+                "{}, {}",
+                Engine::new("own").0.name,
+                crate::machine::describe()
+            );
             crate::helpers::bump();
             crate::helpers::bump();
             println!("calls {calls2}");
@@ -17,6 +23,22 @@ pub(crate) fn init() -> temper_core::Result<()> {
         })
         .clone()
 }
+
+struct EngineStruct {
+    name: Arc<String>,
+}
+
+#[derive(Clone)]
+pub(crate) struct Engine(Arc<EngineStruct>);
+
+impl Engine {
+    pub fn new(name: impl ToArcString) -> Engine {
+        let name = name.to_arc_string();
+        Engine(Arc::new(EngineStruct { name }))
+    }
+}
+
+temper_core::impl_any_value_trait!(Engine, []);
 
 static BASE2: OnceLock<i32> = OnceLock::new();
 

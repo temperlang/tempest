@@ -154,6 +154,18 @@ const DISCARDED: &str = "# Discarded
 /// replaces it, a nullable string field read then replaced, and a
 /// nullable object a call returns, used after `??` and a null check.
 /// ASan checks it with the rest.
+/// `DenseBitVector` past its end, as core's Temper body has it: `get`
+/// gives false, and `set` grows it for a true bit (the runtime bubbled,
+/// as Kotlin's does, failing the regex engine's `ctype`).
+const BIT_VECTOR: &str = "# Bit vector
+
+    let v = new DenseBitVector(0);
+    v.set(5, false);
+    let before = v.get(5);
+    v.set(9, true);
+    console.log(\"${before} ${v.get(9)} ${v.get(8)} ${v.get(100)}\");
+";
+
 const LIFETIMES: &str = "# Lifetimes
 
     class Item(public name: String) {
@@ -348,6 +360,12 @@ fn cases() -> Vec<Case> {
         "discarded.temper.md",
         DISCARDED,
         vec!["ok 3".into()],
+    ));
+    cases.push(Case::inline(
+        "bit-vector",
+        "bit-vector.temper.md",
+        BIT_VECTOR,
+        vec!["false true false false".into()],
     ));
     cases.push(Case::inline(
         "lifetimes",
@@ -1009,7 +1027,7 @@ const FIRST_USE: &[FirstUse] = &[
             ("modules::twice(2)", "hello, helpers from deep\n4"),
             (
                 "modules::sum(3)",
-                "hello, modules from deep\nsum 17\nshare 3\ncalls 0\ncalls now 3\n17",
+                "hello, modules from deep\nsum 17\nshare 3\nown, state 1 engine 4 parts 5\ncalls 0\ncalls now 3\n17",
             ),
         ],
     },

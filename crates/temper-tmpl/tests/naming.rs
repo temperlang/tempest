@@ -75,6 +75,7 @@ const RULES: NamingRules = NamingRules {
     members_prefixed: false,
     fields_apart: false,
     types_apart: false,
+    modules_share_names: false,
 };
 
 const PROGRAM: &str = "tmpl 1 model 1 library t 0.0.0

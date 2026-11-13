@@ -26,9 +26,14 @@ public static class GenericsGlobal
         return Tagged<S, T>(x);
     }
 
+    internal static bool NoneIn(int length)
+    {
+        return length == 0;
+    }
+
     public static T First<T>(IReadOnlyList<T> items, T fallback)
     {
-        if (items.Count == 0)
+        if (NoneIn(items.Count))
         {
             return fallback;
         }

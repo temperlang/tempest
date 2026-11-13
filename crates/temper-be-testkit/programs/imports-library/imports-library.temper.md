@@ -28,6 +28,7 @@ hello, helpers from deep
 hello, modules from deep
 sum 17
 share 3
+own, state 1 engine 4 parts 5
 calls 0
 calls now 3
 both 29

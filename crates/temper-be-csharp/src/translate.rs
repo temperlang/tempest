@@ -155,6 +155,10 @@ pub struct Translator<'a> {
     /// Every name the program's declarations take, and the root
     /// namespace, which would hide a class of the same name.
     taken: HashSet<String>,
+    /// The namespaces of the modules the program has or uses, each
+    /// once, which hide a class named as one of them or as a namespace
+    /// above one, and whose module classes may share a name.
+    module_namespaces: Vec<String>,
     /// Module `let`s and `var`s kept as static fields.
     statics: HashSet<DeclId>,
     /// The module's lock, if a function takes it.
@@ -259,6 +263,13 @@ impl<'a> Translator<'a> {
         for name in renamed.values() {
             taken.insert(name.clone());
         }
+        let mut module_namespaces: Vec<String> = (p.decls.ids())
+            .filter(|&d| p.decls.contains(d))
+            .filter(|&d| matches!(p.decls.get(d).kind, DeclKind::Module | DeclKind::Library))
+            .map(|d| module_namespace(p, d))
+            .collect();
+        module_namespaces.sort();
+        module_namespaces.dedup();
         Translator {
             p,
             names,
@@ -269,6 +280,7 @@ impl<'a> Translator<'a> {
             here: DeclId::NONE,
             classes: HashMap::new(),
             taken,
+            module_namespaces,
             statics: HashSet::new(),
             lock: None,
             in_function: false,
@@ -323,20 +335,27 @@ impl<'a> Translator<'a> {
         }
     }
 
-    /// Whether a namespace beside one this code is in hides a class's
-    /// simple name: in std's `TemperLang.Std.Testing`, `Core` is the
-    /// namespace `TemperLang.Core`, not its class `Core`; and in a
-    /// library's `Lib.Url`, its module `core`'s `Lib.Core`.
+    /// Whether a namespace in or beside one this code is in hides a
+    /// class's simple name, since C# looks a name up in each enclosing
+    /// namespace before `using`s: in std's `TemperLang.Std.Testing`,
+    /// `Core` is the namespace `TemperLang.Core`, not its class `Core`; in
+    /// a library's `Lib.Url`, its module `core`'s `Lib.Core`; in
+    /// `Lib.Nfa`, module `nfa/engine`'s `Lib.Nfa.Engine`; and anywhere in
+    /// `Lib`, `Lib.Dfa`, which holds module `dfa/dfa`'s `Lib.Dfa.Dfa`.
     fn namespace_hides(&self, name: &str) -> bool {
-        let mut outer = self.namespace.as_str();
-        while let Some((parent, _)) = outer.rsplit_once('.') {
-            let beside = format!("{parent}.{name}");
-            if NAMESPACES.iter().any(|(_, ns)| *ns == beside)
-                || (self.p.modules.iter()).any(|m| module_namespace(self.p, m.decl) == beside)
+        let mut outer = Some(self.namespace.as_str());
+        while let Some(ns) = outer {
+            let within = format!("{ns}.{name}");
+            let under = |n: &str| {
+                n.strip_prefix(within.as_str())
+                    .is_some_and(|r| r.is_empty() || r.starts_with('.'))
+            };
+            if NAMESPACES.iter().any(|(_, n)| under(n))
+                || self.module_namespaces.iter().any(|n| under(n))
             {
                 return true;
             }
-            outer = parent;
+            outer = ns.rsplit_once('.').map(|(parent, _)| parent);
         }
         false
     }
@@ -378,13 +397,29 @@ impl<'a> Translator<'a> {
         let hidden = match decl {
             Some(decl) => (p.decls.ids())
                 .any(|d| d != decl && p.decls.contains(d) && self.names.get(d) == name),
-            None => self.taken.contains(name),
+            // Another module's class of this name, as `regex`'s
+            // `RegexGlobal` and std's, whose `using`s would make the name
+            // ambiguous; but a namespace this code is in is searched
+            // before `using`s.
+            None => {
+                let encloses = (self.namespace.strip_prefix(namespace))
+                    .is_some_and(|r| r.is_empty() || r.starts_with('.'));
+                let shares = |n: &String| {
+                    let base = n.rsplit('.').next().unwrap_or_default();
+                    n != namespace && name.strip_suffix("Global") == Some(base)
+                };
+                self.taken.contains(name)
+                    || (!encloses && self.module_namespaces.iter().any(shares))
+            }
         };
         // A namespace this code is in hides it too: a library `match`'s
-        // namespace `Match`, std's regex class `Match`.
+        // namespace `Match`, std's regex class `Match`; and so does one
+        // in or beside it: module `state`'s `Lib.State`, in `Lib.User`,
+        // its class `State`.
         let clash = hidden
             || name == self.class
             || self.namespace.split('.').any(|part| part == name)
+            || self.namespace_hides(name)
             || self.classes.get(name).is_some_and(|ns| ns != namespace);
         if clash {
             return format!("global::{namespace}.{name}");

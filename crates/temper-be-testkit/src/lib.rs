@@ -330,10 +330,29 @@ pub struct Case {
 
 impl Case {
     /// Whether it needs std's output beside it: it runs as tests, with
-    /// std's `testing`, or imports a std module.
+    /// std's `testing`, or imports a std module, or a shared library it
+    /// imports does.
     pub fn needs_std(&self) -> bool {
-        self.tests.is_some()
-            || (self.sources.iter()).any(|(_, text)| text.contains("import(\"std/"))
+        self.tests.is_some() || self.imports_std()
+    }
+
+    /// Whether any of its modules imports a std module: its source's, and
+    /// for a library of several, as `modules`, its other modules', and
+    /// those of the shared libraries it imports.
+    fn imports_std(&self) -> bool {
+        let std = |text: &str| text.contains("import(\"std/");
+        if self.sources.iter().any(|(_, text)| std(text)) {
+            return true;
+        }
+        // Only a library of several modules has shared libraries beside it.
+        if self.libraries.is_empty() {
+            return false;
+        }
+        let mut files = Vec::new();
+        files_with(&self.dir, "temper", &mut files);
+        files_with(&self.dir, "md", &mut files);
+        (files.iter()).any(|f| fs::read_to_string(f).is_ok_and(|t| std(&t)))
+            || libraries(self, "").iter().any(Case::imports_std)
     }
 
     /// A library of one source given as text, not a file, its name the

@@ -138,8 +138,12 @@ def _relayed(x: _T, /) -> _T:
     return _tagged(x)
 
 
+def _none_in(length: int, /) -> bool:
+    return length == 0
+
+
 def first(items: _Sequence[_T], fallback: _T, /) -> _T:
-    if not items:
+    if _none_in(len(items)):
         return fallback
     else:
         return _list_get(items, 0)
