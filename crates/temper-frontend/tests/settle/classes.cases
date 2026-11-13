@@ -631,3 +631,128 @@ export class Builder {
     ^Builder:0
     (Get connected ^size:2 (Fn Int (Block 0)))
     (Method connected ^complete:3 (Signature Void))))
+
+=== a setter without a getter is assigned, also as a value, as Kotlin's nested-setter-invocations-in-result-position
+class C {
+  public set p(newValue: Int) {
+    console.log("Assigned ${newValue.toString(10)}");
+  }
+}
+let c = new C();
+c.p = c.p = 123;
+c.p = 5;
+// Not read, nor assigned what it doesn't take.
+let wrong(): Void {
+  c.p = "x";
+  console.log(c.p.toString());
+}
+--- settled
+(Block
+  (Class
+    ^C:0
+    (Set
+      ^p:4
+      (Fn
+        (Let ^newValue:5 Int)
+        (Block
+          (Call
+            (Call . console \log)
+            (Call cat "Assigned " (Call (Call . newValue:5 \toString) 10)))
+          #void))))
+  (Let ^c:1 (Call new C:0))
+  (Assign (Call . c:1 \p) (Assign (Call . c:1 \p) 123))
+  (Assign (Call . c:1 \p) 5)
+  (Let
+    ^wrong:2
+    (Fn
+      Void
+      (Block
+        (Assign (Call . c:1 \p) "x")
+        (Call (Call . console \log) (Call (Call . (Call . c:1 \p) \toString)))
+        #void))))
+error 221..224: Expected subtype of Int32, but got String
+error 240..243: No member p in C
+log Assigned 123
+log Assigned 123
+log Assigned 5
+
+=== exports that expose what isn't exported, as Kotlin Temper's ExportChecker reports them
+interface Hidden {}
+export class Exported<HI extends Hidden>(public hi: Hidden) extends Hidden {
+  public attempt(): Hidden { hi }
+  public attempt2<H extends Hidden>(hmm: H): H { hmm }
+  public static subvert(): Map<String, Hidden> { more }
+  // This one should be fine, unlike all the others.
+  private ha: Hidden = hi;
+}
+export let consider(hu: Hidden): Hidden? { hu }
+export let sneak<H extends Hidden>(he: H): H { he }
+export let more = new Map<String, Hidden>([]);
+class Fine {}
+export let callback(f: fn (Fine): Void): Void {}
+// A private header property is the implied constructor's parameter.
+export class Holder(private held: Fine) {}
+export class Made {
+  public constructor(other: Hidden) {}
+}
+// Not exports, nor private members, nor another module's types.
+let local(h: Hidden): Hidden { h }
+export class Open {
+  private hidden(h: Hidden): Hidden { h }
+  private constructor(f: Fine) {}
+  public map(): Map<String, Int> { new Map<String, Int>([]) }
+}
+console.log("runs");
+--- settled
+(Block
+  (Interface ^Hidden:0)
+  (Let ^more:4 (Call new (Call <> Map String Hidden:0) (Call list)))
+  (Class
+    ^Exported:1
+    (TypeParam ^HI:12 Hidden:0)
+    Hidden:0
+    (Param ^hi:14 Hidden:0)
+    (Method ^attempt:15 (Fn Hidden:0 (Block hi:14)))
+    (Method
+      ^attempt2:16
+      (Fn (TypeParam ^H:19 Hidden:0) (Let ^hmm:20 H:19) H:19 (Block hmm:20)))
+    (Method static
+      ^subvert:17
+      (Fn (Call <> Map String Hidden:0) (Block more:4)))
+    (Let private ^ha:18 Hidden:0 hi:14))
+  (Let ^consider:2 (Fn (Let ^hu:21 Hidden:0) (Call ? Hidden:0) (Block hu:21)))
+  (Let
+    ^sneak:3
+    (Fn (TypeParam ^H:22 Hidden:0) (Let ^he:23 H:22) H:22 (Block he:23)))
+  (Class ^Fine:5)
+  (Let ^callback:6 (Fn (Let ^f:25 (Call FnType Fine:5 Void)) Void (Block)))
+  (Class ^Holder:7 (Param private ^held:27 Fine:5))
+  (Class
+    ^Made:8
+    (Constructor ^constructor:29 (Fn (Let ^other:30 Hidden:0) (Block))))
+  (Let ^local:9 (Fn (Let ^h:31 Hidden:0) Hidden:0 (Block h:31)))
+  (Class
+    ^Open:10
+    (Method private ^hidden:33 (Fn (Let ^h:36 Hidden:0) Hidden:0 (Block h:36)))
+    (Constructor private ^constructor:34 (Fn (Let ^f:37 Fine:5) (Block)))
+    (Method
+      ^map:35
+      (Fn
+        (Call <> Map String Int)
+        (Block (Call new (Call <> Map String Int) (Call list))))))
+  (Call (Call . console \log) "runs")
+  #void)
+error 53..59: Export depends publicly on non-exported symbol Hidden
+error 72..78: Export depends publicly on non-exported symbol Hidden
+error 88..94: Export depends publicly on non-exported symbol Hidden
+error 117..123: Export depends publicly on non-exported symbol Hidden
+error 159..165: Export depends publicly on non-exported symbol Hidden
+error 225..231: Export depends publicly on non-exported symbol Hidden
+error 348..354: Export depends publicly on non-exported symbol Hidden
+error 357..363: Export depends publicly on non-exported symbol Hidden
+error 399..405: Export depends publicly on non-exported symbol Hidden
+error 435..439: Export depends publicly on non-exported symbol Hidden
+error 512..516: Export depends publicly on non-exported symbol Fine
+error 637..641: Export depends publicly on non-exported symbol Fine
+error 694..700: Export depends publicly on non-exported symbol Hidden
+log runs

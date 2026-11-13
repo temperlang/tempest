@@ -1,7 +1,8 @@
 # Classes
 
 Classes and interfaces: fields, constructors (made from a class's header,
-or its own), methods, getters and setters, static fields and functions,
+or its own), methods, getters and setters, a setter with no getter
+(assigned as a value too), static fields and functions,
 private members read on another instance, a `@noProperty` input that
 initializers read, though a getter and setter share its name, interfaces
 with abstract and default members, `@auto("==")` and `@operator` methods, `toString`, `is`, `as`, and narrowing. Calls chain on
@@ -34,6 +35,7 @@ tempest's interpreter gives.
       private var hidden: Int = 0;
       public get doubled(): Int { count * 2 }
       public set doubled(value: Int) { count = value - count; }
+      public set added(value: Int) { count = count + value; }
       public bump(): Counter {
         count = count + 1;
         hidden = hidden + 1;
@@ -87,6 +89,9 @@ tempest's interpreter gives.
     c.doubled = 10;
     console.log(c.doubled.toString());
     console.log(c.same(new Counter().bump().bump()).toString());
+    c.added = 5;
+    let added = c.added = c.added = 2;
+    console.log("${added} ${c.count}");
     console.log("${new Point(1, 2) == new Point(1, 2)} ${new Point(1, 2) != new Point(2, 1)}");
     console.log("${new Holder(new Loose(3), "a") == new Holder(new Loose(-3), "a")}");
     console.log("${new Version(1, 2) < new Version(1, 3)} ${new Version(2, 0) >= new Version(1, 9)}");
@@ -111,6 +116,7 @@ Rect(5, 5)
 2
 16
 true
+2 17
 true true
 true
 true true

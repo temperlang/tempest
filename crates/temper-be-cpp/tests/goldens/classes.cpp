@@ -55,6 +55,7 @@ struct Counter : public std::enable_shared_from_this<Counter> {
   static std::shared_ptr<Counter> make();
   int32_t get_doubled();
   void set_doubled(int32_t value);
+  void set_added(int32_t value);
   std::shared_ptr<Counter> bump();
   bool same(std::shared_ptr<Counter> const & other) const;
   static std::shared_ptr<Counter> zero();
@@ -197,6 +198,10 @@ int32_t Counter::get_doubled() {
 
 void Counter::set_doubled(int32_t value) {
   this->count = core::Int::sub(value, this->count);
+}
+
+void Counter::set_added(int32_t value) {
+  this->count = core::Int::add(this->count, value);
 }
 
 std::shared_ptr<Counter> Counter::bump() {
@@ -420,6 +425,13 @@ void global_init_init() {
     c->set_doubled(10);
     core::Console::log(console, std::to_string(c->get_doubled()));
     core::Console::log(console, core::Boolean::toString(c->same(Counter::make()->bump()->bump())));
+    c->set_added(5);
+    int32_t t = 2;
+    c->set_added(t);
+    int32_t t2 = t;
+    c->set_added(t2);
+    int32_t added = t2;
+    core::Console::log(console, std::to_string(added) + " " + std::to_string(c->count));
     core::Console::log(console, core::Boolean::toString(Point::make(1, 2)->eq(Point::make(1, 2))) + " " + core::Boolean::toString(!Point::make(1, 2)->eq(Point::make(2, 1))));
     core::Console::log(console, core::Boolean::toString(Holder::make(Loose::make(3), TEMPER_STR("a"))->eq(Holder::make(Loose::make(-3), TEMPER_STR("a")))));
     core::Console::log(console, core::Boolean::toString(Version::make(1, 2)->compareTo(Version::make(1, 3)) < 0) + " " + core::Boolean::toString(Version::make(2, 0)->compareTo(Version::make(1, 9)) >= 0));

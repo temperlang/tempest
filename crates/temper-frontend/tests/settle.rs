@@ -262,7 +262,7 @@ fn regex_literals() {
                        public toString(): String { \"rep(${item}, ${min}, ${max ?? -1}, ${reluctant})\" }\n}\n\
                      export class Capture(public name: String, public item: RegexNode) extends RegexNode {\n\
                        public toString(): String { \"cap(${name}, ${item})\" }\n}\n\
-                     class B extends RegexNode { public toString(): String { \"^\" } }\nexport let Begin = new B();";
+                     class B extends RegexNode { public toString(): String { \"^\" } }\nexport let Begin: RegexNode = new B();";
         library.add_file("-std-/regex/regex.temper", regex, SourceKind::Standalone);
         let settled = settle(library);
         let messages: Vec<String> = settled

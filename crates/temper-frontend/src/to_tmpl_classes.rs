@@ -1140,7 +1140,7 @@ impl Translator<'_> {
         &mut self,
         m: FNode,
         object: Option<FNode>,
-        value: FNode,
+        value: Assigned,
         at: FNode,
     ) -> Tx<NodeId> {
         let m = self.accessor(m, true);
@@ -1152,15 +1152,13 @@ impl Translator<'_> {
                 let have = Some(self.b.program().nodes.ty(object));
                 let (from, to) = temper_tmpl::analysis::bindings(self.b.program(), d, have, &[]);
                 let ty = self.b.program_mut().types.substitute(ty, &from, &to);
-                let value = self.expr(value)?;
-                let value = self.type_error_around(at, value);
+                let value = self.assigned_value(value, at)?;
                 let value = self.fit(value, ty);
                 Ok(self.b.set_field(d, object, value))
             }
             Member::Method(d) if self.b.program().decls.get(d).kind == DeclKind::Setter => {
                 let object = self.receiver(object, d, at)?;
-                let value = self.expr(value)?;
-                let value = self.type_error_around(at, value);
+                let value = self.assigned_value(value, at)?;
                 let value = self.fit_args_with(d, Some(object), &[], vec![value]);
                 let call = self.b.call_method(d, object, &value);
                 let call = self.own(call, at);
@@ -1168,14 +1166,29 @@ impl Translator<'_> {
             }
             Member::Property(_, Some(set)) => {
                 let object = self.receiver(object, set, at)?;
-                let value = self.expr(value)?;
-                let value = self.type_error_around(at, value);
+                let value = self.assigned_value(value, at)?;
                 let value = self.fit_args_with(set, Some(object), &[], vec![value]);
                 let call = self.b.call_method(set, object, &value);
                 let call = self.own(call, at);
                 Ok(self.b.expr_statement(call))
             }
             _ => self.not_yet(at, "an assignment to a static field"),
+        }
+    }
+
+    /// The value an assignment stores: its expression, in a type-only
+    /// `Error` where one is reported at the assignment, or a local holding
+    /// it already.
+    fn assigned_value(&mut self, value: Assigned, at: FNode) -> Tx<NodeId> {
+        match value {
+            Assigned::Expr(value) => {
+                let value = self.expr(value)?;
+                Ok(self.type_error_around(at, value))
+            }
+            Assigned::Held(local) => {
+                let read = self.b.local(local);
+                Ok(self.made(read, at))
+            }
         }
     }
 
@@ -1676,6 +1689,15 @@ impl Translator<'_> {
             .find(|&m| self.kind(m) == NodeKind::Let)?;
         Some((object, found))
     }
+}
+
+/// What [`Translator::assign_member`] stores.
+pub(super) enum Assigned {
+    /// An expression, translated there.
+    Expr(FNode),
+    /// A local that holds the value already, as for an assignment used
+    /// as a value.
+    Held(DeclId),
 }
 
 /// A side of [`Translator::nullable_eq`]: a local, read as often as

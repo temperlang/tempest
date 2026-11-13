@@ -10,6 +10,7 @@
 - [🚨Breaking change: Details of rules for `<` ambiguity have changed](#breaking-change-details-of-rules-for--ambiguity-have-changed)
 - [Rust crates depend on `temper-std` only when they use it](#rust-crates-depend-on-temper-std-only-when-they-use-it)
 - [`++ls[i]` gives the new value](#lsi-gives-the-new-value)
+- [Unassigned locals in `for … of` bodies are errors](#unassigned-locals-in-for--of-bodies-are-errors)
 
 ## 🚨Breaking change: Rest parameter syntax removed.
 
@@ -305,3 +306,21 @@ out of it once.
 element's new value, as `++x` does, where they gave `Void` before, so
 they can be used as values. `ls[i]++` still gives the old value, and
 `ls[i] += 1` still gives `Void`, as `ls[i] = v` does.
+
+## Unassigned locals in `for … of` bodies are errors
+
+A `for … of` loop's body that reads a local of the function around it,
+where some path to the loop doesn't assign it, is now "x is not
+initialized along branches", as it is anywhere else in the function.
+It wasn't reported before, and failed when run.
+
+```temper inert
+let firsts(xs: List<Int>): Int {
+  let first;
+  for (let x of xs) {
+    console.log(first.toString()); // ERROR: not initialized
+  }
+  first = 0;
+  first
+}
+```

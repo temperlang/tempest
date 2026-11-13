@@ -167,6 +167,11 @@ class Counter extends type() {
     this.#count = (value - this.#count) | 0;
   }
 
+  /** @param {number} value */
+  set added(value) {
+    this.#count = (this.#count + value) | 0;
+  }
+
   /** @returns {Counter} */
   bump() {
     this.#count = (this.#count + 1) | 0;
@@ -468,6 +473,23 @@ console.log(c.count.toString());
 c.doubled = 10;
 console.log(c.doubled.toString());
 console.log(c.same(new Counter().bump().bump()).toString());
+c.added = 5;
+/** @type {number} */
+let t$0;
+{
+  /** @type {number} */
+  let t$1;
+  {
+    const t = 2;
+    c.added = t;
+    t$1 = t;
+  }
+  const t2 = t$1;
+  c.added = t2;
+  t$0 = t2;
+}
+const added = t$0;
+console.log(`${added} ${c.count}`);
 console.log(`${new Point(1, 2).eq(new Point(1, 2))} ${!new Point(1, 2).eq(new Point(2, 1))}`);
 console.log(new Holder(new Loose(3), "a").eq(new Holder(new Loose(-3), "a")).toString());
 console.log(`${new Version(1, 2).compareTo(new Version(1, 3)) < 0} ${new Version(2, 0).compareTo(new Version(1, 9)) >= 0}`);
@@ -500,7 +522,7 @@ sql.appendRect(new Rect(1, 2));
 console.log(sql.accumulated);
 const seven = 7;
 /** @type {string} */
-let t$0;
+let t$2;
 {
   const accumulator = new Sql();
   {
@@ -511,6 +533,6 @@ let t$0;
     accumulator.appendSafe(" FROM ");
     accumulator.appendRect(new Rect(2, 2));
   }
-  t$0 = accumulator.accumulated;
+  t$2 = accumulator.accumulated;
 }
-console.log(t$0);
+console.log(t$2);

@@ -646,6 +646,34 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   Test: settle/classes.cases, "static members can't be assigned, even
   a `var`, as Kotlin reports".
 
+- **Definite assignment of locals** (2026-11-13): a `let` or `var`
+  read where some path doesn't assign it is "x is not initialized along
+  branches" in both; Kotlin adds where the paths that miss it are, and
+  reports every such read, where tempest reports one per path. Tempest
+  also checks a `for … of` body's reads of its function's locals, which
+  Kotlin, making the body a function, leaves unchecked, as it does any
+  function's reads of its enclosing function's locals (both do that);
+  tmpl's loop would read an unassigned local there. A top-level cycle
+  (`let a = b + 1; let b = a + 1;`) is the same error, where tempest
+  failed at run time before.
+  Test: settle/flow.cases, "locals read before they're assigned on some
+  path" and "locals assigned on every path".
+- **Exports that expose non-exported types** (2026-11-13) are "Export
+  depends publicly on non-exported symbol Hidden" in both, for the same
+  parts of a signature, at each use of the type's name, or an inferred
+  type's declaration's name. Tempest's error is type-only, so the code
+  runs and is written as it is. Neither checks a private constructor's
+  parameters, so a non-exported parameter type there, which Kotlin's C#
+  makes a public constructor's (CS0051), isn't caught (t300).
+  Test: settle/classes.cases, "exports that expose what isn't exported".
+- **A setter without a getter** (2026-11-13) can be assigned, as `c.p =
+  5`, and the assignment used as a value, as `c.p = c.p = v`, in both;
+  tempest said "No member p in C" before. As a value, tempest translates
+  it only where the object is a name that isn't assigned again, or
+  `this` ("not yet in tmpl" otherwise).
+  Test: settle/classes.cases, "a setter without a getter is assigned";
+  programs/classes (`added`), on every backend.
+
 ### Interpreter, core and std
 
 - **`Float64.toString` cuts at 16 digits** in the interpreter

@@ -86,7 +86,8 @@ let f: String = d;
   (Let ^f:5 String d:3)
   #void)
 error 16..17: Cannot assign to String from Int32
-Failed: d has not been initialized
+error 64..65: d is not initialized along branches
+Failed: d is not initialized along branches
 
 === locals typed from their initializers
 var a;
@@ -116,7 +117,8 @@ c = c + 1;
 error 14..23: Cannot assign to Int32 from String
 error 41..42: Cannot assign to String from Int32
 error 108..109: Cannot assign to Int32 from String?
-Failed: c has not been initialized
+error 122..123: c is not initialized along branches
+Failed: c is not initialized along branches
 
 === null where a type isn't nullable
 let a: String = null;
@@ -2619,3 +2621,136 @@ let g(s: String): Boolean { s.isOdd() }
   (Let ^g:2 (Fn (Let ^s:7 String) Boolean (Block (Call (Call . s:7 \isOdd))))))
 error 404..418: No member isPalindrome in String
 error 451..458: No member isOdd in String
+
+=== core's non-generic classes as declared types, as Kotlin Temper reports them
+let a: StringBuilder = 5;
+let b: StringBuilder = null;
+let i: StringIndex = "x";
+let d: DenseBitVector = 1;
+let e: StringIndexOption = "x";
+let g: NoStringIndex = String.begin;
+let f(n: Int): String {
+  var sbOrNull: StringBuilder = null;
+  if (n % 2 == 0) {
+    let sb = sbOrNull ?? new StringBuilder();
+    sb.append("${n}");
+    sbOrNull = sb;
+  }
+  let finalSb = sbOrNull;
+  if (finalSb == null) { "" } else { finalSb.toString() }
+}
+// Still fine: a subtype, a nullable, and narrowing.
+let s = "ab";
+let o: StringIndexOption = s.next(String.begin);
+let n: StringIndexOption? = null;
+let j: StringIndex = if (o is StringIndex) { o } else { String.begin };
+let k: AnyValue = new StringBuilder();
+console.log(f(4));
+--- settled
+(Block
+  (Let ^a:0 StringBuilder 5)
+  (Let ^b:1 StringBuilder null)
+  (Let ^i:2 StringIndex "x")
+  (Let ^d:3 DenseBitVector 1)
+  (Let ^e:4 StringIndexOption "x")
+  (Let ^g:5 NoStringIndex (Call . String \begin))
+  (Let
+    ^f:6
+    (Fn
+      (Let ^n:12 Int)
+      String
+      (Block
+        (Var ^sbOrNull:13 StringBuilder null)
+        (If
+          (Call == (Call % n:12 2) 0)
+          (Block
+            (Let
+              ^sb:15
+              (Block
+                (If
+                  (Call == sbOrNull:13 #null)
+                  (Call new StringBuilder)
+                  sbOrNull:13)))
+            (Call (Call . sb:15 \append) (Call cat n:12))
+            (Assign sbOrNull:13 sb:15)
+            #void)
+          (Block))
+        (Let ^finalSb:14 sbOrNull:13)
+        (If
+          (Call == finalSb:14 null)
+          (Block "")
+          (Block (Call (Call . finalSb:14 \toString)))))))
+  (Let ^s:7 "ab")
+  (Let ^o:8 StringIndexOption (Call (Call . s:7 \next) (Call . String \begin)))
+  (Let ^n:9 (Call ? StringIndexOption) null)
+  (Let
+    ^j:10
+    StringIndex
+    (If (Call is o:8 StringIndex) (Block o:8) (Block (Call . String \begin))))
+  (Let ^k:11 AnyValue (Call new StringBuilder))
+  (Call (Call . console \log) (Call f:6 4))
+  #void)
+error 23..24: Cannot assign to StringBuilder from Int32
+error 49..53: Expected subtype of StringBuilder, but got StringBuilder?
+error 76..79: Cannot assign to StringIndex from String
+error 105..106: Cannot assign to DenseBitVector from Int32
+error 135..138: Cannot assign to StringIndexOption from String
+error 163..175: Cannot assign to NoStringIndex from StringIndex
+error 233..237: Expected subtype of StringBuilder, but got StringBuilder?
+log 4
+
+=== calling a function value that may be null, as Kotlin Temper reports it
+export let hi(i: Int, act: (fn (Int): Void)?): Void {
+  if (i == 0 || act != null) {
+    // `||` means act could be null here.
+    act(i);
+  }
+  if (act != null) {
+    act(i);
+  }
+}
+@fun interface Act(i: Int): Void;
+let ho(act: Act?): Void {
+  act(1);
+  act?.apply(1);
+}
+hi(1, fn (i: Int): Void { console.log("hi ${i}"); });
+hi(0, null);
+--- settled
+(Block
+  (Let
+    ^hi:0
+    (Fn
+      (Let ^i:3 Int)
+      (Let ^act:4 (Call ? (Call FnType Int Void)))
+      Void
+      (Block
+        (If
+          (If (Call == i:3 0) #true (Call != act:4 null))
+          (Block (Call act:4 i:3) #void)
+          (Block))
+        (If (Call != act:4 null) (Block (Call act:4 i:3) #void) (Block)))))
+  (Interface ^Act:1 (Method ^apply:6 (Signature (Let ^i:7 Int) Void)))
+  (Let
+    ^ho:2
+    (Fn
+      (Let ^act:8 (Call ? Act:1))
+      Void
+      (Block
+        (Call act:8 1)
+        (Block (If (Call == act:8 #null) #null (Call (Call . act:8 \apply) 1)))
+        #void)))
+  (Call
+    hi:0
+    1
+    (Fn
+      (Let ^i:9 Int)
+      Void
+      (Block (Call (Call . console \log) (Call cat "hi " i:9)) #void)))
+  (Call hi:0 0 null)
+  #void)
+error 131..134: Expected subtype of fn (Int32): Void, but got (fn (Int32): Void)?
+error 244..247: Expected subtype of Act, but got Act?
+log hi 1
+log hi 1
+Failed: Null is not a function

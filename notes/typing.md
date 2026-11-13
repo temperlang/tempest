@@ -1249,6 +1249,20 @@ The Rust backend still wants each field set first by top-level
 statements; fields set in branches or loops, with this rule's
 guarantee, are a follow-up there.
 
+## Definite assignment
+
+As Kotlin Temper's `UseBeforeInit`: a local or top-level `let` or `var`
+read where some path to it doesn't assign it is "x is not initialized
+along branches" (`typing/definite.rs`). One pass in evaluation order,
+as for fields first, carries the declarations that may be unassigned,
+merging by union; a module's top levels are walked in the order they
+run. An `orelse`'s fallback starts with what held where its body may
+fail, so `(x = i) orelse …` assigns `x`. A function's own locals are
+checked, its enclosing function's aren't (as in Kotlin), but a `for …
+of` body's are, as tmpl loops over it
+([kotlin-differences.md](kotlin-differences.md)). Each read reported
+counts as assigning, so a path reports a local once.
+
 ## Run-time type checks
 
 What tempest reports for `x is T` and `x as T` (`typing/rtti.rs`), as

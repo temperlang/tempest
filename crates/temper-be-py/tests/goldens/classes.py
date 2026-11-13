@@ -102,6 +102,14 @@ class _Counter:
     def doubled(self, value: int, /) -> None:
         self._count = _int_sub(value, self._count)
 
+    @property
+    def added(self, /) -> int:
+        raise AttributeError('added getter unavailable')
+
+    @added.setter
+    def added(self, value: int, /) -> None:
+        self._count = _int_add(self._count, value)
+
     def bump(self, /) -> '_Counter':
         self._count = _int_add(self._count, 1)
         self._hidden = _int_add(self._hidden, 1)
@@ -315,6 +323,13 @@ _console.log(str(_c.count))
 _c.doubled = 10
 _console.log(str(_c.doubled))
 _console.log(_boolean_to_string(_c.same(_Counter().bump().bump())))
+_c.added = 5
+_t = 2
+_c.added = _t
+_t2 = _t
+_c.added = _t2
+_added: int = _t2
+_console.log(f'{_added} {_c.count}')
 _console.log(f'{_boolean_to_string(_Point(1, 2) == _Point(1, 2))} {_boolean_to_string(_Point(1, 2) != _Point(2, 1))}')
 _console.log(_boolean_to_string(_Holder(_Loose(3), 'a') == _Holder(_Loose(-3), 'a')))
 _console.log(f'{_boolean_to_string(_Version(1, 2).compare_to(_Version(1, 3)) < 0)} {_boolean_to_string(_Version(2, 0).compare_to(_Version(1, 9)) >= 0)}')

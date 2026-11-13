@@ -50,6 +50,13 @@ public final class ClassesGlobal {
         c.setDoubled(10);
         console.log(Integer.toString(c.getDoubled()));
         console.log(Boolean.toString(c.same(new Counter().bump().bump())));
+        c.setAdded(5);
+        int t = 2;
+        c.setAdded(t);
+        int t2 = t;
+        c.setAdded(t2);
+        int added = t2;
+        console.log(added + " " + c.count);
         console.log(new Point(1, 2).eq(new Point(1, 2)) + " " + !new Point(1, 2).eq(new Point(2, 1)));
         console.log(Boolean.toString(new Holder(new Loose(3), "a").eq(new Holder(new Loose(-3), "a"))));
         console.log((new Version(1, 2).compareTo(new Version(1, 3)) < 0) + " " + (new Version(2, 0).compareTo(new Version(1, 9)) >= 0));

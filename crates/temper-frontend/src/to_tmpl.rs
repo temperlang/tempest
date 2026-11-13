@@ -80,7 +80,7 @@ mod classes;
 mod defaults;
 #[path = "to_tmpl_functions.rs"]
 mod functions;
-use classes::Member;
+use classes::{Assigned, Member};
 
 /// Core's members that tmpl knows, as external declarations.
 const CORE_FIXTURE: &str = include_str!("../../temper-tmpl/tests/fixtures/core.tmpl");
@@ -1734,23 +1734,8 @@ impl Translator<'_> {
                 let [target, value] = children[..] else {
                     return self.not_yet(node, "an assignment's form");
                 };
-                if self.kind(target) != NodeKind::RightName {
-                    let Some((object, m)) = self.assigned_member(target) else {
-                        return self.not_yet(node, "an assignment to a property");
-                    };
-                    let object = self.static_object(object);
-                    let stmt = self.assign_member(m, object, value, node)?;
-                    out.push(self.own(stmt, node));
-                    return Ok(());
-                }
-                let member = self.s.scopes.resolved(target).and_then(|s| {
-                    let s = self.s.scopes.symbol(s);
-                    (s.kind == crate::scope::SymbolKind::Member)
-                        .then_some(s.decl)
-                        .flatten()
-                });
-                if let Some(m) = member {
-                    let stmt = self.assign_member(m, None, value, node)?;
+                if let Some((object, m)) = self.member_target(node, target)? {
+                    let stmt = self.assign_member(m, object, Assigned::Expr(value), node)?;
                     out.push(self.own(stmt, node));
                     return Ok(());
                 }
@@ -2733,7 +2718,7 @@ impl Translator<'_> {
                         DeclKind::Local | DeclKind::Param
                     )
                 }) else {
-                    return self.not_yet(node, "an assignment as a value");
+                    return self.member_assignment_value(node);
                 };
                 let mut stmts = Vec::new();
                 self.stmt(node, &mut stmts)?;
@@ -2745,6 +2730,57 @@ impl Translator<'_> {
             }
             kind => self.not_yet(node, format!("{kind:?}")),
         }
+    }
+
+    /// For an assignment to a member, `o.p = v` or a bare `p = v` in its
+    /// class, the object, if any, and the member.
+    fn member_target(&self, node: FNode, target: FNode) -> Tx<Option<(Option<FNode>, FNode)>> {
+        if self.kind(target) != NodeKind::RightName {
+            let Some((object, m)) = self.assigned_member(target) else {
+                return self.not_yet(node, "an assignment to a property");
+            };
+            return Ok(Some((self.static_object(object), m)));
+        }
+        let member = self.s.scopes.resolved(target).and_then(|s| {
+            let s = self.s.scopes.symbol(s);
+            (s.kind == crate::scope::SymbolKind::Member)
+                .then_some(s.decl)
+                .flatten()
+        });
+        Ok(member.map(|m| (None, m)))
+    }
+
+    /// `o.p = v` as a value, as in `c.p = c.p = v`: `v` held in a local,
+    /// then the assignment, then the local, as Kotlin Temper writes it.
+    /// Only where reading `o` after `v` is the same as before it: `o` a
+    /// name that's never assigned again, or `this`.
+    fn member_assignment_value(&mut self, node: FNode) -> Tx<NodeId> {
+        let &[target, value] = self.children(node) else {
+            return self.not_yet(node, "an assignment as a value");
+        };
+        let Some((object, m)) = self.member_target(node, target)? else {
+            return self.not_yet(node, "an assignment as a value");
+        };
+        let steady = object.is_none_or(|o| {
+            self.kind(o) == NodeKind::RightName
+                && (self.s.scopes.resolved(o)).is_some_and(|b| !self.s.scopes.symbol(b).mutable)
+        });
+        if !steady {
+            return self.not_yet(node, "an assignment to a property as a value");
+        }
+        let held = self.expr(value)?;
+        let held = self.type_error_around(node, held);
+        let ty = self.b.program().nodes.ty(held);
+        let local = self.b.declare_made(DeclKind::Local, &["t"], self.owner, ty);
+        let span = self.span(node);
+        self.b.set_decl_spans(local, span, span);
+        let init = self.b.let_stmt(local, Some(held));
+        let assign = self.assign_member(m, object, Assigned::Held(local), node)?;
+        let stmts = [self.made(init, node), self.own(assign, node)];
+        let read = self.b.local(local);
+        let read = self.made(read, node);
+        let made = self.b.block_value(ty, &stmts, read);
+        Ok(self.made(made, node))
     }
 
     /// `a && b`, as `if (a) { b } else { false }`, or `a || b`, as `if (a)

@@ -128,6 +128,18 @@ pub fn builtin_supertype(name: &str) -> Option<&'static str> {
         .map(|&(_, sup)| sup)
 }
 
+/// Core's non-generic classes and interface beyond the final types:
+/// `StringIndex` and `NoStringIndex` extend the sealed `StringIndexOption`,
+/// and nothing else extends any of them, so each is a subtype of only
+/// itself and what core says it extends ([`Types::is_subtype`]).
+const CORE_NOMINAL: [&str; 5] = [
+    "DenseBitVector",
+    "NoStringIndex",
+    "StringBuilder",
+    "StringIndex",
+    "StringIndexOption",
+];
+
 /// Builtin generic types that core declares as classes, which no class
 /// extends; core marks the first four `@mayDowncastTo(false)`.
 const BUILTIN_GENERIC_CLASSES: [&str; 10] = [
@@ -671,9 +683,11 @@ impl Types {
             {
                 None
             }
-            (Null | Nullable(_), _) => {
-                (self.is_definite(t) || self.is_class_like(t) || t == ANY_VALUE).then_some(false)
-            }
+            (Null | Nullable(_), _) => (self.is_definite(t)
+                || self.is_class_like(t)
+                || self.is_core_nominal(t)
+                || t == ANY_VALUE)
+                .then_some(false),
             // A type parameter is a subtype of its bound only, and nothing
             // but itself and `Never` is a subtype of it.
             (Param(_), _) => {
@@ -689,6 +703,11 @@ impl Types {
                 (s != VOID && (self.is_definite(s) || self.is_class_like(s))).then_some(true)
             }
             _ if self.is_fun_pair(s, t) => self.fun_subtype(s, t, depth),
+            // Core's non-generic classes, as `StringBuilder`, are only what
+            // core says they extend, and no other type is one of them.
+            _ if self.is_core_nominal(s) || self.is_core_nominal(t) => {
+                Some(self.builtin_extends(s, t))
+            }
             (Applied { .. }, _) | (_, Applied { .. }) => self.generic_subtype(s, t, depth),
             (Class(a), Class(b)) => Some(self.classes.get(&a)?.ancestors.contains(&b)),
             (Class(_), _) if self.is_final(t) => Some(false),
@@ -890,6 +909,13 @@ impl Types {
     /// type: a final builtin type's or a function type's.
     fn is_definite(&self, x: TypeId) -> bool {
         self.is_final(x) || matches!(self.get(x), TypeData::Fn { .. })
+    }
+
+    /// Whether `x` is one of core's non-generic classes or interfaces
+    /// beyond the final types ([`CORE_NOMINAL`]).
+    fn is_core_nominal(&self, x: TypeId) -> bool {
+        self.builtin_name(x)
+            .is_some_and(|n| CORE_NOMINAL.contains(&n))
     }
 
     /// Whether `x` is a class's or interface's type, a type parameter, or

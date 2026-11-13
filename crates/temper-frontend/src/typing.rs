@@ -40,6 +40,7 @@ use crate::types::{
 };
 use std::collections::{HashMap, HashSet};
 use temper_syntax::ast::Value;
+use temper_syntax::names::NameId;
 use temper_syntax::tree::{NodeId, NodeKind, Span};
 
 /// Builtin types whose members core's table has in full, and whose values
@@ -60,6 +61,8 @@ const FULL_TYPES: [&str; 10] = [
 mod bubbles;
 mod connected;
 mod core_members;
+mod definite;
+mod exports;
 mod exprs;
 mod fields_first;
 mod fun_interfaces;
@@ -405,9 +408,13 @@ impl Settle {
             NodeKind::Let | NodeKind::Loop => VOID,
             NodeKind::Return | NodeKind::Break | NodeKind::Continue | NodeKind::Fail => NEVER,
             // An assignment's value is what it assigns; one to a member is
-            // a setter's call.
+            // a setter's call, but passes the value on where it's used, as
+            // in `c.p = c.p = v`, not as a block's statement or result.
             NodeKind::Assign => match (first.and_then(|t| self.local_target(t)), last) {
                 (Some(_), Some(value)) => self.expr_type(value, forced)?,
+                (None, Some(value)) if self.assignment_used(node) => {
+                    self.expr_type(value, forced)?
+                }
                 _ => UNKNOWN,
             },
             NodeKind::Fn => self.literal_type(node, forced)?,
@@ -891,6 +898,8 @@ impl Settle {
             self.check(root);
         }
         self.check_fields_first();
+        self.check_definite_assignment();
+        self.check_exports();
         // After the other checks, so an error there comes first.
         for m in 0..self.lib.modules.len() {
             let scope = self.modules[m];
@@ -1463,7 +1472,19 @@ impl Settle {
             None if self.check_generic_call(node) => return,
             None => {
                 self.check_console_call(node, callee, args);
-                let callee_type = self.known_callee_type(callee);
+                let mut callee_type = self.known_callee_type(callee);
+                // A function that may be null, as `act(i)` for `act: (fn
+                // (Int): Void)?`, as Kotlin Temper reports it; the
+                // arguments are checked against what it is when not null.
+                if let TypeData::Nullable(inner) = *self.typing.types.get(callee_type) {
+                    if let Some(f) = self.typing.types.as_fn(inner) {
+                        let (to, from) = (self.show(inner), self.show(callee_type));
+                        let span = self.lib.tree.span(callee);
+                        self.lib
+                            .report(Level::Error, Message::ExpectedSubType(to, from), span);
+                        callee_type = f;
+                    }
+                }
                 match self.typing.types.get(callee_type) {
                     TypeData::Fn { params, .. } => params.clone(),
                     _ => return,
@@ -1548,6 +1569,14 @@ impl Settle {
         {
             return;
         }
+        // A setter-only property assigned, as `c.p = 5` for `set p(v: Int)`.
+        let tree = &self.lib.tree;
+        let assigned = (self.typing.parent(node)).is_some_and(|p| {
+            tree.kind(p) == NodeKind::Assign && tree.children(p).first() == Some(&node)
+        });
+        if assigned && self.has_setter(t, name) {
+            return;
+        }
         let name = self.lib.names.get(name).to_string();
         for callee in [false, true] {
             match self.dot_member_node(object, key, callee, false) {
@@ -1561,6 +1590,28 @@ impl Settle {
         }
         let message = Message::NoMember(name, self.show(t));
         self.lib.report(Level::Error, message, span);
+    }
+
+    /// Whether an assignment's value is used, as an initializer's, an
+    /// argument's or another assignment's, not as a block's statement or
+    /// result.
+    fn assignment_used(&self, node: NodeId) -> bool {
+        let tree = &self.lib.tree;
+        (self.typing.parent(node)).is_some_and(|p| match tree.kind(p) {
+            NodeKind::Let | NodeKind::Call => true,
+            NodeKind::Assign => tree.children(p).get(1) == Some(&node),
+            _ => false,
+        })
+    }
+
+    /// Whether a value of type `t` has an instance setter named `name`.
+    fn has_setter(&mut self, t: TypeId, name: NameId) -> bool {
+        let Some(receiver) = self.receiver(t) else {
+            return false;
+        };
+        let tree = &self.lib.tree;
+        (self.members_named(receiver.class, name, false).iter())
+            .any(|&m| tree.data(m) & ROLE_MASK == core::ROLE_SETTER)
     }
 
     /// Reports a `Void` value stored in a declaration or passed as an

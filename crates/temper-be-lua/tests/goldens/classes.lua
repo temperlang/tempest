@@ -106,6 +106,7 @@ end
 ---@field count integer
 ---@field hidden integer
 ---@field doubled integer
+---@field added integer
 ---@field bump fun(self: classes.Counter): classes.Counter
 ---@field same fun(self: classes.Counter, other: classes.Counter): boolean
 
@@ -129,6 +130,12 @@ end
 ---@param value integer
 function Counter.set.doubled(this, value)
   this.count = temper.int32_sub(value, this.count)
+end
+
+---@param this classes.Counter
+---@param value integer
+function Counter.set.added(this, value)
+  this.count = temper.int32_add(this.count, value)
 end
 
 ---@param this classes.Counter
@@ -403,6 +410,13 @@ print(tostring(c.count))
 c.doubled = 10
 print(tostring(c.doubled))
 print(tostring(c:same(Counter():bump():bump())))
+c.added = 5
+local t = 2
+c.added = t
+local t2 = t
+c.added = t2
+local added = t2
+print(added .. " " .. c.count)
 print(tostring(Point(1, 2):eq(Point(1, 2))) .. " " .. tostring(not Point(1, 2):eq(Point(2, 1))))
 print(tostring(Holder(Loose(3), "a"):eq(Holder(Loose(-3), "a"))))
 print(tostring(Version(1, 2):compareTo(Version(1, 3)) < 0) .. " " .. tostring(Version(2, 0):compareTo(Version(1, 9)) >= 0))

@@ -263,7 +263,7 @@ impl Settle {
     }
 
     /// Whether a call may bubble, other than through its arguments.
-    fn call_bubbles(&mut self, call: NodeId) -> bool {
+    pub(super) fn call_bubbles(&mut self, call: NodeId) -> bool {
         let children = self.lib.tree.children(call).to_vec();
         let Some((&callee, args)) = children.split_first() else {
             return false;

@@ -200,7 +200,6 @@ a == 42
 
 Assignment to a property with a setter is really a method call, under the hood.
 
-<!-- known: I10 -->
 ```temper
 class C {
   public set p(newValue: String) {
@@ -210,8 +209,6 @@ class C {
 (new C()).p = "a value" //!outputs "Assigned a value."
 // ✅ "a value"
 ```
-
-> **Note:** tempest says "No member p in C" for a property with only a setter ([inconsistencies](../inconsistencies.md#i10-examples-tempest-doesnt-run-as-marked)).
 
 ## Functions
 

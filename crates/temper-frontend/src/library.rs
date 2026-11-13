@@ -152,6 +152,13 @@ pub enum Message {
     /// with no constructor, that has no initializer, as Kotlin reports
     /// the latter.
     PropertyNotInitializedInConstructor(String),
+    /// A local read where some path to it doesn't assign it, as Kotlin
+    /// Temper's `UseBeforeInitialization`, without its paths.
+    UseBeforeInitialization(String),
+    /// An exported declaration whose public signature names a type of its
+    /// module that isn't exported, as Kotlin Temper's
+    /// `ExportNeedsNonExported`.
+    ExportNeedsNonExported(String),
     /// Assigning a member that isn't a `var`: the member, its class.
     IncompatibleUsage(String, String),
     /// A value of the wrong type stored: the target's type, the value's.
@@ -291,6 +298,7 @@ impl Message {
         matches!(
             self,
             Message::CannotAssign(..)
+                | Message::ExportNeedsNonExported(..)
                 | Message::ExpectedSubType(..)
                 | Message::ExpectedValueOfType(..)
                 | Message::IncompatibleSignature(..)
@@ -383,6 +391,12 @@ impl Message {
             }
             Message::PropertyNotInitializedInConstructor(name) => {
                 format!("Property {name} not initialized in constructor")
+            }
+            Message::UseBeforeInitialization(name) => {
+                format!("{name} is not initialized along branches")
+            }
+            Message::ExportNeedsNonExported(name) => {
+                format!("Export depends publicly on non-exported symbol {name}")
             }
             Message::IncompatibleUsage(member, class) => {
                 format!("Member {member} defined in {class} incompatible with usage")

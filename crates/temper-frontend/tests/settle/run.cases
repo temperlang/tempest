@@ -114,7 +114,8 @@ let a = b + 1;
 let b = a + 1;
 --- settled
 (Block (Let ^b:1 (Call + a:0 1)) (Let ^a:0 (Call + b:1 1)) #void)
-Failed: a has not been initialized
+error 23..24: a is not initialized along branches
+Failed: a is not initialized along branches
 
 === top-level assignments order what reads the variable
 var n = 5;

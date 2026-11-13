@@ -645,3 +645,284 @@ error 968..969: Cannot assign to D from I
 error 996..1002: Actual arguments do not match signature: (Int32, Int32) -> Boolean expected [Int32, Int32], but got [I, I]
 hint 1063..1069: Unnecessary type check to I from expression with type D which is a subtype
 error 1473..1474: Expected subtype of D, but got I
+
+=== locals read before they're assigned on some path, as Kotlin Temper's UseBeforeInit reports them
+// Kotlin also says where the paths that miss it are. An orelse's
+// fallback follows what may fail in its body, as the division, but not
+// the assignment of s.
+let maybe(b: Boolean): Int {
+  let a, c;
+  if (b) {
+    a = 1;
+  } else {
+    c = 2;
+  }
+  a + c
+}
+let missingElse(b: Boolean): Void {
+  let x;
+  if (b) {
+    x = 1;
+  }
+  console.log(x.toString());
+}
+let loops(b: Boolean, xs: List<Int>): Int {
+  var w;
+  while (b) { w = 1; }
+  let y;
+  for (let x of xs) { y = x; }
+  var z;
+  z += 1;
+  w + y + z
+}
+let failing(b: Boolean, n: Int): Int {
+  let q;
+  let r = do { q = 10 / n; 0 } orelse 2;
+  let s;
+  (s = n) orelse panic();
+  let t;
+  when (b) {
+    true -> t = 1;
+  }
+  q + r + s + t
+}
+// A read reported once per path; a function's own locals are checked,
+// its outer function's aren't, wherever it's called.
+let once(b: Boolean): Int {
+  let u;
+  if (b) { u = 1; }
+  let f(): Int { u };
+  let g(): Int { let v; v };
+  u + u + f() + g()
+}
+console.log(maybe(true).toString());
+console.log("after");
+--- settled
+(Block
+  (Let
+    ^maybe:0
+    (Fn
+      (Let ^b:5 Boolean)
+      Int
+      (Block
+        (Let ^a:6)
+        (Let ^c:7)
+        (If b:5 (Block (Assign a:6 1) #void) (Block (Assign c:7 2) #void))
+        (Call + a:6 c:7))))
+  (Let
+    ^missingElse:1
+    (Fn
+      (Let ^b:8 Boolean)
+      Void
+      (Block
+        (Let ^x:9)
+        (If b:8 (Block (Assign x:9 1) #void) (Block))
+        (Call (Call . console \log) (Call (Call . x:9 \toString)))
+        #void)))
+  (Let
+    ^loops:2
+    (Fn
+      (Let ^b:10 Boolean)
+      (Let ^xs:11 (Call <> List Int))
+      Int
+      (Block
+        (Var ^w:12)
+        (Loop (If b:10 (Block (Assign w:12 1) #void) (Break @418)))
+        (Let ^y:13)
+        (Loop
+          (Block
+            (Call
+              (Call . xs:11 \forEach)
+              (Fn (Let ^x:15) (Block (Assign y:13 x:15) #void)))
+            (Break @450)))
+        (Var ^z:14)
+        (Assign z:14 (Call + z:14 1))
+        (Call + (Call + w:12 y:13) z:14))))
+  (Let
+    ^failing:3
+    (Fn
+      (Let ^b:16 Boolean)
+      (Let ^n:17 Int)
+      Int
+      (Block
+        (Let ^q:18)
+        (Let ^r:19 (Orelse (Block (Assign q:18 (Call / 10 n:17)) 0) 2))
+        (Let ^s:20)
+        (Orelse (Assign s:20 n:17) (Call panic))
+        (Let ^t:21)
+        (Block (If (Call == b:16 true) (Assign t:21 1) (Block)))
+        (Call + (Call + (Call + q:18 r:19) s:20) t:21))))
+  (Let
+    ^once:4
+    (Fn
+      (Let ^b:22 Boolean)
+      Int
+      (Block
+        (Let ^u:23)
+        (If b:22 (Block (Assign u:23 1) #void) (Block))
+        (Let ^f:24 (Fn Int (Block u:23)))
+        (Let ^g:25 (Fn Int (Block (Let ^v:26) v:26)))
+        (Call + (Call + (Call + u:23 u:23) (Call f:24)) (Call g:25)))))
+  (Call (Call . console \log) (Call (Call . (Call maybe:0 true) \toString)))
+  (Call (Call . console \log) "after")
+  #void)
+error 253..254: a is not initialized along branches
+error 257..258: c is not initialized along branches
+error 346..347: x is not initialized along branches
+error 490..491: z is not initialized along branches
+error 500..501: w is not initialized along branches
+error 504..505: y is not initialized along branches
+error 683..684: q is not initialized along branches
+error 695..696: t is not initialized along branches
+error 927..928: v is not initialized along branches
+error 934..935: u is not initialized along branches
+Failed: a is not initialized along branches
+
+=== locals assigned on every path, as Kotlin Temper's UseBeforeInit accepts them
+let branches(b: Boolean): Int {
+  let x;
+  if (b) { x = 1; } else { x = 2; }
+  let y;
+  if (b) { y = 1; } else { return 0; }
+  let z;
+  when (b) {
+    true -> z = 1;
+    else -> z = 2;
+  }
+  let u;
+  if (b) { u = 1; } else { panic(); }
+  x + y + z + u
+}
+let bubbles(b: Boolean): Int throws Bubble {
+  let v;
+  if (b) { v = 1; } else { bubble(); }
+  v
+}
+let loops(b: Boolean): Int {
+  let x;
+  do { x = 3; } while (x < 2);
+  var w;
+  while (true) { w = 1; break; }
+  var n;
+  for (;;) { if (b) { n = 1; break; } }
+  let k;
+  for (var i = 0; i < 3; i += 1) {
+    if (i == 1) { continue; }
+  }
+  k = 4;
+  x + w + n + k
+}
+let failing(n: Int): Int {
+  let q;
+  do { q = 10 / n; } orelse do { q = 2; }
+  let r;
+  do { r = 4 / 2; } orelse panic();
+  q + r
+}
+let later(): Int {
+  let x;
+  let f(): Int { x };
+  x = 1;
+  f()
+}
+let x;
+if (branches(true) > 0) { x = 1; } else { x = 2; }
+console.log("${x} ${branches(true)} ${loops(true)} ${failing(0)} ${later()} ${bubbles(true) orelse 0}");
+--- settled
+(Block
+  (Let
+    ^branches:0
+    (Fn
+      (Let ^b:6 Boolean)
+      Int
+      (Block
+        (Let ^x:7)
+        (If b:6 (Block (Assign x:7 1) #void) (Block (Assign x:7 2) #void))
+        (Let ^y:8)
+        (If b:6 (Block (Assign y:8 1) #void) (Block (Return @0 0) #void))
+        (Let ^z:9)
+        (Block (If (Call == b:6 true) (Assign z:9 1) (Assign z:9 2)))
+        (Let ^u:10)
+        (If b:6 (Block (Assign u:10 1) #void) (Block (Call panic) #void))
+        (Call + (Call + (Call + x:7 y:8) z:9) u:10))))
+  (Let
+    ^bubbles:1
+    (Fn
+      (Let ^b:11 Boolean)
+      (Call throws Int Bubble)
+      (Block
+        (Let ^v:12)
+        (If b:11 (Block (Assign v:12 1) #void) (Block (Fail) #void))
+        v:12)))
+  (Let
+    ^loops:2
+    (Fn
+      (Let ^b:13 Boolean)
+      Int
+      (Block
+        (Let ^x:14)
+        (Loop
+          (Block (Assign x:14 3) #void)
+          (If (Call < x:14 2) (Block) (Break @393)))
+        (Var ^w:15)
+        (Loop (If true (Block (Assign w:15 1) (Break @433) #void) (Break @433)))
+        (Var ^n:16)
+        (Block
+          (Loop
+            (Block (If b:13 (Block (Assign n:16 1) (Break @475) #void) (Block)))))
+        (Let ^k:17)
+        (Block
+          (Var ^i:18 0)
+          (Loop
+            (If
+              (Call < i:18 3)
+              (Block
+                (If (Call == i:18 1) (Block (Continue @524) #void) (Block)))
+              (Break @524))
+            (Assign i:18 (Call + i:18 1))))
+        (Assign k:17 4)
+        (Call + (Call + (Call + x:14 w:15) n:16) k:17))))
+  (Let
+    ^failing:3
+    (Fn
+      (Let ^n:19 Int)
+      Int
+      (Block
+        (Let ^q:20)
+        (Orelse
+          (Block (Assign q:20 (Call / 10 n:19)) #void)
+          (Block (Assign q:20 2) #void))
+        (Let ^r:21)
+        (Orelse (Block (Assign r:21 (Call / 4 2)) #void) (Call panic))
+        (Call + q:20 r:21))))
+  (Let
+    ^later:4
+    (Fn
+      Int
+      (Block
+        (Let ^x:22)
+        (Let ^f:23 (Fn Int (Block x:22)))
+        (Assign x:22 1)
+        (Call f:23))))
+  (Let ^x:5)
+  (If
+    (Call > (Call branches:0 true) 0)
+    (Block (Assign x:5 1) #void)
+    (Block (Assign x:5 2) #void))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      x:5
+      " "
+      (Call branches:0 true)
+      " "
+      (Call loops:2 true)
+      " "
+      (Call failing:3 0)
+      " "
+      (Call later:4)
+      " "
+      (Orelse (Call bubbles:1 true) 0)))
+  #void)
+log 1 4 9 4 1 1

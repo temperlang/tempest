@@ -556,7 +556,29 @@ impl Translator<'_> {
                     body: vec![Stmt::Return(Some(storage))],
                 });
             }
-            (None, None) => return not_yet(format!("a setter without a getter, {name}")),
+            // A getter that fails, as Kotlin's Python writes one, since a
+            // property's setter needs one; Temper code never reads it.
+            (None, None) => {
+                let setter_decl = match setter.map(|s| p.nodes.get(s)) {
+                    Some(Node::Method { decl, .. } | Node::AbstractMethod { decl, .. }) => decl,
+                    _ => return not_yet(format!("a property without a getter, {name}")),
+                };
+                let Some(&ty) = p.signature(setter_decl).and_then(|s| s.params.first()) else {
+                    return not_yet(format!("a setter without a parameter, {name}"));
+                };
+                let ann = self.ann(ty)?;
+                let message = Expr::Str(format!("{name} getter unavailable"));
+                out.push(Stmt::Def {
+                    decorators: vec!["property".into()],
+                    name: name.into(),
+                    params: vec![("self".into(), String::new())],
+                    positional: 1,
+                    result: ann,
+                    body: vec![Stmt::Raise(
+                        Expr::name("AttributeError").call(vec![message]),
+                    )],
+                });
+            }
         }
         match (setter, field) {
             (Some(s), _) => out.push(accessor(self, s, format!("{name}.setter"))?),

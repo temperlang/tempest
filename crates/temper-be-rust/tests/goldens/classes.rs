@@ -22,6 +22,17 @@ pub(crate) fn init() -> temper_core::Result<()> {
             c.set_doubled(10);
             println!("{}", c.doubled());
             println!("{}", c.same(Counter::new().bump().bump()));
+            c.set_added(5);
+            let added = {
+                let t2 = {
+                    let t: i32 = 2;
+                    c.set_added(t);
+                    t
+                };
+                c.set_added(t2);
+                t2
+            };
+            println!("{added} {}", c.count());
             println!(
                 "{} {}",
                 Point::new(1, 2) == Point::new(1, 2),
@@ -251,6 +262,10 @@ impl Counter {
 
     pub fn set_doubled(&self, value: i32) {
         *self.0.count.write().unwrap() = value.wrapping_sub(self.count());
+    }
+
+    pub fn set_added(&self, value: i32) {
+        *self.0.count.write().unwrap() = self.count().wrapping_add(value);
     }
 
     pub fn bump(&self) -> Counter {
