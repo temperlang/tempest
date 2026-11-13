@@ -1,4 +1,4 @@
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, OnceLock, RwLock};
 use temper_core::ToArcString;
 
 pub(crate) fn init() -> temper_core::Result<()> {
@@ -111,6 +111,7 @@ pub(crate) fn init() -> temper_core::Result<()> {
                 temper_core::ListedTrait::len(&*temper_core::MappedTrait::keys(&mb))
             );
             indexed();
+            both();
             TALLY
                 .set(temper_core::MapBuilder::new())
                 .unwrap_or_else(|_| panic!());
@@ -224,6 +225,29 @@ impl Named {
 }
 
 temper_core::impl_any_value_trait!(Named, []);
+
+struct CounterStruct {
+    n: RwLock<i32>,
+}
+
+#[derive(Clone)]
+pub struct Counter(Arc<CounterStruct>);
+
+impl Counter {
+    pub fn new(n: i32) -> Counter {
+        Counter(Arc::new(CounterStruct { n: RwLock::new(n) }))
+    }
+
+    pub fn n(&self) -> i32 {
+        *self.0.n.read().unwrap()
+    }
+
+    pub fn set_n(&self, value: i32) {
+        *self.0.n.write().unwrap() = value;
+    }
+}
+
+temper_core::impl_any_value_trait!(Counter, []);
 
 struct ShelfStruct<T: Clone + Send + Sync + 'static + Into<Named>> {
     items: temper_core::List<T>,
@@ -411,6 +435,67 @@ pub(crate) fn indexed() {
         t
     };
     println!("{was} {pre} {post} {down} {at}");
+}
+
+pub(crate) fn both() {
+    let mut x: i32 = 1;
+    let mut y: i32 = 10;
+    let locals = {
+        let t = x;
+        x = t.wrapping_add(1);
+        t
+    }
+    .wrapping_add({
+        let t = y;
+        y = t.wrapping_add(1);
+        t
+    });
+    let p = Counter::new(100);
+    let q = Counter::new(1000);
+    let fields = {
+        let t = p.n();
+        *p.0.n.write().unwrap() = t.wrapping_add(1);
+        t
+    }
+    .wrapping_add({
+        let t = q.n();
+        *q.0.n.write().unwrap() = t.wrapping_add(1);
+        t
+    });
+    let same = {
+        let t = p.n();
+        *p.0.n.write().unwrap() = t.wrapping_add(1);
+        t
+    }
+    .wrapping_add({
+        let t = p.n();
+        *p.0.n.write().unwrap() = t.wrapping_add(1);
+        t
+    });
+    let a: temper_core::ListBuilder<i32> = temper_core::listed::new_builder();
+    temper_core::listed::add(&a, 3, None);
+    let b: temper_core::ListBuilder<i32> = temper_core::listed::new_builder();
+    temper_core::listed::add(&b, 30, None);
+    let i: i32 = 0;
+    let items = {
+        let k = i;
+        let t = temper_core::ListedTrait::get(&a, k);
+        temper_core::listed::set(&a, k, t.wrapping_add(1));
+        t
+    }
+    .wrapping_add({
+        let k = i;
+        let t = temper_core::ListedTrait::get(&b, k);
+        temper_core::listed::set(&b, k, t.wrapping_add(1));
+        t
+    });
+    println!(
+        "{locals} {x} {y} {fields} {same} {} {} {items} {} {}",
+        p.n(),
+        q.n(),
+        temper_core::ListedTrait::get(&a, 0),
+        temper_core::ListedTrait::get(&b, 0)
+    );
 }
 
 static TALLY: OnceLock<temper_core::MapBuilder<Arc<String>, i32>> = OnceLock::new();

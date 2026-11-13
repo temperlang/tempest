@@ -18,7 +18,7 @@ use crate::analysis::{module_imports, module_refs, test_imports, walk};
 use crate::decls::{DeclKind, Facts};
 use crate::ids::{DeclId, NodeId};
 use crate::qname::{QNames, is_external, library_of, qname_library};
-use crate::schema::Node;
+use crate::schema::{Family, Node};
 use crate::{Module, Program};
 use std::collections::{HashMap, HashSet};
 
@@ -80,6 +80,12 @@ pub struct NamingRules {
     /// walrus would assign it before the other's annotation. Only for
     /// function-scoped targets.
     pub same_type_shares: bool,
+    /// Whether a block value's statements run before the statement
+    /// holding it, as Python's, which has no block expressions: then the
+    /// locals its value reads stay alive until that statement reads them,
+    /// after every block value in it has run, so `x++ + y++` keeps its
+    /// two temporaries apart. Only for function-scoped targets.
+    pub hoists_block_values: bool,
     /// Whether the module's init block is one function in the output,
     /// whose locals the function literals in it can't shadow, as Java's
     /// static initializer's lambdas can't, and C++'s `-Wshadow` reports:
@@ -928,6 +934,16 @@ struct Live {
     loops: Vec<(u32, u32)>,
     /// Where each `let`'s initializer is, for locals declared inside it.
     inits: HashMap<DeclId, (u32, u32)>,
+    /// Whether block values' statements run before the statement holding
+    /// them ([`NamingRules::hoists_block_values`]).
+    hoist: bool,
+    /// The locals that block values' values read, by statement being
+    /// walked, innermost last: read where that statement's expressions
+    /// are, once its block values' statements have all run.
+    held: Vec<Vec<DeclId>>,
+    /// How many block values' values deep the walk is, in the innermost
+    /// statement.
+    in_value: usize,
 }
 
 impl Live {
@@ -940,19 +956,75 @@ impl Live {
         let end = self.end.entry(d).or_insert(self.pos);
         *end = (*end).max(self.pos);
         self.uses.entry(d).or_default().push(self.pos);
+        if self.in_value > 0 {
+            if let Some(held) = self.held.last_mut() {
+                held.push(d);
+            }
+        }
+    }
+
+    /// Reads the innermost statement's held locals here.
+    fn release(&mut self) {
+        let held = self.held.last_mut().map(std::mem::take).unwrap_or_default();
+        let in_value = std::mem::replace(&mut self.in_value, 0);
+        for d in held {
+            self.touch(d);
+        }
+        self.in_value = in_value;
+    }
+
+    /// Visits kids in order, releasing held locals before a nested
+    /// statement (an `if`'s blocks), which runs after the expressions
+    /// before it.
+    fn visit_kids(&mut self, p: &Program, id: NodeId) {
+        for &kid in p.nodes.kids(id) {
+            if p.nodes.kind(kid).family() == Family::Stmt {
+                self.release();
+            }
+            self.visit(p, kid);
+        }
     }
 
     fn visit(&mut self, p: &Program, id: NodeId) {
+        // Where block values' statements run before the statement holding
+        // them, as Python's, what their values read is read there, after
+        // every one of them: `x++ + y++` reads both temporaries after
+        // assigning both.
+        let stmt = self.hoist && p.nodes.kind(id).family() == Family::Stmt;
+        let in_value = if stmt {
+            self.held.push(Vec::new());
+            std::mem::replace(&mut self.in_value, 0)
+        } else {
+            0
+        };
+        self.visit_node(p, id);
+        if stmt {
+            self.release();
+            self.held.pop();
+            self.in_value = in_value;
+        }
+    }
+
+    fn visit_node(&mut self, p: &Program, id: NodeId) {
         self.pos += 1;
         match p.nodes.get(id) {
             Node::Let { local, init } => {
                 if let Some(init) = init {
                     let start = self.pos;
                     self.visit(p, init);
+                    self.release();
                     self.inits.insert(local, (start, self.pos));
                 }
                 self.pos += 1;
                 self.define(local);
+            }
+            Node::BlockValue { stmts, value } => {
+                for &s in p.nodes.list(stmts) {
+                    self.visit(p, s);
+                }
+                self.in_value += 1;
+                self.visit(p, value);
+                self.in_value -= 1;
             }
             Node::Param { decl } => {
                 self.define(decl);
@@ -966,22 +1038,18 @@ impl Live {
             Node::Local { local } => self.touch(local),
             Node::Assign { local, value } => {
                 self.visit(p, value);
+                self.release();
                 self.pos += 1;
                 self.touch(local);
             }
             Node::While { .. } | Node::DoWhile { .. } => {
                 let start = self.pos;
-                for &kid in p.nodes.kids(id) {
-                    self.visit(p, kid);
-                }
+                self.visit_kids(p, id);
+                self.release();
                 self.pos += 1;
                 self.loops.push((start, self.pos));
             }
-            _ => {
-                for &kid in p.nodes.kids(id) {
-                    self.visit(p, kid);
-                }
-            }
+            _ => self.visit_kids(p, id),
         }
     }
 
@@ -1019,7 +1087,10 @@ fn name_function(
         .map(|d| map.get(d).to_string())
         .collect();
     outer.extend(around.iter().cloned());
-    let mut live = Live::default();
+    let mut live = Live {
+        hoist: rules.hoists_block_values,
+        ..Live::default()
+    };
     live.visit(p, function);
     let mut ranges = live.ranges();
     let mut decls: Vec<DeclId> = Vec::new();

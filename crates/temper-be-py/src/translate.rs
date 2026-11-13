@@ -1968,7 +1968,10 @@ impl<'a> Translator<'a> {
                         }
                     }
                 }
-                let mut stmts = Vec::new();
+                // After what's hoisted already, which a statement's own
+                // hoisted statements would otherwise join after it:
+                // `p.n++ + q.n++` reads `p.n` first.
+                let mut stmts = std::mem::take(&mut self.pre);
                 for &s in list {
                     self.stmt(s, &mut stmts)?;
                 }

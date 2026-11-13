@@ -94,6 +94,42 @@ public static class GenericsGlobal
         console.Log(string.Create(CultureInfo.InvariantCulture, $"{was} {pre} {post} {down} {at}"));
     }
 
+    internal static void Both()
+    {
+        int x = 1;
+        int y = 10;
+        int t1 = x;
+        x = t1 + 1;
+        int t21 = y;
+        y = t21 + 1;
+        int locals = t1 + t21;
+        Counter p = new Counter(100);
+        Counter q = new Counter(1000);
+        int t31 = p.N;
+        p.N = t31 + 1;
+        int t41 = q.N;
+        q.N = t41 + 1;
+        int fields = t31 + t41;
+        int t51 = p.N;
+        p.N = t51 + 1;
+        int t6 = p.N;
+        p.N = t6 + 1;
+        int same = t51 + t6;
+        IList<int> a = new List<int>();
+        a.Add(3);
+        IList<int> b = new List<int>();
+        b.Add(30);
+        int i = 0;
+        int k1 = i;
+        int t7 = a[k1];
+        a[k1] = t7 + 1;
+        int k21 = i;
+        int t8 = b[k21];
+        b[k21] = t8 + 1;
+        int items = t7 + t8;
+        console.Log(string.Create(CultureInfo.InvariantCulture, $"{locals} {x} {y} {fields} {same} {p.N} {q.N} {items} {a[0]} {b[0]}"));
+    }
+
     internal static int Bump(string key)
     {
         {
@@ -143,25 +179,25 @@ public static class GenericsGlobal
         IReadOnlyList<string> built = Listed.ToReadOnlyList(builder);
         console.Log(built.Count.ToString(CultureInfo.InvariantCulture) + " " + Listed.GetOr(built, 5, "?") + " " + Listed.Slice(built, 1, 2)[0]);
         IReadOnlyDictionary<string, int> m = Mapped.ConstructMap(Listed.CreateReadOnlyList<KeyValuePair<string, int>>(new KeyValuePair<string, int>("a", 1), new KeyValuePair<string, int>("b", 2)));
-        int t1;
+        int t9;
         try
         {
-            t1 = m["b"];
+            t9 = m["b"];
         }
         catch
         {
-            t1 = -1;
+            t9 = -1;
         }
-        int t6;
+        int t10;
         try
         {
-            t6 = m["c"];
+            t10 = m["c"];
         }
         catch
         {
-            t6 = -1;
+            t10 = -1;
         }
-        console.Log(string.Create(CultureInfo.InvariantCulture, $"{t1} {t6} {(m.ContainsKey("a") ? "true" : "false")} {m.Count}"));
+        console.Log(string.Create(CultureInfo.InvariantCulture, $"{t9} {t10} {(m.ContainsKey("a") ? "true" : "false")} {m.Count}"));
         IDictionary<string, int?> mb = new TemperLang.Core.OrderedDictionary<string, int?>();
         mb["q"] = 5;
         mb["n"] = null;
@@ -182,36 +218,37 @@ public static class GenericsGlobal
         console.Log(subject5 == null ? "null" : subject5);
         console.Log(Mapped.Keys(mb).Count.ToString(CultureInfo.InvariantCulture));
         Indexed();
+        Both();
         tally = new TemperLang.Core.OrderedDictionary<string, int>();
         tally["k"] = 2;
-        int t7;
+        int t11;
         try
         {
-            t7 = Bump("k");
+            t11 = Bump("k");
         }
         catch
         {
-            t7 = -1;
+            t11 = -1;
         }
-        int t8;
+        int t12;
         try
         {
-            t8 = Bump("z");
+            t12 = Bump("z");
         }
         catch
         {
-            t8 = -1;
+            t12 = -1;
         }
-        int t9;
+        int t13;
         try
         {
-            t9 = tally["k"];
+            t13 = tally["k"];
         }
         catch
         {
-            t9 = -1;
+            t13 = -1;
         }
-        console.Log(string.Create(CultureInfo.InvariantCulture, $"{t7} {t8} {t9}"));
+        console.Log(string.Create(CultureInfo.InvariantCulture, $"{t11} {t12} {t13}"));
         console.Log((FirstSame(Listed.CreateReadOnlyList<int>(1000), Listed.CreateReadOnlyList<int>(1000)) ? "true" : "false") + " " + (FirstSame(Listed.CreateReadOnlyList<int>(1000), Listed.CreateReadOnlyList<int>(7)) ? "true" : "false"));
     }
 }

@@ -50,6 +50,19 @@ function Named.constructor(this, name)
   this.name = name
 end
 
+---@class generics.Counter
+---@field n integer
+
+---@class generics.Counter.type: temper.Type
+---@operator call: generics.Counter
+local Counter = temper.type("generics.Counter")
+
+---@param this generics.Counter
+---@param n integer
+function Counter.constructor(this, n)
+  this.n = n
+end
+
 ---@class generics.Shelf
 ---@field items any[]
 ---@field firstName fun(self: generics.Shelf): string|temper.Null
@@ -183,6 +196,41 @@ local function indexed()
   print(was .. " " .. pre .. " " .. post .. " " .. down .. " " .. at)
 end
 
+local function both()
+  local x = 1
+  local y = 10
+  local t = x
+  x = temper.int32_add(t, 1)
+  local t2 = y
+  y = temper.int32_add(t2, 1)
+  local locals = temper.int32_add(t, t2)
+  local p = Counter(100)
+  local q = Counter(1000)
+  local t3 = p.n
+  p.n = temper.int32_add(t3, 1)
+  local t4 = q.n
+  q.n = temper.int32_add(t4, 1)
+  local fields = temper.int32_add(t3, t4)
+  local t5 = p.n
+  p.n = temper.int32_add(t5, 1)
+  local t6 = p.n
+  p.n = temper.int32_add(t6, 1)
+  local same = temper.int32_add(t5, t6)
+  local a = temper.listbuilder_constructor()
+  temper.listbuilder_add(a, 3)
+  local b = temper.listbuilder_constructor()
+  temper.listbuilder_add(b, 30)
+  local i = 0
+  local k = i
+  local t7 = temper.listed_get(a, k)
+  temper.listbuilder_set(a, k, temper.int32_add(t7, 1))
+  local k2 = i
+  local t8 = temper.listed_get(b, k2)
+  temper.listbuilder_set(b, k2, temper.int32_add(t8, 1))
+  local items = temper.int32_add(t7, t8)
+  print(locals .. " " .. x .. " " .. y .. " " .. fields .. " " .. same .. " " .. p.n .. " " .. q.n .. " " .. items .. " " .. temper.listed_get(a, 0) .. " " .. temper.listed_get(b, 0))
+end
+
 ---@param key string
 ---@return integer
 local function bump(key)
@@ -260,6 +308,7 @@ local subject5 = temper.is_null(subject6) and temper.null or tostring(subject6 -
 print(temper.is_null(subject5) and "null" or (subject5 --[[@as string]]))
 print(tostring(temper.listed_length(temper.mapped_keys(mb))))
 indexed()
+both()
 tally = temper.mapbuilder_constructor()
 temper.mapbuilder_set(tally, "k", 2)
 ---@type integer
@@ -290,6 +339,7 @@ return {
   Holder = Holder,
   Box = Box,
   Named = Named,
+  Counter = Counter,
   Shelf = Shelf,
   Scene = Scene,
   Stage = Stage,

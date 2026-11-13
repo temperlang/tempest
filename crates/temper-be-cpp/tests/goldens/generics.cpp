@@ -15,6 +15,7 @@ struct Holder;
 template <class T>
 struct Box;
 struct Named;
+struct Counter;
 template <class T>
 struct Shelf;
 struct Scene;
@@ -38,6 +39,12 @@ struct Named : public std::enable_shared_from_this<Named> {
   temper::core::Str name;
   static std::shared_ptr<Named> make(temper::core::Str const & name);
   temper::core::Str get_name() const;
+};
+
+struct Counter : public std::enable_shared_from_this<Counter> {
+  int32_t n;
+  static std::shared_ptr<Counter> make(int32_t n);
+  int32_t get_n();
 };
 
 template <class T>
@@ -144,6 +151,17 @@ core::Str Named::get_name() const {
   return this->name;
 }
 
+std::shared_ptr<Counter> Counter::make(int32_t n) {
+  global_init_init();
+  std::shared_ptr<Counter> self = std::make_shared<Counter>();
+  self->n = n;
+  return self;
+}
+
+int32_t Counter::get_n() {
+  return this->n;
+}
+
 std::shared_ptr<Stage> Stage::make() {
   global_init_init();
   std::shared_ptr<Stage> self = std::make_shared<Stage>();
@@ -212,6 +230,44 @@ static void indexed() {
   core::ListBuilder::set<int32_t>(counts, 0, t5);
   int32_t down = t5;
   core::Console::log(temper_globals::console.value, std::to_string(was) + " " + std::to_string(pre) + " " + std::to_string(post) + " " + std::to_string(down) + " " + std::to_string(at));
+}
+
+static void both() {
+  int32_t x = 1;
+  int32_t y = 10;
+  int32_t t = x;
+  x = core::Int::add(t, 1);
+  int32_t t2 = y;
+  y = core::Int::add(t2, 1);
+  int32_t locals = core::Int::add(t, t2);
+  std::shared_ptr<Counter> p = Counter::make(100);
+  std::shared_ptr<Counter> q = Counter::make(1000);
+  int32_t t3 = p->n;
+  p->n = core::Int::add(t3, 1);
+  int32_t int32 = t3;
+  int32_t t4 = q->n;
+  q->n = core::Int::add(t4, 1);
+  int32_t fields = core::Int::add(int32, t4);
+  int32_t t5 = p->n;
+  p->n = core::Int::add(t5, 1);
+  int32_t value2 = t5;
+  int32_t t6 = p->n;
+  p->n = core::Int::add(t6, 1);
+  int32_t same = core::Int::add(value2, t6);
+  std::shared_ptr<std::vector<int32_t>> a = core::ListBuilder::make<int32_t>();
+  core::ListBuilder::add<int32_t>(a, 3);
+  std::shared_ptr<std::vector<int32_t>> b = core::ListBuilder::make<int32_t>();
+  core::ListBuilder::add<int32_t>(b, 30);
+  int32_t i = 0;
+  int32_t k = i;
+  int32_t t7 = core::List::get<int32_t>(a, k);
+  core::ListBuilder::set<int32_t>(a, k, core::Int::add(t7, 1));
+  int32_t value3 = t7;
+  int32_t k2 = i;
+  int32_t t8 = core::List::get<int32_t>(b, k2);
+  core::ListBuilder::set<int32_t>(b, k2, core::Int::add(t8, 1));
+  int32_t items = core::Int::add(value3, t8);
+  core::Console::log(temper_globals::console.value, std::to_string(locals) + " " + std::to_string(x) + " " + std::to_string(y) + " " + std::to_string(fields) + " " + std::to_string(same) + " " + std::to_string(p->n) + " " + std::to_string(q->n) + " " + std::to_string(items) + " " + std::to_string(core::List::get<int32_t>(a, 0)) + " " + std::to_string(core::List::get<int32_t>(b, 0)));
 }
 
 static int32_t bump(core::Str const & key) {
@@ -295,6 +351,7 @@ void global_init_init() {
     core::Console::log(temper_globals::console.value, subject5 == nullptr ? TEMPER_STR("null") : subject5.value);
     core::Console::log(temper_globals::console.value, std::to_string(core::List::length<core::Str>(core::Mapped::keys<core::Str, core::NullableParam<int32_t>>(mb))));
     indexed();
+    both();
     temper_globals::tally.value = core::Map::make<core::Str, int32_t>();
     core::MapBuilder::set<core::Str, int32_t>(temper_globals::tally.value, TEMPER_STR("k"), 2);
     int32_t value5;

@@ -424,7 +424,11 @@ the Python backend's first variant:
   null (a parameter's default's local, `T`, and the parameter, `T?`),
   and a local declared inside another's initializer may not share its
   name, since a walrus assigns it before the other's annotation
-  (`NamingRules::same_type_shares`, 2026-11-02).
+  (`NamingRules::same_type_shares`, 2026-11-02). Python also hoists a
+  block value's statements before the statement holding it, so what
+  the value reads stays live until that statement, past every block
+  value in it: `x++ + y++` gets `t` and `t2`, not one `t` read twice
+  (`NamingRules::hoists_block_values`, 2026-11-13).
 - **Module level:** the items, then the init block's locals, which live
   in the module's namespace in Python (so `_x`, private, not Kotlin's
   public `x_1`), claimed exported, connected, and `@keep` first, then

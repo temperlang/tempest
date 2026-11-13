@@ -22,7 +22,16 @@ from temper_core import (
 from types import MappingProxyType as _MappingProxyType
 from typing import Generic as _Generic, TypeVar as _TypeVar
 
-__all__ = ('Holder', 'Box', 'Named', 'Shelf', 'Scene', 'Stage', 'first')
+__all__ = (
+    'Holder',
+    'Box',
+    'Named',
+    'Counter',
+    'Shelf',
+    'Scene',
+    'Stage',
+    'first',
+)
 
 _T = _TypeVar('_T')
 _T_2 = _TypeVar('_T_2', bound='Named')
@@ -69,6 +78,22 @@ class Named:
     @property
     def name(self, /) -> str:
         return self._name
+
+
+class Counter:
+    __slots__ = ('_n',)
+    _n: int
+
+    def __init__(self, /, n: int) -> None:
+        self._n = n
+
+    @property
+    def n(self, /) -> int:
+        return self._n
+
+    @n.setter
+    def n(self, value: int, /) -> None:
+        self._n = value
 
 
 class Shelf(_Generic[_T_2]):
@@ -160,6 +185,41 @@ def _indexed() -> None:
     _console.log(f'{was} {pre} {post} {down} {at}')
 
 
+def _both() -> None:
+    x = 1
+    y = 10
+    t = x
+    x = _int_add(t, 1)
+    t2 = y
+    y = _int_add(t2, 1)
+    locals_ = _int_add(t, t2)
+    p = Counter(100)
+    q = Counter(1000)
+    t = p.n
+    p.n = _int_add(t, 1)
+    t2 = q.n
+    q.n = _int_add(t2, 1)
+    fields = _int_add(t, t2)
+    t = p.n
+    p.n = _int_add(t, 1)
+    t2 = p.n
+    p.n = _int_add(t2, 1)
+    same = _int_add(t, t2)
+    a: _MutableSequence[int] = []
+    a.append(3)
+    b: _MutableSequence[int] = []
+    b.append(30)
+    i = 0
+    k = i
+    t = _list_get(a, k)
+    _list_builder_set(a, k, _int_add(t, 1))
+    k = i
+    t2 = _list_get(b, k)
+    _list_builder_set(b, k, _int_add(t2, 1))
+    items = _int_add(t, t2)
+    _console.log(f'{locals_} {x} {y} {fields} {same} {p.n} {q.n} {items} {_list_get(a, 0)} {_list_get(b, 0)}')
+
+
 def _bump(key: str, /) -> int:
     _map_builder_set(_tally, key, _int_sub(_tally[key], 1))
     t = _tally[key]
@@ -222,6 +282,7 @@ except Exception:
 _console.log('null' if (_subject5 := None if (_subject6 := _t_2) is None else str(_subject6)) is None else _subject5)
 _console.log(str(len(list(_mb.keys()))))
 _indexed()
+_both()
 _tally: dict[str, int] = {}
 _map_builder_set(_tally, 'k', 2)
 _t_3: int

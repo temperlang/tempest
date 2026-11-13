@@ -291,6 +291,7 @@ pub const RULES: NamingRules = NamingRules {
     identifier,
     block_scoped: false,
     same_type_shares: true,
+    hoists_block_values: true,
     init_literals_avoid_module: false,
     members_prefixed: true,
     fields_apart: false,

@@ -20,6 +20,8 @@ gives.
 
     export class Named(public name: String) {}
 
+    export class Counter(public var n: Int) {}
+
     export class Shelf<T extends Named>(public items: List<T>) {
       public firstName(): String? {
         if (items.isEmpty) { null } else { items[0].name }
@@ -99,6 +101,25 @@ gives.
       console.log("${was} ${pre} ${post} ${down} ${at}");
     }
     indexed();
+    // Two increments in one expression each keep their own temporary
+    // and run in order, on locals, fields, and indexes.
+    let both(): Void {
+      var x = 1;
+      var y = 10;
+      let locals = x++ + y++;
+      let p = new Counter(100);
+      let q = new Counter(1000);
+      let fields = p.n++ + q.n++;
+      let same = p.n++ + p.n++;
+      let a = new ListBuilder<Int>();
+      a.add(3);
+      let b = new ListBuilder<Int>();
+      b.add(30);
+      var i = 0;
+      let items = a[i]++ + b[i]++;
+      console.log("${locals} ${x} ${y} ${fields} ${same} ${p.n} ${q.n} ${items} ${a[0]} ${b[0]}");
+    }
+    both();
     let tally = new MapBuilder<String, Int>();
     tally.set("k", 2);
     let bump(key: String): Int throws Bubble {
@@ -128,6 +149,7 @@ none
 5
 1
 5 31 6 4 1
+11 2 11 1100 203 103 1001 33 4 31
 4 -1 3
 true false
 ```

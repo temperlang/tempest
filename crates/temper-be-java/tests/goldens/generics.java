@@ -83,6 +83,45 @@ public final class GenericsGlobal {
         console.log(was + " " + pre + " " + post + " " + down + " " + at);
     }
 
+    static void both() {
+        int x = 1;
+        int y = 10;
+        int t = x;
+        x = t + 1;
+        int t9 = t;
+        int t2 = y;
+        y = t2 + 1;
+        int locals = t9 + t2;
+        Counter p = new Counter(100);
+        Counter q = new Counter(1000);
+        int t3 = p.n;
+        p.n = t3 + 1;
+        int t10 = t3;
+        int t4 = q.n;
+        q.n = t4 + 1;
+        int fields = t10 + t4;
+        int t5 = p.n;
+        p.n = t5 + 1;
+        int t11 = t5;
+        int t6 = p.n;
+        p.n = t6 + 1;
+        int same = t11 + t6;
+        List<Integer> a = new ArrayList<>();
+        a.add(3);
+        List<Integer> b = new ArrayList<>();
+        b.add(30);
+        int i = 0;
+        int k = i;
+        int t7 = Core.listGet(a, k);
+        a.set(k, t7 + 1);
+        int t12 = t7;
+        int k2 = i;
+        int t8 = Core.listGet(b, k2);
+        b.set(k2, t8 + 1);
+        int items = t12 + t8;
+        console.log(locals + " " + x + " " + y + " " + fields + " " + same + " " + p.n + " " + q.n + " " + items + " " + Core.listGet(a, 0) + " " + Core.listGet(b, 0));
+    }
+
     static int bump(String key) {
         tally.put(key, Core.mappedGet(tally, key) - 1);
         int t = Core.mappedGet(tally, key);
@@ -156,6 +195,7 @@ public final class GenericsGlobal {
         console.log(subject5 == null ? "null" : subject5);
         console.log(Integer.toString(List.copyOf(mb.keySet()).size()));
         indexed();
+        both();
         tally = new LinkedHashMap<>();
         tally.put("k", 2);
         int t5;

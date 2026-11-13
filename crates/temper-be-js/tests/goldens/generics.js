@@ -140,6 +140,87 @@ function indexed() {
   console.log(`${was} ${pre} ${post} ${down} ${at}`);
 }
 
+function both() {
+  let x = 1;
+  let y = 10;
+  /** @type {number} */
+  let t$5;
+  {
+    const t = x;
+    x = (t + 1) | 0;
+    t$5 = t;
+  }
+  const t$7 = t$5;
+  /** @type {number} */
+  let t$6;
+  {
+    const t2 = y;
+    y = (t2 + 1) | 0;
+    t$6 = t2;
+  }
+  const locals = (t$7 + t$6) | 0;
+  const p = new Counter(100);
+  const q = new Counter(1000);
+  /** @type {number} */
+  let t$8;
+  {
+    const t3 = p.n;
+    p.n = (t3 + 1) | 0;
+    t$8 = t3;
+  }
+  const t$10 = t$8;
+  /** @type {number} */
+  let t$9;
+  {
+    const t4 = q.n;
+    q.n = (t4 + 1) | 0;
+    t$9 = t4;
+  }
+  const fields = (t$10 + t$9) | 0;
+  /** @type {number} */
+  let t$11;
+  {
+    const t5 = p.n;
+    p.n = (t5 + 1) | 0;
+    t$11 = t5;
+  }
+  const t$13 = t$11;
+  /** @type {number} */
+  let t$12;
+  {
+    const t6 = p.n;
+    p.n = (t6 + 1) | 0;
+    t$12 = t6;
+  }
+  const same = (t$13 + t$12) | 0;
+  /** @type {number[]} */
+  const a = [];
+  a.push(3);
+  /** @type {number[]} */
+  const b = [];
+  b.push(30);
+  const i = 0;
+  /** @type {number} */
+  let t$14;
+  {
+    const k = i;
+    const t7 = listedGet(a, k);
+    listBuilderSet(a, k, (t7 + 1) | 0);
+    t$14 = t7;
+  }
+  const t$16 = t$14;
+  /** @type {number} */
+  let t$15;
+  {
+    const k2 = i;
+    const t8 = listedGet(b, k2);
+    listBuilderSet(b, k2, (t8 + 1) | 0);
+    t$15 = t8;
+  }
+  const items = (t$16 + t$15) | 0;
+  console.log(`${locals} ${x} ${y} ${fields} ${same} ${p.n} ${q.n} ${items} ${listedGet(a, 0)} ${listedGet(b, 0)}`);
+}
+
 /**
  * @param {string} key
  * @returns {number}
@@ -149,21 +230,21 @@ function bump(key) {
     tally.set(key, (mappedGet(tally, key) - 1) | 0);
   }
   /** @type {number} */
-  let t$5;
+  let t$17;
   {
     const t = mappedGet(tally, key);
     tally.set(key, (t + 1) | 0);
-    t$5 = t;
+    t$17 = t;
   }
-  const before = t$5;
+  const before = t$17;
   /** @type {number} */
-  let t$6;
+  let t$18;
   {
     const t2 = (mappedGet(tally, key) + 1) | 0;
     tally.set(key, t2);
-    t$6 = t2;
+    t$18 = t2;
   }
-  const after = t$6;
+  const after = t$18;
   return (before + after) | 0;
 }
 
@@ -225,6 +306,27 @@ export class Named extends type() {
   /** @returns {string} */
   get name() {
     return this.#name;
+  }
+}
+
+export class Counter extends type() {
+  /** @type {number} */
+  #n;
+
+  /** @param {number} n */
+  constructor(n) {
+    super();
+    this.#n = n;
+  }
+
+  /** @returns {number} */
+  get n() {
+    return this.#n;
+  }
+
+  /** @param {number} value */
+  set n(value) {
+    this.#n = value;
   }
 }
 
@@ -301,27 +403,27 @@ console.log(`${built.length} ${listedGetOr(/** @type {string[]} */ (built), 5, "
 /** @type {Map<string, number>} */
 const m = mapConstructor(/** @type {any} */ (Object.freeze([pairConstructor("a", 1), pairConstructor("b", 2)])));
 /** @type {number} */
-let t$7;
+let t$19;
 try {
-  t$7 = mappedGet(m, "b");
+  t$19 = mappedGet(m, "b");
 } catch {
-  t$7 = -1;
+  t$19 = -1;
 }
 /** @type {number} */
-let t$8;
+let t$20;
 try {
-  t$8 = mappedGet(m, "c");
+  t$20 = mappedGet(m, "c");
 } catch {
-  t$8 = -1;
+  t$20 = -1;
 }
-console.log(`${t$7} ${t$8} ${m.has("a")} ${m.size}`);
+console.log(`${t$19} ${t$20} ${m.has("a")} ${m.size}`);
 /** @type {Map<string, number | null>} */
 const mb = new Map();
 mb.set("q", 5);
 mb.set("n", null);
 console.log(`${(mb.has("q") ? /** @type {number | null} */ (mb.get("q")) : 0) ?? -2} ${(mb.has("n") ? /** @type {number | null} */ (mb.get("n")) : 0) ?? -2} ${mb.has("n")}`);
 /** @type {string | null} */
-let t$9;
+let t$21;
 {
   /** @type {number | null} */
   let subject6;
@@ -330,34 +432,35 @@ let t$9;
   } catch {
     subject6 = 0;
   }
-  t$9 = subject6 == null ? null : subject6.toString();
+  t$21 = subject6 == null ? null : subject6.toString();
 }
-console.log(t$9 ?? "null");
+console.log(t$21 ?? "null");
 console.log(Object.freeze(Array.from(mb.keys())).length.toString());
 indexed();
+both();
 /** @type {Map<string, number>} */
 const tally = new Map();
 tally.set("k", 2);
 /** @type {number} */
-let t$10;
+let t$22;
 try {
-  t$10 = bump("k");
+  t$22 = bump("k");
 } catch {
-  t$10 = -1;
+  t$22 = -1;
 }
 /** @type {number} */
-let t$11;
+let t$23;
 try {
-  t$11 = bump("z");
+  t$23 = bump("z");
 } catch {
-  t$11 = -1;
+  t$23 = -1;
 }
 /** @type {number} */
-let t$12;
+let t$24;
 try {
-  t$12 = mappedGet(tally, "k");
+  t$24 = mappedGet(tally, "k");
 } catch {
-  t$12 = -1;
+  t$24 = -1;
 }
-console.log(`${t$10} ${t$11} ${t$12}`);
+console.log(`${t$22} ${t$23} ${t$24}`);
 console.log(`${firstSame(Object.freeze([1000]), Object.freeze([1000]))} ${firstSame(Object.freeze([1000]), Object.freeze([7]))}`);
