@@ -12,7 +12,7 @@ says so.
 | [`build`](#build) | Brings the libraries under the work root up to date, in every target language, under `temper.out/` | `build`, and `-o DIR` to write elsewhere |
 | [`test`](#test) | Runs the libraries' tests on each backend given, or on the interpreter | `test`, on the interpreter by default |
 | [`run`](#run) | Builds the work root, then runs a library's top level with a backend's language | `run` |
-| [`repl`](repl.md) | An interactive shell for Temper, or for a backend's language with the libraries loaded | `repl` for Temper, without line editing yet; not `-b` |
+| [`repl`](repl.md) | An interactive shell for Temper, or for a backend's language with the libraries loaded | `repl` for Temper; not `-b` yet |
 | [`init`](#init) | Creates a new library: a `config.temper.md` and a first source file | `init`, file for file |
 | [`serve`](#serve-or-lsp) | Starts the language server for an editor | `serve`, or `lsp`, over standard input and output |
 | [`version`](#version-license-and-licenses), `license`, `licenses` | About the tool itself | the same |
@@ -20,8 +20,8 @@ says so.
 | [`watch`](#not-in-tempest-yet) | Like `build`, but keeps running, rebuilding (and testing, with `-t`) as files change | not yet |
 | [`doc`](#not-in-tempest-yet) | Generates documentation for the libraries | not yet |
 
-> **Note:** the guide uses `temper` throughout; where `tempest` lacks a
-> command, Temper's releases have it
+> **Note:** the guide writes `temper` throughout; with this compiler,
+> type `tempest`. What tempest lacks, Kotlin Temper's releases have
 > ([inconsistencies](../inconsistencies.md#i9-the-command-line)).
 
 ## Options

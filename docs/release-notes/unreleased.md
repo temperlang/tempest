@@ -14,6 +14,7 @@
 - [`@json` adapters](#json-adapters)
 - [A class has only one constructor](#a-class-has-only-one-constructor)
 - [Extension methods](#extension-methods)
+- [Generated packages need this compiler's runtimes](#generated-packages-need-this-compilers-runtimes)
 
 ## 🚨Breaking change: Rest parameter syntax removed.
 
@@ -361,3 +362,14 @@ such a call couldn't be translated. A method of the same name that
 takes the arguments still wins. Two extensions that fit a call equally
 well, declared side by side, are now an error, where Kotlin's Temper
 picked the first one.
+
+## Generated packages need this compiler's runtimes
+
+A generated package depends on exactly the compiler's version of its
+language's runtime, `temper-core`, and of `std`, as
+`0.7.0-alpha.0.123` (`0.7.0.dev123` for Python). Temper 0.6.0's output
+named the 0.6.0 runtimes on the package registries; this compiler's
+runtimes gained APIs its output uses, and aren't on the registries
+yet, so use them from `temper.out/BACKEND/`, where `temper build`
+writes them, or from a release's packages
+([target languages](../backends/README.md)).

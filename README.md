@@ -85,6 +85,11 @@ browser.
   [playground](https://temperlang.github.io/tempest/playground/)
   runs the whole compiler as wasm: type Temper and see every
   language's output, errors, and test results as you type.
+- **Download** `tempest` for Linux, macOS (Apple silicon), or Windows
+  from the [releases](https://github.com/temperlang/tempest/releases)
+  (the `nightly` prerelease follows `main`), with the VS Code
+  extension's `.vsix` files beside it
+  ([getting started](docs/guide/getting-started.md#set-up-temper-tools-and-vs-code-support)).
 - **From source,** with [Rust](https://rustup.rs/) 1.85 or later:
 
       cargo build --release -p tempest

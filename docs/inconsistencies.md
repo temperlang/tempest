@@ -19,7 +19,6 @@ page doesn't repeat those.
 | [I4](#i4-backends-that-tempest-doesnt-have) | target languages, builtins, CLI | `java8`, `mypyc`, `data`, `cppv` | Decide which tempest needs |
 | [I5](#i5-node-and-javascript-versions) | getting started, release notes, target languages | Node 14 or 18; ES2018 | State one supported range |
 | [I6](#i6-the-temperout-layout) | getting started | Old output paths | Done here; check the site |
-| [I7](#i7-rust-warnings) | getting started | Rust output warns | Drop the advice once tempest ships |
 | [I8](#i8-numbered-names-in-output-samples) | home page | `x__4` in samples | Done here |
 | [I9](#i9-the-command-line) | guide, tools | `temper` commands tempest lacks | CLI parity, then one name |
 | [I10](#i10-examples-tempest-doesnt-run-as-marked) | builtins, types | 9 examples | Fix tempest, one by one |
@@ -142,15 +141,6 @@ page doesn't repeat those.
   current one.
 - **Here:** the list shows tempest's paths.
 
-### I7: Rust warnings
-
-- **Docs:** generated Rust "still causes a number of compiler
-  warnings", silenced with `--cap-lints=allow`.
-- **tempest:** its Rust passes `cargo build` and clippy without
-  warnings.
-- **Suggested:** drop the advice once tempest's output is what users
-  get.
-
 ### I8: Numbered names in output samples
 
 - **Docs:** the home page's translations, made by the Kotlin compiler,
@@ -166,8 +156,8 @@ page doesn't repeat those.
 - **tempest:** `temper`'s commands and flags, as `tempest build`,
   `test`, `run`, `repl`, `init`, `version`, `license`, `licenses`,
   `help`, and `serve` (or `lsp`, on standard input and output only); no
-  `watch`, `doc`, or `repl -b` yet, which say so, and the REPL has no
-  `describe`, `translate`, or `help` functions yet
+  `watch`, `doc`, or `repl -b` yet, which say so; the REPL's `describe`
+  takes tempest's steps, not Kotlin's stage names
   ([the command line](tools/cli.md), [the REPL](tools/repl.md)).
 - **Suggested:** finish CLI parity, then decide whether the binary is
   called `temper`.

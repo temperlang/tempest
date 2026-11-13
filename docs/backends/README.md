@@ -24,6 +24,17 @@ and Rust; C++ is built when asked for (`-b cpp`).
 | [Python](#python-py) | `py` | Python 3.11 and later | a `pyproject.toml` | `unittest` |
 | [Rust](#rust-rust) | `rust` | Rust 1.71.1 and later, edition 2021 | a crate | `cargo test` |
 
+Each library's package has the version its `config.temper.md` gives,
+and depends on Temper's runtime for its language, `temper-core`, and on
+`std` if it imports std, at exactly the compiler's version (`tempest
+version`), in each ecosystem's spelling: `0.7.0-alpha.0.123` (a dev
+build, 123 commits after the last release) for npm, Cargo, NuGet, and
+Maven, `0.7.0.dev123` for Python, and `0.7.0.alpha.0.123-1` for
+LuaRocks. `temper build` writes both beside the library, in
+`temper.out/BACKEND/`. They aren't on package registries yet; each
+[release](https://github.com/temperlang/tempest/releases) carries
+them, packed as each registry takes them, for installing by hand.
+
 How each backend is built, and what it chooses for failure, null,
 naming, and order of evaluation, is in
 [how tempest works: backends](../internals/06-backends.md) and its

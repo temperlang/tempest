@@ -2310,11 +2310,10 @@ Note that the extension function must have at least one required, positional
 parameter and that parameter is the *this* argument, the subject when
 called via `subject.methodName(other, args)` syntax.
 
-When translated to target languages that allow for extensions,
-these functions are presented as extensions using the member name.
-
-In other target languages, they translate as if the *\@extension*
-decorator were ignored.
+Backends translate these as if the *\@extension* decorator were
+ignored: an ordinary function, under its regular name, and a
+method-style call as a call of it, even in target languages that have
+extensions of their own, such as C#.
 
 ### `@fun` decorator
 Marks an interface declaration as a [Functional interface](types.md#functional-interface).
@@ -2417,6 +2416,9 @@ to make it easy to encode instances of the type to and from JSON.
 
 There are a number of strategies used to generate encoders and
 decoders outlined below.
+
+> **Note:** tempest doesn't generate adapters for generic `@json`
+> types, nor for std's `Date`, yet.
 
 #### The concrete class strategy
 
@@ -2786,8 +2788,8 @@ Private members entail no backwards compatibility commitments.
 `@private` is a [legacy decorator](#legacy-decorators) so
 the `@` is optional.
 
-A private member may be used from within its class definition
-via `this.`.
+A private member may be used from within its class definition,
+via `this.` or on another instance of the same class.
 
 ```temper
 class C {

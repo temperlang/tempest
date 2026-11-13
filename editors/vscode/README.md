@@ -36,7 +36,10 @@ in the preview itself, and scripts in the document don't run.
 Each platform's package bundles tempest: `temper-linux-x64-VERSION.vsix`,
 and likewise `linux-arm64`, `darwin-arm64`, `win32-x64`, and
 `win32-arm64`. The universal `temper-VERSION.vsix` has none, and
-uses `tempest` on `PATH`. CI's Binaries workflow builds them all.
+uses `tempest` on `PATH`. CI's Binaries workflow builds them all, and
+each release, and the `nightly` prerelease, on
+[GitHub](https://github.com/temperlang/tempest/releases) carries them.
+The extension isn't in the VS Code Marketplace yet.
 
 Install one with `code --install-extension temper-linux-x64-VERSION.vsix`,
 or in VS Code, the Extensions view's `...` menu, "Install from VSIX...",

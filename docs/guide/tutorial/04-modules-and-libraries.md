@@ -306,8 +306,10 @@ library for C\#, Java, JS, Lua, Python, and Rust:
 
 ```sh
 temper build
-# Also try this out sometime: temper watch -t py
 ```
+
+(Kotlin Temper also has `temper watch -t py`, which rebuilds and tests
+as files change; it isn't in tempest yet.)
 
 After building, you should be able to see the effects of library configuration
 (library name, version, license, and the rest) in these files:

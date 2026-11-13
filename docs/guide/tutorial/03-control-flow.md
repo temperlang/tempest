@@ -200,11 +200,10 @@ into Temper's built-in `while` macro, one is just syntactic sugar for the other.
 Both translate to a `while` loop in Java, JS, or Python. In most cases, trailing
 blocks are clearer to read and write.
 
-To look closer at Temper's handling of various syntax forms, in Kotlin
-Temper's REPL, try using the `describe` REPL function mentioned earlier but
-with `"frontend.disAmbiguateStage.after"` to see an earlier stage of
-processing. Or try the `translate` function, or enter `help()` for more info.
-(These aren't in tempest's REPL yet.)
+To look closer at Temper's handling of various syntax forms, try using the
+`describe` REPL function mentioned earlier but with `"parsed"` to see an
+earlier step of processing, the parser's tree. Or try the `translate`
+function, or enter `help()` for more info.
 
 ## Branches
 

@@ -23,8 +23,11 @@ Blocks tagged `temper inert`, Temper shown for reading but not compiled,
 are highlighted too, tinted and labeled "inert" in the editor, the
 preview, and on this site; the language server leaves them alone.
 
-Each platform's package bundles the compiler. How to install it, and
-its settings, are in [editors/vscode](../../editors/vscode/README.md).
+Each platform's package bundles the compiler; get it from a
+[release](https://github.com/temperlang/tempest/releases), beside the
+compiler, as `temper-PLATFORM-VERSION.vsix`. It isn't in the VS Code
+Marketplace yet. How to install it, and its settings, are in
+[editors/vscode](../../editors/vscode/README.md).
 
 ![Screenshot of VS Code with Temper code highlighted, with red error squiggles under "Float" in `public radius: Float` and a hover box noting "No declaration for Float". Elsewhere "Float64" appears without error squiggles.](../images/editor.png)
 
