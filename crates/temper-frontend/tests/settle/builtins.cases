@@ -710,6 +710,7 @@ error 1484..1498: Cannot assign to String from Int32
 error 1526..1536: Cannot assign to Map<Int32, Int32> from Map<String, Int32>
 error 1604..1610: Cannot bubble from a function without Bubble in its return type
 error 1623..1633: Cannot bubble from a function without Bubble in its return type
+error 1702..1711: No member length in List<Int32>?
 
 === builtin generic methods' own type parameters are solved per call
 // `map<O>`, `reduceFrom<O>`, `reduceFromIndex<O>` and `Mapped`'s

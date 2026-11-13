@@ -1011,6 +1011,7 @@ impl Settle {
         }
         match self.lib.tree.kind(node) {
             NodeKind::Call => {
+                self.check_nullable_member(node);
                 self.check_member_access(node, scope, classes);
                 self.check_member_exists(node, scope);
             }
@@ -1516,6 +1517,37 @@ impl Settle {
                 self.check_value(param.ty, arg, Site::Arg);
             }
         }
+    }
+
+    /// Reports `object.key` where `object` may be null, as `c.n` for `c:
+    /// Counter?` with no null check that narrows it (`flow`), a property's
+    /// read or assignment or a method's call, as Kotlin Temper rejects it,
+    /// though in odder words ("No member n in AnyValue"): "No member n in
+    /// Counter?". Beside [`Settle::check_call`]'s nullable function value.
+    /// `c?.n` is fine, and so is a value Kotlin might work out while
+    /// compiling ([`Settle::may_fold`]), as `s.isEmpty` for `let s:
+    /// String? = "q"`. Code is still generated; the access fails where it
+    /// runs, as for a member that isn't there.
+    fn check_nullable_member(&mut self, node: NodeId) {
+        let Some((object, key)) = self.dot_parts(node) else {
+            return;
+        };
+        let Some(name) = self.lib.symbol(key) else {
+            return;
+        };
+        let t = self.known_type(object);
+        if !matches!(self.typing.types.get(t), TypeData::Nullable(_)) || self.may_fold(object, 0) {
+            return;
+        }
+        let span = self.lib.tree.span(node);
+        let overlaps = |d: &crate::library::Diagnostic| {
+            d.level == Level::Error && d.span.start < span.end && span.start < d.span.end
+        };
+        if self.lib.diagnostics.iter().any(overlaps) {
+            return;
+        }
+        let message = Message::NoMember(self.lib.names.get(name).to_string(), self.show(t));
+        self.lib.report(Level::Error, message, span);
     }
 
     /// Reports `object.key` where `object`'s type has no member `key`,

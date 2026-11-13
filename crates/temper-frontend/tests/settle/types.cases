@@ -2573,6 +2573,109 @@ error 483..492: No member lengthy in String
 log -1
 Failed: No member lengthy in String
 
+=== a member of a nullable value is an error that fails where it runs
+// As Kotlin's "No member n in AnyValue", with no null check that narrows
+// the value (flow.cases has the accepted forms): a property's read or
+// assignment, a method's call, a chained member, a builtin type's member,
+// a `var` (never narrowed), and `orelse`, which doesn't catch null. Only
+// the first of a chain is reported. A value Kotlin might work out while
+// compiling isn't reported, as `take(c)` for `let c: String? = "q"` isn't.
+class Counter(public var n: Int) {
+  public inc(): Void { n += 1; }
+  public get next(): Counter? { null }
+}
+let r1(c: Counter?): Int { c.n }
+let r2(c: Counter?): Void { c.inc() }
+let r3(c: Counter?): Void { c.n = 2; }
+let r4(c: Counter): Int { c.next.n }
+let r5(c: Counter?): Int { c.next.n }
+let r6(s: String?): Boolean { s.isEmpty }
+let r7(ls: List<Int>?): Int { ls.length }
+let r8(var x: Int?): String? { if (x != null) { x.toString() } else { null } }
+let r9(c: Counter?): Int { var d = c; if (d != null) { d.n } else { 0 } }
+let r10(c: Counter?): Int { c.n orelse 0 }
+let r11(): Boolean { let s: String? = "q"; s.isEmpty }
+console.log(r11().toString());
+console.log(r1(new Counter(1)).toString());
+console.log(r1(null).toString());
+--- settled
+(Block
+  (Class
+    ^Counter:0
+    (Param var ^n:13 Int)
+    (Method ^inc:14 (Fn Void (Block (Assign n:13 (Call + n:13 1)) #void)))
+    (Get ^next:15 (Fn (Call ? Counter:0) (Block null))))
+  (Let ^r1:1 (Fn (Let ^c:16 (Call ? Counter:0)) Int (Block (Call . c:16 \n))))
+  (Let
+    ^r2:2
+    (Fn (Let ^c:17 (Call ? Counter:0)) Void (Block (Call (Call . c:17 \inc)))))
+  (Let
+    ^r3:3
+    (Fn
+      (Let ^c:18 (Call ? Counter:0))
+      Void
+      (Block (Assign (Call . c:18 \n) 2) #void)))
+  (Let
+    ^r4:4
+    (Fn (Let ^c:19 Counter:0) Int (Block (Call . (Call . c:19 \next) \n))))
+  (Let
+    ^r5:5
+    (Fn
+      (Let ^c:20 (Call ? Counter:0))
+      Int
+      (Block (Call . (Call . c:20 \next) \n))))
+  (Let
+    ^r6:6
+    (Fn (Let ^s:21 (Call ? String)) Boolean (Block (Call . s:21 \isEmpty))))
+  (Let
+    ^r7:7
+    (Fn
+      (Let ^ls:22 (Call ? (Call <> List Int)))
+      Int
+      (Block (Call . ls:22 \length))))
+  (Let
+    ^r8:8
+    (Fn
+      (Var ^x:23 (Call ? Int))
+      (Call ? String)
+      (Block
+        (If
+          (Call != x:23 null)
+          (Block (Call (Call . x:23 \toString)))
+          (Block null)))))
+  (Let
+    ^r9:9
+    (Fn
+      (Let ^c:24 (Call ? Counter:0))
+      Int
+      (Block
+        (Var ^d:25 c:24)
+        (If (Call != d:25 null) (Block (Call . d:25 \n)) (Block 0)))))
+  (Let
+    ^r10:10
+    (Fn (Let ^c:26 (Call ? Counter:0)) Int (Block (Orelse (Call . c:26 \n) 0))))
+  (Let
+    ^r11:11
+    (Fn Boolean (Block (Let ^s:27 (Call ? String) "q") (Call . s:27 \isEmpty))))
+  (Call (Call . console \log) (Call (Call . (Call r11:11) \toString)))
+  (Call
+    (Call . console \log)
+    (Call (Call . (Call r1:1 (Call new Counter:0 1)) \toString)))
+  (Call (Call . console \log) (Call (Call . (Call r1:1 null) \toString)))
+  #void)
+error 579..582: No member n in Counter?
+error 613..618: No member inc in Counter?
+error 651..654: No member n in Counter?
+error 688..696: No member n in Counter?
+error 726..732: No member next in Counter?
+error 767..776: No member isEmpty in String?
+error 809..818: No member length in List<Int32>?
+error 869..879: No member toString in Int32?
+error 955..958: No member n in Counter?
+error 1002..1005: No member n in Counter?
+log false
+Failed: No member n in Counter?
+
 === a comment mentioning @extension doesn't hide a missing member
 // Only an `@extension("y")` visible where `p.y` is read would.
 // see @extension docs

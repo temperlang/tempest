@@ -556,10 +556,20 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   same span.
   Test: settle/run.cases, "Map, MapBuilder and Pair".
 - **A member of a nullable value** gets an odd message: `xs.length`
-  for `xs: List<Int>?` is "No member length in AnyValue", and `g.n` for
-  `g: P?` "No type for subject of .n"; each should say the value may be
-  null. Tempest doesn't report these yet ([milestone-4.md](history/milestone-4.md),
-  "Builtin generic types' members").
+  for `xs: List<Int>?` is "No member length in AnyValue", and `c.n` for
+  `c: Counter?` "No member n in AnyValue" (or "No type for subject of
+  .n"). Tempest names the value's type, "No member n in Counter?", at
+  the same span (the member, not the call), once per chain, and the
+  access fails where it runs. Like Kotlin, it doesn't report a value
+  Kotlin might work out while compiling, as `s.isEmpty` for `let s:
+  String? = "q"`, but tempest's guess is looser (`let c: Counter? = new
+  Counter(1); c.n` is accepted, where Kotlin rejects it). Tempest's null
+  checks narrow more ("Flow facts"), so `if (c == null) { return 0 };
+  c.n` is accepted. `a?.m` holds a `var` `a` in a temporary, as Kotlin
+  does, so `g?.next()` for `var g: G?` is accepted.
+  Test: settle/types.cases, "a member of a nullable value is an error
+  that fails where it runs", and settle/flow.cases, "null checks let a
+  nullable value's members be used".
 - **A list literal with a null or nullable element** is rejected:
   `[1, null]` is "Expected subtype of Int32, but got Int32?", even
   where a `List<Int?>` is wanted, and `[n, 1]` for `n: Int?` there is
@@ -1288,8 +1298,9 @@ Other differences we won't copy:
     full (`Boolean`, `Float64`, `Int`, `Int32`, `Int64`, `List`,
     `ListBuilder`, `Map`, `MapBuilder`, and `String`), and not where an
     error is reported already (Kotlin reports only the tie for a method
-    inherited twice); not yet for an interface's value, a nullable
-    value, or a type parameter's.
+    inherited twice); not yet for an interface's value or a type
+    parameter's. A nullable value's member is an error of its own ("A
+    member of a nullable value").
   - **A condition with an error** is a `Boolean` `Error`.
   - **The interpreter** fails at an error reported at a value, name, or
     call, as every backend does, but for a type-only error (below).

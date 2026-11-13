@@ -399,6 +399,167 @@ let e6(): Void { var c: String? = "q"; c = "r"; take(c) }
 error 283..291: Expected subtype of String, but got String?
 error 391..392: Expected subtype of String, but got String?
 
+=== null checks let a nullable value's members be used
+// Kotlin Temper accepts each of these but `a3`, the `return` after a
+// null check, which narrows beyond it ("narrowed beyond Kotlin Temper").
+class Counter(public var n: Int) {
+  public inc(): Void { n += 1; }
+  public get next(): Counter? { null }
+}
+let a1(c: Counter?): Int? { c?.n }
+let a2(c: Counter?): Int { if (c != null) { c.n } else { 0 } }
+let a3(c: Counter?): Int { if (c == null) { return 0 }; c.n }
+let a4(c: Counter?): Int { if (c is Counter) { c.n } else { 0 } }
+let a5(c: Counter?): Int { (c ?? new Counter(0)).n }
+let a6(c: Counter?): Int { when (c) { null -> 0; else -> c.n } }
+let a7(c: Counter?): Int { c?.n ?? 0 }
+let a8(c: Counter?): Void { c?.inc(); }
+let a9(c: Counter?): Void { if (c != null) { c.n = 3; c.inc() } }
+let a10(c: Counter): Int? { c.next?.n }
+let a11(c: Counter?): Int { if (c != null && c.n > 0) { c.n } else { 0 } }
+let a12(s: String?, ls: List<Int>?): Boolean {
+  if (s == null || ls == null) { return false };
+  s.isEmpty && ls.length == 0
+}
+let a13(c: Counter?): Int { while (c != null) { return c.n }; 0 }
+console.log("${a1(null) ?? -1} ${a2(new Counter(2))} ${a7(null)} ${a12("", [])}");
+--- settled
+(Block
+  (Class
+    ^Counter:0
+    (Param var ^n:15 Int)
+    (Method ^inc:16 (Fn Void (Block (Assign n:15 (Call + n:15 1)) #void)))
+    (Get ^next:17 (Fn (Call ? Counter:0) (Block null))))
+  (Let
+    ^a1:1
+    (Fn
+      (Let ^c:18 (Call ? Counter:0))
+      (Call ? Int)
+      (Block (Block (If (Call == c:18 #null) #null (Call . c:18 \n))))))
+  (Let
+    ^a2:2
+    (Fn
+      (Let ^c:19 (Call ? Counter:0))
+      Int
+      (Block (If (Call != c:19 null) (Block (Call . c:19 \n)) (Block 0)))))
+  (Let
+    ^a3:3
+    (Fn
+      (Let ^c:20 (Call ? Counter:0))
+      Int
+      (Block
+        (If (Call == c:20 null) (Block (Return @351 0)) (Block))
+        (Call . c:20 \n))))
+  (Let
+    ^a4:4
+    (Fn
+      (Let ^c:21 (Call ? Counter:0))
+      Int
+      (Block (If (Call is c:21 Counter:0) (Block (Call . c:21 \n)) (Block 0)))))
+  (Let
+    ^a5:5
+    (Fn
+      (Let ^c:22 (Call ? Counter:0))
+      Int
+      (Block
+        (Call
+          .
+          (Block (If (Call == c:22 #null) (Call new Counter:0 0) c:22))
+          \n))))
+  (Let
+    ^a6:6
+    (Fn
+      (Let ^c:23 (Call ? Counter:0))
+      Int
+      (Block (Block (If (Call == c:23 null) 0 (Call . c:23 \n))))))
+  (Let
+    ^a7:7
+    (Fn
+      (Let ^c:24 (Call ? Counter:0))
+      Int
+      (Block
+        (Block
+          (Let
+            ^subject#25
+            (Block (If (Call == c:24 #null) #null (Call . c:24 \n))))
+          (If (Call == subject#25 #null) 0 subject#25)))))
+  (Let
+    ^a8:8
+    (Fn
+      (Let ^c:26 (Call ? Counter:0))
+      Void
+      (Block
+        (Block (If (Call == c:26 #null) #null (Call (Call . c:26 \inc))))
+        #void)))
+  (Let
+    ^a9:9
+    (Fn
+      (Let ^c:27 (Call ? Counter:0))
+      Void
+      (Block
+        (If
+          (Call != c:27 null)
+          (Block (Assign (Call . c:27 \n) 3) (Call (Call . c:27 \inc)))
+          (Block)))))
+  (Let
+    ^a10:10
+    (Fn
+      (Let ^c:28 Counter:0)
+      (Call ? Int)
+      (Block
+        (Block
+          (Let ^subject#29 (Call . c:28 \next))
+          (If (Call == subject#29 #null) #null (Call . subject#29 \n))))))
+  (Let
+    ^a11:11
+    (Fn
+      (Let ^c:30 (Call ? Counter:0))
+      Int
+      (Block
+        (If
+          (If (Call != c:30 null) (Call > (Call . c:30 \n) 0) #false)
+          (Block (Call . c:30 \n))
+          (Block 0)))))
+  (Let
+    ^a12:12
+    (Fn
+      (Let ^s:31 (Call ? String))
+      (Let ^ls:32 (Call ? (Call <> List Int)))
+      Boolean
+      (Block
+        (If
+          (If (Call == s:31 null) #true (Call == ls:32 null))
+          (Block (Return @857 false))
+          (Block))
+        (If (Call . s:31 \isEmpty) (Call == (Call . ls:32 \length) 0) #false))))
+  (Let
+    ^a13:13
+    (Fn
+      (Let ^c:33 (Call ? Counter:0))
+      Int
+      (Block
+        (Loop
+          (If
+            (Call != c:33 null)
+            (Block (Return @985 (Call . c:33 \n)))
+            (Break @1013)))
+        0)))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Block
+        (Let ^subject#34 (Call a1:1 null))
+        (If (Call == subject#34 #null) (Call - 1) subject#34))
+      " "
+      (Call a2:2 (Call new Counter:0 2))
+      " "
+      (Call a7:7 null)
+      " "
+      (Call a12:12 "" (Call list))))
+  #void)
+log -1 2 0 true
+
 === functions get the facts at their block's start, closures where they're made
 let take(s: String): Void {}
 let run(f: fn (): String): String { f() }

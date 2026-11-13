@@ -2413,57 +2413,79 @@ log made
 Failed: Cannot bubble from a function without Bubble in its return type
 
 === next from within a running generator, and close
-var g: SafeGenerator<Int>? = null;
+// In a function: at top level, the temporary `g?.` holds `g` in moves
+// `let h` after `g = h` (a bug of its own).
 let make(body: fn (): SafeGenerator<Int>): SafeGenerator<Int> { body() }
-g = make { (): GeneratorResult<Int> extends GeneratorFn =>
-  console.log("inner ${g.nextSafe() is DoneResult<Int>}");
-  yield 1;
-  yield 2;
-};
-console.log("${g.nextSafe() is ValueResult<Int>} ${g.done}");
-g.close();
-console.log("${g.done} ${g.nextSafe() is DoneResult<Int>}");
+let run(): Void {
+  var g: SafeGenerator<Int>? = null;
+  let h = make { (): GeneratorResult<Int> extends GeneratorFn =>
+    console.log("inner ${g?.nextSafe() is DoneResult<Int>}");
+    yield 1;
+    yield 2;
+  };
+  g = h;
+  console.log("${h.nextSafe() is ValueResult<Int>} ${h.done}");
+  h.close();
+  console.log("${h.done} ${h.nextSafe() is DoneResult<Int>}");
+}
+run();
 --- settled
 (Block
-  (Var ^g:0 (Call ? (Call <> SafeGenerator Int)) null)
   (Let
-    ^make:1
+    ^make:0
     (Fn
       (Let ^body:2 (Call FnType (Call <> SafeGenerator Int)))
       (Call <> SafeGenerator Int)
       (Block (Call body:2))))
-  (Assign
-    g:0
-    (Call
-      make:1
-      (Fn
-        (Call <> GeneratorResult Int)
-        GeneratorFn
-        (Block
+  (Let
+    ^run:1
+    (Fn
+      Void
+      (Block
+        (Var ^g:3 (Call ? (Call <> SafeGenerator Int)) null)
+        (Let
+          ^h:4
           (Call
-            (Call . console \log)
-            (Call
-              cat
-              "inner "
-              (Call is (Call (Call . g:0 \nextSafe)) (Call <> DoneResult Int))))
-          (Yield @117 1)
-          (Yield @117 2)
-          #void))))
-  (Call
-    (Call . console \log)
-    (Call
-      cat
-      (Call is (Call (Call . g:0 \nextSafe)) (Call <> ValueResult Int))
-      " "
-      (Call . g:0 \done)))
-  (Call (Call . g:0 \close))
-  (Call
-    (Call . console \log)
-    (Call
-      cat
-      (Call . g:0 \done)
-      " "
-      (Call is (Call (Call . g:0 \nextSafe)) (Call <> DoneResult Int))))
+            make:0
+            (Fn
+              (Call <> GeneratorResult Int)
+              GeneratorFn
+              (Block
+                (Call
+                  (Call . console \log)
+                  (Call
+                    cat
+                    "inner "
+                    (Call
+                      is
+                      (Block
+                        (Let ^subject#5 g:3)
+                        (If
+                          (Call == subject#5 #null)
+                          #null
+                          (Call (Call . subject#5 \nextSafe))))
+                      (Call <> DoneResult Int))))
+                (Yield @259 1)
+                (Yield @259 2)
+                #void))))
+        (Assign g:3 h:4)
+        (Call
+          (Call . console \log)
+          (Call
+            cat
+            (Call is (Call (Call . h:4 \nextSafe)) (Call <> ValueResult Int))
+            " "
+            (Call . h:4 \done)))
+        (Call (Call . h:4 \close))
+        (Call
+          (Call . console \log)
+          (Call
+            cat
+            (Call . h:4 \done)
+            " "
+            (Call is (Call (Call . h:4 \nextSafe)) (Call <> DoneResult Int))))
+        #void)))
+  (Call run:1)
   #void)
 log inner true
 log true false

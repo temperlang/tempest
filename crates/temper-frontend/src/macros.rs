@@ -914,29 +914,16 @@ impl Settle {
     /// `a?.name`, or as `dot` in a call, `a?.name(args)`: `do { let t = a;
     /// if (t == null) { null } else { t.name(args) } }`, as Kotlin Temper
     /// lowers it. A later `.` isn't skipped: `a?.b.c` fails if `a` is null.
-    /// `a` is held in a temporary unless it's a local's name: a bare
-    /// member's name in a class, `this`'s getter, isn't, as checking it
-    /// for null doesn't narrow the next read.
+    /// `a` is held in a temporary unless it's a name that reads the same
+    /// each time ([`Settle::stable_name`]), which the null check narrows:
+    /// a `var`'s or a bare member's name (`this`'s getter) is held, as
+    /// checking it for null doesn't narrow the next read.
     pub(crate) fn expand_chain_null(&mut self, call: NodeId, dot: NodeId, scope: ScopeId) {
         let span = self.lib.tree.span(call);
         let [op, object, key] = *self.lib.tree.children(dot) else {
             unreachable!()
         };
-        let member = self.lib.tree.kind(object) == NodeKind::RightName
-            && self.lib.name(object).is_some_and(|n| {
-                match self
-                    .scopes
-                    .lookup(scope, n, false, self.lib.tree.span(object).start)
-                {
-                    Lookup::Found(s) => self.scopes.symbol(s).kind == SymbolKind::Member,
-                    Lookup::Wait(_) => true,
-                    Lookup::Missing => false,
-                }
-            });
-        let (mut statements, name) = match member {
-            true => self.held(object, "subject", call),
-            false => self.subject(object, "subject", call),
-        };
+        let (mut statements, name) = self.held_receiver(object, scope, "subject", call);
         let null_check = self.null_check(name, span, call);
         let null = self.lib.add_value(Value::Null, span, call);
         let dot_name = self.lib.names.intern(".");
