@@ -14,6 +14,9 @@ import temper.core.Nullable;
 public final class GenericsGlobal {
     private GenericsGlobal() {}
 
+    static final Console console;
+    static final Map<String, Integer> tally;
+
     static <S, T> T tagged(T x) {
         return x;
     }
@@ -51,12 +54,52 @@ public final class GenericsGlobal {
         return sum;
     }
 
+    static void indexed() {
+        List<Integer> counts = new ArrayList<>();
+        counts.add(1);
+        counts.add(10);
+        int at = 0;
+        {
+            int k = at;
+            counts.set(k, Core.listGet(counts, k) + 4);
+        }
+        counts.set(1, Core.listGet(counts, 1) * 3);
+        int t = at;
+        at = t + 1;
+        int k2 = t;
+        int t2 = Core.listGet(counts, k2);
+        counts.set(k2, t2 + 1);
+        int was = t2;
+        int k3 = at;
+        int t3 = Core.listGet(counts, k3) + 1;
+        counts.set(k3, t3);
+        int pre = t3;
+        int t4 = Core.listGet(counts, 0);
+        counts.set(0, t4 - 1);
+        int post = t4;
+        int t5 = Core.listGet(counts, 0) - 1;
+        counts.set(0, t5);
+        int down = t5;
+        console.log(was + " " + pre + " " + post + " " + down + " " + at);
+    }
+
+    static int bump(String key) {
+        tally.put(key, Core.mappedGet(tally, key) - 1);
+        int t = Core.mappedGet(tally, key);
+        tally.put(key, t + 1);
+        int before = t;
+        int t2 = Core.mappedGet(tally, key) + 1;
+        tally.put(key, t2);
+        int after = t2;
+        return before + after;
+    }
+
     static boolean firstSame(List<Integer> a, List<Integer> b) {
         return Core.listGet(a, 0).intValue() == Core.listGet(b, 0);
     }
 
     static {
-        Console console = Core.getConsole(Logger.getLogger("generics"));
+        console = Core.getConsole(Logger.getLogger("generics"));
         List<Integer> ns = List.of(1, 2, 3);
         List<Integer> none = List.of();
         console.log(total(ns) + " " + first(ns, 0) + " " + first(none, -1));
@@ -112,6 +155,30 @@ public final class GenericsGlobal {
         @Nullable String subject5 = subject6 == null ? null : Integer.toString(subject6);
         console.log(subject5 == null ? "null" : subject5);
         console.log(Integer.toString(List.copyOf(mb.keySet()).size()));
+        indexed();
+        tally = new LinkedHashMap<>();
+        tally.put("k", 2);
+        int t5;
+        try {
+            t5 = bump("k");
+        } catch (RuntimeException ignored4) {
+            t5 = -1;
+        }
+        String t6 = t5 + " ";
+        int t7;
+        try {
+            t7 = bump("z");
+        } catch (RuntimeException ignored5) {
+            t7 = -1;
+        }
+        String t8 = t6 + t7 + " ";
+        int t9;
+        try {
+            t9 = Core.mappedGet(tally, "k");
+        } catch (RuntimeException ignored6) {
+            t9 = -1;
+        }
+        console.log(t8 + t9);
         console.log(firstSame(List.of(1000), List.of(1000)) + " " + firstSame(List.of(1000), List.of(7)));
     }
 }

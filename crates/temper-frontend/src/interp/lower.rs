@@ -1153,6 +1153,13 @@ impl Lowering {
         }
         let method = tree.kind(callee) == NodeKind::Call
             && tree.children(callee).first().is_some_and(|&c| is_dot(s, c));
+        // A method with an error reported at it, as `c.secret()` outside
+        // `c`'s class, fails before its object or arguments run, as tmpl's
+        // `Error` for the whole call does.
+        if let Some(message) = method.then(|| self.error_at(s, callee)).flatten() {
+            self.fail(message);
+            return self.dead(base, keep);
+        }
         let method = if method {
             match self.member(s, callee) {
                 Some(name) => Some(name),

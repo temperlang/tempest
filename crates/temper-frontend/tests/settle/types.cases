@@ -2569,7 +2569,7 @@ error 440..443: No member m in P
 error 449..456: No member size in List<Int32>
 error 483..492: No member lengthy in String
 log -1
-Failed: No method lengthy for String
+Failed: No member lengthy in String
 
 === a comment mentioning @extension doesn't hide a missing member
 // Only an `@extension("y")` visible where `p.y` is read would.

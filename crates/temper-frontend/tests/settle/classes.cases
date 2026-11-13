@@ -329,9 +329,10 @@ console.log(C.secret.toString());
     (Call (Call . (Call (Call . a:1 \plus) b:2) \toString)))
   (Call (Call . console \log) (Call (Call . (Call . C:0 \secret) \toString)))
   #void)
+error 321..329: Member secret defined in C not publicly accessible
 log 14
 log 38
-Panicked: Member secret defined in C not publicly accessible
+Failed: Member secret defined in C not publicly accessible
 
 === private members aren't usable outside their class
 class C(private x: Int) { private twice(): Int { x * 2 } }
@@ -353,7 +354,110 @@ console.log(new D().peek(new C(3)).toString());
     (Call
       (Call . (Call (Call . (Call new D:2) \peek) (Call new C:0 3)) \toString)))
   #void)
-Panicked: Member twice defined in C not publicly accessible
+error 98..105: Member twice defined in C not publicly accessible
+Failed: Member twice defined in C not publicly accessible
+
+=== private and static members outside their class are errors, as Kotlin's typer reports them
+class Private(private b: Int) {
+  public sharing(other: Private): Int { b + other.b }
+  private static hidden: Int = 1;
+  public static shown: Int = Private.hidden + 1;
+}
+let aPrivate = new Private(9);
+console.log(aPrivate.sharing(aPrivate).toString());
+console.log(Private.shown.toString());
+class Outsider {
+  public burgle(victim: Private): Int { victim.b }
+  public static peek(): Int { Private.hidden }
+}
+console.log(Private.nope.toString());
+console.log(aPrivate.b.toString());
+--- settled
+(Block
+  (Class
+    ^Private:0
+    (Param private ^b:4 Int)
+    (Method
+      ^sharing:5
+      (Fn (Let ^other:8 Private:0) Int (Block (Call + b:4 (Call . other:8 \b)))))
+    (Let private static ^hidden:6 Int 1)
+    (Let static ^shown:7 Int (Call + (Call . Private:0 \hidden) 1)))
+  (Let ^aPrivate:1 (Call new Private:0 9))
+  (Call
+    (Call . console \log)
+    (Call (Call . (Call (Call . aPrivate:1 \sharing) aPrivate:1) \toString)))
+  (Call
+    (Call . console \log)
+    (Call (Call . (Call . Private:0 \shown) \toString)))
+  (Class
+    ^Outsider:2
+    (Method
+      ^burgle:10
+      (Fn (Let ^victim:12 Private:0) Int (Block (Call . victim:12 \b))))
+    (Method static ^peek:11 (Fn Int (Block (Call . Private:0 \hidden)))))
+  (Call
+    (Call . console \log)
+    (Call (Call . (Call . Private:0 \nope) \toString)))
+  (Call (Call . console \log) (Call (Call . (Call . aPrivate:1 \b) \toString)))
+  #void)
+error 350..358: Member b defined in Private not publicly accessible
+error 391..405: Member hidden defined in Private not publicly accessible
+error 422..434: No member nope in Private
+error 460..470: Member b defined in Private not publicly accessible
+log 18
+log 2
+Failed: No member nope in Private
+
+=== a method that isn't there on a private property, as Kotlin's noMatchingMemberUsage
+class Something(private b: Int) {}
+let something = new Something(9);
+something.b();
+--- settled
+(Block
+  (Class ^Something:0 (Param private ^b:3 Int))
+  (Let ^something:1 (Call new Something:0 9))
+  (Call (Call . something:1 \b))
+  #void)
+error 69..80: Member b defined in Something incompatible with usage
+Failed: Member b defined in Something incompatible with usage
+
+=== static members need their type's name, as Kotlin's static-access-good-and-bad
+class C {
+  private static ap: Int = 1;
+  public static a: Int = ap + C.ap;
+  public static f(i: Int): Int { i + a + C.a }
+  public h(i: Int): Int { 2 * f(i) * C.f(i) }
+}
+console.log("${C.f(1)} ${new C().h(1)} ${C.a}");
+--- settled
+(Block
+  (Class
+    ^C:0
+    (Let private static ^ap:2 Int 1)
+    (Let static ^a:3 Int (Call + ap:2 (Call . C:0 \ap)))
+    (Method static
+      ^f:4
+      (Fn (Let ^i:6 Int) Int (Block (Call + (Call + i:6 a:3) (Call . C:0 \a)))))
+    (Method
+      ^h:5
+      (Fn
+        (Let ^i:7 Int)
+        Int
+        (Block (Call * (Call * 2 (Call f:4 i:7)) (Call (Call . C:0 \f) i:7))))))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call (Call . C:0 \f) 1)
+      " "
+      (Call (Call . (Call new C:0) \h) 1)
+      " "
+      (Call . C:0 \a)))
+  #void)
+error 65..67: Type name required for accessing static member
+error 113..114: Type name required for accessing static member
+error 153..154: Type name required for accessing static member
+Failed: Type name required for accessing static member
 
 === this outside a class
 let f(): Int { this.x }

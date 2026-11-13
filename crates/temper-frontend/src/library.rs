@@ -169,6 +169,12 @@ pub enum Message {
     /// `object.key` where `object`'s type has no member `key`: the key
     /// and the type. Kotlin's `BecauseNoSuchMember`.
     NoMember(String, String),
+    /// A private member used outside its class: the member and the class.
+    /// Kotlin's `MemberNotPubliclyAccessible`.
+    NotPubliclyAccessible(String, String),
+    /// A static member named bare, not as `C.name`. Kotlin's
+    /// `StaticMemberNeedsQualified`.
+    StaticNeedsTypeName,
     /// A function without a return type where nothing gives it one.
     MissingReturnType,
     /// Arguments that don't fit the variant of a builtin that a call
@@ -387,6 +393,10 @@ impl Message {
             Message::VoidAsValue => "Void expressions cannot be used as values".into(),
             Message::ArityMismatch(n) => format!("Wrong number of arguments.  Expected {n}"),
             Message::NoMember(key, t) => format!("No member {key} in {t}"),
+            Message::NotPubliclyAccessible(key, class) => {
+                format!("Member {key} defined in {class} not publicly accessible")
+            }
+            Message::StaticNeedsTypeName => "Type name required for accessing static member".into(),
             Message::MissingReturnType => "Explicit return type required".into(),
             Message::SignatureMismatch(sig, expected, got) => format!(
                 "Actual arguments do not match signature: {sig} expected {expected}, but got {got}"

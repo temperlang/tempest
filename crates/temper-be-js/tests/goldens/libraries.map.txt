@@ -342,8 +342,8 @@
 577:5 -> ../libraries.temper.md:50:47  try { <- parseGrid(s) orelse null }
 585:1 -> ../libraries.temper.md:65:21  /** @type {Casing} */ <- first = new Casing("first");
 586:1 -> ../libraries.temper.md:65:21  let Casing$first; <- first = new Casing("first");
-587:1 -> ../libraries.temper.md:69:21  /** @type {Casing} */ <- last = named("last");
-588:1 -> ../libraries.temper.md:69:21  let Casing$last; <- last = named("last");
+587:1 -> ../libraries.temper.md:69:21  /** @type {Casing} */ <- last = Casing.named("last");
+588:1 -> ../libraries.temper.md:69:21  let Casing$last; <- last = Casing.named("last");
 589:1 -> ../libraries.temper.md:71:22  /** @type {string} */ <- mark = "#";
 590:1 -> ../libraries.temper.md:71:22  let Casing$mark; <- mark = "#";
 592:1 -> ../libraries.temper.md:53:5  export class Casing extends <- export class Casing {
@@ -354,9 +354,9 @@
 596:3 -> ../libraries.temper.md:65:21  /** @returns {Casing} */ <- first = new Casing("first");
 597:3 -> ../libraries.temper.md:65:21  static get first() { <- first = new Casing("first");
 597:14 -> ../libraries.temper.md:65:21 (first)  first() { <- first = new Casing("first");
-601:3 -> ../libraries.temper.md:69:21  /** @returns {Casing} */ <- last = named("last");
-602:3 -> ../libraries.temper.md:69:21  static get last() { <- last = named("last");
-602:14 -> ../libraries.temper.md:69:21 (last)  last() { <- last = named("last");
+601:3 -> ../libraries.temper.md:69:21  /** @returns {Casing} */ <- last = Casing.named("last");
+602:3 -> ../libraries.temper.md:69:21  static get last() { <- last = Casing.named("last");
+602:14 -> ../libraries.temper.md:69:21 (last)  last() { <- last = Casing.named("last");
 606:3 -> ../libraries.temper.md:59:15  /** @param {string} name */ <- constructor(name: String) {
 607:3 -> ../libraries.temper.md:59:15  constructor(name) { <- constructor(name: String) {
 609:5 -> ../libraries.temper.md:60:9  this.#name = name; <- this.name = name;
@@ -631,7 +631,7 @@
 1035:3 -> ../libraries.temper.md:333:14 (escape)  escape(s) { <- escape(s: String?): String {
 1036:5 -> ../libraries.temper.md:333:43  return `'${s == null ? "null <- "'${s ?? "null"}'" }
 1040:1 -> ../libraries.temper.md:65:21  Casing$first = new Casing("f <- first = new Casing("first");
-1041:1 -> ../libraries.temper.md:69:21  Casing$last = Casing.named(" <- last = named("last");
+1041:1 -> ../libraries.temper.md:69:21  Casing$last = Casing.named(" <- last = Casing.named("last");
 1042:1 -> ../libraries.temper.md:71:22  Casing$mark = "#"; <- mark = "#";
 1043:1 -> ../libraries.temper.md:193:5  let ticks = 0; <- var ticks = 0;
 1044:1 -> ../libraries.temper.md:209:5  /** @type {readonly number[] <- let extras = [1];

@@ -82,6 +82,32 @@ gives.
     console.log("${mb.getOr("q", 0) ?? -2} ${mb.getOr("n", 0) ?? -2} ${mb.has("n")}");
     console.log((mb.remove("q") orelse 0)?.toString() ?? "null");
     console.log(mb.keys().length.toString());
+    // Compound assignment and increments on indexed targets read the
+    // builder and the index once. In a function, as top-level statements
+    // run in dependency order, and `at++` assigns `at`.
+    let indexed(): Void {
+      let counts = new ListBuilder<Int>();
+      counts.add(1);
+      counts.add(10);
+      var at = 0;
+      counts[at] += 4;
+      counts[1] *= 3;
+      let was = counts[at++]++;
+      let pre = ++counts[at];
+      let post = counts[0]--;
+      let down = --counts[0];
+      console.log("${was} ${pre} ${post} ${down} ${at}");
+    }
+    indexed();
+    let tally = new MapBuilder<String, Int>();
+    tally.set("k", 2);
+    let bump(key: String): Int throws Bubble {
+      tally[key] -= 1;
+      let before = tally[key]++;
+      let after = ++tally[key];
+      before + after
+    }
+    console.log("${bump("k") orelse -1} ${bump("z") orelse -1} ${tally["k"] orelse -1}");
     // Java's boxes compare by value (Kotlin's compare references, so
     // two 1000s differ).
     let firstSame(a: List<Int>, b: List<Int>): Boolean { a[0] == b[0] }
@@ -101,5 +127,7 @@ none
 5 -2 true
 5
 1
+5 31 6 4 1
+4 -1 3
 true false
 ```

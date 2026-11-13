@@ -580,7 +580,7 @@ impl Settle {
                                 return Ok(());
                             }
                             Some(Value::Builtin(SyntaxBuiltin::DocComment)) => {
-                                self.expand_syntax(statement, SyntaxBuiltin::DocComment);
+                                self.expand_syntax(statement, scope, SyntaxBuiltin::DocComment);
                                 continue;
                             }
                             _ => {}
@@ -975,7 +975,7 @@ impl Settle {
                     if b == SyntaxBuiltin::This {
                         self.expand_this(node, scope);
                     } else {
-                        self.expand_syntax(node, b);
+                        self.expand_syntax(node, scope, b);
                     }
                     return Ok(true);
                 }

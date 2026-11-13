@@ -9,6 +9,7 @@
 - [🆕 Bitwise operators](#-bitwise-operators)
 - [🚨Breaking change: Details of rules for `<` ambiguity have changed](#breaking-change-details-of-rules-for--ambiguity-have-changed)
 - [Rust crates depend on `temper-std` only when they use it](#rust-crates-depend-on-temper-std-only-when-they-use-it)
+- [`++ls[i]` gives the new value](#lsi-gives-the-new-value)
 
 ## 🚨Breaking change: Rest parameter syntax removed.
 
@@ -297,3 +298,10 @@ A generated Rust crate no longer depends on `temper-std` when its
 library doesn't use std, where it always did before. A project with a
 committed `Cargo.lock` that builds such a crate sees `temper-std` drop
 out of it once.
+
+## `++ls[i]` gives the new value
+
+`++ls[i]` and `--ls[i]` on a `ListBuilder` or `MapBuilder` now give the
+element's new value, as `++x` does, where they gave `Void` before, so
+they can be used as values. `ls[i]++` still gives the old value, and
+`ls[i] += 1` still gives `Void`, as `ls[i] = v` does.

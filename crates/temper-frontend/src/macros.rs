@@ -168,12 +168,12 @@ impl Settle {
     }
 
     /// Expands a call to a builtin the grammar step refers to directly.
-    pub(crate) fn expand_syntax(&mut self, call: NodeId, builtin: SyntaxBuiltin) {
+    pub(crate) fn expand_syntax(&mut self, call: NodeId, scope: ScopeId, builtin: SyntaxBuiltin) {
         let children = self.lib.tree.children(call).to_vec();
         let span = self.lib.tree.span(call);
         match (builtin, &children[1..]) {
             (SyntaxBuiltin::DesugarOperation, [op, operands @ ..]) => {
-                self.desugar_operation(call, *op, operands)
+                self.desugar_operation(call, scope, *op, operands)
             }
             (SyntaxBuiltin::StringExpr, [tag, tagged, parts @ ..]) => {
                 let plain = self.lib.value(*tag) == Some(&Value::Null)
@@ -556,7 +556,7 @@ impl Settle {
 
     /// `a + b` is `desugarOperation(+, a, b)`: a call of the operator's
     /// name, or for `+=`, `++` and the like, an assignment.
-    fn desugar_operation(&mut self, call: NodeId, op: NodeId, operands: &[NodeId]) {
+    fn desugar_operation(&mut self, call: NodeId, scope: ScopeId, op: NodeId, operands: &[NodeId]) {
         let Some(name) = self.lib.name(op) else {
             return self.error(call, Message::MalformedSpecial("desugarOperation".into()));
         };
@@ -581,6 +581,17 @@ impl Settle {
         if self.is_dot_call(target) {
             return self.desugar_member_operation(
                 call,
+                scope,
+                &text,
+                simple,
+                target,
+                operands.get(1).copied(),
+            );
+        }
+        if self.is_index_call(target) {
+            return self.desugar_index_operation(
+                call,
+                scope,
                 &text,
                 simple,
                 target,
@@ -644,10 +655,12 @@ impl Settle {
 
     /// `obj.name += v`, `obj.name++` and the like, reading `obj` once:
     /// `do { let o = obj; o.name = o.name + v }`, or for `obj.name++`,
-    /// `do { let o = obj; let t = o.name; o.name = t + 1; t }`.
+    /// `do { let o = obj; let t = o.name; o.name = t + 1; t }`. `obj`
+    /// isn't held if it's a stable name ([`Settle::stable_name`]).
     fn desugar_member_operation(
         &mut self,
         call: NodeId,
+        scope: ScopeId,
         text: &str,
         simple: &str,
         target: NodeId,
@@ -669,16 +682,15 @@ impl Settle {
         let Some(key_value) = key_value else {
             return self.error(call, Message::MalformedSpecial(".".into()));
         };
-        let o = self.lib.names.temporary("o");
-        let o_left = self.lib.add_name(NodeKind::LeftName, o, span, call);
-        let mut statements =
-            vec![
-                self.lib
-                    .add(NodeKind::Let, span, LET_INIT, &[o_left, object], call),
-            ];
+        let (mut statements, o) = self.held_receiver(object, scope, "o", call);
+        // A name read again where it's written, for the editor.
+        let o_span = match statements.is_empty() {
+            true => self.lib.tree.span(object),
+            false => span,
+        };
         let member = |s: &mut Self| {
             let callee = s.lib.add_name(NodeKind::BuiltinName, dot_name, span, dot);
-            let o_use = s.lib.add_name(NodeKind::RightName, o, span, call);
+            let o_use = s.lib.add_name(NodeKind::RightName, o, o_span, call);
             let key = s.lib.add_value(key_value.clone(), span, key);
             s.lib
                 .add(NodeKind::Call, span, 0, &[callee, o_use, key], target)
@@ -712,6 +724,158 @@ impl Settle {
             statements.push(self.lib.add_name(NodeKind::RightName, t, span, call));
         }
         self.rewrite(call, NodeKind::Block, 0, &statements);
+    }
+
+    /// `ls[i] += v`, `ls[i]++`, `++ls[i]` and the like, evaluating `ls`
+    /// and `i` once, as Kotlin Temper does: `do { let o = ls; let k = i;
+    /// o.set(k, o[k] + v) }`, whose value is `set`'s, as for `ls[i] = v`.
+    /// `ls[i]++` is `do { ...; let t = o[k]; o.set(k, t + 1); t }`, and
+    /// `++ls[i]` is `do { ...; let t = o[k] + 1; o.set(k, t); t }`. A
+    /// literal index isn't held, nor a list or an index that's a stable
+    /// name ([`Settle::stable_name`]).
+    fn desugar_index_operation(
+        &mut self,
+        call: NodeId,
+        scope: ScopeId,
+        text: &str,
+        simple: &str,
+        target: NodeId,
+        value: Option<NodeId>,
+    ) {
+        let span = self.lib.tree.span(call);
+        let Some(function) = self
+            .lib
+            .names
+            .find(simple)
+            .and_then(|n| self.scopes.builtin(n))
+        else {
+            return self.error(call, Message::Unsupported(format!("operator {text}")));
+        };
+        let [index, object, key] = *self.lib.tree.children(target) else {
+            unreachable!()
+        };
+        let index_name = self.lib.name(index).unwrap();
+        let (mut statements, o) = self.held_receiver(object, scope, "o", call);
+        // A name read again where it's written, for the editor.
+        let name_span = |s: &Self, node: NodeId, held: bool| match held {
+            true => span,
+            false => s.lib.tree.span(node),
+        };
+        let o_span = name_span(self, object, !statements.is_empty());
+        let key_value = match self.lib.tree.kind(key) {
+            NodeKind::Value => self.lib.value(key).cloned(),
+            _ => None,
+        };
+        let k = match key_value {
+            Some(_) => None,
+            None => {
+                let (lets, k) = self.held_receiver(key, scope, "k", call);
+                let k_span = name_span(self, key, !lets.is_empty());
+                statements.extend(lets);
+                Some((k, k_span))
+            }
+        };
+        let key_use = |s: &mut Self| match (k, &key_value) {
+            (Some((k, k_span)), _) => s.lib.add_name(NodeKind::RightName, k, k_span, call),
+            (None, Some(v)) => s.lib.add_value(v.clone(), span, key),
+            (None, None) => unreachable!(),
+        };
+        let o_use = |s: &mut Self| s.lib.add_name(NodeKind::RightName, o, o_span, call);
+        let read = {
+            let callee = self
+                .lib
+                .add_name(NodeKind::BuiltinName, index_name, span, index);
+            let (o, k) = (o_use(self), key_use(self));
+            self.lib
+                .add(NodeKind::Call, span, 0, &[callee, o, k], target)
+        };
+        let amount = match value {
+            Some(v) => v,
+            None => self.lib.add_value(Value::Int32(1), span, call),
+        };
+        let operator = self.builtin_name(function, span, call);
+        let compound = value.is_some();
+        let postfix = text.starts_with('_');
+        let mut held_result = None;
+        let mut temp = |s: &mut Self, init: NodeId, statements: &mut Vec<NodeId>| {
+            let t = s.lib.names.temporary("t");
+            let t_left = s.lib.add_name(NodeKind::LeftName, t, span, call);
+            statements.push(
+                s.lib
+                    .add(NodeKind::Let, span, LET_INIT, &[t_left, init], call),
+            );
+            held_result = Some(t);
+            s.lib.add_name(NodeKind::RightName, t, span, call)
+        };
+        let old = match postfix {
+            true => temp(self, read, &mut statements),
+            false => read,
+        };
+        let mut new = self
+            .lib
+            .add(NodeKind::Call, span, 0, &[operator, old, amount], call);
+        if !compound && !postfix {
+            new = temp(self, new, &mut statements);
+        }
+        let set = {
+            let dot = self.lib.names.intern(".");
+            let dot = self.lib.add_name(NodeKind::BuiltinName, dot, span, index);
+            let key = Value::Symbol(self.lib.names.intern("set"));
+            let key = self.lib.add_value(key, span, index);
+            let o = o_use(self);
+            let member = self
+                .lib
+                .add(NodeKind::Call, span, 0, &[dot, o, key], target);
+            let k = key_use(self);
+            self.lib
+                .add(NodeKind::Call, span, 0, &[member, k, new], call)
+        };
+        statements.push(set);
+        if let Some(t) = held_result {
+            statements.push(self.lib.add_name(NodeKind::RightName, t, span, call));
+        }
+        self.rewrite(call, NodeKind::Block, 0, &statements);
+    }
+
+    /// The receiver of `obj.name += v` or `obj[i] += v`, or the index,
+    /// held in a temporary, unless it's a name that reads the same each
+    /// time ([`Settle::stable_name`]).
+    fn held_receiver(
+        &mut self,
+        object: NodeId,
+        scope: ScopeId,
+        hint: &str,
+        like: NodeId,
+    ) -> (Vec<NodeId>, NameId) {
+        match self.stable_name(object, scope) {
+            Some(name) => (Vec::new(), name),
+            None => self.held(object, hint, like),
+        }
+    }
+
+    /// A name that reads the same however often it's read: a type's, as
+    /// `C` in `C.count += 1`, which Kotlin Temper doesn't hold either
+    /// (`isKnownStable`), and which a static member's read and assignment
+    /// need as written; or a `let`'s or a parameter's, which nothing can
+    /// assign meanwhile. Not a `var`, which the value may assign, nor a
+    /// member named bare, a getter's call.
+    fn stable_name(&self, node: NodeId, scope: ScopeId) -> Option<NameId> {
+        let name = self.lib.name(node)?;
+        if self.lib.tree.kind(node) != NodeKind::RightName {
+            return None;
+        }
+        let at = self.lib.tree.span(node).start;
+        let Lookup::Found(s) = self.scopes.lookup(scope, name, false, at) else {
+            return None;
+        };
+        let symbol = self.scopes.symbol(s);
+        let stable = self.type_decl(s).is_some()
+            || (!symbol.mutable
+                && matches!(
+                    symbol.kind,
+                    SymbolKind::Local | SymbolKind::Parameter | SymbolKind::TopLevel
+                ));
+        stable.then_some(name)
     }
 
     /// A temporary holding `value`, unless it's a name already: the

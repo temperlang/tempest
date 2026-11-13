@@ -294,7 +294,6 @@ $ nums.add(40);
 interactive#3:1:1: error: No member add in List<Int32>
     nums.add(40);
     ^^^^^^^^
-Failed: No method add for List
 interactive#3: fail
 $ let nums2 = do {
     let builder = new ListBuilder<Int>();

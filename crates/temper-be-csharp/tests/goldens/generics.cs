@@ -6,6 +6,9 @@ namespace Generics;
 
 public static class GenericsGlobal
 {
+    internal static readonly ILoggingConsole console;
+    internal static readonly IDictionary<string, int> tally;
+
     internal static T Tagged<S, T>(T x)
     {
         return x;
@@ -54,6 +57,59 @@ public static class GenericsGlobal
         return sum;
     }
 
+    internal static void Indexed()
+    {
+        IList<int> counts = new List<int>();
+        counts.Add(1);
+        counts.Add(10);
+        int at = 0;
+        {
+            int k = at;
+            counts[k] = counts[k] + 4;
+        }
+        {
+            counts[1] = counts[1] * 3;
+        }
+        int was;
+        int k2;
+        int t = at;
+        at = t + 1;
+        k2 = t;
+        int t2 = counts[k2];
+        counts[k2] = t2 + 1;
+        was = t2;
+        int pre;
+        int k3 = at;
+        int t3 = counts[k3] + 1;
+        counts[k3] = t3;
+        pre = t3;
+        int post;
+        int t4 = counts[0];
+        counts[0] = t4 - 1;
+        post = t4;
+        int down;
+        int t5 = counts[0] - 1;
+        counts[0] = t5;
+        down = t5;
+        console.Log(string.Create(CultureInfo.InvariantCulture, $"{was} {pre} {post} {down} {at}"));
+    }
+
+    internal static int Bump(string key)
+    {
+        {
+            tally[key] = tally[key] - 1;
+        }
+        int before;
+        int t = tally[key];
+        tally[key] = t + 1;
+        before = t;
+        int after;
+        int t2 = tally[key] + 1;
+        tally[key] = t2;
+        after = t2;
+        return before + after;
+    }
+
     internal static bool FirstSame(IReadOnlyList<int> a, IReadOnlyList<int> b)
     {
         return a[0] == b[0];
@@ -61,7 +117,7 @@ public static class GenericsGlobal
 
     static GenericsGlobal()
     {
-        ILoggingConsole console = Support.Logging.LoggingConsoleFactory.CreateConsole("Generics");
+        console = Support.Logging.LoggingConsoleFactory.CreateConsole("Generics");
         IReadOnlyList<int> ns = Listed.CreateReadOnlyList<int>(1, 2, 3);
         IReadOnlyList<int> none = Listed.CreateReadOnlyList<int>();
         console.Log(string.Create(CultureInfo.InvariantCulture, $"{Total(ns)} {First(ns, 0)} {First(none, -1)}"));
@@ -96,16 +152,16 @@ public static class GenericsGlobal
         {
             t1 = -1;
         }
-        int t2;
+        int t6;
         try
         {
-            t2 = m["c"];
+            t6 = m["c"];
         }
         catch
         {
-            t2 = -1;
+            t6 = -1;
         }
-        console.Log(string.Create(CultureInfo.InvariantCulture, $"{t1} {t2} {(m.ContainsKey("a") ? "true" : "false")} {m.Count}"));
+        console.Log(string.Create(CultureInfo.InvariantCulture, $"{t1} {t6} {(m.ContainsKey("a") ? "true" : "false")} {m.Count}"));
         IDictionary<string, int?> mb = new TemperLang.Core.OrderedDictionary<string, int?>();
         mb["q"] = 5;
         mb["n"] = null;
@@ -125,6 +181,37 @@ public static class GenericsGlobal
         subject5 = subject6 == null ? null : subject6.Value.ToString(CultureInfo.InvariantCulture);
         console.Log(subject5 == null ? "null" : subject5);
         console.Log(Mapped.Keys(mb).Count.ToString(CultureInfo.InvariantCulture));
+        Indexed();
+        tally = new TemperLang.Core.OrderedDictionary<string, int>();
+        tally["k"] = 2;
+        int t7;
+        try
+        {
+            t7 = Bump("k");
+        }
+        catch
+        {
+            t7 = -1;
+        }
+        int t8;
+        try
+        {
+            t8 = Bump("z");
+        }
+        catch
+        {
+            t8 = -1;
+        }
+        int t9;
+        try
+        {
+            t9 = tally["k"];
+        }
+        catch
+        {
+            t9 = -1;
+        }
+        console.Log(string.Create(CultureInfo.InvariantCulture, $"{t7} {t8} {t9}"));
         console.Log((FirstSame(Listed.CreateReadOnlyList<int>(1000), Listed.CreateReadOnlyList<int>(1000)) ? "true" : "false") + " " + (FirstSame(Listed.CreateReadOnlyList<int>(1000), Listed.CreateReadOnlyList<int>(7)) ? "true" : "false"));
     }
 }

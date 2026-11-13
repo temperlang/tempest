@@ -110,6 +110,17 @@ pub(crate) fn init() -> temper_core::Result<()> {
                 "{}",
                 temper_core::ListedTrait::len(&*temper_core::MappedTrait::keys(&mb))
             );
+            indexed();
+            TALLY
+                .set(temper_core::MapBuilder::new())
+                .unwrap_or_else(|_| panic!());
+            temper_core::MapBuilder::set(&tally(), Arc::new("k".to_string()), 2);
+            println!(
+                "{} {} {}",
+                bump("k").unwrap_or(-1),
+                bump("z").unwrap_or(-1),
+                temper_core::MappedTrait::get(&tally(), Arc::new("k".to_string())).unwrap_or(-1)
+            );
             println!(
                 "{} {}",
                 first_same(Arc::new(vec![1000]), Arc::new(vec![1000])),
@@ -351,6 +362,83 @@ pub(crate) fn total(ns: impl temper_core::ToList<i32>) -> i32 {
         }
     }
     sum
+}
+
+pub(crate) fn indexed() {
+    let counts: temper_core::ListBuilder<i32> = temper_core::listed::new_builder();
+    temper_core::listed::add(&counts, 1, None);
+    temper_core::listed::add(&counts, 10, None);
+    let mut at: i32 = 0;
+    {
+        let k = at;
+        temper_core::listed::set(
+            &counts,
+            k,
+            temper_core::ListedTrait::get(&counts, k).wrapping_add(4),
+        );
+    }
+    {
+        temper_core::listed::set(
+            &counts,
+            1,
+            temper_core::ListedTrait::get(&counts, 1).wrapping_mul(3),
+        );
+    }
+    let was = {
+        let k = {
+            let t = at;
+            at = t.wrapping_add(1);
+            t
+        };
+        let t = temper_core::ListedTrait::get(&counts, k);
+        temper_core::listed::set(&counts, k, t.wrapping_add(1));
+        t
+    };
+    let pre = {
+        let k = at;
+        let t = temper_core::ListedTrait::get(&counts, k).wrapping_add(1);
+        temper_core::listed::set(&counts, k, t);
+        t
+    };
+    let post = {
+        let t = temper_core::ListedTrait::get(&counts, 0);
+        temper_core::listed::set(&counts, 0, t.wrapping_sub(1));
+        t
+    };
+    let down = {
+        let t = temper_core::ListedTrait::get(&counts, 0).wrapping_sub(1);
+        temper_core::listed::set(&counts, 0, t);
+        t
+    };
+    println!("{was} {pre} {post} {down} {at}");
+}
+
+static TALLY: OnceLock<temper_core::MapBuilder<Arc<String>, i32>> = OnceLock::new();
+
+pub(crate) fn tally() -> temper_core::MapBuilder<Arc<String>, i32> {
+    crate::support::initialized(|| TALLY.get()).clone()
+}
+
+pub(crate) fn bump(key: impl ToArcString) -> temper_core::Result<i32> {
+    let key = key.to_arc_string();
+    {
+        temper_core::MapBuilder::set(
+            &tally(),
+            key.clone(),
+            temper_core::MappedTrait::get(&tally(), key.clone())?.wrapping_sub(1),
+        );
+    }
+    let before = {
+        let t = temper_core::MappedTrait::get(&tally(), key.clone())?;
+        temper_core::MapBuilder::set(&tally(), key.clone(), t.wrapping_add(1));
+        t
+    };
+    let after = {
+        let t = temper_core::MappedTrait::get(&tally(), key.clone())?.wrapping_add(1);
+        temper_core::MapBuilder::set(&tally(), key.clone(), t);
+        t
+    };
+    Ok(before.wrapping_add(after))
 }
 
 pub(crate) fn first_same(

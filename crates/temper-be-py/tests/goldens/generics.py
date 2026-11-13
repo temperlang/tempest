@@ -8,7 +8,10 @@ from temper_core import (
     Pair as _Pair,
     boolean_to_string as _boolean_to_string,
     int_add as _int_add,
+    int_mul as _int_mul,
+    int_sub as _int_sub,
     list_builder_add as _list_builder_add,
+    list_builder_set as _list_builder_set,
     list_get as _list_get,
     list_get_or as _list_get_or,
     list_slice as _list_slice,
@@ -130,6 +133,44 @@ def _total(ns: _Sequence[int], /) -> int:
     return sum_
 
 
+def _indexed() -> None:
+    counts: _MutableSequence[int] = []
+    counts.append(1)
+    counts.append(10)
+    at = 0
+    k = at
+    _list_builder_set(counts, k, _int_add(_list_get(counts, k), 4))
+    _list_builder_set(counts, 1, _int_mul(_list_get(counts, 1), 3))
+    t = at
+    at = _int_add(t, 1)
+    k = t
+    t = _list_get(counts, k)
+    _list_builder_set(counts, k, _int_add(t, 1))
+    was = t
+    k = at
+    t = _int_add(_list_get(counts, k), 1)
+    _list_builder_set(counts, k, t)
+    pre = t
+    t = _list_get(counts, 0)
+    _list_builder_set(counts, 0, _int_sub(t, 1))
+    post = t
+    t = _int_sub(_list_get(counts, 0), 1)
+    _list_builder_set(counts, 0, t)
+    down = t
+    _console.log(f'{was} {pre} {post} {down} {at}')
+
+
+def _bump(key: str, /) -> int:
+    _map_builder_set(_tally, key, _int_sub(_tally[key], 1))
+    t = _tally[key]
+    _map_builder_set(_tally, key, _int_add(t, 1))
+    before = t
+    t = _int_add(_tally[key], 1)
+    _map_builder_set(_tally, key, t)
+    after = t
+    return _int_add(before, after)
+
+
 def _first_same(a: _Sequence[int], b: _Sequence[int], /) -> bool:
     return _list_get(a, 0) == _list_get(b, 0)
 
@@ -180,4 +221,23 @@ except Exception:
     _t_2 = 0
 _console.log('null' if (_subject5 := None if (_subject6 := _t_2) is None else str(_subject6)) is None else _subject5)
 _console.log(str(len(list(_mb.keys()))))
+_indexed()
+_tally: dict[str, int] = {}
+_map_builder_set(_tally, 'k', 2)
+_t_3: int
+try:
+    _t_3 = _bump('k')
+except Exception:
+    _t_3 = -1
+_t_4: int
+try:
+    _t_4 = _bump('z')
+except Exception:
+    _t_4 = -1
+_t_5: int
+try:
+    _t_5 = _tally['k']
+except Exception:
+    _t_5 = -1
+_console.log(f'{_t_3} {_t_4} {_t_5}')
 _console.log(f'{_boolean_to_string(_first_same((1000,), (1000,)))} {_boolean_to_string(_first_same((1000,), (7,)))}')

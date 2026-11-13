@@ -235,7 +235,7 @@ interface B extends A {}
 interface C extends A { a(): String { "C" } }
 class D extends B & C {
   public static var count = 0;
-  public static make(): D { count += 1; new D(0) }
+  public static make(): D { D.count += 1; new D(0) }
   public var n: Int;
   public fixed: Int;
   public constructor(n: Int) { this.n = n; fixed = n; }
@@ -258,7 +258,11 @@ console.log("fixed is still ${d.fixed}");
     (Var static ^count:12 0)
     (Method static
       ^make:13
-      (Fn D:3 (Block (Assign count:12 (Call + count:12 1)) (Call new D:3 0))))
+      (Fn
+        D:3
+        (Block
+          (Block (Assign (Call . D:3 \count) (Call + (Call . D:3 \count) 1)))
+          (Call new D:3 0))))
     (Var ^n:14 Int)
     (Let ^fixed:15 Int)
     (Constructor
@@ -268,7 +272,7 @@ console.log("fixed is still ${d.fixed}");
         (Block (Assign (Call . this#11 \n) n:19) (Assign fixed:15 n:19) #void)))
     (Method ^bad:17 (Fn Void (Block 2 #void))))
   (Let ^d:4 (Call (Call . D:3 \make)))
-  (Block (Let ^o#20 d:4) (Assign (Call . o#20 \n) (Call + (Call . o#20 \n) 2)))
+  (Block (Assign (Call . d:4 \n) (Call + (Call . d:4 \n) 2)))
   (Call
     (Call . console \log)
     (Call
@@ -276,10 +280,9 @@ console.log("fixed is still ${d.fixed}");
       (Call (Call . d:4 \a))
       " "
       (Block
-        (Let ^o#21 d:4)
-        (Let ^t#22 (Call . o#21 \n))
-        (Assign (Call . o#21 \n) (Call + t#22 1))
-        t#22)
+        (Let ^t#20 (Call . d:4 \n))
+        (Assign (Call . d:4 \n) (Call + t#20 1))
+        t#20)
       " "
       (Call . d:4 \n)
       " "
@@ -287,7 +290,7 @@ console.log("fixed is still ${d.fixed}");
   (Call (Call . d:4 \bad))
   (Call (Call . console \log) (Call cat "fixed is still " (Call . d:4 \fixed)))
   #void)
-error 334..339: Member fixed defined in D incompatible with usage
+error 336..341: Member fixed defined in D incompatible with usage
 log C 2 3 1
 log fixed is still 0
 

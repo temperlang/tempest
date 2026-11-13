@@ -66,7 +66,7 @@ tempest's interpreter gives.
 
       private static named(name: String): Casing { new Casing(name) }
 
-      public static last = named("last");
+      public static last = Casing.named("last");
 
       private static mark = "#";
 

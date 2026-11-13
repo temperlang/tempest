@@ -148,11 +148,18 @@ Language and frontend:
 - **Private members of other instances** of the same class are usable in
   its methods, as Kotlin Temper's #625 allows (merged to its main
   2026-11-03; before it, Kotlin said only "Cannot translate Invalid" and
-  emitted code that fails). Done, checked at run time
-  ([milestone-3.md](history/milestone-3.md), "Classes"); no longer a difference
-  once Kotlin's next release has it.
+  emitted code that fails). Done ([milestone-3.md](history/milestone-3.md),
+  "Classes"); use outside the class is reported where it is, as Kotlin's
+  typer does ("Member b defined in C not publicly accessible"); no
+  longer a difference once Kotlin's next release has it.
   Test: settle/classes.cases, "private members are readable on any
   instance of their class"; programs/classes.temper.md on every backend.
+- **`++ls[i]` and `--ls[i]` give the new value,** as `++x` and `++o.n`
+  do. Kotlin lowers them to `ls.set(i, …)`, so their value is `Void`,
+  which can't be used. `ls[i] += v` stays `Void` there and here, as
+  `ls[i] = v` is.
+  Test: settle/macros.cases, "compound assignment on index targets
+  evaluates the list and index once"; programs/generics.temper.md.
 - **`yield` and `await` in `for … of` bodies.** Kotlin lowers a body to a
   `forEach` lambda, so a `yield` there fails at run time. Idea: iterables
   provide a generator or iterator, so `yield`, `await`, `break` and
