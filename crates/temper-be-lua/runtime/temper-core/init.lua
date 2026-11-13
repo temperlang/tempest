@@ -2181,18 +2181,18 @@ function temper.date_day(date)
 end
 
 function temper.date_dayofweek(date)
-    -- os.date week days are 1 indexed: Sunday is 1, Monday is 2, ... Saturday is 7
-    local wday = os.date("*t", os.time {
-        year = date.year,
-        month = date.month,
-        day = date.day
-    }).wday
-    -- convert to iso wday: Monday = 1, ... Sunday = 7
-    if wday == 1 then
-        return 7
-    else
-        return wday - 1
-    end
+    -- ISO week days, Monday = 1, ... Sunday = 7, by arithmetic on the
+    -- proleptic Gregorian calendar (days since 1970-01-01, a Thursday),
+    -- not os.time, which fails for years before 1900 on some platforms,
+    -- such as macOS.
+    local y, m = date.year, date.month
+    if m <= 2 then y = y - 1 end
+    local era = math_floor(y / 400)
+    local yoe = y - era * 400
+    local doy = math_floor((153 * ((m + 9) % 12) + 2) / 5) + date.day - 1
+    local doe = yoe * 365 + math_floor(yoe / 4) - math_floor(yoe / 100) + doy
+    local days = era * 146097 + doe - 719468
+    return (days + 3) % 7 + 1
 end
 
 do
