@@ -234,8 +234,8 @@ interface A { a(): String { "A" } }
 interface B extends A {}
 interface C extends A { a(): String { "C" } }
 class D extends B & C {
-  public static var count = 0;
-  public static make(): D { D.count += 1; new D(0) }
+  public static count = 1;
+  public static make(): D { new D(D.count - 1) }
   public var n: Int;
   public fixed: Int;
   public constructor(n: Int) { this.n = n; fixed = n; }
@@ -255,14 +255,10 @@ console.log("fixed is still ${d.fixed}");
     ^D:3
     B:1
     C:2
-    (Var static ^count:12 0)
+    (Let static ^count:12 1)
     (Method static
       ^make:13
-      (Fn
-        D:3
-        (Block
-          (Block (Assign (Call . D:3 \count) (Call + (Call . D:3 \count) 1)))
-          (Call new D:3 0))))
+      (Fn D:3 (Block (Call new D:3 (Call - (Call . D:3 \count) 1)))))
     (Var ^n:14 Int)
     (Let ^fixed:15 Int)
     (Constructor
@@ -290,7 +286,7 @@ console.log("fixed is still ${d.fixed}");
   (Call (Call . d:4 \bad))
   (Call (Call . console \log) (Call cat "fixed is still " (Call . d:4 \fixed)))
   #void)
-error 336..341: Member fixed defined in D incompatible with usage
+error 328..333: Member fixed defined in D incompatible with usage
 log C 2 3 1
 log fixed is still 0
 

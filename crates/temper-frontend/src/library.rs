@@ -175,6 +175,10 @@ pub enum Message {
     /// A static member named bare, not as `C.name`. Kotlin's
     /// `StaticMemberNeedsQualified`.
     StaticNeedsTypeName,
+    /// An assignment to a static member, even a `var`, which tmpl has no
+    /// form for: the member and its class. Kotlin's
+    /// `CannotAssignStaticMember`.
+    CannotAssignStatic(String, String),
     /// A function without a return type where nothing gives it one.
     MissingReturnType,
     /// Arguments that don't fit the variant of a builtin that a call
@@ -397,6 +401,9 @@ impl Message {
                 format!("Member {key} defined in {class} not publicly accessible")
             }
             Message::StaticNeedsTypeName => "Type name required for accessing static member".into(),
+            Message::CannotAssignStatic(member, class) => format!(
+                "Cannot assign to static member {member} of {class}; static members are only initialized at their declaration"
+            ),
             Message::MissingReturnType => "Explicit return type required".into(),
             Message::SignatureMismatch(sig, expected, got) => format!(
                 "Actual arguments do not match signature: {sig} expected {expected}, but got {got}"

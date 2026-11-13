@@ -636,6 +636,16 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   method overriding a marked one counts too (fixed 2026-11-10).
   Test: programs/content-tags (`Both`), settle/autoescape.cases.
 
+- **Assigning a static member,** even a `static var` (which, as in
+  Kotlin, is a static `let` in tmpl), is "Cannot assign to static
+  member count of C; static members are only initialized at their
+  declaration" in both. Kotlin's program runs on with the value
+  unchanged; tempest's fails at the assignment, as at any error. A bare
+  `count = 1` in `C` gets that error besides "Type name required for
+  accessing static member" (2026-11-13).
+  Test: settle/classes.cases, "static members can't be assigned, even
+  a `var`, as Kotlin reports".
+
 ### Interpreter, core and std
 
 - **`Float64.toString` cuts at 16 digits** in the interpreter

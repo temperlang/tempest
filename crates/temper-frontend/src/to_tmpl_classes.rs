@@ -292,10 +292,9 @@ impl Translator<'_> {
             }
             (0, true) => {
                 let ty = self.member_ty(m)?;
+                // A `static var` is a static `let`, as in Kotlin Temper: no
+                // static may be assigned after its initializer.
                 let d = self.b.declare(DeclKind::StaticField, &name, decl, ty);
-                if data & LET_VAR != 0 {
-                    facts = facts | Facts::VAR;
-                }
                 self.b.add_facts(d, facts);
                 self.decl_spans(d, m);
                 Member::Field(d)

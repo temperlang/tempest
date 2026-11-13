@@ -1119,6 +1119,55 @@ impl Settle {
         }
     }
 
+    /// Reports an assignment to a static member, `C.count = 1` or `C.count
+    /// += 1`, even a `static var`, as Kotlin Temper does: statics are only
+    /// initialized at their declaration. A bare `count = 1` in `C` is
+    /// reported too, besides needing its type's name. Returns whether it
+    /// reported one; the assignment then fails where it runs.
+    fn check_static_assignment(&mut self, node: NodeId, target: NodeId) -> bool {
+        let (class, name) = match self.dot_parts(target) {
+            Some((object, key)) => {
+                let class = (self.lib.tree.kind(object) == NodeKind::RightName)
+                    .then(|| self.scopes.resolved(object))
+                    .flatten()
+                    .and_then(|b| self.type_decl(b))
+                    .filter(|_| self.builtin_type_named(object).is_none());
+                match (class, self.lib.symbol(key)) {
+                    (Some(class), Some(name)) => (class, name),
+                    _ => return false,
+                }
+            }
+            None => {
+                let Some(b) = self.scopes.resolved(target) else {
+                    return false;
+                };
+                let symbol = *self.scopes.symbol(b);
+                let is_static = symbol.kind == SymbolKind::Member
+                    && symbol
+                        .decl
+                        .is_some_and(|d| self.lib.tree.data(d) & core::MEMBER_STATIC != 0);
+                if !is_static {
+                    return false;
+                }
+                (self.scopes.get(symbol.owner).node, symbol.name)
+            }
+        };
+        // `C.x` for an instance member `x` names nothing assignable either,
+        // and Kotlin reports it the same way.
+        if self.members_named(class, name, true).is_empty()
+            && self.members_named(class, name, false).is_empty()
+        {
+            return false;
+        }
+        let message = Message::CannotAssignStatic(
+            self.lib.names.get(name).to_string(),
+            self.member_text(class).to_string(),
+        );
+        let span = self.lib.tree.span(node);
+        self.lib.report(Level::Error, message, span);
+        true
+    }
+
     /// Checks a node after its children, as Kotlin Temper's `TypeChecker`
     /// does, so deeper errors come first.
     fn check(&mut self, node: NodeId) {
@@ -1142,7 +1191,7 @@ impl Settle {
                     let t = self.known_decl_type(decl);
                     self.check_value(t, value, Site::Assign(node));
                     self.check_not_void(value, node);
-                } else {
+                } else if !self.check_static_assignment(node, target) {
                     // A setter's call, as Kotlin Temper reports it.
                     let t = self.member_target_type(target);
                     self.check_value(t, value, Site::Arg);

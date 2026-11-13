@@ -41,8 +41,9 @@ and labels are declared by the statements below.
 **Statements:**
 
 - Binding: `Let` (local, maybe `var`, maybe without an initializer).
-- Writes: `Assign` to a local, `SetField`, `SetStatic`, and
-  `SetModuleVar` ([modules.md](modules.md): module `var`s have their own read and write).
+- Writes: `Assign` to a local, `SetField`, and `SetModuleLet`
+  ([modules.md](modules.md): module `var`s have their own read and write).
+  Statics are only initialized, by `InitStatic`; Temper never assigns one.
 - Control: `Block`, `If`, `While`, `DoWhile`, `ForOf` (Decided
   2026-10-29: a real loop, so `yield` and `await` in its body can work
   later; backends may map it to native loops or `forEach`),

@@ -459,6 +459,60 @@ error 113..114: Type name required for accessing static member
 error 153..154: Type name required for accessing static member
 Failed: Type name required for accessing static member
 
+=== static members can't be assigned, even a `var`, as Kotlin reports
+class C {
+  public static var count: Int = 0;
+  public bump(): Void { C.count += 1; C.count++; }
+  public static reset(): Void { C.count = 0; count = 1; }
+}
+let set(): Void { C.count = 2; C.count--; }
+console.log("before ${C.count}");
+new C().bump();
+console.log("after ${C.count}");
+--- settled
+(Block
+  (Class
+    ^C:0
+    (Var static ^count:3 Int 0)
+    (Method
+      ^bump:4
+      (Fn
+        Void
+        (Block
+          (Block (Assign (Call . C:0 \count) (Call + (Call . C:0 \count) 1)))
+          (Block
+            (Let ^t#6 (Call . C:0 \count))
+            (Assign (Call . C:0 \count) (Call + t#6 1))
+            t#6)
+          #void)))
+    (Method static
+      ^reset:5
+      (Fn Void (Block (Assign (Call . C:0 \count) 0) (Assign count:3 1) #void))))
+  (Let
+    ^set:1
+    (Fn
+      Void
+      (Block
+        (Assign (Call . C:0 \count) 2)
+        (Block
+          (Let ^t#7 (Call . C:0 \count))
+          (Assign (Call . C:0 \count) (Call - t#7 1))
+          t#7)
+        #void)))
+  (Call (Call . console \log) (Call cat "before " (Call . C:0 \count)))
+  (Call (Call . (Call new C:0) \bump))
+  (Call (Call . console \log) (Call cat "after " (Call . C:0 \count)))
+  #void)
+error 70..82: Cannot assign to static member count of C; static members are only initialized at their declaration
+error 84..93: Cannot assign to static member count of C; static members are only initialized at their declaration
+error 129..140: Cannot assign to static member count of C; static members are only initialized at their declaration
+error 142..151: Cannot assign to static member count of C; static members are only initialized at their declaration
+error 175..186: Cannot assign to static member count of C; static members are only initialized at their declaration
+error 188..197: Cannot assign to static member count of C; static members are only initialized at their declaration
+error 142..147: Type name required for accessing static member
+log before 0
+Failed: Cannot assign to static member count of C; static members are only initialized at their declaration
+
 === this outside a class
 let f(): Int { this.x }
 --- settled
