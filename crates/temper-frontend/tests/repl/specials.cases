@@ -249,7 +249,7 @@ interactive#9: void
 let { Date } = import("std/temporal")
 let d1 = new Date(2020, 1, 2)
 let { Date } = import("std/temporal")
-let d2(): Date { new Date(2021, 3, 4) }
+let d2(): Date { new Date(2021, 3, 4) orelse panic() }
 "${d2().toString()} ${d1.toString()}"
 describe(4, "module")
 let { CodePoints } = import("std/regex")
@@ -273,7 +273,7 @@ let { Date } = import("std/temporal");
 let d1 = new Date(2020, 1, 2);
 // interactive#2
 // interactive#3
-let d2(): Date { new Date(2021, 3, 4) };
+let d2(): Date { new Date(2021, 3, 4) orelse panic() };
 // interactive#4
 "${d2().toString()} ${d1.toString()}";
 interactive#5: void

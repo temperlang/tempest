@@ -461,11 +461,16 @@ impl Translator<'_> {
             if self.kind(callee) == NodeKind::Error {
                 return Some(lib.error_text(callee));
             }
-            // A method that isn't there, as `s.lenght()` ("No member").
-            if self.dot_object(callee).is_some() {
+            // A method that isn't there, as `s.lenght()` ("No member"),
+            // or one of an object that's an error, as an undeclared
+            // name's `missing.toString()`, which fails before the call.
+            if let Some(object) = self.dot_object(callee) {
                 let span = lib.tree.span(callee);
                 if let Some(message) = self.errors.get(&(span.start, span.end)) {
                     return Some(message.clone());
+                }
+                if let Some(message) = self.error_at(object) {
+                    return Some(message);
                 }
             }
             // An operator typing couldn't resolve for an operand that's an
@@ -1131,6 +1136,12 @@ impl Translator<'_> {
         self.declare_formals(&formals, d, class)?;
         let supers = self.class_supers(class)?;
         self.b.set_supers(d, &supers);
+        // A `@fun` interface, with its `apply`, which gives a function
+        // literal or reference of its type its signature.
+        if self.data(class) & core::CLASS_FUN != 0 {
+            self.b.add_facts(d, temper_tmpl::Facts::FUN);
+            self.external_method_named(d, "apply", at)?;
+        }
         Ok(Some(d))
     }
 
@@ -2683,6 +2694,9 @@ impl Translator<'_> {
                     return self.read_member(m, None, node);
                 }
                 let decl = match self.declaration(node) {
+                    Some(d) if self.kind(d) == NodeKind::Class => {
+                        return self.not_yet(node, "a class or interface as a type value");
+                    }
                     Some(d) if self.decls.contains_key(&d) => Some(self.decls[&d]),
                     Some(d) => self.top_decl(d, node)?,
                     None => None,
@@ -3081,6 +3095,13 @@ impl Translator<'_> {
             }
             None if self.s.typing.identity_eq(node).is_some() => {
                 self.identity(node, f.unwrap_or(Function::Eq), args)
+            }
+            // In a library with errors, one that left the callee's type
+            // unknown, as `x.toString()` for `x: Undeclared`: the call
+            // fails where it runs, as the error's code does.
+            None if self.has_errors() => {
+                let made = self.b.error(TypeId::NONE, "a call of unknown type");
+                Ok(self.own(made, node))
             }
             None => self.not_yet(node, "a call typing didn't resolve"),
             Some(Resolved::Builtin(key)) => {
@@ -3785,6 +3806,15 @@ impl Translator<'_> {
             _ => ty,
         };
         let Some(class) = temper_tmpl::analysis::nominal_decl(self.b.program(), ty) else {
+            // In a library with errors, a value whose type one left
+            // unknown, which `unknown_ty` makes any value: the part fails
+            // where it runs, as the error's code does.
+            if ty == TypeId::ANY_VALUE && self.has_errors() {
+                let made = self
+                    .b
+                    .error(TypeId::STRING, "a template's part of unknown type");
+                return Ok(self.made(made, part));
+            }
             return self.not_yet(part, "a template's part of another type");
         };
         let mut owners = vec![class];

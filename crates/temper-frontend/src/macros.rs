@@ -126,7 +126,13 @@ impl Settle {
             Macro::Coalesce => match *args {
                 [a, b] => {
                     let span = self.lib.tree.span(call);
-                    let (mut statements, name) = self.subject(a, "subject", call);
+                    // A member named bare, a getter's call, is held, as
+                    // checking it for null doesn't narrow the next read.
+                    let (mut statements, name) = if self.is_bare_member(a, scope) {
+                        self.held(a, "subject", call)
+                    } else {
+                        self.subject(a, "subject", call)
+                    };
                     let null_check = self.null_check(name, span, call);
                     let reread = self.lib.add_name(NodeKind::RightName, name, span, a);
                     statements.push(self.lib.add(
@@ -876,6 +882,22 @@ impl Settle {
                     SymbolKind::Local | SymbolKind::Parameter | SymbolKind::TopLevel
                 ));
         stable.then_some(name)
+    }
+
+    /// Whether `node` names a member bare, as `problem` for
+    /// `this.problem` in its class.
+    fn is_bare_member(&self, node: NodeId, scope: ScopeId) -> bool {
+        let Some(name) = self.lib.name(node) else {
+            return false;
+        };
+        if self.lib.tree.kind(node) != NodeKind::RightName {
+            return false;
+        }
+        let at = self.lib.tree.span(node).start;
+        match self.scopes.lookup(scope, name, false, at) {
+            Lookup::Found(s) => self.scopes.symbol(s).kind == SymbolKind::Member,
+            _ => false,
+        }
     }
 
     /// A temporary holding `value`, unless it's a name already: the

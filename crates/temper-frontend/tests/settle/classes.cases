@@ -988,3 +988,37 @@ error 412..418: A @connected function that lists backends needs a Temper body fo
 error 508..513: @connected expects a list of backend names, like ["cpp", "rust"], not "cpp"
 error 569..579: @connected expects a list of backend names, like ["cpp", "rust"], not ["cpp", 1]
 log 2 4 3
+
+=== a bare member's ?? is held, as checking it for null doesn't narrow it
+// A getter's call, as this.problem is.
+class Q(public problem: String?) {
+  public k(): String { problem ?? "ok" }
+  public k2(): String { this.problem ?? "ok" }
+}
+let q = new Q(null);
+console.log(q.k());
+--- settled
+(Block
+  (Class
+    ^Q:0
+    (Param ^problem:3 (Call ? String))
+    (Method
+      ^k:4
+      (Fn
+        String
+        (Block
+          (Block
+            (Let ^subject#6 problem:3)
+            (If (Call == subject#6 #null) "ok" subject#6)))))
+    (Method
+      ^k2:5
+      (Fn
+        String
+        (Block
+          (Block
+            (Let ^subject#7 (Call . this#2 \problem))
+            (If (Call == subject#7 #null) "ok" subject#7))))))
+  (Let ^q:1 (Call new Q:0 null))
+  (Call (Call . console \log) (Call (Call . q:1 \k)))
+  #void)
+log ok

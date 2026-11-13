@@ -486,6 +486,15 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   fits no variant (`k == mk(n)`, `"a" - mi(n)`). Harmless, since the
   misfit is reported, but odd; tempest matches ([typing.md](typing.md),
   "What may bubble").
+- **Bubbling calls of constants:** Kotlin folds a call of a function
+  that `throws Bubble` when its arguments are constants, as `g(1)`,
+  and reports "Cannot bubble …" only if the folded call bubbles; one
+  that doesn't becomes its value. Tempest doesn't fold such calls yet,
+  so it reports neither, and translation stops at the call ("may
+  bubble, but … can't"). A constructor's call, as `new Date(2020, 1,
+  1)`, Kotlin never folds, and both report it.
+  Test: settle/builtins.cases, "what may bubble where it can" (`a9`),
+  and "what may bubble: constructors that say so".
 - **Overrides with the wrong signature** ("Type B has method f with
   signature …, but it should be …"), like Kotlin's other
   `TypeDeclChecker` errors, are reported only while generating code,

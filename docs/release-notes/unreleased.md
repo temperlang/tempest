@@ -15,6 +15,7 @@
 - [A class has only one constructor](#a-class-has-only-one-constructor)
 - [Extension methods](#extension-methods)
 - [Generated packages need this compiler's runtimes](#generated-packages-need-this-compilers-runtimes)
+- [Fixes for code Kotlin's Temper accepted](#fixes-for-code-kotlins-temper-accepted)
 
 ## 🚨Breaking change: Rest parameter syntax removed.
 
@@ -373,3 +374,18 @@ runtimes gained APIs its output uses, and aren't on the registries
 yet, so use them from `temper.out/BACKEND/`, where `temper build`
 writes them, or from a release's packages
 ([target languages](../backends/README.md)).
+
+## Fixes for code Kotlin's Temper accepted
+
+- `new C(…)`, where `C`'s constructor `throws Bubble`, in a function
+  that can't bubble is reported as "Cannot bubble from a function
+  without Bubble in its return type", as Kotlin's Temper reports it,
+  instead of stopping translation.
+- `x ?? d`, where `x` is a nullable member named bare in its class, is
+  a non-null value, as `this.x ?? d` is; it was an error.
+- A function literal or function reference where another library's
+  `@fun` interface is wanted translates for every backend.
+- In a library with errors, a value whose type an error left unknown,
+  as a parameter of an undeclared type, fails where it runs when it's
+  in a string template or has a method called, instead of keeping the
+  module from being translated.

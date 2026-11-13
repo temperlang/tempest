@@ -315,6 +315,55 @@ fn hints_only_with_verbose() {
     });
 }
 
+/// A function literal and a function reference where another library's
+/// `@fun` interface is wanted: `b`'s code gets the interface's `apply`,
+/// so both translate and run.
+#[test]
+fn another_librarys_fun_interface() {
+    if !built_in("py") {
+        return;
+    }
+    let dir = std::env::temp_dir().join(format!("tempest-cli-{}-fun", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    let files = [
+        ("a/config.temper.md", "export let name = \"a\";\n"),
+        (
+            "a/a.temper",
+            "export @fun interface Pred(x: Int): Boolean;\n\
+             export let countIf(xs: List<Int>, p: Pred): Int {\n\
+             var n = 0;\n\
+             for (let x of xs) { if (p(x)) { n += 1; } }\n\
+             n\n\
+             }\n",
+        ),
+        ("b/config.temper.md", "export let name = \"b\";\n"),
+        (
+            "b/b.temper",
+            "let { Pred, countIf } = import(\"a\");\n\
+             let isOdd(x: Int): Boolean { x % 2 != 0 }\n\
+             export let one(): Int { countIf([1, 2, 3], fn (x: Int): Boolean { x > 1 }) }\n\
+             export let two(): Int { let p: Pred = isOdd; countIf([1, 2, 3], p) }\n\
+             test(\"counts\") { assert(one() == 2); assert(two() == 2) }\n",
+        ),
+    ];
+    for (name, text) in files {
+        let path = dir.join(name);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, text).unwrap();
+    }
+    let root = dir.to_string_lossy().to_string();
+    let out = format!("{root}-out");
+    let (code, _, err) = tempest(&["build", "-w", &root, "-b", "py", "-o", &out]);
+    assert_eq!((code, err.as_str()), (0, ""));
+    let _ = fs::remove_dir_all(&out);
+    if Command::new("python3").arg("--version").output().is_ok() {
+        let (code, out, err) = tempest(&["test", "-w", &root, "-b", "py"]);
+        assert!(out.ends_with("Tests passed: 1 of 1\n"), "{out}{err}");
+        assert_eq!(code, 0, "{err}");
+    }
+    let _ = fs::remove_dir_all(&dir);
+}
+
 /// The audit's probe (scratch/deps): `b` imports `a`, which has an
 /// error. Each command reports it once, under `a`, the library it's in,
 /// though settling `b` finds it again; and still fails.
@@ -1050,7 +1099,9 @@ fn errors_fail_only_where_they_run() {
          export let misspelled(s: String): Int { s.lenght }\n\
          export let typo(x: Nope): Int { 1 }\n\
          export let unclosed(x: Int: Int { x * 2 }\n\
-         export let after(x: Int): Int { x * 3 }\n",
+         export let after(x: Int): Int { x * 3 }\n\
+         export let shown(x: Gone): String { \"${x}\" + x.toString() }\n\
+         export let named(): String { missing.toString() }\n",
         ),
         (
             "tests.temper",
@@ -1066,13 +1117,15 @@ fn errors_fail_only_where_they_run() {
             "a.temper:3:41: error: No member lenght in String",
             "a.temper:4:20: error: Nope has not been declared",
             "a.temper:5:27: error: Expected `)` to close the `(` on line 5",
+            "a.temper:7:21: error: Gone has not been declared",
+            "a.temper:8:30: error: missing has not been declared",
         ];
         // Every backend's code, each error reported once, and 1.
         let (code, out, err) = tempest(&["build", "-w", dir]);
         for error in errors {
             assert_eq!(err.matches(error).count(), 1, "{error}:\n{err}");
         }
-        assert!(err.ends_with("a: 4 errors\n"), "{err}");
+        assert!(err.ends_with("a: 6 errors\n"), "{err}");
         assert_eq!((code, out.as_str()), (1, ""), "{err}");
         for backend in ["csharp", "java", "js", "lua", "py", "rust"] {
             let written = Path::new(dir).join("temper.out").join(backend).join("a");
@@ -1084,7 +1137,7 @@ fn errors_fail_only_where_they_run() {
         let (code, _, err) = tempest(&["build", "-w", dir, "-b", "py", "-o", &py]);
         let text = fs::read_to_string(format!("{py}/py/a/a/a.py")).unwrap();
         assert!(text.contains("def after(x: int, /) -> int:"), "{text}");
-        assert!(err.ends_with("a: 4 errors\n"), "{err}");
+        assert!(err.ends_with("a: 6 errors\n"), "{err}");
         assert_eq!(code, 1);
         let _ = fs::remove_dir_all(&py);
         // Tests run, on the interpreter and on a backend, those that
