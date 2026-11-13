@@ -148,17 +148,28 @@ impl Settle {
         }
         let is_fun = self.fun_interfaces.remove(&call) && interface;
         let sealed = self.sealed.remove(&call) && interface;
-        if self.json_decorated.remove(&call) && is_fun {
+        let json = self.json_decorated.remove(&call);
+        let in_std = self.lib.in_std(self.lib.tree.span(call).start);
+        // Not yet for std's `@connected` `Date`: backends that connect it
+        // to a type of their own would need its other members as module
+        // functions, as Kotlin's (notes/kotlin-differences.md).
+        let std_connected = in_std && self.connected.contains(&call);
+        if json && is_fun {
             let class = (self.lib.name(*name)).map_or("", |n| self.lib.names.get(n));
             let class = class.to_string();
             let message = Message::FunInterfaceRule(class, FunRule::Json);
             self.lib
                 .report(Level::Error, message, self.lib.tree.span(*name));
+        } else if json && block.is_some() && !std_connected {
+            let members = children[1 + type_params.len() + supers.len()..].to_vec();
+            let added = self.json_members(call, *name, &type_params, &members, interface, sealed);
+            children.extend(added);
         }
+        self.json.extras.remove(&call);
+        self.json.at.remove(&call);
         // `@connected` on a class, or on std's interface (`NetResponse`),
         // which a backend connects to a type of its own; on its members,
         // it's `MEMBER_CONNECTED`.
-        let in_std = self.lib.in_std(self.lib.tree.span(call).start);
         let connected = self.connected.remove(&call) && (!interface || in_std);
         let listed = self.connected_lists.remove(&call).filter(|_| connected);
         let lists = listed.is_some();
@@ -400,7 +411,12 @@ impl Settle {
         Some(self.lib.names.intern(&text))
     }
 
-    fn lower_member(&mut self, node: NodeId, flags: u32, header: bool) -> Option<NodeId> {
+    pub(crate) fn lower_member(
+        &mut self,
+        node: NodeId,
+        flags: u32,
+        header: bool,
+    ) -> Option<NodeId> {
         let children = self.lib.tree.children(node).to_vec();
         match self.lib.tree.kind(node) {
             NodeKind::Value if self.lib.value(node) == Some(&Value::Void) => return None,
@@ -490,9 +506,22 @@ impl Settle {
                         let overload = (text.as_deref() == Some("overload"))
                             .then(|| self.overload_name(*decorator))
                             .flatten();
+                        let json_name = self.json_name_of(*decorator);
                         let lowered = self.lower_member(*target, flags | more, header);
                         if let (Some(m), Some(name)) = (lowered, overload) {
                             self.overloads.entry(m).or_default().push(name);
+                        }
+                        match (lowered, json_name) {
+                            (Some(m), Some(Ok(key))) => {
+                                self.json.names.insert(m, key);
+                            }
+                            (_, Some(Err(()))) => {
+                                let why = "@jsonName takes a string".to_string();
+                                let span = self.lib.tree.span(*decorator);
+                                self.lib
+                                    .report(Level::Error, Message::JsonInterop(why), span);
+                            }
+                            _ => {}
                         }
                         return lowered;
                     }

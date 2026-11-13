@@ -268,7 +268,7 @@ pub fn without_net(cases: &mut [Case]) {
 /// example; `content-tags` tagged strings whose contexts are worked out
 /// at compile time, so their escapers are called directly, in branches
 /// and loops, and one left to run time.
-pub const PROGRAMS: [&str; 18] = [
+pub const PROGRAMS: [&str; 19] = [
     "classes",
     "nullables",
     "generics",
@@ -287,6 +287,7 @@ pub const PROGRAMS: [&str; 18] = [
     "errors",
     "triple",
     "content-tags",
+    "json-adapters",
 ];
 
 /// The shared programs that are libraries of several modules, in

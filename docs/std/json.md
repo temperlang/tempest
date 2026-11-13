@@ -9,7 +9,6 @@ let { JsonTextProducer, parseJson } = import("std/json");
 Most code only decorates its classes with `@json`, which gives a class
 a static `jsonAdapter()` that encodes and decodes it:
 
-<!-- known: I25 -->
 ```temper
 let { JsonTextProducer, parseJson, NullInterchangeContext } = import("std/json");
 
@@ -26,8 +25,6 @@ let back = Point.jsonAdapter().decodeFromJson(tree, NullInterchangeContext.insta
 console.log(back.y.toString()); //!outputs "2"
 // ✅
 ```
-
-> **Note:** tempest doesn't generate `@json` adapters yet ("No member jsonAdapter") ([inconsistencies](../inconsistencies.md#i25-json-adapters)).
 
 ## Writing JSON
 

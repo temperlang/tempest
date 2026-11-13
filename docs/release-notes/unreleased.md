@@ -11,6 +11,7 @@
 - [Rust crates depend on `temper-std` only when they use it](#rust-crates-depend-on-temper-std-only-when-they-use-it)
 - [`++ls[i]` gives the new value](#lsi-gives-the-new-value)
 - [Unassigned locals in `for … of` bodies are errors](#unassigned-locals-in-for--of-bodies-are-errors)
+- [`@json` adapters](#json-adapters)
 
 ## 🚨Breaking change: Rest parameter syntax removed.
 
@@ -324,3 +325,12 @@ let firsts(xs: List<Int>): Int {
   first
 }
 ```
+
+## `@json` adapters
+
+`@json` on a class or sealed interface now gives it a static
+`jsonAdapter()`, and, unless it writes them itself, `encodeToJson` and
+`decodeFromJson`, as the [decorator's docs](../language/builtins.md#json-decorator)
+describe, with `@jsonName` and `@jsonExtra`; before, it gave "No member
+jsonAdapter". A module with `@json` needn't import `std/json` for them.
+Not yet for generic types, nor std's `Date`.

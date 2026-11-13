@@ -85,9 +85,11 @@ const ALLOWED_LINTS: [&str; 8] = [
 /// copies it never reads and a closure's `value`, and `broken`'s
 /// functions with errors, never called, one ignoring a parameter, and
 /// `errors`' functions whose errors leave parameters unread, and
-/// `angle-call`'s `Hi`, whose field nothing reads), so rustc's
-/// `dead_code` and `unused_variables` are allowed in them.
-const UNUSED: [&str; 8] = [
+/// `angle-call`'s `Hi`, whose field nothing reads, and `json-adapters`'
+/// decoders, which read their `ic` only to pass it to another adapter,
+/// as Kotlin's `@json` writes them), so rustc's `dead_code` and
+/// `unused_variables` are allowed in them.
+const UNUSED: [&str; 9] = [
     "call-override-from-subtype",
     "mutually-referencing-types",
     "bubble",
@@ -96,6 +98,7 @@ const UNUSED: [&str; 8] = [
     "broken",
     "angle-call",
     "errors",
+    "json-adapters",
 ];
 
 /// Tests, by key, that store what they never read: `functions/connected`'s
@@ -118,13 +121,16 @@ const UNUSED_KEYS: [&str; 3] = [
 /// printer does, and breaks a `let` before its value; and state machines
 /// nested deep in `async` blocks, where rustfmt lays out a closure's
 /// header past its width differently, and a generic type past it, as
-/// `functions`' generator has.
-const LAYOUT_GAPS: [&str; 5] = [
+/// `functions`' generator has; and `json-adapters`' nested calls, whose `?`
+/// call rustfmt doesn't overflow there, and a `let` of a chain whose
+/// first line is just 100 wide, which rustfmt breaks inside the call.
+const LAYOUT_GAPS: [&str; 6] = [
     "functions",
     "regex-match",
     "regex-zero-advance",
     "control-flow-async",
     "control-flow-async-waiters",
+    "json-adapters",
 ];
 
 /// This crate's own programs, in `tests/programs/`, which test what's

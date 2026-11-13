@@ -1021,11 +1021,20 @@ impl Translator<'_> {
         let var = self.data(decl) & LET_VAR != 0;
         let d = match init.filter(|&i| self.kind(i) == NodeKind::Fn) {
             Some(f) => {
-                if !core::type_params(&self.s.library.tree, f).is_empty() {
-                    return self.not_yet(at, "a generic function");
-                }
-                let sig = self.signature(f)?;
-                let d = self.b.declare(DeclKind::Function, &name, owner, sig);
+                // A generic one's type parameters first, which its
+                // signature names, as std's `listJsonAdapter<T>`.
+                let d = if core::type_params(&self.s.library.tree, f).is_empty() {
+                    let sig = self.signature(f)?;
+                    self.b.declare(DeclKind::Function, &name, owner, sig)
+                } else {
+                    let d = self
+                        .b
+                        .declare(DeclKind::Function, &name, owner, TypeId::NONE);
+                    self.declare_type_params(f, d)?;
+                    let sig = self.signature(f)?;
+                    self.b.set_decl_type(d, sig);
+                    d
+                };
                 let (params, ..) = core::fn_parts(&self.s.library.tree, f);
                 let names: Vec<String> = (params.iter())
                     .map(|&p| {

@@ -508,8 +508,10 @@ impl<'a> Translator<'a> {
                     // body, since Lua connects all of std's `Test`.
                     ("std/testing.type Test", []) => "table".to_string(),
                     // Another library's class, as std's regex `Group`,
-                    // by the LuaCATS class its own output declares.
-                    (_, []) if library_of(self.p, decl) != "core" => self.lua_type(decl),
+                    // by the LuaCATS class its own output declares, a
+                    // generic one, as std's `JsonAdapter<T>`, without its
+                    // type arguments, as the program's own.
+                    _ if library_of(self.p, decl) != "core" => self.lua_type(decl),
                     (q, _) => return not_yet(format!("a type annotation for {q}")),
                 }
             }

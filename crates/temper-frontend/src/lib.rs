@@ -6,6 +6,7 @@
 //! - [`settle`]: the settle loop's steps: reading blocks, resolving names in
 //!   [`scope`]s and expanding [`macros`] into [`core`] constructs.
 //! - `imports`: `let { a } = import("./dir")` across modules.
+//! - `json`: `@json`'s generated members and adapter classes.
 //! - `extensions`: `@staticExtension`, so `Int.jsonAdapter()` calls a
 //!   function.
 //! - [`regex`]: std's regex model as data, Temper's regex dialect, a
@@ -43,6 +44,7 @@ mod flow;
 pub mod ignore;
 mod imports;
 pub mod interp;
+mod json;
 pub mod library;
 pub mod library_tests;
 pub mod log;

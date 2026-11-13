@@ -2238,8 +2238,9 @@ copied Kotlin's:
   `LocalDate`, and `DateTime`, and leave std's class out, as Kotlin's;
   but where Kotlin keeps its members that aren't connected
   (`encodeToJson`, `decodeFromJson`) as private module functions, with
-  `@json`'s `DateJsonAdapter`, tempest has neither yet (it makes no
-  `@json` adapters). Rust, C++, and Lua declare the class, as Kotlin's.
+  `@json`'s `DateJsonAdapter`, tempest has neither yet (its `@json`
+  skips std's connected `Date`, so `Date.jsonAdapter()` is "No
+  member"). Rust, C++, and Lua declare the class, as Kotlin's.
   Differences that fix Kotlin's bugs (Kotlin fixes to make):
   C#'s `dayOfWeek` is `((int)d.DayOfWeek + 6) % 7 + 1`, where Kotlin's
   `TemporalSupport.IsoWeekdayNum` gives Sunday 0, and C++'s adds the
@@ -2274,6 +2275,30 @@ copied Kotlin's:
   the first.
   Test: funtest types/json/syntax-tree on those backends, with their
   checkers.
+- **`@json`** (2026-11-13): adapters as Kotlin's `JsonInteropPass`
+  generates them, with its names and JSON (`PointJsonAdapter`,
+  `encodeToJson(p)`, static `decodeFromJson(t, ic)` and `jsonAdapter()`;
+  the custom, concrete class, and sealed interface strategies;
+  `@jsonName`, `@jsonExtra`, and nullable and list fields), written as
+  Temper text and settled as written code is ([json.rs](../crates/temper-frontend/src/json.rs)).
+  Differences: a sealed interface's `encodeToJson` is abstract, where
+  Kotlin's switches on `this`'s class to call its adapter, as each
+  `@json` subtype has its own (C++'s `const` methods can't give `this`
+  out); a decoder casts each built-in field's tree into a local of its
+  own (`let xJson = obj.propertyValueOrBubble("x") as JsonNumeric;`),
+  where Kotlin's reads from the cast, which pyright types as its
+  argument; locals are declared with their values, where Kotlin's
+  assigns them after; a field outside the constructor is encoded but
+  not decoded, where Kotlin's passes it as a named argument the
+  constructor lacks; a known `null` from `@jsonExtra` is tested with
+  `is JsonNull`, where Kotlin's reads its `content`, which it has none
+  of; and a module with `@json` loads `std/json` and its names resolve
+  there whatever the module imports, as Kotlin's resolved names do. Not
+  yet: generic types, which Kotlin's interpreter fails on ("An operation
+  is not implemented: (TypeFormal …)") and whose static members C# and
+  C++ can't call yet; and std's connected `Date` (above).
+  Test: settle/json.cases; programs/json-adapters.temper.md on every
+  backend.
 - **std's `json`, in Python, JS, and Rust** (2026-11-04): std's `json`
   is all Temper, as Kotlin connects none of it. A function that ends in
   `bubble()` ends in its statement (JS's `bubble();`, Rust's `return

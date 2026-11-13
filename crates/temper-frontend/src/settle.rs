@@ -164,6 +164,7 @@ impl Settle {
             fun_interfaces: HashSet::new(),
             sealed: HashSet::new(),
             json_decorated: HashSet::new(),
+            json: crate::json::JsonState::default(),
             static_extension_marks: HashMap::new(),
             static_extensions: Vec::new(),
             extension_marks: HashMap::new(),
@@ -314,9 +315,11 @@ pub(crate) struct Settle {
     pub(crate) fun_interfaces: HashSet<NodeId>,
     /// Declarations marked `sealed`, until they're interfaces.
     pub(crate) sealed: HashSet<NodeId>,
-    /// Declarations marked `@json`, until they're classes: only to
-    /// report one on a `@fun` interface, as `@json` would add members.
+    /// Declarations marked `@json`, until they're classes, which get
+    /// members to encode and decode JSON ([`crate::json`]).
     pub(crate) json_decorated: HashSet<NodeId>,
+    /// What `@json` generates, and keeps between steps.
+    pub(crate) json: crate::json::JsonState,
     /// Declarations marked `@staticExtension(T, "name")`, until they're
     /// declared: `T` and the name.
     pub(crate) static_extension_marks: HashMap<NodeId, (NodeId, NameId)>,
@@ -516,6 +519,13 @@ impl Settle {
             }
             forced = false;
             next += 1;
+            // A `@json` type's adapter class, declared after it.
+            if let Some(siblings) = self.json.siblings.remove(&statement) {
+                let mut children = self.lib.tree.children(node).to_vec();
+                let at = next as usize;
+                children.splice(at..at, siblings);
+                self.set_children(node, &children);
+            }
         }
         let children = self.lib.tree.children(node);
         if children.iter().any(|c| self.removed.contains(c)) {
@@ -903,6 +913,9 @@ impl Settle {
         if self.lib.tree.kind(node) != NodeKind::RightName || self.scopes.resolved(node).is_some() {
             return Ok(());
         }
+        if let Some(&path) = self.json.std_refs.get(&node) {
+            return self.resolve_std_ref(node, path, forced);
+        }
         let name = self.lib.name(node).unwrap();
         match self.lookup(scope, name, node, false, forced) {
             Lookup::Found(b) => self.scopes.resolve(node, b),
@@ -923,6 +936,10 @@ impl Settle {
             self.error(node, Message::Unsupported("a call without a callee".into()));
             return Ok(false);
         };
+        // A sealed `@json` interface's decoder, once its module is read.
+        if self.json_sealed_body(node, forced)? {
+            return Ok(true);
+        }
         // `T.name()` may become `f()`, rewriting the callee in place.
         self.static_extension_call(node, scope, forced)?;
         if self.is_chain_null(callee) {

@@ -626,17 +626,28 @@ impl Settle {
     /// `var`), with type parameters and no declared type.
     fn generic_fn(&self, callee: NodeId) -> Option<NodeId> {
         let tree = &self.lib.tree;
-        if tree.kind(callee) != NodeKind::RightName {
-            return None;
+        let mut callee = callee;
+        // Through another name for it, as an import makes
+        // (`listJsonAdapter` for std's).
+        for _ in 0..8 {
+            if tree.kind(callee) != NodeKind::RightName {
+                return None;
+            }
+            let symbol = self.scopes.symbol(self.scopes.resolved(callee)?);
+            if !matches!(symbol.kind, SymbolKind::TopLevel | SymbolKind::Local) || symbol.mutable {
+                return None;
+            }
+            let decl = symbol.decl.filter(|&d| tree.kind(d) == NodeKind::Let)?;
+            let (_, ty, init) = core::let_parts(tree, decl);
+            let init = init.filter(|_| ty.is_none())?;
+            if tree.kind(init) == NodeKind::RightName {
+                callee = init;
+                continue;
+            }
+            let f = Some(init).filter(|&f| tree.kind(f) == NodeKind::Fn)?;
+            return (!core::type_params(tree, f).is_empty()).then_some(f);
         }
-        let symbol = self.scopes.symbol(self.scopes.resolved(callee)?);
-        if !matches!(symbol.kind, SymbolKind::TopLevel | SymbolKind::Local) || symbol.mutable {
-            return None;
-        }
-        let decl = symbol.decl.filter(|&d| tree.kind(d) == NodeKind::Let)?;
-        let (_, ty, init) = core::let_parts(tree, decl);
-        let f = init.filter(|&f| ty.is_none() && tree.kind(f) == NodeKind::Fn)?;
-        (!core::type_params(tree, f).is_empty()).then_some(f)
+        None
     }
 
     /// The generic class a call `new Box(…)` or `new Box<Int>(…)` makes,

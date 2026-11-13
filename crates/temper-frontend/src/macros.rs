@@ -1821,7 +1821,11 @@ impl Settle {
         }
         if (self.lib.name(decorator)).is_some_and(|n| self.lib.names.get(n) == "json") {
             self.json_decorated.insert(call);
+            // Where generated members are spanned, as `@auto`'s.
+            let at = self.lib.tree.span(call).start;
+            self.json.at.entry(call).or_insert(at);
         }
+        self.json_extra(call, decorator);
         // `@connected` or `@connected("key")`.
         let callee = match self.lib.tree.kind(decorator) {
             NodeKind::Call => self.lib.tree.children(decorator).first().copied(),

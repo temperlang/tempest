@@ -37,7 +37,6 @@ page doesn't repeat those.
 | [I22](#i22-named-groups-in-regular-expressions) | std/regex | `(?<name>…)` | Pick one syntax, or both |
 | [I23](#i23-integer-literals-too-big-for-int32) | builtins | Four bit examples wrap | Decide literal typing, then fix |
 | [I24](#i24-tutorial-examples-tempest-doesnt-run) | tutorial 3 | `fn` without a declared type; `do(fn …)` | Fix the examples, or tempest |
-| [I25](#i25-json-adapters) | builtins, std/json | `@json` makes no `jsonAdapter()` | Generate adapters in tempest |
 
 ## Licensing and community
 
@@ -308,16 +307,3 @@ out of it, as tempest rejects them:
 
 **Suggested:** decide whether tempest should accept them, or show
 what it accepts in the tutorial.
-
-### I25: `@json` adapters
-
-- **Docs:** six `@json` examples, five in
-  [builtins](language/builtins.md#json-decorator) (generated, custom,
-  and sealed adapters, `@jsonExtra`, and `@jsonName`) and one in
-  [std/json](std/json.md), call a class's static `jsonAdapter()`.
-- **Kotlin:** its frontend generates `jsonAdapter()`, and, unless the
-  class writes them, `encodeToJson` and `decodeFromJson`.
-- **tempest:** generates neither yet: "No member jsonAdapter".
-- **Suggested:** generate them in tempest's frontend, as Kotlin does;
-  then remove these examples' `<!-- known: I25 -->` comments and this
-  entry.

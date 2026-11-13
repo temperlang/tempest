@@ -23,6 +23,7 @@ and names mean, see the [language reference](../../language/README.md).
   - [Names as ids, symbols in one table](#names-as-ids-symbols-in-one-table)
   - [Builtin macros in Rust, rewriting in place](#builtin-macros-in-rust-rewriting-in-place)
   - [Decorators matched by name](#decorators-matched-by-name)
+  - [`@json`'s members generated as Temper text](#jsons-members-generated-as-temper-text)
   - [Imported modules settled with the importer](#imported-modules-settled-with-the-importer)
   - [Top levels in dependency order](#top-levels-in-dependency-order)
 - [The main types and functions](#the-main-types-and-functions)
@@ -322,6 +323,29 @@ and `label` in [`enter_block`](../../../crates/temper-frontend/src/settle.rs).
 
 **Status:** a known shortcut, with a plan to resolve decorators as
 builtins.
+
+### `@json`'s members generated as Temper text
+
+**Chosen:** when the class macro lowers a `@json` type,
+[`json_members`](../../../crates/temper-frontend/src/json.rs) writes its
+`encodeToJson`, `decodeFromJson`, and `jsonAdapter` and its adapter
+class as Temper source with placeholders, parses it
+([`add_fragment`](../../../crates/temper-frontend/src/library.rs)), and
+puts in for each placeholder a copy of the type's own type expression, a
+value, or a name resolved in `std/json` ([`resolve_std_ref`](../../../crates/temper-frontend/src/json.rs)),
+whatever the module imports. The members are lowered as written ones
+are, and the adapter class is read after the type's statement. A sealed
+interface's decoder needs all its subtypes, so it's a placeholder call
+until the module's scope is complete
+([`json_sealed_body`](../../../crates/temper-frontend/src/json.rs)). The
+generated nodes are all spanned at the `@json`, with empty spans, so a
+local is visible from where it's declared on.
+
+**How Kotlin Temper does it:** `JsonInteropPass` builds the same code as
+trees of resolved names, between the define and type stages.
+
+**Cons:** text is parsed again for each type, and an error in generated
+code points only at the `@json`.
 
 ### Imported modules settled with the importer
 

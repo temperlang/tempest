@@ -8,6 +8,9 @@
 //!
 //! - `cases_settle_as_expected` checks each case. To accept new or
 //!   changed output, run with `UPDATE_SNAPSHOTS=1` and review the diff.
+//! - `cases_with_std_settle_as_expected` checks the cases in
+//!   `tests/settle-std/`, with std loaded, by their diagnostics and runs
+//!   only.
 //! - `mutated_inputs_settle` settles randomly edited copies of these cases
 //!   and of temper-syntax's grammar cases, and checks that settling never
 //!   panics (nor fails the debug check that no step read a node rewritten
@@ -68,6 +71,37 @@ fn cases_settle_as_expected() {
     with_stack(|| {
         check_cases("tests/settle", "settled", |case| {
             settled(&case.input, case.kind, 1_000_000).0
+        })
+    });
+}
+
+/// The diagnostics and run of a source with std loaded, as `@json` needs
+/// `std/json`: not the settled trees, which would show all of std's,
+/// numbered as std's declarations are.
+fn settled_with_std(input: &str, kind: SourceKind) -> String {
+    let mut library = Library::new();
+    library.add_file("test.temper", input, kind);
+    load_imports(&Sources::standard(), &mut library);
+    let settled = settle(library);
+    let mut text = String::new();
+    temper_frontend::print::write_diagnostics(&settled, &mut text);
+    let run = run(&settled, Some(1_000_000));
+    for line in run.output {
+        text.push_str(&format!("log {line}\n"));
+    }
+    if let Some(failure) = run.failure {
+        text.push_str(&format!("{failure}\n"));
+    }
+    text
+}
+
+/// The cases in `tests/settle-std/*.cases`, as [`settled_with_std`]
+/// gives them.
+#[test]
+fn cases_with_std_settle_as_expected() {
+    with_stack(|| {
+        check_cases("tests/settle-std", "settled", |case| {
+            settled_with_std(&case.input, case.kind)
         })
     });
 }

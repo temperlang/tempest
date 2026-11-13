@@ -300,7 +300,8 @@ fn expected_source(generated: &str) -> Option<&'static [&'static str]> {
 }
 
 /// Whether source text is what the compiler made code from, which maps
-/// there whatever it is: an `@auto("==")` class's `eq` and its body.
+/// there whatever it is: an `@auto("==")` class's `eq` and its body, or
+/// what `@json` adds.
 fn synthesized(temper: &str) -> bool {
     temper.starts_with('@') || temper.starts_with("auto(")
 }
@@ -360,7 +361,8 @@ fn describe<'a>(case: &'a Case, module: &'a str, map: &Map) -> (String, Vec<Stri
                 snippet(&temper)
             ));
             let lands = match name {
-                Some(name) => temper.starts_with(name),
+                // Or a declaration a decorator makes, as `@json`'s.
+                Some(name) => temper.starts_with(name) || synthesized(&temper),
                 None => {
                     // Exported or not, the same.
                     fn unexported(t: &str) -> &str {

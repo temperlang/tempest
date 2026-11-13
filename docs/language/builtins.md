@@ -2425,7 +2425,6 @@ a JSON property per backed field.
 *IntPoint* below encode to JSON like `{"x":1,"y":2}` because its
 *x* and *y* properties' values encode to JSON numbers.
 
-<!-- known: I25 -->
 ```temper
 let {
   InterchangeContext,
@@ -2460,15 +2459,12 @@ console.log("x is ${p.x.toString()}, y is ${p.y.toString()}");
 // ✅
 ```
 
-> **Note:** tempest doesn't generate `@json` adapters yet ("No member jsonAdapter") ([inconsistencies](../inconsistencies.md#i25-json-adapters)).
-
 #### The custom JSON adapter strategy
 
 If a type, whether it's a class or interface type,
 already has encoding and decoding functions, then none are
 auto-generated.
 
-<!-- known: I25 -->
 ```temper
 let {
   InterchangeContext,
@@ -2499,14 +2495,11 @@ IntWrapper.jsonAdapter().encodeToJson(new IntWrapper(123), p);
 // ✅
 ```
 
-> **Note:** tempest doesn't generate `@json` adapters yet ("No member jsonAdapter") ([inconsistencies](../inconsistencies.md#i25-json-adapters)).
-
 #### Sealed interface strategy
 
 For sealed interfaces, we generate adapters that delegate to adapters for
 the appropriate subtype.
 
-<!-- known: I25 -->
 ```temper
 let {
   JsonTextProducer,
@@ -2530,8 +2523,6 @@ List.jsonAdapter(Animal.jsonAdapter()).encodeToJson(ls, p);
 p.toJsonString() == "[{\"meowCount\":11},{\"hydrantsSniffed\":111}]"
 // ✅
 ```
-
-> **Note:** tempest doesn't generate `@json` adapters yet ("No member jsonAdapter") ([inconsistencies](../inconsistencies.md#i25-json-adapters)).
 
 #### Adapting JSON for generic types
 
@@ -2572,7 +2563,6 @@ Allows customizing code generation for [`@json` decorator](#json-decorator) supp
 This allows avoiding ambiguity when two variants of a sealed interface
 have otherwise similar JSON structure in their JSON wire formats.
 
-<!-- known: I25 -->
 ```temper
 let {
   InterchangeContext,
@@ -2621,8 +2611,6 @@ FooRequest.jsonAdapter()
 // ✅
 ```
 
-> **Note:** tempest doesn't generate `@json` adapters yet ("No member jsonAdapter") ([inconsistencies](../inconsistencies.md#i25-json-adapters)).
-
 ### `@jsonName` decorator
 
 Specifies the JSON property name for a Temper property name.
@@ -2631,7 +2619,6 @@ Without the `@jsonName` decoration below, the JSON form would be
 `{"messageText":"Hello, World!"}` but as seen below, the JSON
 output has dash case.
 
-<!-- known: I25 -->
 ```temper
 @json
 class Message(
@@ -2648,8 +2635,6 @@ Message.jsonAdapter()
 console.log(jsonOut.toJsonString());
 // ✅
 ```
-
-> **Note:** tempest doesn't generate `@json` adapters yet ("No member jsonAdapter") ([inconsistencies](../inconsistencies.md#i25-json-adapters)).
 
 ### `@keep` decorator
 Mark a non-exported item for being treated as reachable so it's kept in
