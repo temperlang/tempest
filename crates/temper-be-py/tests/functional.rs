@@ -534,7 +534,8 @@ fn trace<'o>(stdout: &'o str, cases: &[&Checked]) -> Vec<Vec<&'o str>> {
 fn checks_traced_to_cases() {
     let case = |key: &str| Checked {
         key: key.to_string(),
-        root: PathBuf::from("/out").join(key),
+        // With `/` on every platform, as the lines below have it.
+        root: PathBuf::from(format!("/out/{key}")),
         projects: Vec::new(),
         library: "lib".to_string(),
         package: "lib".to_string(),

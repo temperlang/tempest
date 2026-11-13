@@ -169,10 +169,53 @@ jobs:
           name: temper-vscode
           path: editors/vscode/out/*.vsix
 
+  # Each platform's archive, as users download it, on that platform:
+  # its contents, `temper version`, `init`, `test` and `run` on the
+  # interpreter, and the REPL, piped and (off Windows) on a terminal
+  # (.github/ci-tools/smoke.py). No language toolchains. Windows Arm64's
+  # is built on x64, so this is the first time it runs.
+  smoke:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            archive: tar.gz
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            archive: tar.gz
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            archive: tar.gz
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            archive: zip
+          - os: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            archive: zip
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        # As in the toolchains action: the checksum for Linux x64; on
+        # the other platforms, setup-uv checks against the list it carries.
+        with:
+          version: "0.13.5"
+          checksum: ${{ (runner.os == 'Linux' && runner.arch == 'X64') && 'f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f' || '' }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: binary-${{ matrix.target }}
+          path: dist
+      - name: Smoke test
+        shell: bash
+        run: uv run .github/ci-tools/smoke.py "dist/temper-${{ matrix.target }}.${{ matrix.archive }}"
+
   # Not for a tag: called by release.yml, the event is its `push`.
   nightly:
     if: github.event_name != 'push' && github.ref == 'refs/heads/main'
-    needs: [build, wasm, vscode]
+    needs: [build, smoke, wasm, vscode]
     runs-on: ubuntu-latest
     permissions:
       contents: write

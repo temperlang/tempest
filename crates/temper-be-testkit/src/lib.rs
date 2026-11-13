@@ -615,12 +615,15 @@ pub fn interpret(case: &Case) -> (Option<String>, Vec<String>) {
 /// A case's library, with the modules it imports, and the other
 /// libraries it may import by name.
 fn load(case: &Case) -> Library {
+    use temper_frontend::project::slashed;
     let mut library = Library::new();
     library.libraries = (case.libraries.iter())
-        .map(|(name, root)| (name.clone(), root.to_string_lossy().into_owned()))
+        .map(|(name, root)| (name.clone(), slashed(&root.to_string_lossy())))
         .collect();
+    // Paths with `/` on Windows too, as the CLI gives the frontend them.
     for (path, text) in &case.sources {
-        library.add_file(path, text, source_kind(path));
+        let path = slashed(path);
+        library.add_file(&path, text, source_kind(&path));
     }
     if (case.sources.iter()).any(|(_, text)| text.contains("testServerPort")) {
         library.test_server_port = Some(test_server_port().into());
@@ -636,10 +639,10 @@ fn load(case: &Case) -> Library {
                 .map(|e| e.path())
                 .collect();
             entries.sort();
-            let name = dir.to_string_lossy();
+            let name = slashed(&dir.to_string_lossy());
             let loaded = (library.modules.iter()).any(|m| m.dir == name);
             for path in entries {
-                let file = path.to_string_lossy().into_owned();
+                let file = slashed(&path.to_string_lossy());
                 if path.is_dir() {
                     dirs.push(path);
                 } else if !loaded && temper_frontend::project::is_source(&file) {

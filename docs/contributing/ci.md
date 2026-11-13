@@ -191,9 +191,13 @@ Should GitHub stop offering an image, drop its row and keep building
 that target in binaries.yml.
 
 [binaries.yml](../../.github/workflows/binaries.yml) builds the released
-binaries nightly, cross-compiling Windows Arm64 on x64, and runs
-nothing on them; nightly.yml's `platforms` jobs are where they're
-tested.
+binaries nightly, cross-compiling Windows Arm64 on x64. Its `smoke`
+job runs each platform's archive, as users download it, on that
+platform before anything is published: its contents, `version`,
+`init`, `test` and `run` on the interpreter, and the REPL, piped and
+(off Windows) on a terminal
+([smoke.py](../../.github/ci-tools/smoke.py)). nightly.yml's
+`platforms` jobs test the rest, with each language's tools.
 
 ### On a `v` tag: the release
 
