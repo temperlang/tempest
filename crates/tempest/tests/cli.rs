@@ -915,7 +915,9 @@ fn library_without_root_module(backend: &str) {
             return;
         }
         // Java runs one module's `…Main`, for now.
+        // The program's own line ends: CRLF on Windows for some languages.
         if backend != "java" {
+            let out = out.replace("\r\n", "\n");
             assert_eq!((code, out.as_str()), (0, "x\ny\n"), "{backend}: {err}");
         }
         assert_eq!(code, 0, "{backend}: {err}");
@@ -1067,7 +1069,10 @@ fn missing_operator_is_one_error() {
             (1, "", 2),
             "{err}"
         );
-        for backend in ["csharp", "java", "js", "lua", "py", "rust"] {
+        for backend in ["csharp", "java", "js", "lua", "py", "rust"]
+            .into_iter()
+            .filter(|b| built_in(b))
+        {
             let written = Path::new(dir).join("temper.out").join(backend).join("a");
             assert!(written.is_dir(), "{backend}");
         }
@@ -1125,7 +1130,10 @@ fn errors_fail_only_where_they_run() {
         }
         assert!(err.ends_with("a: 6 errors\n"), "{err}");
         assert_eq!((code, out.as_str()), (1, ""), "{err}");
-        for backend in ["csharp", "java", "js", "lua", "py", "rust"] {
+        for backend in ["csharp", "java", "js", "lua", "py", "rust"]
+            .into_iter()
+            .filter(|b| built_in(b))
+        {
             let written = Path::new(dir).join("temper.out").join(backend).join("a");
             assert!(written.is_dir(), "{backend}");
         }

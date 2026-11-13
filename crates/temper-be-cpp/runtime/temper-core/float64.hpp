@@ -15,11 +15,15 @@ namespace temper {
 
         namespace Float64 {
 
+            // Literals, not M_E and M_PI: MSVC defines those only when
+            // _USE_MATH_DEFINES comes before the first <cmath> or
+            // <math.h>, which a header included earlier may already have
+            // brought in.
             inline double e() {
-                return M_E;
+                return 2.718281828459045;
             }
             inline double pi() {
-                return M_PI;
+                return 3.141592653589793;
             }
             inline double abs(double f) {
                 return std::abs(f);
