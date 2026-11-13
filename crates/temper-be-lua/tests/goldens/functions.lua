@@ -210,6 +210,70 @@ function Gate.methods.passed(this, n)
   end
 end
 
+---@param s string
+---@return boolean
+local function stringIsPalindrome(s)
+  local i = 1
+  local j = temper.string_end(s)
+  while i - j < 0 do
+    j = temper.string_prev(s, j)
+    if temper.string_get(s, i) ~= temper.string_get(s, j) then
+      return false
+    end
+    i = temper.string_next(s, i)
+  end
+  return true
+end
+
+---@param n integer|temper.Null
+---@return integer
+local function intOrZero(n)
+  if temper.is_null(n) then
+    return 0
+  else
+    return n --[[@as integer]]
+  end
+end
+
+---@generic T
+---@param ls T[]
+---@param d T
+---@return T
+local function listFirstOr(ls, d)
+  if temper.listed_isempty(ls) then
+    return d
+  else
+    return temper.list_get(ls, 0)
+  end
+end
+
+---@param s string
+---@param n integer
+---@param fill? string|temper.Null
+---@return string
+local function stringPadded(s, n, fill)
+  if temper.is_null(fill) then
+    fill = "."
+  end
+  ---@cast fill string
+  local out = s
+  do
+    local i = 0
+    while i < n do
+      out = out .. fill
+      i = temper.int32_add(i, 1)
+    end
+  end
+  return out
+end
+
+---@param g functions.Gate
+---@param s string
+---@return string
+local function gatePassed(g, s)
+  return s .. " " .. tostring(g:allows(1))
+end
+
 local counter = makeCounter(10)
 counter()
 print("count " .. counter())
@@ -272,5 +336,10 @@ local gate = Gate()
 print("gate " .. tostring(gate:allows(0)) .. " " .. gate:passed(4))
 gate.check = function(x) return temper.int32_sub(x, 1) end
 print("gate " .. tostring(gate:allows(1)) .. " " .. tostring(gate:allows(2)) .. " " .. gate:passed(4))
+local none = gate:allows(0) and 3 or temper.null
+print(tostring(stringIsPalindrome("step on no pets")) .. " " .. tostring(stringIsPalindrome("steps")))
+print(intOrZero(none) .. " " .. listFirstOr({ 4, 5 }, 0) .. " " .. listFirstOr({ "x" }, "-"))
+print(stringPadded("ab", 2) .. " " .. stringPadded("ab", 1, "*"))
+print(gate:passed(4) .. " " .. gatePassed(gate, "gate"))
 
 return {}

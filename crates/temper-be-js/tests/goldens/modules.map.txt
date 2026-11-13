@@ -12,15 +12,20 @@
 7:17 -> ../helpers/helpers.temper:3:12 (twice)  twice(x) { <- twice(x: Int): Int { x * 2 }
 7:22 -> ../helpers/helpers.temper:3:1  (x) { <- export let twice(x: Int): In
 8:3 -> ../helpers/helpers.temper:3:33  return Math.imul(x, 2); <- x * 2 }
-11:1 -> ../helpers/helpers.temper:7:1  /** @returns {number} */ <- export let bump(): Int {
-12:1 -> ../helpers/helpers.temper:7:1  export function bump() { <- export let bump(): Int {
-12:17 -> ../helpers/helpers.temper:7:12 (bump)  bump() { <- bump(): Int {
-12:21 -> ../helpers/helpers.temper:7:1  () { <- export let bump(): Int {
-13:3 -> ../helpers/helpers.temper:8:3  calls = (calls + 1) | 0; <- calls = calls + 1;
-14:3 -> ../helpers/helpers.temper:9:3  return calls; <- calls
-17:1 -> ../helpers/helpers.temper:4:1  export const base = 10; <- export let base = 10;
-18:1 -> ../helpers/helpers.temper:5:1  export let calls = 0; <- export var calls = 0;
-19:1 -> ../helpers/helpers.temper:12:1  console.log(greet("helpers") <- console.log(greet("helpers")
+11:1 -> ../helpers/helpers.temper:5:1  /** <- @extension("doubled")
+15:1 -> ../helpers/helpers.temper:5:1  export function intDoubled(x <- @extension("doubled")
+15:17 -> ../helpers/helpers.temper:6:12 (intDoubled)  intDoubled(x) { <- intDoubled(x: Int): Int { tw
+15:27 -> ../helpers/helpers.temper:5:1  (x) { <- @extension("doubled")
+16:3 -> ../helpers/helpers.temper:6:38  return twice(x); <- twice(x) }
+19:1 -> ../helpers/helpers.temper:10:1  /** @returns {number} */ <- export let bump(): Int {
+20:1 -> ../helpers/helpers.temper:10:1  export function bump() { <- export let bump(): Int {
+20:17 -> ../helpers/helpers.temper:10:12 (bump)  bump() { <- bump(): Int {
+20:21 -> ../helpers/helpers.temper:10:1  () { <- export let bump(): Int {
+21:3 -> ../helpers/helpers.temper:11:3  calls = (calls + 1) | 0; <- calls = calls + 1;
+22:3 -> ../helpers/helpers.temper:12:3  return calls; <- calls
+25:1 -> ../helpers/helpers.temper:7:1  export const base = 10; <- export let base = 10;
+26:1 -> ../helpers/helpers.temper:8:1  export let calls = 0; <- export var calls = 0;
+27:1 -> ../helpers/helpers.temper:15:1  console.log(greet("helpers") <- console.log(greet("helpers")
 # modules/core.internal.js
 # generated line:column -> source:line:column, and the text at each
 3:1 -> ../core/core.temper:1:1  /** <- export let share(n: Int, d:
@@ -84,32 +89,32 @@
 11:3 -> ../machine/machine.temper:10:3  return `state ${state.id} en <- "state ${state.id.toString()
 # modules/modules.internal.js
 # generated line:column -> source:line:column, and the text at each
-7:1 -> ../modules.temper.md:32:5  /** <- export let sum(n: Int): Int
-11:1 -> ../modules.temper.md:32:5  export function sum(n) { <- export let sum(n: Int): Int
-11:17 -> ../modules.temper.md:32:16 (sum)  sum(n) { <- sum(n: Int): Int {
-11:20 -> ../modules.temper.md:32:5  (n) { <- export let sum(n: Int): Int
-12:3 -> ../modules.temper.md:33:7  return (((twice(n) + base) | <- double(n) + helperBase + bas
-15:1 -> ../modules.temper.md:24:5  class Engine extends type() <- class Engine(public name: St
-15:7 -> ../modules.temper.md:24:11 (Engine)  Engine extends type() { <- Engine(public name: String)
-15:13 -> ../modules.temper.md:24:5   extends type() { <- class Engine(public name: St
-16:3 -> ../modules.temper.md:24:25  /** @type {string} */ <- name: String) {}
-17:3 -> ../modules.temper.md:24:25  #name; <- name: String) {}
-19:3 -> ../modules.temper.md:24:5  /** @param {string} name */ <- class Engine(public name: St
-20:3 -> ../modules.temper.md:24:5  constructor(name) { <- class Engine(public name: St
-22:5 -> ../modules.temper.md:24:25  this.#name = name; <- name: String) {}
-25:3 -> ../modules.temper.md:24:25  /** @returns {string} */ <- name: String) {}
-26:3 -> ../modules.temper.md:24:25  get name() { <- name: String) {}
-26:7 -> ../modules.temper.md:24:25 (name)  name() { <- name: String) {}
-31:1 -> ../modules.temper.md:19:5  const calls2 = calls; <- let { twice as double, base,
-32:1 -> ../modules.temper.md:30:5  const base2 = 1; <- let base = 1;
-33:1 -> ../modules.temper.md:36:5  console.log(greet("modules") <- console.log(greet("modules")
-34:1 -> ../modules.temper.md:37:5  console.log(`sum ${sum(3)}`) <- console.log("sum ${sum(3).to
-35:1 -> ../modules.temper.md:38:5  console.log(`share ${share(7 <- console.log("share ${share(7
-36:1 -> ../modules.temper.md:39:5  console.log(`${new Engine("o <- console.log("${new Engine("o
-37:1 -> ../modules.temper.md:40:5  bump(); <- bump();
-38:1 -> ../modules.temper.md:41:5  bump(); <- bump();
-39:1 -> ../modules.temper.md:42:5  console.log(`calls ${calls2} <- console.log("calls ${calls.t
-40:1 -> ../modules.temper.md:53:5  console.log(`calls now ${bum <- console.log("calls now ${bum
+7:1 -> ../modules.temper.md:33:5  /** <- export let sum(n: Int): Int
+11:1 -> ../modules.temper.md:33:5  export function sum(n) { <- export let sum(n: Int): Int
+11:17 -> ../modules.temper.md:33:16 (sum)  sum(n) { <- sum(n: Int): Int {
+11:20 -> ../modules.temper.md:33:5  (n) { <- export let sum(n: Int): Int
+12:3 -> ../modules.temper.md:34:7  return (((twice(n) + base) | <- double(n) + helperBase + bas
+15:1 -> ../modules.temper.md:25:5  class Engine extends type() <- class Engine(public name: St
+15:7 -> ../modules.temper.md:25:11 (Engine)  Engine extends type() { <- Engine(public name: String)
+15:13 -> ../modules.temper.md:25:5   extends type() { <- class Engine(public name: St
+16:3 -> ../modules.temper.md:25:25  /** @type {string} */ <- name: String) {}
+17:3 -> ../modules.temper.md:25:25  #name; <- name: String) {}
+19:3 -> ../modules.temper.md:25:5  /** @param {string} name */ <- class Engine(public name: St
+20:3 -> ../modules.temper.md:25:5  constructor(name) { <- class Engine(public name: St
+22:5 -> ../modules.temper.md:25:25  this.#name = name; <- name: String) {}
+25:3 -> ../modules.temper.md:25:25  /** @returns {string} */ <- name: String) {}
+26:3 -> ../modules.temper.md:25:25  get name() { <- name: String) {}
+26:7 -> ../modules.temper.md:25:25 (name)  name() { <- name: String) {}
+31:1 -> ../modules.temper.md:20:5  const calls2 = calls; <- let { twice as double, base,
+32:1 -> ../modules.temper.md:31:5  const base2 = 1; <- let base = 1;
+33:1 -> ../modules.temper.md:37:5  console.log(greet("modules") <- console.log(greet("modules")
+34:1 -> ../modules.temper.md:38:5  console.log(`sum ${sum(3)}`) <- console.log("sum ${sum(3).to
+35:1 -> ../modules.temper.md:39:5  console.log(`share ${share(7 <- console.log("share ${share(7
+36:1 -> ../modules.temper.md:40:5  console.log(`${new Engine("o <- console.log("${new Engine("o
+37:1 -> ../modules.temper.md:41:5  bump(); <- bump();
+38:1 -> ../modules.temper.md:42:5  bump(); <- bump();
+39:1 -> ../modules.temper.md:43:5  console.log(`calls ${calls2} <- console.log("calls ${calls.t
+40:1 -> ../modules.temper.md:54:5  console.log(`calls now ${bum <- console.log("calls now ${bum
 # modules/client.internal.js
 # generated line:column -> source:line:column, and the text at each
 3:1 -> ../client/client.temper:3:1  /** <- export let sumTwice(n: Int):

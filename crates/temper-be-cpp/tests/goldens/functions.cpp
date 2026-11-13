@@ -225,6 +225,59 @@ core::NullableParam<std::function<int32_t(int32_t)>> Gate::get_check() {
   return this->check;
 }
 
+static bool stringIsPalindrome(core::Str const & s) {
+  int32_t i = core::String::begin();
+  int32_t j = core::String::end(s);
+  while (core::Compare::cmp(i, j) < 0) {
+    j = core::String::prev(s, j);
+    if (core::String::get(s, i) != core::String::get(s, j)) {
+      return false;
+    }
+    i = core::String::next(s, i);
+  }
+  return true;
+}
+
+static int32_t intOrZero(core::NullableParam<int32_t> n) {
+  {
+    if (n == nullptr) {
+      return 0;
+    } else {
+      return n.value;
+    }
+  }
+}
+
+template <class T>
+static T listFirstOr(std::shared_ptr<std::vector<T>> const & ls, T d) {
+  if (core::List::isEmpty<T>(ls)) {
+    return d;
+  } else {
+    return core::List::get<T>(ls, 0);
+  }
+}
+
+static core::Str stringPadded(core::Str const & s, int32_t n, core::NullableParam<core::Str> fill) {
+  core::Str fill2 = fill == nullptr ? TEMPER_STR(".") : fill.value;
+  core::Str out = s;
+  {
+    int32_t i = 0;
+    while (i < n) {
+      out = out + fill2;
+      i = core::Int::add(i, 1);
+    }
+  }
+  return out;
+}
+
+static core::Str stringPadded(core::Str const & s, int32_t n) {
+  return stringPadded(s, n, nullptr);
+}
+
+static core::Str gatePassed(std::shared_ptr<Gate> const & g, core::Str const & s) {
+  return s + " " + core::Boolean::toString(g->allows(1));
+}
+
 void global_init_init() {
   core::init_once([] {
     temper_globals::console.construct();
@@ -330,6 +383,12 @@ void global_init_init() {
     bool value5 = gate->allows(1);
     bool value6 = gate->allows(2);
     core::Console::log(temper_globals::console.value, "gate " + core::Boolean::toString(value5) + " " + core::Boolean::toString(value6) + " " + std::to_string(gate->passed(4)));
+    core::NullableParam<int32_t> none = gate->allows(0) ? core::NullableParam<int32_t>(3) : nullptr;
+    core::Console::log(temper_globals::console.value, core::Boolean::toString(functions_program::stringIsPalindrome(TEMPER_STR("step on no pets"))) + " " + core::Boolean::toString(functions_program::stringIsPalindrome(TEMPER_STR("steps"))));
+    core::Console::log(temper_globals::console.value, std::to_string(functions_program::intOrZero(none)) + " " + std::to_string(functions_program::listFirstOr<int32_t>(core::List::make<int32_t>(4, 5), 0)) + " " + functions_program::listFirstOr<core::Str>(core::List::make<core::Str>(TEMPER_STR("x")), TEMPER_STR("-")));
+    core::Console::log(temper_globals::console.value, functions_program::stringPadded(TEMPER_STR("ab"), 2) + " " + functions_program::stringPadded(TEMPER_STR("ab"), 1, TEMPER_STR("*")));
+    int32_t value7 = gate->passed(4);
+    core::Console::log(temper_globals::console.value, std::to_string(value7) + " " + functions_program::gatePassed(gate, TEMPER_STR("gate")));
   });
 }
 

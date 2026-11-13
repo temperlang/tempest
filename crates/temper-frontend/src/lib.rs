@@ -8,7 +8,7 @@
 //! - `imports`: `let { a } = import("./dir")` across modules.
 //! - `json`: `@json`'s generated members and adapter classes.
 //! - `extensions`: `@staticExtension`, so `Int.jsonAdapter()` calls a
-//!   function.
+//!   function, and the record of `@extension`s, which typing calls.
 //! - [`regex`]: std's regex model as data, Temper's regex dialect, a
 //!   matcher, and regex literals.
 //! - `testing`: `test` and `assert`, and running a module's tests.

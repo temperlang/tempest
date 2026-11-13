@@ -27,7 +27,7 @@ spelled as `renamed`'s own naming spelled it.
 hello, helpers from deep
 hello, modules from deep
 sum 17
-share 3
+share 3 42
 own, state 1 engine 4 parts 5
 calls 0
 calls now 3

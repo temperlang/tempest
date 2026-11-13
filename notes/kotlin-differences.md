@@ -711,6 +711,25 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   `this` ("not yet in tmpl" otherwise).
   Test: settle/classes.cases, "a setter without a getter is assigned";
   programs/classes (`added`), on every backend.
+- **Instance extensions** (`@extension("name")`, 2026-11-13) answer to
+  `x.name(…)` where visible, declared or imported, in both, as a plain
+  call of the function with `x` first; a member of `x`'s type that fits
+  the arguments wins, as Kotlin prefers one over an extension that fits
+  as well. Kotlin types members and extensions as one overload set;
+  tempest takes a fitting member first, then the most specific fitting
+  extension, then the nearest declared among equals, as Kotlin lists an
+  inner block's first. Where two fit as well in one scope, Kotlin
+  quietly calls the first; tempest reports "No callee matches", as for
+  several that don't fit. `x.name` read alone is "No member" in both;
+  tempest hid that error where an extension was visible before.
+  `x.name<T>(…)` with explicit type arguments isn't an extension call
+  in tempest yet. Core's generic list methods (`Listed.map<O>` and its
+  kin) can become such extensions later ([typing.md](typing.md), "To
+  explore later"); they're still core's methods.
+  Test: settle/run.cases, "instance extensions, as Kotlin Temper's tests
+  use them"; settle/types.cases, "instance extensions' errors, as
+  Kotlin Temper reports them"; programs/functions and programs/modules,
+  on every backend.
 
 ### Interpreter, core and std
 

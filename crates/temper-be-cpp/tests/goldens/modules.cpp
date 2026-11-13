@@ -55,6 +55,7 @@ int32_t const & base();
 int32_t calls();
 
 int32_t twice(int32_t x);
+int32_t intDoubled(int32_t x);
 int32_t bump();
 
 }  // namespace modules
@@ -97,6 +98,11 @@ int32_t calls() {
 int32_t twice(int32_t x) {
   global_init_helpers();
   return core::Int::mul(x, 2);
+}
+
+int32_t intDoubled(int32_t x) {
+  global_init_helpers();
+  return twice(x);
 }
 
 int32_t bump() {
@@ -403,7 +409,7 @@ void global_init_init() {
     temper_globals::base2.value = 1;
     core::Console::log(console2, modules::greet(TEMPER_STR("modules")));
     core::Console::log(console2, "sum " + std::to_string(sum(3)));
-    core::Console::log(console2, "share " + std::to_string(share(7, 2)));
+    core::Console::log(console2, "share " + std::to_string(share(7, 2)) + " " + std::to_string(intDoubled(21)));
     core::Console::log(console2, Engine2::make(TEMPER_STR("own"))->name + ", " + describe());
     bump();
     bump();

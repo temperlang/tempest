@@ -13,6 +13,7 @@
 - [Unassigned locals in `for … of` bodies are errors](#unassigned-locals-in-for--of-bodies-are-errors)
 - [`@json` adapters](#json-adapters)
 - [A class has only one constructor](#a-class-has-only-one-constructor)
+- [Extension methods](#extension-methods)
 
 ## 🚨Breaking change: Rest parameter syntax removed.
 
@@ -350,3 +351,13 @@ class Thing {
   public constructor(lo: Int) { n = lo + 1; } // ERROR: only one constructor
 }
 ```
+
+## Extension methods
+
+A function marked `@extension("name")` can now be called as a method
+wherever it's visible, declared or imported: `"step on no pets".isPalindrome()`
+calls `stringIsPalindrome("step on no pets")`, on every backend; before,
+such a call couldn't be translated. A method of the same name that
+takes the arguments still wins. Two extensions that fit a call equally
+well, declared side by side, are now an error, where Kotlin's Temper
+picked the first one.

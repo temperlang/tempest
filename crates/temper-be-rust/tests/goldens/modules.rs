@@ -9,7 +9,11 @@ pub(crate) fn init() -> temper_core::Result<()> {
             BASE2.set(1).unwrap_or_else(|_| panic!());
             println!("{}", crate::helpers::deep::greet("modules"));
             println!("sum {}", sum(3));
-            println!("share {}", crate::core::share(7, 2));
+            println!(
+                "share {} {}",
+                crate::core::share(7, 2),
+                crate::helpers::int_doubled(21)
+            );
             println!(
                 "{}, {}",
                 Engine::new("own").0.name,

@@ -23,7 +23,8 @@
 //! call, in [`generic_calls`], and the type a value's place wants, which
 //! types list literals, in [`targets`], and decides object literals'
 //! classes, in [`object_literals`], and which `@overload` method a call
-//! means, in [`overloads`]. Before
+//! means, in [`overloads`], or which `@extension` function, in
+//! [`instance_extensions`]. Before
 //! inferring, flow facts ([`crate::flow`]) find the uses of locals that
 //! null checks and `is` checks narrow, so typing a use of `a: String?`
 //! after `if (a != null)` gives `String`, and of `i: I` after `if (i is
@@ -68,6 +69,7 @@ mod fields_first;
 mod fun_interfaces;
 mod generic_calls;
 mod initializers;
+mod instance_extensions;
 mod members;
 mod object_literals;
 mod overloads;
@@ -551,6 +553,9 @@ impl Settle {
             return self.list_type(node, forced);
         }
         self.resolve_overload(node, forced)?;
+        if self.resolve_extension(node, forced, false)? {
+            return self.call_type(node, forced);
+        }
         if self.list_of_parts(node).is_some() {
             return self.list_of_type(node, forced);
         }
@@ -1012,7 +1017,7 @@ impl Settle {
         match self.lib.tree.kind(node) {
             NodeKind::Call => {
                 self.check_nullable_member(node);
-                self.check_member_access(node, scope, classes);
+                self.check_member_access(node, classes);
                 self.check_member_exists(node, scope);
             }
             NodeKind::RightName => self.check_bare_static(node),
@@ -1028,7 +1033,7 @@ impl Settle {
     /// C"), which [`Settle::check_member_exists`] leaves alone, and a
     /// property of a type that's never a function called as a method, as
     /// `c.count()` ("Member count defined in C incompatible with usage").
-    fn check_member_access(&mut self, node: NodeId, scope: ScopeId, classes: &[NodeId]) {
+    fn check_member_access(&mut self, node: NodeId, classes: &[NodeId]) {
         let Some((object, key)) = self.dot_parts(node) else {
             return;
         };
@@ -1055,8 +1060,7 @@ impl Settle {
                 let member = self.member_named(class, name, true, callee);
                 let none = member.is_none()
                     && self.members_named(class, name, true).is_empty()
-                    && self.members_named(class, name, false).is_empty()
-                    && !self.extension_visible(scope, name, node);
+                    && self.members_named(class, name, false).is_empty();
                 if none {
                     let message = Message::NoMember(
                         self.lib.names.get(name).to_string(),
@@ -1444,6 +1448,7 @@ impl Settle {
 
     fn check_call(&mut self, node: NodeId) {
         let _ = self.resolve_overload(node, false);
+        let _ = self.resolve_extension(node, false, true);
         let children = self.lib.tree.children(node).to_vec();
         let Some((&callee, args)) = children.split_first() else {
             return;
@@ -1559,10 +1564,11 @@ impl Settle {
     /// not of an interface's value, as Kotlin lets `this.toString()` be
     /// in one, nor of a nullable value or a type parameter's (Kotlin's
     /// messages there are odd; kotlin-differences.md), nor a static
-    /// member, as `C.key`, nor a destructuring's, nor where an
-    /// `@extension("key")` is visible, declared or imported (extensions
-    /// aren't supported yet), nor where an error is reported already, as
-    /// for a method inherited twice.
+    /// member, as `C.key`, nor a destructuring's, nor a call where an
+    /// `@extension("key")` is visible, declared or imported, that typing
+    /// left a method call after reporting why ([`instance_extensions`]),
+    /// nor where an error is reported already, as for a method inherited
+    /// twice.
     fn check_member_exists(&mut self, node: NodeId, scope: ScopeId) {
         let Some((object, key)) = self.dot_parts(node) else {
             return;
@@ -1595,9 +1601,14 @@ impl Settle {
         let overlaps = |d: &crate::library::Diagnostic| {
             d.level == Level::Error && d.span.start < span.end && span.start < d.span.end
         };
+        // A method call an extension might be, which typing left as it
+        // is after reporting why.
+        let tree = &self.lib.tree;
+        let callee = (self.typing.parent(node))
+            .is_some_and(|p| tree.kind(p) == NodeKind::Call && tree.children(p)[0] == node);
         if !known
             || self.lib.diagnostics.iter().any(overlaps)
-            || self.extension_visible(scope, name, node)
+            || (callee && self.extension_visible(scope, name, node))
         {
             return;
         }

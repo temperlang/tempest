@@ -9,8 +9,11 @@ function and in a generator, which is stepped once past its end; and
 loops: `continue` in a `for … of`, and a `for` whose second
 declaration reads the first; a local function that calls itself, in a
 block that's a `let`'s value and in one that's a function's; and a
-nullable `@fun` value held in a local and called after a null check.
-The log is what tempest's interpreter gives.
+nullable `@fun` value held in a local and called after a null check;
+and instance extensions, functions marked `@extension("name")` that
+`x.name(…)` calls with `x` first, of a builtin type, a generic one, a
+nullable one, and a class, whose own method of that name wins where its
+parameters fit. The log is what tempest's interpreter gives.
 
     @fun interface Counter(): Int;
     @fun interface IntOp(x: Int): Int;
@@ -133,6 +136,36 @@ The log is what tempest's interpreter gives.
     gate.check = fn (x: Int): Int { x - 1 };
     console.log("gate ${gate.allows(1)} ${gate.allows(2)} ${gate.passed(4)}");
 
+    @extension("isPalindrome")
+    let stringIsPalindrome(s: String): Boolean {
+      var i = String.begin;
+      var j = s.end;
+      while (i < j) {
+        j = s.prev(j);
+        if (s[i] != s[j]) { return false }
+        i = s.next(i);
+      }
+      return true
+    }
+    @extension("orZero") let intOrZero(n: Int?): Int { n ?? 0 }
+    @extension("firstOr")
+    let listFirstOr<T>(ls: List<T>, d: T): T {
+      if (ls.isEmpty) { d } else { ls[0] }
+    }
+    @extension("padded")
+    let stringPadded(s: String, n: Int, fill: String = "."): String {
+      var out = s;
+      for (var i = 0; i < n; ++i) { out = "${out}${fill}" }
+      out
+    }
+    @extension("passed")
+    let gatePassed(g: Gate, s: String): String { "${s} ${g.allows(1)}" }
+    let none: Int? = if (gate.allows(0)) { 3 } else { null };
+    console.log("${"step on no pets".isPalindrome()} ${"steps".isPalindrome()}");
+    console.log("${none.orZero()} ${[4, 5].firstOr(0)} ${["x"].firstOr("-")}");
+    console.log("${"ab".padded(2)} ${"ab".padded(1, "*")}");
+    console.log("${gate.passed(4)} ${gate.passed("gate")}");
+
 ```log
 count 12
 other 1 count 13
@@ -148,4 +181,8 @@ sum 17 doubles 3
 climb 5 -1
 gate true 4
 gate false true 3
+true false
+0 4 x
+ab.. ab*
+3 gate false
 ```

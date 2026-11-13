@@ -296,17 +296,20 @@ twice at one place ([`check_not_void`](../../../crates/temper-frontend/src/typin
 [`check_member_exists`](../../../crates/temper-frontend/src/typing.rs)),
 which is quadratic in errors.
 
-**Extensions:** instance extensions, `@extension("name")`, aren't
-supported yet, but one may supply a member, so
+**Extensions:** a call `x.name(…)` where an instance extension,
+`@extension("name")`, is visible, as a name is looked up (declared
+there or in an enclosing scope, or imported; declarations and the
+imports of them are recorded as static extensions are), becomes a
+plain call `f(x, …)` while it's typed
+([`instance_extensions`](../../../crates/temper-frontend/src/typing/instance_extensions.rs)),
+unless a member of `x`'s type by that name fits, so later stages see
+only function calls, as Kotlin's `SimplifyDotHelper` leaves them.
 [`check_member_exists`](../../../crates/temper-frontend/src/typing.rs)
-doesn't report `x.name` where an extension of that name is visible, as
-a name is looked up: declared there or in an enclosing scope, or
-imported ([`extension_visible`](../../../crates/temper-frontend/src/extensions.rs);
-declarations and the imports of them are recorded as static extensions
-are). Until 2026-11-09 it skipped the whole library if any file's text
-contained `@extension`, a comment included (the audit's C1). The same
-function still lists the builtin types whose members are known in full
-by name.
+leaves alone only a call typing left as it was after reporting why;
+`x.name` read alone is "No member", as in Kotlin. Until 2026-11-09 it
+skipped the whole library if any file's text contained `@extension`, a
+comment included (the audit's C1). The same function still lists the
+builtin types whose members are known in full by name.
 
 ### Resolutions recorded for later stages
 
@@ -425,7 +428,7 @@ it testable on its own.
 | Types | unit tests in [`types.rs`](../../../crates/temper-frontend/src/types.rs) | Subtyping, function types, builtin supertypes against core, generic subtypes, users' generic supertypes |
 | Core's members | unit tests in [`core_members.rs`](../../../crates/temper-frontend/src/typing/core_members.rs) | Signatures read from core, generic ones, the list editors complete from |
 | Typing cases | [`types.cases`](../../../crates/temper-frontend/tests/settle/types.cases) (33), [`class-types.cases`](../../../crates/temper-frontend/tests/settle/class-types.cases) (17), [`flow.cases`](../../../crates/temper-frontend/tests/settle/flow.cases) (7), [`fields-first.cases`](../../../crates/temper-frontend/tests/settle/fields-first.cases) (11) | Each slice's types and errors as snapshots, many named "as Kotlin Temper reports them"; each language change has a case named in notes/kotlin-differences.md |
-| Integration | [`settle.rs`](../../../crates/temper-frontend/tests/settle.rs): `every_expression_is_typed`, `calls_resolve_to_what_they_call`, `fun_values_take_their_interface`, `imported_extensions_hide_no_member` | No expression left untyped or call unresolved in a program using most of what's typed; resolutions by kind; an imported `@extension` hiding "No member" only where it's imported |
+| Integration | [`settle.rs`](../../../crates/temper-frontend/tests/settle.rs): `every_expression_is_typed`, `calls_resolve_to_what_they_call`, `fun_values_take_their_interface`, `imported_extensions_called_where_imported` | No expression left untyped or call unresolved in a program using most of what's typed; resolutions by kind; an imported `@extension` called, under its name or an alias, only where it's imported |
 | Coverage | `compat/count_untyped.py` over the functional tests, std, and real libraries | What's still unknown, unresolved, or relying on identity, per file |
 | Downstream | tmpl goldens in `crates/temper-frontend/tests/to_tmpl/`, the functional tests on every backend under strict checkers (pyright, mypy, `tsc --strict`, clippy) | Types that reach generated code: a wrong type shows up as a type error in a statically typed backend |
 | Property fuzzer | `mutated_inputs_settle` | Typing runs in it, so no panics or nondeterminism on edited input |
@@ -442,9 +445,6 @@ it testable on its own.
 
 ## Known weaknesses and planned changes
 
-- **Instance extensions** (`@extension("name")`) are recorded only to
-  keep "No member" from being reported where one is visible; a call of
-  one still fails in translation ("a call typing didn't resolve").
 - **`Never` without its `T`:** a backend can't get the fallback type, and
   a `Never<A>` used as an unrelated `B` isn't reported. Planned before
   more of code generation relies on it.

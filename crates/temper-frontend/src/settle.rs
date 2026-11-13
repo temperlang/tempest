@@ -326,9 +326,8 @@ pub(crate) struct Settle {
     pub(crate) static_extensions: Vec<StaticExtension>,
     /// Declarations marked `@extension("name")`, until they're declared,
     /// with the name; then each such function or a name for it, such as
-    /// an import's, with the name. Instance extensions aren't supported
-    /// yet; these only keep "No member" from being reported where one may
-    /// apply ([`Settle::extension_visible`]).
+    /// an import's, with the name, for typing to call where visible
+    /// (`typing::instance_extensions`).
     pub(crate) extension_marks: HashMap<NodeId, NameId>,
     pub(crate) extensions: Vec<(SymbolId, NameId)>,
     /// Methods marked `@overload("name")`, with each such name: a call

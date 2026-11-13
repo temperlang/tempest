@@ -129,6 +129,56 @@ public final class FunctionsGlobal {
         }
     }
 
+    static boolean stringIsPalindrome(String s) {
+        int i = 0;
+        int j = s.length();
+        while (Integer.compare(i, j) < 0) {
+            j = Core.stringPrev(s, j);
+            if (s.codePointAt(i) != s.codePointAt(j)) {
+                return false;
+            }
+            i = Core.stringNext(s, i);
+        }
+        return true;
+    }
+
+    static int intOrZero(@Nullable Integer n) {
+        if (n == null) {
+            return 0;
+        } else {
+            return n;
+        }
+    }
+
+    static <T> T listFirstOr(List<T> ls, T d) {
+        if (ls.isEmpty()) {
+            return d;
+        } else {
+            return Core.listGet(ls, 0);
+        }
+    }
+
+    static String stringPadded(String s, int n, @Nullable String fill) {
+        String fill2 = fill != null ? fill : ".";
+        String out = s;
+        {
+            int i = 0;
+            while (i < n) {
+                out = out + fill2;
+                i = i + 1;
+            }
+        }
+        return out;
+    }
+
+    static String stringPadded(String s, int n) {
+        return stringPadded(s, n, null);
+    }
+
+    static String gatePassed(Gate g, String s) {
+        return s + " " + g.allows(1);
+    }
+
     static {
         console = Core.getConsole(Logger.getLogger("functions"));
         IntSupplier counter = makeCounter(10);
@@ -249,5 +299,10 @@ public final class FunctionsGlobal {
         console.log("gate " + gate.allows(0) + " " + gate.passed(4));
         gate.check = x -> x - 1;
         console.log("gate " + gate.allows(1) + " " + gate.allows(2) + " " + gate.passed(4));
+        @Nullable Integer none = gate.allows(0) ? Integer.valueOf(3) : null;
+        console.log(stringIsPalindrome("step on no pets") + " " + stringIsPalindrome("steps"));
+        console.log(intOrZero(none) + " " + listFirstOr(List.of(4, 5), 0) + " " + listFirstOr(List.of("x"), "-"));
+        console.log(stringPadded("ab", 2) + " " + stringPadded("ab", 1, "*"));
+        console.log(gate.passed(4) + " " + gatePassed(gate, "gate"));
     }
 }

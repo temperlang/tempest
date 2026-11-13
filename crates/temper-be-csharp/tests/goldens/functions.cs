@@ -136,6 +136,68 @@ public static class FunctionsGlobal
         }
     }
 
+    internal static bool StringIsPalindrome(string s)
+    {
+        int i = 0;
+        int j = s.Length;
+        while (i.CompareTo(j) < 0)
+        {
+            j = StringUtil.Prev(s, j);
+            if (StringUtil.Get(s, i) != StringUtil.Get(s, j))
+            {
+                return false;
+            }
+            i = StringUtil.Next(s, i);
+        }
+        return true;
+    }
+
+    internal static int IntOrZero(int? n)
+    {
+        {
+            if (n == null)
+            {
+                return 0;
+            }
+            else
+            {
+                return n.Value;
+            }
+        }
+    }
+
+    internal static T ListFirstOr<T>(IReadOnlyList<T> ls, T d)
+    {
+        if (ls.Count == 0)
+        {
+            return d;
+        }
+        else
+        {
+            return ls[0];
+        }
+    }
+
+    internal static string StringPadded(string s, int n, string? fill = null)
+    {
+        string fill2 = fill ?? ".";
+        string @out = s;
+        {
+            int i = 0;
+            while (i < n)
+            {
+                @out = @out + fill2;
+                i = i + 1;
+            }
+        }
+        return @out;
+    }
+
+    internal static string GatePassed(Gate g, string s)
+    {
+        return s + " " + (g.Allows(1) ? "true" : "false");
+    }
+
     static FunctionsGlobal()
     {
         console = Support.Logging.LoggingConsoleFactory.CreateConsole("Functions");
@@ -207,5 +269,10 @@ public static class FunctionsGlobal
         console.Log("gate " + (gate.Allows(0) ? "true" : "false") + " " + gate.Passed(4).ToString(CultureInfo.InvariantCulture));
         gate.Check = (int x) => x - 1;
         console.Log("gate " + (gate.Allows(1) ? "true" : "false") + " " + (gate.Allows(2) ? "true" : "false") + " " + gate.Passed(4).ToString(CultureInfo.InvariantCulture));
+        int? none = gate.Allows(0) ? (int?)3 : null;
+        console.Log((StringIsPalindrome("step on no pets") ? "true" : "false") + " " + (StringIsPalindrome("steps") ? "true" : "false"));
+        console.Log(string.Create(CultureInfo.InvariantCulture, $"{IntOrZero(none)} {ListFirstOr(Listed.CreateReadOnlyList<int>(4, 5), 0)} {ListFirstOr(Listed.CreateReadOnlyList<string>("x"), "-")}"));
+        console.Log(StringPadded("ab", 2) + " " + StringPadded("ab", 1, "*"));
+        console.Log(gate.Passed(4).ToString(CultureInfo.InvariantCulture) + " " + GatePassed(gate, "gate"));
     }
 }

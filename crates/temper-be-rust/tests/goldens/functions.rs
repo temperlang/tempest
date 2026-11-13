@@ -166,6 +166,27 @@ pub(crate) fn init() -> temper_core::Result<()> {
                 gate.allows(2),
                 gate.passed(4)
             );
+            let none = if gate.allows(0) { Some(3) } else { None };
+            println!(
+                "{} {}",
+                string_is_palindrome("step on no pets"),
+                string_is_palindrome("steps")
+            );
+            println!(
+                "{} {} {}",
+                int_or_zero(none),
+                list_first_or(Arc::new(vec![4, 5]), 0),
+                list_first_or(
+                    Arc::new(vec![Arc::new("x".to_string())]),
+                    Arc::new("-".to_string()),
+                )
+            );
+            println!(
+                "{} {}",
+                string_padded("ab", 2, None::<Arc<String>>),
+                string_padded("ab", 1, Some("*"))
+            );
+            println!("{} {}", gate.passed(4), gate_passed(gate.clone(), "gate"));
             Ok(())
         })
         .clone()
@@ -374,3 +395,57 @@ impl Gate {
 }
 
 temper_core::impl_any_value_trait!(Gate, []);
+
+pub(crate) fn string_is_palindrome(s: impl ToArcString) -> bool {
+    let s = s.to_arc_string();
+    let mut i: usize = 0usize;
+    let mut j = s.len();
+    while (Some(i).cmp(&Some(j)) as i32) < 0 {
+        j = temper_core::string::prev(&s, j);
+        if temper_core::string::get(&s, i) != temper_core::string::get(&s, j) {
+            return false;
+        }
+        i = temper_core::string::next(&s, i);
+    }
+    true
+}
+
+pub(crate) fn int_or_zero(n: Option<i32>) -> i32 {
+    n.unwrap_or(0)
+}
+
+pub(crate) fn list_first_or<T: Clone + Send + Sync + 'static>(
+    ls: impl temper_core::ToList<T>,
+    d: T,
+) -> T {
+    let ls = ls.to_list();
+    if temper_core::ListedTrait::is_empty(&ls) {
+        d.clone()
+    } else {
+        temper_core::ListedTrait::get(&ls, 0)
+    }
+}
+
+pub(crate) fn string_padded(
+    s: impl ToArcString,
+    n: i32,
+    fill: Option<impl ToArcString>,
+) -> Arc<String> {
+    let s = s.to_arc_string();
+    let fill = fill.map(|x| x.to_arc_string());
+    let fill = fill.unwrap_or_else(|| Arc::new(".".to_string()));
+    let mut out = s.clone();
+    {
+        let mut i: i32 = 0;
+        while i < n {
+            out = Arc::new(format!("{out}{fill}"));
+            i = i.wrapping_add(1);
+        }
+    }
+    out.clone()
+}
+
+pub(crate) fn gate_passed(g: Gate, s: impl ToArcString) -> Arc<String> {
+    let s = s.to_arc_string();
+    Arc::new(format!("{s} {}", g.allows(1)))
+}

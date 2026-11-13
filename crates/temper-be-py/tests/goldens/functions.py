@@ -18,10 +18,13 @@ from temper_core import (
     listed_sorted as _listed_sorted,
     string_get as _string_get,
     string_next as _string_next,
+    string_prev as _string_prev,
 )
-from typing import Any as _Any, Generator as _Generator
+from typing import Any as _Any, Generator as _Generator, TypeVar as _TypeVar
 
 __all__ = ()
+
+_T = _TypeVar('_T')
 
 
 def _make_counter(start: int, /) -> _Callable[[], int]:
@@ -162,6 +165,46 @@ class _Gate:
             return n
 
 
+def _string_is_palindrome(s: str, /) -> bool:
+    i = 0
+    j = len(s)
+    while i - j < 0:
+        j = _string_prev(s, j)
+        if _string_get(s, i) != _string_get(s, j):
+            return False
+        i = _string_next(s, i)
+    return True
+
+
+def _int_or_zero(n: int | None, /) -> int:
+    if n is None:
+        return 0
+    else:
+        return n
+
+
+def _list_first_or(ls: _Sequence[_T], d: _T, /) -> _T:
+    if not ls:
+        return d
+    else:
+        return _list_get(ls, 0)
+
+
+def _string_padded(s: str, n: int, fill: str | None = None, /) -> str:
+    if fill is None:
+        fill = '.'
+    out = s
+    i = 0
+    while i < n:
+        out = out + fill
+        i = _int_add(i, 1)
+    return out
+
+
+def _gate_passed(g: _Gate, s: str, /) -> str:
+    return f'{s} {_boolean_to_string(g.allows(1))}'
+
+
 _console: _LoggingConsole = _LoggingConsole(__name__)
 _counter: _Callable[[], int] = _make_counter(10)
 _counter()
@@ -224,3 +267,8 @@ _gate: _Gate = _Gate()
 _console.log(f'gate {_boolean_to_string(_gate.allows(0))} {_gate.passed(4)}')
 _gate.check = lambda x: _int_sub(x, 1)
 _console.log(f'gate {_boolean_to_string(_gate.allows(1))} {_boolean_to_string(_gate.allows(2))} {_gate.passed(4)}')
+_none: int | None = 3 if _gate.allows(0) else None
+_console.log(f"{_boolean_to_string(_string_is_palindrome('step on no pets'))} {_boolean_to_string(_string_is_palindrome('steps'))}")
+_console.log(f"{_int_or_zero(_none)} {_list_first_or((4, 5), 0)} {_list_first_or(('x',), '-')}")
+_console.log(f"{_string_padded('ab', 2)} {_string_padded('ab', 1, '*')}")
+_console.log(f"{_gate.passed(4)} {_gate_passed(_gate, 'gate')}")

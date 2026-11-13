@@ -13,10 +13,11 @@ modules' classes of functions are `RegexGlobal`. This module's own
 
 Imports name functions, a `let`, and a `var`, which an import copies
 when it runs, as the interpreter and Kotlin's backends read it, so
-later writes don't show here; an alias; and a module's own declaration
-with an imported one's name.
+later writes don't show here; an alias; a module's own declaration
+with an imported one's name; and an instance extension, which
+`n.doubled()` calls.
 
-    let { twice as double, base, bump, calls } = import("./helpers");
+    let { twice as double, base, bump, calls, intDoubled } = import("./helpers");
     let { greet } = import("./helpers/deep");
     let { share } = import("./core");
     let { describe } = import("./machine");
@@ -35,7 +36,7 @@ imported as `helperBase`.
 
     console.log(greet("modules"));
     console.log("sum ${sum(3).toString()}");
-    console.log("share ${share(7, 2).toString()}");
+    console.log("share ${share(7, 2).toString()} ${21.doubled()}");
     console.log("${new Engine("own").name}, ${describe()}");
     bump();
     bump();
@@ -45,7 +46,7 @@ imported as `helperBase`.
 hello, helpers from deep
 hello, modules from deep
 sum 17
-share 3
+share 3 42
 own, state 1 engine 4 parts 5
 calls 0
 ```

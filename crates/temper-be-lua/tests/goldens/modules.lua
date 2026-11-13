@@ -3,6 +3,7 @@ require("modules/state")
 require("modules/parts/regex")
 local greet = require("modules/helpers/deep").greet
 local twice = require("modules/helpers").twice
+local intDoubled = require("modules/helpers").intDoubled
 local base = require("modules/helpers").base
 local bump = require("modules/helpers").bump
 local share = require("modules/core").share
@@ -34,7 +35,7 @@ local calls2 = require("modules/helpers").calls
 base2 = 1
 print(greet("modules"))
 print("sum " .. sum(3))
-print("share " .. share(7, 2))
+print("share " .. share(7, 2) .. " " .. intDoubled(21))
 print(Engine("own").name .. ", " .. describe())
 bump()
 bump()

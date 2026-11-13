@@ -2691,10 +2691,10 @@ console.log(p.y.toString());
 error 143..146: No member y in P
 Failed: No member y in P
 
-=== a visible @extension keeps its name from being a missing member
-// Instance extensions aren't supported yet, but `s.isPal()` isn't "No
-// member" where `@extension("isPal")` is visible; `s.isPalindrome()`
-// still is, as is `isOdd` where the extension, local to `f`, isn't.
+=== a visible @extension answers to its name, where it's visible
+// `s.isPal()` calls `stringIsPal(s)` where `@extension("isPal")` is
+// visible; `s.isPalindrome()` is still "No member", as is `isOdd`
+// where the extension, local to `f`, isn't visible.
 @extension("isPal")
 let stringIsPal(s: String): Boolean { s == "aba" }
 let f(s: String): Boolean {
@@ -2715,15 +2715,54 @@ let g(s: String): Boolean { s.isOdd() }
       (Block
         (Let ^stringIsOdd:5 (Fn (Let ^t:6 String) Boolean (Block true)))
         (If
-          (Call (Call . s:4 \isOdd))
-          (If
-            (Call (Call . s:4 \isPal))
-            (Call (Call . s:4 \isPalindrome))
-            #false)
+          (Call stringIsOdd:5 s:4)
+          (If (Call stringIsPal:0 s:4) (Call (Call . s:4 \isPalindrome)) #false)
           #false))))
   (Let ^g:2 (Fn (Let ^s:7 String) Boolean (Block (Call (Call . s:7 \isOdd))))))
-error 404..418: No member isPalindrome in String
-error 451..458: No member isOdd in String
+error 383..397: No member isPalindrome in String
+error 430..437: No member isOdd in String
+
+=== instance extensions' errors, as Kotlin Temper reports them
+// A lone extension that doesn't take the receiver is called anyway, so
+// the argument's error shows; among several, none fitting, or two
+// fitting as well, is "No callee matches" (Kotlin calls the first of
+// equals). An extension isn't a property, nor a static member.
+@extension("half") let intHalf(x: Int): Int { x / 2 }
+@extension("d") let d1(x: Int): String { "1" }
+@extension("d") let d2(x: Int): String { "2" }
+@extension("k") let k1(x: Int): String { "1" }
+@extension("k") let k2(x: String): String { "2" }
+interface I {}
+@extension("f") let iF(i: I): Int { 1 }
+let a = "x".half();
+let b = 1.d();
+let c = true.k();
+let e = 84.half;
+let f = I.f();
+let g = 84.half("extra");
+--- settled
+(Block
+  (Let ^intHalf:0 (Fn (Let ^x:13 Int) Int (Block (Call / x:13 2))))
+  (Let ^d1:1 (Fn (Let ^x:14 Int) String (Block "1")))
+  (Let ^d2:2 (Fn (Let ^x:15 Int) String (Block "2")))
+  (Let ^k1:3 (Fn (Let ^x:16 Int) String (Block "1")))
+  (Let ^k2:4 (Fn (Let ^x:17 String) String (Block "2")))
+  (Interface ^I:5)
+  (Let ^iF:6 (Fn (Let ^i:19 I:5) Int (Block 1)))
+  (Let ^a:7 (Call intHalf:0 "x"))
+  (Let ^b:8 (Call (Call . 1 \d)))
+  (Let ^c:9 (Call (Call . true \k)))
+  (Let ^e:10 (Call . 84 \half))
+  (Let ^f:11 (Call (Call . I:5 \f)))
+  (Let ^g:12 (Call intHalf:0 84 "extra"))
+  #void)
+error 581..584: Expected subtype of Int32, but got String
+error 601..606: No callee matches inputs [Int32] among [fn (Int32): String, fn (Int32): String]
+error 616..624: No callee matches inputs [Boolean] among [fn (Int32): String, fn (String): String]
+error 666..682: Wrong number of arguments.  Expected 1
+error 634..641: No member half in Int32
+error 651..654: No member f in I
+Failed: Can't apply / to these arguments
 
 === core's non-generic classes as declared types, as Kotlin Temper reports them
 let a: StringBuilder = 5;

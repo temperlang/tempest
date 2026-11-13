@@ -23,7 +23,7 @@ public final class ModulesGlobal {
         base2 = 1;
         console.log(DeepGlobal.greet("modules"));
         console.log("sum " + sum(3));
-        console.log("share " + CoreGlobal.share(7, 2));
+        console.log("share " + CoreGlobal.share(7, 2) + " " + HelpersGlobal.intDoubled(21));
         console.log(new Engine("own").name + ", " + MachineGlobal.describe());
         HelpersGlobal.bump();
         HelpersGlobal.bump();
