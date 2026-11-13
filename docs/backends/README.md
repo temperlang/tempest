@@ -26,7 +26,7 @@ and Rust; C++ is built when asked for (`-b cpp`).
 
 Each library's package has the version its `config.temper.md` gives,
 and depends on Temper's runtime for its language, `temper-core`, and on
-`std` if it imports std, at exactly the compiler's version (`tempest
+`std` if it imports std, at exactly the compiler's version (`temper
 version`), in each ecosystem's spelling: `0.7.0-alpha.0.123` (a dev
 build, 123 commits after the last release) for npm, Cargo, NuGet, and
 Maven, `0.7.0.dev123` for Python, and `0.7.0.alpha.0.123-1` for
@@ -37,14 +37,14 @@ them, packed as each registry takes them, for installing by hand.
 
 How each backend is built, and what it chooses for failure, null,
 naming, and order of evaluation, is in
-[how tempest works: backends](../internals/06-backends.md) and its
+[how the compiler works: backends](../internals/06-backends.md) and its
 [per-backend table](../internals/detail/06-backends.md#per-backend-choices).
 Getting started with each language is in the
 [getting started guide](../guide/getting-started.md).
 
-> **Note:** Temper's first compiler also has `java8`, `mypyc`, and
-> `data` backends, and an experimental `cppv`; tempest doesn't have
-> them yet ([inconsistencies](../inconsistencies.md#i4-backends-that-tempest-doesnt-have)).
+> **Note:** Temper's earlier releases also have `java8`, `mypyc`, and
+> `data` backends, and an experimental `cppv`; they aren't available
+> yet ([inconsistencies](../inconsistencies.md#i4-backends-not-available-yet)).
 
 ## C++ (`cpp`)
 
@@ -60,7 +60,7 @@ backend keeps Temper's left-to-right order wherever it would show.
 C++20 code can `co_await` a Temper promise.
 
 > **Note:** Temper's older docs list C++ as "coming soon", and leave it
-> out of this list; tempest's C++ backend passes every functional test
+> out of this list; the C++ backend passes every functional test
 > ([inconsistencies](../inconsistencies.md#i3-c-support)).
 
 ## C# (`csharp`)

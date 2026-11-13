@@ -1,11 +1,11 @@
 # The Rust runtime
 
-What generated Rust needs beside it, begun as Kotlin Temper's (commit
-69f1a5b0) and tempest's own since; [the backends' internals](../../../docs/internals/detail/06-backends.md#changes-from-kotlin-tempers-runtimes)
-list what tempest changed.
+What generated Rust needs beside it, begun as the previous compiler's (commit
+69f1a5b0) and this compiler's own since; [the backends' internals](../../../docs/internals/detail/06-backends.md#changes-from-kotlin-tempers-runtimes)
+list what changed.
 
 - `temper-core/`: the runtime, which `src/runtime.rs` embeds for
-  `tempest build` to write beside the output.
+  `temper build` to write beside the output.
 - `std/regex/`: std's `regex` support, embedded by `src/lib.rs`.
 
 `temper-core` is a crate of its own, with its own `Cargo.lock`, kept out

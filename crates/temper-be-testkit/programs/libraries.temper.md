@@ -35,7 +35,7 @@ class extending it and the interface it extends inherits, an override
 of a method that takes a type parameter's value, a trait method's
 `String?` given an `if`'s value, `when`s of only `null` and `panic()`,
 `orelse continue`, and `--i` in a loop's condition. The log is what
-tempest's interpreter gives.
+the interpreter gives.
 
     export let parseGrid(s: String): Grid throws Bubble {
       if (s == "") { bubble() }

@@ -11,7 +11,7 @@
 //! `completions`, `references`, `rename`, and `signature_help`, which
 //! [`temper_analysis`] answers; `backends`
 //! lists the backends built in, `version` names the build's version
-//! (as `tempest --version`, from git when it was built), and
+//! (as `temper --version`, from git when it was built), and
 //! `std_library` gives std's own
 //! output from one, for running generated tests. The older calls each do
 //! one thing: `parse` returns the parse tree and the grammar step's tree
@@ -39,10 +39,10 @@
 //! lines through, and `host_now`, the clock, for std's `temporal`.
 //! Instantiating it needs both, for every export.
 //!
-//! Settling aside, it compiles as `tempest` does, through
+//! Settling aside, it compiles as `temper` does, through
 //! `temper-driver` ([`temper_driver::checked`], [`temper_driver::with_std`],
 //! [`temper_driver::translate`]). Each backend is a cargo feature, all on
-//! by default, as in `tempest`.
+//! by default, as in `temper`.
 //!
 //! Its only unsafe code is its exports' `no_mangle` attribute, each
 //! allowed by name (`#[allow(unsafe_code)]`), as the crate denies it
@@ -166,7 +166,7 @@ pub extern "C" fn backends() {
 }
 
 /// This build's version, with its commit, as a JSON string, as
-/// `tempest --version` says it: `"0.7.0-alpha.0.123 (3f2b063)"`. Output
+/// `temper --version` says it: `"0.7.0-alpha.0.123 (3f2b063)"`. Output
 /// still names the version with no commits counted
 /// ([`temper_tmpl::version::current`]), as tests' does.
 #[allow(unsafe_code)]
@@ -1109,7 +1109,7 @@ mod tests {
         assert!(!json.contains("\"rust\":"), "{json}");
         backends();
         let names = OUTPUT.with_borrow(|out| out.clone());
-        // Alphabetically, as `tempest` lists them.
+        // Alphabetically, as `temper` lists them.
         let listed: Vec<String> = built_in().map(json_string).collect();
         assert_eq!(names, format!("[{}]", listed.join(",")));
         assert!(names.contains("\"py\""), "{names}");

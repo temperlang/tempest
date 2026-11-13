@@ -6,7 +6,7 @@ another `@json` class, and a field `@jsonName` renames; a sealed
 interface whose decoder tells its classes apart by their properties,
 and one by a `@jsonExtra` value; and a class that encodes itself.
 Decoding bubbles on a missing property and on a value no class has.
-The log is what tempest's interpreter gives.
+The log is what the interpreter gives.
 
     let {
       InterchangeContext,

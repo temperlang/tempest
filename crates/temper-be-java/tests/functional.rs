@@ -42,7 +42,7 @@
 //!   cache, as strictly, and runs through JUnit's launcher
 //!   ([`tools::RUN_TESTS`]), its failures compared with its
 //!   `expectedFailures`. Skipped, with a message, without
-//!   `javac` or `java`; with `TEMPEST_REQUIRE_CHECKERS` set, as in CI,
+//!   `javac` or `java`; with `TEMPER_REQUIRE_CHECKERS` set, as in CI,
 //!   either missing fails it instead.
 
 use std::path::{Path, PathBuf};
@@ -286,7 +286,7 @@ public final class ModuleStateThreads {
 
 /// A run as tests, as Kotlin's `RunJava`: std's package and the
 /// library's main and test sources compiled with JUnit, its tests run
-/// through JUnit's launcher ([`tools::RUN_TESTS`], as `tempest test -b
+/// through JUnit's launcher ([`tools::RUN_TESTS`], as `temper test -b
 /// java` runs them), and their failures compared
 /// with its `expectedFailures`.
 fn run_tests(
@@ -312,7 +312,7 @@ fn run_tests(
             sources.push(path);
         }
     }
-    let runner = root.join("tempest/RunTests.java");
+    let runner = root.join("temper/RunTests.java");
     fs::create_dir_all(runner.parent().unwrap()).unwrap();
     fs::write(&runner, tools::RUN_TESTS).unwrap();
     sources.push(runner);
@@ -340,7 +340,7 @@ fn run_tests(
         .current_dir(env!("CARGO_TARGET_TMPDIR"))
         .args(["-XX:TieredStopAtLevel=1", "-XX:+UseSerialGC", "-cp"])
         .arg(&classpath)
-        .arg("tempest.RunTests")
+        .arg("temper.RunTests")
         .arg(&classes)
         .output()
         .unwrap();

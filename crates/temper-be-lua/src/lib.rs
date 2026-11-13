@@ -156,7 +156,7 @@ pub fn rock_version(p: &Program) -> String {
 /// A library with no root module (only `src/a/…` and `src/b/…`) gets an
 /// `init.lua` that requires each module, as Kotlin's, and has no
 /// `init-test.lua`: each module's tests are in their own file, which
-/// `tempest test` runs in turn.
+/// `temper test` runs in turn.
 ///
 /// Kotlin also zips the library beside the rockspec, for LuaRocks, whose
 /// `source.url` names the zip by its absolute path; this names it
@@ -201,7 +201,7 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
     }
     // A library without a root module still gets an `init.lua`, as
     // Kotlin's, which requires each module, so `require("LIBRARY")` (and
-    // `tempest run`) loads them all; it exports nothing.
+    // `temper run`) loads them all; it exports nothing.
     if !p.modules.iter().any(|m| m.path.is_empty()) {
         let require = |m: &temper_tmpl::Module| {
             let path = translate::require_path(p, m.decl);

@@ -1,18 +1,18 @@
 # Every push to main and every pull request, on Linux x64, in four
 # parallel jobs after a quick `changes` job, so the run takes about as
-# long as its slowest job, not the sum. Each job builds tempest's crates
+# long as its slowest job, not the sum. Each job builds the workspace's crates
 # from scratch (the cache keeps only third-party crates), so there are
 # few jobs, each running many checks, a step each:
 #
 # - `lint`: formatting, clippy (with and without default features), the
 #   workflows parsed as YAML, the docs' links, Temper's functional
-#   tests (crates/temper-funtests/cases/) on tempest's interpreter, the
+#   tests (crates/temper-funtests/cases/) on Temper's interpreter, the
 #   size and speed charts, and release tags' rules (release.yml); then
 #   `core`'s tests: every crate's but the backends' and `tempest`'s, and
 #   again without default features (no backends, no `net`), `tempest`'s
 #   included;
-# - `cli`: `tempest`'s tests with every backend, so with every
-#   toolchain: `tempest test`, `build`, and `run` on small libraries;
+# - `cli`: `temper`'s tests with every backend, so with every
+#   toolchain: `temper test`, `build`, and `run` on small libraries;
 # - `backends`, two jobs, each with only its backends' toolchains
 #   (.github/actions/toolchains): generated Python run and type checked
 #   by mypy and pyright, strict; generated JS run under Node and type
@@ -27,7 +27,7 @@
 #   by g++ 12 and 14 (14 at -O3 too) and clang++, every warning an error;
 #   and the version's spellings, sorted by each ecosystem's own
 #   comparator (npm's, PEP 440's, Maven's, NuGet's, and LuaRocks');
-# - `release`: tempest's release build, the VS Code extension (type
+# - `release`: `temper`'s release build, the VS Code extension (type
 #   checked, bundled, packaged, and tested in a real VS Code against
 #   that build), the docs' examples on it, and the docs site (built,
 #   its Mermaid diagrams drawn, and its links checked); and the wasm
@@ -40,7 +40,7 @@
 # (`changes` says why, and docs/contributing/ci.md). Skipped jobs pass,
 # as required checks.
 #
-# The other platforms tempest is released for (Linux Arm64, macOS
+# The other platforms `temper` is released for (Linux Arm64, macOS
 # Arm64, and Windows x64 and Arm64) are tested by nightly.yml. The
 # checkers of generated code are at exact versions (.github/ci-tools/);
 # nightly.yml also tries each one's latest release. Every action is
@@ -55,7 +55,7 @@
 # which pull requests read, so their caches don't crowd main's out. The
 # jobs whose builds say their version (`cli` and `release`) check out
 # the whole history and its tags, so it's a real dev build's
-# (`0.7.0-alpha.0.123`), as `tempest --version` and the playground's
+# (`0.7.0-alpha.0.123`), as `temper --version` and the playground's
 # About show.
 name: CI
 
@@ -133,7 +133,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
-      TEMPEST_REQUIRE_CHECKERS: "1"
+      TEMPER_REQUIRE_CHECKERS: "1"
       CORE: ${{ needs.changes.outputs.docs != 'false' }}
       BACKENDS: >-
         --exclude temper-be-cpp --exclude temper-be-csharp
@@ -159,7 +159,7 @@ jobs:
       - name: Lints
         if: ${{ !cancelled() }}
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
-      # Without backends, as `core` tests `tempest`, and as nightly.yml
+      # Without backends, as `core` tests `temper`, and as nightly.yml
       # builds it on the other platforms: helpers only backends' tests
       # use must be gated by `cfg` too.
       - name: Lints without default features
@@ -206,8 +206,8 @@ jobs:
         if: ${{ !cancelled() && env.CORE == 'true' }}
         run: cargo test --locked --workspace --no-default-features $BACKENDS
 
-  # `tempest`'s own tests with every backend built in, and so every
-  # backend's toolchain: `tempest test -b`, `build`, and `run` on small
+  # `temper`'s own tests with every backend built in, and so every
+  # backend's toolchain: `temper test -b`, `build`, and `run` on small
   # libraries, CMake's build of generated C++, and Kotlin's layout of
   # `temper.out`.
   cli:
@@ -221,7 +221,7 @@ jobs:
         with:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@cfcaf53ba4c621917ec7f78a66bff7a8848ddad4 # 1.85.0 branch, 2026-10-16
-        # For `tempest test -b rust`, as the Rust backend's job.
+        # For `temper test -b rust`, as the Rust backend's job.
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
@@ -233,7 +233,7 @@ jobs:
       - name: Tests
         run: cargo test --locked -p tempest
         env:
-          TEMPEST_REQUIRE_CHECKERS: "1"
+          TEMPER_REQUIRE_CHECKERS: "1"
 
   # Each backend's crate, its functional tests running generated code
   # with only its group's toolchains set up (.github/actions/toolchains
@@ -260,7 +260,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 50
     env:
-      TEMPEST_REQUIRE_CHECKERS: "1"
+      TEMPER_REQUIRE_CHECKERS: "1"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: dtolnay/rust-toolchain@cfcaf53ba4c621917ec7f78a66bff7a8848ddad4 # 1.85.0 branch, 2026-10-16
@@ -315,7 +315,7 @@ jobs:
       - name: Version comparators
         if: ${{ !cancelled() && matrix.id == 'checked' }}
         env:
-          TEMPEST_REQUIRE_COMPARATORS: "1"
+          TEMPER_REQUIRE_COMPARATORS: "1"
         run: |
           cmp="$RUNNER_TEMP/comparators"
           uv venv -q "$cmp/py"
@@ -344,9 +344,9 @@ jobs:
         if: ${{ !cancelled() && contains(matrix.backends, 'cpp') }}
         run: cargo test --locked -p temper-be-cpp --test functional -- --exact strict
         env:
-          TEMPEST_STRICT_CXX: g++-12 g++-14 clang++
+          TEMPER_STRICT_CXX: g++-12 g++-14 clang++
 
-  # tempest's release build (the small profile, as released), and what
+  # `temper`'s release build (the small profile, as released), and what
   # runs on it; and the wasm build, with every backend, as released, and
   # the playground on it. A step that needs an earlier one's build is
   # skipped when that build fails, so the failure names the build.
@@ -376,17 +376,17 @@ jobs:
         with:
           node-version: 24
       - id: small
-        name: Release build of tempest
+        name: Release build of temper
         run: |
           cargo build --locked --profile small -p tempest
-          target/small/tempest --version | tee -a "$GITHUB_STEP_SUMMARY"
+          target/small/temper --version | tee -a "$GITHUB_STEP_SUMMARY"
       # The VS Code extension, type checked by its pinned tsc and bundled
-      # by esbuild, its search for tempest tested under Node, its TextMate
+      # by esbuild, its search for `temper` tested under Node, its TextMate
       # grammars checked (check_grammar.py, and test/grammar.mjs with VS
       # Code's own TextMate engine), and packaged by vsce, as a
-      # universal .vsix and a Linux x64 one with tempest's release build;
+      # universal .vsix and a Linux x64 one with `temper`'s release build;
       # that one's tests run in a real VS Code (@vscode/test-electron),
-      # under xvfb, against its tempest. VS Code is cached by the version
+      # under xvfb, against its `temper`. VS Code is cached by the version
       # build.py pins (VSCODE_VERSION), so its update servers, which
       # sometimes fail to answer, are needed only when that changes.
       # test/run.ts retries a failed download.
@@ -403,12 +403,12 @@ jobs:
           key: vscode-${{ runner.os }}-${{ steps.vscode.outputs.version }}
       - name: VS Code extension
         if: ${{ !cancelled() && steps.small.outcome == 'success' }}
-        run: uv run editors/vscode/build.py --tempest target/small/tempest --test
+        run: uv run editors/vscode/build.py --temper target/small/temper --test
       # Each marked ```temper block in docs/ runs on the release build as its
       # marker says, or as its `<!-- known: In -->` comment says.
       - name: Docs' examples
         if: ${{ !cancelled() && steps.small.outcome == 'success' }}
-        run: uv run compat/check_doc_examples.py --tempest target/small/tempest
+        run: uv run compat/check_doc_examples.py --temper target/small/temper
       # The docs site, as pages.yml builds it, Mermaid diagrams drawn, so
       # a broken link or diagram fails here, not at deploy. Links into the
       # playground are only listed.
@@ -439,7 +439,7 @@ jobs:
       - id: docs
         name: Docs site
         if: ${{ !cancelled() && steps.small.outcome == 'success' && steps.renderer.outcome == 'success' }}
-        run: uv run site/docs/build.py --kelpto .kelpto --tempest target/small/tempest --out "$RUNNER_TEMP/site"
+        run: uv run site/docs/build.py --kelpto .kelpto --temper target/small/temper --out "$RUNNER_TEMP/site"
       - id: wasm
         name: Wasm build
         if: ${{ !cancelled() }}

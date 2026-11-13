@@ -5,14 +5,14 @@
 # - `check`: the tag must name the workspace's version (the root
 #   Cargo.toml's), or a pre-release of it (`-alpha.K`, `-beta.K`,
 #   `-rc.K`), or nothing else runs;
-# - `binaries`: binaries.yml's jobs, called: tempest for every platform,
+# - `binaries`: binaries.yml's jobs, called: `temper` for every platform,
 #   temper-wasm, and the VS Code extension's packages;
 # - `packages`: the runtimes (temper-core) and std, built by the Linux
-#   x64 tempest just built and packed as each registry takes them:
+#   x64 `temper` just built and packed as each registry takes them:
 #   crates, npm tarballs, wheels and sdists, NuGet packages, a Maven
 #   Central bundle, and LuaRocks rockspecs and source rocks;
 # - `release`: the GitHub release, with all of them, the binaries named
-#   by version (`tempest-0.7.0-x86_64-unknown-linux-gnu.tar.gz`), and
+#   by version (`temper-0.7.0-x86_64-unknown-linux-gnu.tar.gz`), and
 #   SHA256SUMS; marked a pre-release for an alpha, beta, or rc.
 #
 # Nothing goes to a package registry yet: the commented `publish` job
@@ -76,7 +76,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       # Not the workspace's 1.85.0: only cargo 1.90 and later packs
       # temper-std against the unpublished temper-core beside it
-      # (`cargo package --workspace`). It builds nothing of tempest.
+      # (`cargo package --workspace`). It builds nothing of the compiler.
       - uses: dtolnay/rust-toolchain@ff7f6a3374ce205788da40198ec918bd5d67aea7 # 1.99.0 branch
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         # As in ci.yml.
@@ -121,13 +121,13 @@ jobs:
           luarocks --version
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: tempest-x86_64-unknown-linux-gnu
+          name: binary-x86_64-unknown-linux-gnu
           path: bin
       - name: Packages
         run: |
-          tar xzf bin/tempest-x86_64-unknown-linux-gnu.tar.gz -C bin
+          tar xzf bin/temper-x86_64-unknown-linux-gnu.tar.gz -C bin
           uv run .github/ci-tools/release.py packages \
-            --tempest bin/tempest-x86_64-unknown-linux-gnu/tempest \
+            --temper bin/temper-x86_64-unknown-linux-gnu/temper \
             --version "$VERSION" --out packages
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -156,7 +156,9 @@ jobs:
       - name: Name the files by version
         working-directory: dist
         run: |
-          for f in tempest-*; do mv "$f" "tempest-$VERSION-${f#tempest-}"; done
+          # The binaries, by their targets' architectures, as the .vsix
+          # files and temper-wasm start with `temper-` too.
+          for f in temper-x86_64-* temper-aarch64-*; do mv "$f" "temper-$VERSION-${f#temper-}"; done
           mv temper-wasm.tar.gz "temper-wasm-$VERSION.tar.gz"
           sha256sum * > SHA256SUMS
           ls -l
@@ -166,9 +168,9 @@ jobs:
           cat > "$RUNNER_TEMP/notes.md" <<EOF
           Temper $VERSION, built from $GITHUB_SHA ([the run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)).
 
-          - \`tempest-$VERSION-TARGET\`: the compiler, for each platform
+          - \`temper-$VERSION-TARGET\`: the compiler, for each platform
           - \`temper-wasm-$VERSION.tar.gz\`: the compiler as wasm, as the playground runs it
-          - \`.vsix\`: the VS Code extension, with tempest for each platform, and without
+          - \`.vsix\`: the VS Code extension, with \`temper\` for each platform, and without
           - the runtimes (temper-core) and std as each registry would take them, not yet published to any: crates, npm tarballs, wheels and sdists, NuGet packages (releases only), a Maven Central bundle (unsigned), and LuaRocks rockspecs and source rocks
           - \`SHA256SUMS\`: \`sha256sum -c SHA256SUMS\`
           EOF

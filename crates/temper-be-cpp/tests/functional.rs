@@ -44,9 +44,9 @@
 //!   `lifetimes` frees objects and lists in use). The sanitizers' build
 //!   of every library compiles several files to one object
 //!   ([`compile_bulk`]), since the plain build has checked each alone;
-//!   with `TEMPEST_CPP_BULK=0`, each compiles alone there too
+//!   with `TEMPER_CPP_BULK=0`, each compiles alone there too
 //!   (notes/test-speed.md, "C++'s functional tests in bulk").
-//!   `TEMPEST_CXXFLAGS` adds options to every build but ThreadSanitizer's,
+//!   `TEMPER_CXXFLAGS` adds options to every build but ThreadSanitizer's,
 //!   as the nightly workflow's sanitized job does. Every library is built in
 //!   one directory, so `imports-library` finds `modules` beside it, but
 //!   a library with host code, which names it `work`, builds alone, its
@@ -56,13 +56,13 @@
 //!   and runs, writing JUnit's XML, its failures compared with its
 //!   `expectedFailures` (none but for those that run as tests, `TESTS`,
 //!   which run only so). Skipped, with a message,
-//!   without `g++`; with `TEMPEST_REQUIRE_CHECKERS` set, as in CI, that
+//!   without `g++`; with `TEMPER_REQUIRE_CHECKERS` set, as in CI, that
 //!   fails it instead.
 //! - `strict`: every library's generated `.cpp`s (std's too, and the
 //!   generated files of those with host code) compiled, not linked, at
 //!   `-O2`, as other people's release builds are, with [`STRICT`] by
 //!   `g++-12` and `g++-14`, whichever are installed, or the compilers
-//!   `TEMPEST_STRICT_CXX` names (clang++ with [`CLANG_STRICT`]), as CI
+//!   `TEMPER_STRICT_CXX` names (clang++ with [`CLANG_STRICT`]), as CI
 //!   does; the newest GCC at `-O3` too. `-O2` inlines more, and GCC's
 //!   path-following warnings (`-Wnull-dereference`, `-Warray-bounds`,
 //!   `-Wmaybe-uninitialized`) see what `-O1`'s builds don't. In bulk,
@@ -382,7 +382,7 @@ fn cases() -> Vec<Case> {
     // would be one in a build of every library, so a later one is named
     // for its test, or where that's taken too (the `functions` program,
     // after `imports/functions`), for its test and `-program`. Named
-    // among every case, whichever `TEMPEST_CASES` keeps, so that the
+    // among every case, whichever `TEMPER_CASES` keeps, so that the
     // goldens don't change with it.
     let mut seen = std::collections::HashSet::new();
     let mut named = std::collections::HashMap::new();
@@ -534,7 +534,7 @@ struct Mode {
 }
 
 impl Mode {
-    /// [`Mode::options`], then `TEMPEST_CXXFLAGS`, split at spaces, for every
+    /// [`Mode::options`], then `TEMPER_CXXFLAGS`, split at spaces, for every
     /// mode but [`TSAN`], whose sanitizer can't be combined with others (the
     /// nightly workflow builds with AddressSanitizer this way), and
     /// [`strict`]'s, which only compile.
@@ -542,7 +542,7 @@ impl Mode {
         let mut flags: Vec<String> = self.options.iter().map(|o| o.to_string()).collect();
         let strict = [STRICT_O2, STRICT_O2_TESTS, STRICT_O3, STRICT_O3_TESTS].map(|m| m.name);
         if self.name != TSAN.name && !strict.contains(&self.name) {
-            let extra = env::var("TEMPEST_CXXFLAGS").unwrap_or_default();
+            let extra = env::var("TEMPER_CXXFLAGS").unwrap_or_default();
             flags.extend(extra.split_whitespace().map(String::from));
         }
         if curl() {
@@ -648,12 +648,12 @@ const CLANG_STRICT: &[&str] = &[
 ];
 
 /// The compilers [`strict`] builds with, each with its `--version`:
-/// `TEMPEST_STRICT_CXX`, split at spaces (empty for none), or else
+/// `TEMPER_STRICT_CXX`, split at spaces (empty for none), or else
 /// `g++-12` and `g++-14`, the oldest and newest GCC that CI has, those
-/// that run. With `TEMPEST_REQUIRE_CHECKERS`, one that's named and
+/// that run. With `TEMPER_REQUIRE_CHECKERS`, one that's named and
 /// doesn't run fails.
 fn strict_compilers() -> Vec<(String, String)> {
-    let named = env::var("TEMPEST_STRICT_CXX").ok();
+    let named = env::var("TEMPER_STRICT_CXX").ok();
     let names: Vec<String> = match &named {
         Some(list) => list.split_whitespace().map(String::from).collect(),
         None => vec!["g++-12".into(), "g++-14".into()],
@@ -665,7 +665,7 @@ fn strict_compilers() -> Vec<(String, String)> {
             Ok(out) if out.status.success() => {
                 found.push((name, String::from_utf8_lossy(&out.stdout).into_owned()));
             }
-            _ if named.is_some() => kit::missing(&format!("{name} (TEMPEST_STRICT_CXX)")),
+            _ if named.is_some() => kit::missing(&format!("{name} (TEMPER_STRICT_CXX)")),
             _ => eprintln!("strict: skipped {name}, which isn't installed"),
         }
     }
@@ -764,11 +764,11 @@ fn runtime_pch_with(
 }
 
 /// How many compilers run at once: four at most, which the sanitizers'
-/// memory allows beside other work, or `TEMPEST_CXX_JOBS`, fewer where
+/// memory allows beside other work, or `TEMPER_CXX_JOBS`, fewer where
 /// memory's short (an `-O3` group's `cc1plus` takes up to a gigabyte).
 fn jobs() -> usize {
     let cpus = std::thread::available_parallelism().map_or(1, |n| n.get());
-    let cap = (env::var("TEMPEST_CXX_JOBS").ok())
+    let cap = (env::var("TEMPER_CXX_JOBS").ok())
         .and_then(|j| j.parse().ok())
         .unwrap_or(4);
     cpus.min(cap).max(1)
@@ -897,9 +897,9 @@ fn compile_with(
 }
 
 /// Whether to build the sanitizers' libraries in bulk ([`compile_bulk`]):
-/// unless `TEMPEST_CPP_BULK=0`, which builds each file alone.
+/// unless `TEMPER_CPP_BULK=0`, which builds each file alone.
 fn bulk() -> bool {
-    env::var("TEMPEST_CPP_BULK").map_or(true, |v| v != "0")
+    env::var("TEMPER_CPP_BULK").map_or(true, |v| v != "0")
 }
 
 /// [`compile`], but several files to one object, which instantiates the
@@ -1433,7 +1433,7 @@ fn runs() {
 fn strict() {
     let compilers = strict_compilers();
     if compilers.is_empty() {
-        eprintln!("strict: skipped, no compiler (TEMPEST_STRICT_CXX, or g++-12 and g++-14)");
+        eprintln!("strict: skipped, no compiler (TEMPER_STRICT_CXX, or g++-12 and g++-14)");
         return;
     }
     let _builds = BUILDS.lock().unwrap_or_else(|e| e.into_inner());

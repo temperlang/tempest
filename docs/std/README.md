@@ -24,7 +24,7 @@ What's always available without an import, such as `String`, `List`,
 [builtins](../language/builtins.md).
 
 The library is written in literate Temper, so its sources are its
-fullest documentation; tempest builds them in, from
+fullest documentation; `temper` builds them in, from
 [lib/std/](../../lib/std/config.temper.md). On each
 backend, some of it connects to the language's own types and
 functions (`Date` is a `java.time.LocalDate` in Java, for example);

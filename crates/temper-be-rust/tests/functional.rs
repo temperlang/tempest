@@ -47,7 +47,7 @@
 //!   them ([`cargo_test_failures`]). Skipped, with a message, without cargo
 //!   or clippy, or if `temper-core`'s one dependency, `indexmap`, isn't
 //!   in cargo's cache (`cargo fetch` in `temper-core` puts
-//!   it there); with `TEMPEST_REQUIRE_CHECKERS` set, as in CI, any of
+//!   it there); with `TEMPER_REQUIRE_CHECKERS` set, as in CI, any of
 //!   those fails it instead.
 
 use std::path::{Path, PathBuf};
@@ -554,7 +554,7 @@ fn runs_and_lints() {
                 list.join(", ")
             ),
         );
-        // The runtime as `tempest build` writes it, naming the version
+        // The runtime as `temper build` writes it, naming the version
         // the libraries depend on.
         let filled = temper_tmpl::version::fill_runtime(
             temper_be_rust::runtime::FILES,

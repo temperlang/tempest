@@ -8,7 +8,7 @@ uses that rely on identity, per file and in total.
 Covers Kotlin Temper's functional tests, each built as check_functional.py
 builds it (std's files it imports aren't counted there), std as one
 library, and the libraries under each LIBRARY directory given, found as
-`tempest test` finds them (each directory with a config.temper.md). Uses
+`temper test` finds them (each directory with a config.temper.md). Uses
 `run-temper --untyped`. The tests and std come from this repository's
 crates/temper-funtests/cases/ and lib/std/, or, with --temper, from a Kotlin
 Temper checkout. Lists the functional tests with no expression of unknown type, then the most

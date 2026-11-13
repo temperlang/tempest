@@ -7,7 +7,7 @@
     feature = "py",
     feature = "rust"
 ))]
-//! `tempest build`'s `temper.out` against Kotlin Temper's, for the
+//! `temper build`'s `temper.out` against Kotlin Temper's, for the
 //! functional tests that tempest translates (`COVERED`, `CLASSES`, and
 //! `NULLABLES`): every file's path, each backend's runtime beside the
 //! libraries, and the package files' names and versions, as
@@ -299,7 +299,7 @@ fn temper_out_is_kotlins() {
                 );
             }
         }
-        let mut command = Command::new(env!("CARGO_BIN_EXE_tempest"));
+        let mut command = Command::new(env!("CARGO_BIN_EXE_temper"));
         command.arg("build").arg("-w").arg(&root);
         for backend in BACKENDS {
             command.args(["-b", backend]);

@@ -524,7 +524,7 @@ function allPassed(run: RunOutput): boolean {
   return run.tests.every((t) => t.failure === null) && run.tests.length === run.defined && !run.failure;
 }
 
-/** `tempest test`'s summary, for the JavaScript run's tests. */
+/** `temper test`'s summary, for the JavaScript run's tests. */
 function summarize(tests: TestResult[], defined: number): string {
   const passed = tests.filter((t) => t.failure === null).length;
   const notRun = Math.max(0, defined - tests.length);
@@ -731,7 +731,7 @@ function show(result: CompileResult, ms: number): void {
   status(`Compiled in ${ms < 10 ? ms.toFixed(1) : Math.round(ms)} ms`, false);
 }
 
-/** The compiler's version, as `tempest --version` says it, in About. */
+/** The compiler's version, as `temper --version` says it, in About. */
 function showVersion(version: string): void {
   const list = document.querySelector("#about ul");
   if (!version || !list) return;

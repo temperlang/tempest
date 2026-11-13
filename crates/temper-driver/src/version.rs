@@ -34,7 +34,7 @@ pub fn describe() -> String {
 
 /// Makes the build's version the one this process names for runtimes,
 /// std, and core ([`temper_tmpl::version::current`]); a program calls it
-/// first thing, as `tempest` does. Without it, a library user's output
+/// first thing, as `temper` does. Without it, a library user's output
 /// names a dev build with no commits counted (`0.7.0-alpha.0.0`), as
 /// tests' does.
 pub fn init() {

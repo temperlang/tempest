@@ -41,12 +41,12 @@ something changed.
 
 ## What the release has
 
-- `tempest-VERSION-TARGET.tar.gz` (`.zip` on Windows): the compiler,
+- `temper-VERSION-TARGET.tar.gz` (`.zip` on Windows): the compiler,
   with std built in, for Linux x64 and Arm64, macOS Arm64, and Windows
   x64 and Arm64, from [binaries.yml](../../.github/workflows/binaries.yml);
 - `temper-wasm-VERSION.tar.gz`, and the VS Code extension's `.vsix`
   files (with their own version);
-- the runtimes (temper-core) and std, built by the Linux x64 tempest,
+- the runtimes (temper-core) and std, built by the Linux x64 `temper`,
   as each registry takes them: `.crate`s, npm `.tgz`s, wheels and
   sdists, NuGet `.nupkg`s, `temper-maven-VERSION.zip` (Maven Central's
   bundle layout, unsigned), and LuaRocks rockspecs and `.src.rock`s;
@@ -54,7 +54,7 @@ something changed.
 
 ## What to review
 
-- `tempest --version` from a downloaded binary says the tag's version
+- `temper --version` from a downloaded binary says the tag's version
   and commit, without "modified", on each platform you can run.
 - Each package names the version in its ecosystem's spelling
   (`0.7.0-rc.1`, `0.7.0rc1`, `0.7.0.rc.1-1`), and std depends on

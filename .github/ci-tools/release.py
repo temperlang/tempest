@@ -6,7 +6,7 @@ docs/contributing/releasing.md describes. Standard library only, so
 plain `python3` runs it too.
 
     release.py check v0.7.0-rc.1
-    release.py packages --tempest PATH --version 0.7.0-rc.1 --out DIR [--only rust,js]
+    release.py packages --temper PATH --version 0.7.0-rc.1 --out DIR [--only rust,js]
     release.py self-test
 
 `check` fails unless the tag is `v` and the workspace's version
@@ -15,12 +15,12 @@ or `-rc.K`, K from 1), as temper_tmpl::version spells them; otherwise it
 prints `version=`, `numbers=`, and `prerelease=` lines for
 $GITHUB_OUTPUT.
 
-`packages` builds a small library that imports std with that tempest,
+`packages` builds a small library that imports std with that temper,
 for every backend with a registry, then packs its runtime (temper-core)
 and std as each registry takes them, into DIR, flat: crates, npm
 tarballs, a wheel and an sdist each, NuGet packages, one Maven Central
 bundle (the repository layout, unsigned), and LuaRocks source rocks with
-their rockspecs. It checks that tempest names the version, and that the
+their rockspecs. It checks that temper names the version, and that the
 runtimes refuse publishing exactly when it's a pre-release. Where that
 refusal stops a tool from packing at all (NuGet's `IsPackable`, and
 Cargo's for temper-std, which needs temper-core publishable), a
@@ -59,7 +59,7 @@ PROBE_CONFIG = """# Release probe
 
     export let name = "release-probe";
 """
-# Uses std, so `tempest build` writes std beside the runtimes.
+# Uses std, so `temper build` writes std beside the runtimes.
 PROBE = """let { JsonTextProducer } = import("std/json");
 
 export let probe(): String {
@@ -250,13 +250,13 @@ def lua(build: Path, out: Path, release: bool) -> list[str]:
 PACK = {"rust": rust, "js": js, "py": py, "csharp": csharp, "java": java, "lua": lua}
 
 
-def packages(tempest: Path, version: str | None, out: Path, only: list[str]) -> int:
+def packages(temper: Path, version: str | None, out: Path, only: list[str]) -> int:
     problems: list[str] = []
     notes: list[str] = []
-    said = run(tempest, "--version").split()
+    said = run(temper, "--version").split()
     built = said[1] if len(said) > 1 else ""
     if version and built != version:
-        problems.append(f"tempest says it's {built!r}, not {version}")
+        problems.append(f"temper says it's {built!r}, not {version}")
     version = version or built
     release = "-" not in version
     out.mkdir(parents=True, exist_ok=True)
@@ -268,9 +268,9 @@ def packages(tempest: Path, version: str | None, out: Path, only: list[str]) -> 
         build = temp / "build"
         backends = [arg for e in only for arg in ("-b", e)]
         try:
-            run(tempest, "build", "-w", temp / "probe", "-o", build, *backends)
+            run(temper, "build", "-w", temp / "probe", "-o", build, *backends)
         except RuntimeError as e:
-            print(f"release.py: tempest build: {e}", file=sys.stderr)
+            print(f"release.py: temper build: {e}", file=sys.stderr)
             return 1
         for ecosystem in only:
             if ecosystem in MARKERS:
@@ -299,8 +299,8 @@ def main() -> int:
     check = sub.add_parser("check", help="check a tag against the workspace's version")
     check.add_argument("tag")
     pack = sub.add_parser("packages", help="build and pack the runtimes and std")
-    pack.add_argument("--tempest", type=Path, required=True)
-    pack.add_argument("--version", help="the version tempest must say it is")
+    pack.add_argument("--temper", type=Path, required=True)
+    pack.add_argument("--version", help="the version temper must say it is")
     pack.add_argument("--out", type=Path, required=True)
     pack.add_argument("--only", default=",".join(ECOSYSTEMS), help="comma-separated, of " + ", ".join(ECOSYSTEMS))
     sub.add_parser("self-test", help="test the tag rules")
@@ -321,7 +321,7 @@ def main() -> int:
     unknown = [e for e in only if e not in ECOSYSTEMS]
     if unknown:
         parser.error(f"--only: unknown {', '.join(unknown)}")
-    return packages(args.tempest.resolve(), args.version, args.out, only)
+    return packages(args.temper.resolve(), args.version, args.out, only)
 
 
 if __name__ == "__main__":

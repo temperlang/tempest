@@ -1,4 +1,4 @@
-// The compiler's worker: runs the wasm build of tempest off the page's
+// The compiler's worker: runs the wasm build of temper off the page's
 // thread, so typing never waits on it. The page sends the compiled
 // module once, then source to compile; each answer carries the request's
 // id, so the page can drop stale ones. Each compile answers twice: its

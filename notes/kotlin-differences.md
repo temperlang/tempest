@@ -1105,11 +1105,11 @@ Other differences we won't copy:
   outlives `temper` if it's killed (on a library whose Lua tests grew
   past 2.5 GB, the `lua` process ran on after its run was killed).
   Tempest gives each command 600 seconds (`--timeout`,
-  `TEMPEST_TIMEOUT`), a tests file that runs over failing alone; runs
+  `TEMPER_TIMEOUT`), a tests file that runs over failing alone; runs
   each in a process group that's killed when it ends, times out, or
   tempest gets SIGINT, SIGTERM, or SIGHUP, and on Linux, that dies with
   tempest; and on Linux limits Lua's, Python's, and C++'s test programs
-  to 4 GiB written (`TEMPEST_MEMORY_LIMIT`)
+  to 4 GiB written (`TEMPER_MEMORY_LIMIT`)
   ([docs/tools/cli.md](../docs/tools/cli.md#what-tools-start)).
   Test: tempest/tests/cli.rs, `test_timeout` and
   `killing_tempest_kills_its_children`.

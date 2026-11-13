@@ -5,7 +5,7 @@ be null, and `orelse` with `bubble()` and `panic()`: nullable
 parameters, results, locals, and fields, a nullable class type, and a
 failure caught where it's a value and where it stands alone, and a
 fallback with `??` as a function's last value. The log is what
-tempest's interpreter gives.
+the interpreter gives.
 
     export class Node(public value: Int, public next: Node?) {
       public last(): Int {

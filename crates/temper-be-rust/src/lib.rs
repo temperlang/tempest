@@ -210,7 +210,7 @@ pub const BACKEND: temper_tmpl::Backend = temper_tmpl::Backend {
 /// The package takes the library's name; its crate, the name with `_`
 /// for `-` (`hello-world` gives `hello_world`); its binary too, but for
 /// the names cargo forbids a binary ([`bin_name`]). Kotlin also copies
-/// `temper-core` beside the package; `tempest build` does too ([`runtime`]).
+/// `temper-core` beside the package; `temper build` does too ([`runtime`]).
 /// The name of a library's binary, which runs its `init`: the package's
 /// own, unless cargo forbids that for a binary (`build`, `deps`,
 /// `examples`, and `incremental`, its target directory's names), then

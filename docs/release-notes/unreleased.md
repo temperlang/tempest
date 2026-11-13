@@ -14,8 +14,9 @@
 - [`@json` adapters](#json-adapters)
 - [A class has only one constructor](#a-class-has-only-one-constructor)
 - [Extension methods](#extension-methods)
-- [Generated packages need this compiler's runtimes](#generated-packages-need-this-compilers-runtimes)
-- [Fixes for code Kotlin's Temper accepted](#fixes-for-code-kotlins-temper-accepted)
+- [Generated packages need the matching runtimes](#generated-packages-need-the-matching-runtimes)
+- [Fixes for code Temper 0.6.0 accepted](#fixes-for-code-temper-060-accepted)
+- [`temper` and its `TEMPER_*` settings](#temper-and-its-temper_-settings)
 
 ## 🚨Breaking change: Rest parameter syntax removed.
 
@@ -341,7 +342,7 @@ Not yet for generic types, nor std's `Date`.
 
 ## A class has only one constructor
 
-Several constructors were never portable (Kotlin's JS output, for
+Several constructors were never portable (the JS output, for
 one, was invalid), and now each one after the first is an error. For
 other ways to make instances, use a static method, or an object literal
 with the one constructor.
@@ -361,25 +362,25 @@ wherever it's visible, declared or imported: `"step on no pets".isPalindrome()`
 calls `stringIsPalindrome("step on no pets")`, on every backend; before,
 such a call couldn't be translated. A method of the same name that
 takes the arguments still wins. Two extensions that fit a call equally
-well, declared side by side, are now an error, where Kotlin's Temper
+well, declared side by side, are now an error, where Temper 0.6.0
 picked the first one.
 
-## Generated packages need this compiler's runtimes
+## Generated packages need the matching runtimes
 
 A generated package depends on exactly the compiler's version of its
 language's runtime, `temper-core`, and of `std`, as
 `0.7.0-alpha.0.123` (`0.7.0.dev123` for Python). Temper 0.6.0's output
-named the 0.6.0 runtimes on the package registries; this compiler's
+named the 0.6.0 runtimes on the package registries; the new
 runtimes gained APIs its output uses, and aren't on the registries
 yet, so use them from `temper.out/BACKEND/`, where `temper build`
 writes them, or from a release's packages
 ([target languages](../backends/README.md)).
 
-## Fixes for code Kotlin's Temper accepted
+## Fixes for code Temper 0.6.0 accepted
 
 - `new C(…)`, where `C`'s constructor `throws Bubble`, in a function
   that can't bubble is reported as "Cannot bubble from a function
-  without Bubble in its return type", as Kotlin's Temper reports it,
+  without Bubble in its return type", as Temper 0.6.0 reports it,
   instead of stopping translation.
 - `x ?? d`, where `x` is a nullable member named bare in its class, is
   a non-null value, as `this.x ?? d` is; it was an error.
@@ -389,3 +390,14 @@ writes them, or from a release's packages
   as a parameter of an undeclared type, fails where it runs when it's
   in a string template or has a method called, instead of keeping the
   module from being translated.
+
+## `temper` and its `TEMPER_*` settings
+
+The command line tool is `temper`, as in earlier releases, and each
+release's downloads are `temper-VERSION-TARGET.tar.gz` (`.zip` on
+Windows). The environment variables it reads are named `TEMPER_*`:
+`TEMPER_TIMEOUT` and `TEMPER_MEMORY_LIMIT` set the limits on what
+`temper test` and `temper run` start
+([the command line](../tools/cli.md#what-tools-start)). Development
+builds before this used other names for both, so scripts written for
+them need the new ones.

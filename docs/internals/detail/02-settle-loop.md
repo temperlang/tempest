@@ -104,7 +104,7 @@ a fixed point.
 **Why:** Temper's macros can declare names other statements need, and
 can need types before they know what to produce, so any fixed stage
 order is wrong for some program ([notes/design.md](../../../notes/design.md),
-section 5). Tempest's design, not yet presented to the team.
+section 5). This compiler's design, not yet presented to the team.
 
 ### A scheduler that knows nothing of Temper
 
@@ -192,7 +192,7 @@ and decide object literals). Between them,
 [`drop_dead_branches`](../../../crates/temper-frontend/src/dead_branches.rs)
 keeps only the live branch of an `if (false)` whose dead branch has an
 error, after folding an undeclared name's `!= null` to `true`. Kotlin
-does both silently; tempest reports the errors as errors and folds only
+does both silently; this compiler reports the errors as errors and folds only
 to recover, so the code generated past them runs as Kotlin's does. Then
 [`find_flow_facts`](../../../crates/temper-frontend/src/flow.rs)
 walks every function. After them, typing's checks and recording, then

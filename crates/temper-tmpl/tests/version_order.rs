@@ -2,7 +2,7 @@
 //! (`temper_tmpl::version`) in release order: dev builds, alpha 1 and its
 //! later commits, alpha 2, beta, rc, the release, and a dev build after
 //! it. Each runs a tool already on the machine and skips, saying so, where
-//! it's missing; `TEMPEST_REQUIRE_COMPARATORS=1` makes a missing one fail,
+//! it's missing; `TEMPER_REQUIRE_COMPARATORS=1` makes a missing one fail,
 //! for CI. Where found:
 //!
 //! - PEP 440: `packaging`, as pip vendors it, or on its own, with
@@ -66,14 +66,14 @@ fn run(command: &mut Command) -> Option<String> {
 }
 
 /// Fails on what a comparator found wrong; skips, or fails under
-/// `TEMPEST_REQUIRE_COMPARATORS`, where it couldn't run.
+/// `TEMPER_REQUIRE_COMPARATORS`, where it couldn't run.
 fn report(ecosystem: &str, output: Option<String>) {
     match output {
         Some(text) => {
             let wrong: Vec<&str> = text.lines().filter(|l| l.starts_with("wrong")).collect();
             assert!(wrong.is_empty(), "{ecosystem}:\n{}", wrong.join("\n"));
         }
-        None if env::var_os("TEMPEST_REQUIRE_COMPARATORS").is_some() => {
+        None if env::var_os("TEMPER_REQUIRE_COMPARATORS").is_some() => {
             panic!("{ecosystem}: its comparator isn't here")
         }
         None => eprintln!("skipped: {ecosystem}'s comparator isn't here"),

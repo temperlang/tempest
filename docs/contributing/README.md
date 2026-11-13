@@ -10,12 +10,12 @@ interaction with other contributors and community members; the
 
 ## What's here
 
-This repository is tempest, Temper's compiler in Rust. Start with:
+This repository is Temper's compiler, written in Rust. Start with:
 
-- [How tempest works](../internals/README.md): each stage, with
+- [How the compiler works](../internals/README.md): each stage, with
   diagrams and links into the code.
 - [Design notes](../../notes/README.md): the plan, the decisions behind
-  it, and [where tempest differs from Temper's first
+  it, and [where it differs from Temper's first
   compiler](../../notes/kotlin-differences.md).
 - [Writing these docs](docs.md): their conventions, how their examples
   are checked, and the plan for rendering them.
@@ -49,8 +49,8 @@ This repository is tempest, Temper's compiler in Rust. Start with:
 | `temper-be-testkit` | What the backends' tests share: programs, goldens, and tool discovery |
 | `temper-funtests` | Temper's functional tests, in its `cases/` |
 | `temper-driver` | The registry of backends, the one compile path, `build`, and running tests with each backend's tools |
-| `temper-lsp` | The language server, `tempest lsp` |
-| `tempest` | The command-line tool: argument parsing and output |
+| `temper-lsp` | The language server, `temper lsp` |
+| `tempest` | The command-line tool, `temper`: argument parsing and output |
 | `temper-wasm` | The compiler for the browser, the base of the playground |
 | `temper-os` | The OS calls std lacks, behind safe functions: the only crate with unsafe code |
 
@@ -70,12 +70,11 @@ later.
 
     cargo build --release -p tempest
 
-Each backend is a cargo feature, all on by default. While tempest
-grows toward Temper's command line, each backend's name is also a
-development command that translates files and prints, or writes, the
-result:
+That writes the command, `target/release/temper`; the `tempest` crate
+builds it. Each backend is a cargo feature, all on by default. To see
+one language's code for a library:
 
-    cargo run --release -p tempest -- py|rust|js|java|csharp|cpp|lua [--out DIR] FILE...
+    target/release/temper build -w DIR -b py|rust|js|java|csharp|cpp|lua -o OUT
 
 ## Testing
 
@@ -104,7 +103,7 @@ For the docs:
     uv run compat/check_doc_examples.py   # examples run as marked
 
 CI runs formatting, clippy, the link check, every crate's tests with
-each language's toolchain (`tempest test -b` on small fixture libraries
+each language's toolchain (`temper test -b` on small fixture libraries
 for every backend among them), the wasm build, and the functional
 tests, all on Rust 1.85.0. A nightly job tests C++ on more compilers
 and under sanitizers, and runs real libraries' tests on every backend,
@@ -149,7 +148,7 @@ Temper's version is written once, as the root `Cargo.toml`'s
 generated packages all take it, each in its ecosystem's spelling
 ([Versions](../internals/detail/06-backends.md#versions-one-version-spelled-for-each-ecosystem)).
 Between releases, builds are dev builds named by the commits since the
-last release tag (`0.7.0-alpha.0.123`), which `tempest --version` shows
+last release tag (`0.7.0-alpha.0.123`), which `temper --version` shows
 with the commit.
 
 Releases are tag-driven: a signed `v` tag on `main` (`v0.7.0-rc.1`,

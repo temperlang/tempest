@@ -91,7 +91,7 @@ Short for "con**cat**enate", combines multiple strings into one string.
 // ✅
 ```
 
-> **Note:** tempest doesn't declare `cat` yet ([inconsistencies](../inconsistencies.md#i10-examples-tempest-doesnt-run-as-marked)).
+> **Note:** Temper doesn't declare `cat` yet ([inconsistencies](../inconsistencies.md#i10-examples-that-dont-run-as-marked)).
 
 [`+`](#-2) does not concatenate strings; it's reserved for math.
 
@@ -1255,7 +1255,7 @@ console.log((m is Minimal).toString()); //!outputs "true"
 // ✅
 ```
 
-Source: [*TypeDefinitionMacro.kt*](https://github.com/temperlang/temper/blob/main/frontend/src/commonMain/kotlin/lang/temper/frontend/TypeDefinitionMacro.kt), in Temper's first compiler.
+Source: [*TypeDefinitionMacro.kt*](https://github.com/temperlang/temper/blob/main/frontend/src/commonMain/kotlin/lang/temper/frontend/TypeDefinitionMacro.kt), in Temper's previous compiler.
 
 Re parenthetical declarations, see also: [`@noProperty` decorator](#noproperty-decorator)
 
@@ -1327,7 +1327,7 @@ dataFile(
 // ✅ null
 ```
 
-> **Note:** tempest doesn't declare `dataFile`, and has no `data` backend ([inconsistencies](../inconsistencies.md#i10-examples-tempest-doesnt-run-as-marked)).
+> **Note:** Temper doesn't declare `dataFile` yet, and has no `data` backend ([inconsistencies](../inconsistencies.md#i10-examples-that-dont-run-as-marked)).
 
 If the path starts with a `/` then the rest of the path will be resolved
 relative to the library's root directory.
@@ -1789,7 +1789,7 @@ subtype.
 
 See also [`class`](#class) for details and examples of type declaration syntax.
 
-Source: [*TypeDefinitionMacro.kt*](https://github.com/temperlang/temper/blob/main/frontend/src/commonMain/kotlin/lang/temper/frontend/TypeDefinitionMacro.kt), in Temper's first compiler.
+Source: [*TypeDefinitionMacro.kt*](https://github.com/temperlang/temper/blob/main/frontend/src/commonMain/kotlin/lang/temper/frontend/TypeDefinitionMacro.kt), in Temper's previous compiler.
 
 #### *SubType* `extends` *SuperType*
 
@@ -1929,7 +1929,7 @@ console.log(f()); //!outputs "function-declaration"
 // ✅
 ```
 
-> **Note:** tempest doesn't support named function expressions yet ("Use of builtin fn is malformed") ([inconsistencies](../inconsistencies.md#i10-examples-tempest-doesnt-run-as-marked)).
+> **Note:** Temper doesn't support named function expressions yet ("Use of builtin fn is malformed") ([inconsistencies](../inconsistencies.md#i10-examples-that-dont-run-as-marked)).
 
 ### `orelse`
 The `orelse` infix operator allows recovering from
@@ -2363,7 +2363,7 @@ f([2]) //!outputs "Found 2!"
 // ✅
 ```
 
-> **Note:** tempest doesn't inline block lambdas to let them `return` from the enclosing function, so reports "Expected subtype of Void, but got Boolean" ([inconsistencies](../inconsistencies.md#i10-examples-tempest-doesnt-run-as-marked)).
+> **Note:** Temper doesn't inline block lambdas to let them `return` from the enclosing function, so reports "Expected subtype of Void, but got Boolean" ([inconsistencies](../inconsistencies.md#i10-examples-that-dont-run-as-marked)).
 
 After inlining, that code is equivalent to this where the `.forEach` call has been
 turned into a `while` loop (as specified by `List.forEach`) and the block lambda is now in
@@ -2417,7 +2417,7 @@ to make it easy to encode instances of the type to and from JSON.
 There are a number of strategies used to generate encoders and
 decoders outlined below.
 
-> **Note:** tempest doesn't generate adapters for generic `@json`
+> **Note:** Temper doesn't generate adapters for generic `@json`
 > types, nor for std's `Date`, yet.
 
 #### The concrete class strategy
@@ -3021,7 +3021,7 @@ console.log("console");                   //!outputs "[ console ]"
 // ✅
 ```
 
-> **Note:** tempest doesn't declare the `Console` type, or `builtins.console`, yet ([inconsistencies](../inconsistencies.md#i10-examples-tempest-doesnt-run-as-marked)).
+> **Note:** Temper doesn't declare the `Console` type, or `builtins.console`, yet ([inconsistencies](../inconsistencies.md#i10-examples-that-dont-run-as-marked)).
 
 `builtins` must be followed by a `.`.  Unlike `globalThis` in JavaScript, `builtins` is not
 an object; it's a special syntactic form.

@@ -28,8 +28,8 @@ Every backend crate has much the same files:
 | `ops.rs` | How each builtin operator is spelled |
 | `connected.rs` | How each of core's `connected` declarations maps to the language's runtime, `temper-core` |
 | `tree.rs` | The output tree and its printer, which adds parentheses only where precedence needs them, and lays out code in the language's usual style |
-| `runtime.rs` | The runtime's files, copied beside the output by `tempest build` |
-| `tools.rs` | Natively, how the language runs built libraries' tests, for `tempest test -b`, and a library's top level, for `tempest run -b`: finding its tools, their command lines, and reading their results |
+| `runtime.rs` | The runtime's files, copied beside the output by `temper build` |
+| `tools.rs` | Natively, how the language runs built libraries' tests, for `temper test -b`, and a library's top level, for `temper run -b`: finding its tools, their command lines, and reading their results |
 
 Which lowerings each backend runs, in what order, and how the seven
 differ: [the pipeline](detail/06-backends.md#the-pipeline-each-backend-runs)

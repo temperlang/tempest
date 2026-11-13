@@ -1,12 +1,12 @@
 # 10. Where tests go
 
 A cheat sheet for adding tests, for readers who know Kotlin Temper's
-test layout. Most of tempest's tests are goldens: an input, and the
+test layout. Most of this compiler's tests are goldens: an input, and the
 output it should give, checked in beside it.
 
-## Kotlin's places, and tempest's
+## Kotlin's places, and this compiler's
 
-| In Kotlin Temper | In tempest |
+| In Kotlin Temper | Here |
 |---|---|
 | Lexer and parser tests | `.cases` files in `temper-syntax`: `tests/*.cases` for tokens ([`lex.rs`](../../crates/temper-syntax/tests/lex.rs)), `tests/parse/` for trees, `tests/ast/` for the grammar step, and `tests/module/` for what comes after it. `compat/check_lex.py`, `check_parse.py`, and `check_ast.py` compare the same inputs with Kotlin Temper |
 | Stage tests (`frontend/src/commonTest/resources/.../stage-tests/`) | `.cases` files in `temper-frontend`'s `tests/settle/` ([`settle.rs`](../../crates/temper-frontend/tests/settle.rs)): names, macros, and builtins; typing in `types.cases`, `class-types.cases`, `flow.cases`, and `fields-first.cases`; the interpreter in `run.cases`. A new `.cases` file there is picked up as it is |
@@ -18,7 +18,7 @@ output it should give, checked in beside it.
 | Language server tests | `temper-analysis`'s [`analysis.rs`](../../crates/temper-analysis/tests/analysis.rs) for queries, and `temper-lsp`'s [`lsp.rs`](../../crates/temper-lsp/tests/lsp.rs) for a scripted session; the VS Code extension's in `editors/vscode/` ([its tests](detail/09-language-server.md#tests)) |
 | (none) | The playground: `temper-wasm`'s [`examples.rs`](../../crates/temper-wasm/tests/examples.rs), one line per example, and a smoke test in a browser ([its tests](detail/08-playground.md#tests)) |
 | (none) | The REPL: transcripts in `tests/repl/*.cases` in `temper-frontend` and `temper-driver`, and the docs' transcripts ([`repl_docs.rs`](../../crates/temper-frontend/tests/repl_docs.rs)) |
-| `temper test` on libraries | Small fixture libraries in `tempest`'s [`cli.rs`](../../crates/tempest/tests/cli.rs), on every backend; real libraries' tests nightly, from the list in `.github/nightly-libraries.json` |
+| `temper test` on libraries | Small fixture libraries in the `tempest` crate's [`cli.rs`](../../crates/tempest/tests/cli.rs), on every backend; real libraries' tests nightly, from the list in `.github/nightly-libraries.json` |
 
 Unit tests of one module stay in its source file, under `#[cfg(test)]`,
 as Rust has them.
@@ -59,13 +59,13 @@ review the diff:
 
     cargo test -p temper-frontend --test settle   # one crate's test file
     cargo test -p temper-be-js                    # one backend
-    TEMPEST_CASES=casts-as-expr cargo test -p temper-be-js   # a few functional tests
+    TEMPER_CASES=casts-as-expr cargo test -p temper-be-js   # a few functional tests
     uv run compat/check_functional.py algos/fibonacci        # one functional test, on the interpreter
 
 A backend's tests run the generated code with the language's own tools
 and checkers: mypy and pyright, `tsc` and Mocha, LuaLS, and the
 compilers. A missing tool skips its test with a message. CI sets
-`TEMPEST_REQUIRE_CHECKERS`, so there a missing tool fails instead; set
+`TEMPER_REQUIRE_CHECKERS`, so there a missing tool fails instead; set
 it locally to be sure nothing was skipped. Tools are found on `PATH`,
 or by an environment variable named in each crate's
 `tests/functional.rs` (such as `MYPY` or `TSC`).

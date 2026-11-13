@@ -403,7 +403,7 @@ impl Settle {
             // call a generic class's static members, as `jsonAdapter`.
             report(
                 self,
-                format!("tempest doesn't yet derive JSON adapters for generic type {class_text}"),
+                format!("Temper doesn't yet derive JSON adapters for generic type {class_text}"),
             );
             return Vec::new();
         } else if from_json || to_json {

@@ -231,7 +231,7 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
         }
     }
     // A library without a root module loads every module, as Lua's
-    // `init.lua` requires each, so `tempest run` runs them all.
+    // `init.lua` requires each, so `temper run` runs them all.
     if !p.modules.iter().any(|m| m.path.is_empty()) {
         for module in &p.modules {
             for class in loads(p, module) {

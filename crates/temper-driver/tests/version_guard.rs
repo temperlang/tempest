@@ -113,7 +113,7 @@ fn the_version_is_written_once() {
 
 /// The workspace's `[workspace.package]` says `publish = false`, which
 /// each crate takes (`the_version_is_written_once`): releases ship
-/// `tempest` and the runtimes, never these crates.
+/// `temper` and the runtimes, never these crates.
 #[test]
 fn the_workspace_is_not_published() {
     let manifest = fs::read_to_string(root().join("Cargo.toml")).unwrap();
@@ -129,7 +129,7 @@ fn the_workspace_is_not_published() {
 }
 
 /// Python's runtime keeps a pyproject.toml for mypyc's compiled wheels,
-/// which `tempest build` neither ships nor fills (`temper-be-py`'s
+/// which `temper build` neither ships nor fills (`temper-be-py`'s
 /// `runtime::FILES`), so it always refuses PyPI, as the runtimes do
 /// until a release.
 #[test]

@@ -317,7 +317,7 @@ pub(crate) const INTERRUPTED: &str = "interrupted";
 /// playground and tests' own runs of small programs; compile-time
 /// evaluation will need one too. About a second in a release build.
 pub const FUEL: u64 = 50_000_000;
-/// `tempest test`'s default budget for each test, and for the top-level
+/// `temper test`'s default budget for each test, and for the top-level
 /// code before them (`--fuel` sets it). Wide on purpose: at least 10
 /// times the real libraries' slowest test, so none comes near it, as it
 /// only has to end true runaways (memory, the real hazard, is bounded by

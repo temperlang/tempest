@@ -52,7 +52,7 @@
 //!   its `Warning` level, but for a library with host code, which isn't
 //!   typed for LuaLS, run in a directory of its own. Skipped, with a
 //!   message, without `lua`, and the check without LuaLS; with
-//!   `TEMPEST_REQUIRE_CHECKERS` set, as in CI, either missing fails it
+//!   `TEMPER_REQUIRE_CHECKERS` set, as in CI, either missing fails it
 //!   instead. A missing `luac` only skips.
 
 use std::path::{Path, PathBuf};

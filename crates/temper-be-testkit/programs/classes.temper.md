@@ -7,7 +7,7 @@ private members read on another instance, a `@noProperty` input that
 initializers read, though a getter and setter share its name, interfaces
 with abstract and default members, `@auto("==")` and `@operator` methods, `toString`, `is`, `as`, and narrowing. Calls chain on
 objects that methods return, which C++ must keep alive. The log is what
-tempest's interpreter gives.
+the interpreter gives.
 
     export interface Shape {
       public get area(): Int;

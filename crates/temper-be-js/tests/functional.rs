@@ -49,7 +49,7 @@
 //!   `expectedFailures`.
 //!   Skipped, with a message,
 //!   without Node, and its type check without `tsc`; with
-//!   `TEMPEST_REQUIRE_CHECKERS` set, as in CI, either missing fails it
+//!   `TEMPER_REQUIRE_CHECKERS` set, as in CI, either missing fails it
 //!   instead.
 //! - `missing_host_code`: a connected class whose `_connected.js` is
 //!   missing is `NotYet`, naming the file.

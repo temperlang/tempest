@@ -1,5 +1,5 @@
 #pragma once
-// The runtime's version, which `tempest build` writes in.
+// The runtime's version, which `temper build` writes in.
 #define TEMPER_CORE_VERSION "0.0.0"
 #include "temper_bubble.hpp"
 #include "any_value.hpp"

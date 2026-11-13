@@ -140,7 +140,7 @@ pub const BACKEND: temper_tmpl::Backend = temper_tmpl::Backend {
 /// The package takes the library's name, with `_` for `-`
 /// ([`names::package`]), and a module's path after it; the classes take
 /// the package's last part in Pascal case. Kotlin also copies
-/// `temper-core` beside the package; `tempest build` does too
+/// `temper-core` beside the package; `temper build` does too
 /// ([`runtime`]).
 /// std's modules with support code, as Kotlin's Java backend writes it
 /// into std's output: each module's path, and its support class's file

@@ -1,8 +1,8 @@
 //! Each backend's built-in runtime (`temper_be_*::runtime::FILES`), which
-//! `tempest build` writes beside the libraries, is its crate's
+//! `temper build` writes beside the libraries, is its crate's
 //! `runtime/temper-core`, copied as Kotlin copies it: every file but its
 //! dotfiles and its own tests and tools, with the same text, where each
-//! place naming its version names the placeholder `tempest build` fills,
+//! place naming its version names the placeholder `temper build` fills,
 //! and which only a release lets be published.
 
 use std::fs;
@@ -58,7 +58,7 @@ fn check(backend: &str, files: &[(&str, &str)], runtime: &RuntimeVersion) {
     unpublished(backend, files, runtime);
 }
 
-/// Until a release, a runtime as `tempest build` writes it can't be
+/// Until a release, a runtime as `temper build` writes it can't be
 /// published, where its ecosystem has a way to say so; a release drops
 /// what says so, and nothing else.
 #[allow(dead_code)] // Unless every backend is left out.

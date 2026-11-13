@@ -33,12 +33,12 @@ Marketplace yet. How to install it, and its settings, are in
 
 ## The language server
 
-`tempest lsp`, or `tempest serve`, speaks the protocol over standard
+`temper lsp`, or `temper serve`, speaks the protocol over standard
 input and output.
 [How it works](../internals/09-language-server.md) is in the internals.
 
-> **Note:** Temper's first compiler starts its server with `temper
-> serve --port N`, and its extension, "Temper Language Support",
-> is built from its repository; tempest's is `tempest lsp` (or
-> `tempest serve`, without `--port`), on standard input and output
+> **Note:** Temper's earlier releases start the server with `temper
+> serve --port N`, and their extension, "Temper Language Support", is
+> built from their repository; now it's `temper lsp` (or `temper
+> serve`, without `--port`), on standard input and output
 > ([inconsistencies](../inconsistencies.md#i9-the-command-line)).

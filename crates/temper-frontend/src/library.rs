@@ -534,7 +534,7 @@ impl Message {
             Message::JsonInterop(text) => text.clone(),
             Message::ContentTag(problem) => format!("content tag reported:{problem}"),
             Message::TestsInRepl => "Tests don't run in the REPL: write them in a library's \
-                                     files, and run tempest test"
+                                     files, and run temper test"
                 .into(),
             Message::Unsupported(what) => format!("Not supported yet: {what}"),
             Message::NeverSettled(chain) => format!("Never settled, waiting on {chain}"),

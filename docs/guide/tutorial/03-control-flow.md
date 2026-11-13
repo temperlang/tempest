@@ -5,7 +5,7 @@ Now we actually get into programming logic. And we'll still use the Temper REPL
 for now:
 
 ```sh
-tempest repl
+temper repl
 ```
 
 We can also start with a variation of our types from before. You can paste this
@@ -72,8 +72,8 @@ interactive#6: ["Rectangle of size 1.5 x 0.5","Circle of radius 2.0"]
 
 And top-level `let` function definitions are also shorthand for `fn` assignment:
 
-> **Note:** tempest wants a declared type for the second form
-> ([inconsistencies](../../inconsistencies.md#i24-tutorial-examples-tempest-doesnt-run)).
+> **Note:** Temper now wants a declared type for the second form
+> ([inconsistencies](../../inconsistencies.md#i24-tutorial-examples-that-dont-run)).
 
 <!-- repl: skip -->
 ```temper
@@ -180,8 +180,8 @@ loop behavior. Temper also has `do ... while` loops. But to be more surprising
 maybe, let's rewrite the above using explicit `fn` function blocks as described
 earlier:
 
-> **Note:** tempest reports this `do(fn () { … })` as malformed
-> ([inconsistencies](../../inconsistencies.md#i24-tutorial-examples-tempest-doesnt-run)).
+> **Note:** Temper now reports this `do(fn () { … })` as malformed
+> ([inconsistencies](../../inconsistencies.md#i24-tutorial-examples-that-dont-run)).
 
 <!-- repl: skip -->
 ```temper

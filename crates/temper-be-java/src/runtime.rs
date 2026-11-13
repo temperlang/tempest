@@ -4,7 +4,7 @@
 //! it that Kotlin copies: not its
 //! dotfiles, nor its own tests and tools (JS's `package-lock.json`,
 //! Python's `mypyc/`, and Java's `src/test/`). [`VERSION`] says where
-//! its files name its version, which `tempest build` fills in (and
+//! its files name its version, which `temper build` fills in (and
 //! Lua's rockspec is renamed for it, as Kotlin names it); the sources say
 //! `0.0.0`, so the runtime still builds and tests where it is.
 
@@ -47,7 +47,7 @@ pub const FILES: &[(&str, &str)] = &[
     ),
 ];
 
-/// Where the runtime names its version, which `tempest build` fills with
+/// Where the runtime names its version, which `temper build` fills with
 /// the build's, in SemVer's spelling.
 ///
 /// Until a release, it skips publishing, as the Central Portal's plugin
@@ -61,6 +61,6 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     }],
     unpublished: &[Unpublished {
         path: "pom.xml",
-        text: "    <!-- tempest build drops this and the next two lines only for a release. -->\n    <skipPublishing>true</skipPublishing>\n    <maven.deploy.skip>true</maven.deploy.skip>\n",
+        text: "    <!-- temper build drops this and the next two lines only for a release. -->\n    <skipPublishing>true</skipPublishing>\n    <maven.deploy.skip>true</maven.deploy.skip>\n",
     }],
 };

@@ -1,4 +1,4 @@
-//! `tempest run --library NAME -b BACKEND`: a library's top level, run,
+//! `temper run --library NAME -b BACKEND`: a library's top level, run,
 //! as Kotlin Temper's `temper run` does: every library under the work
 //! root is built for the backend ([`build`]), then the backend's tools
 //! run the one named ([`temper_tmpl::Tools::run`]), with what it prints

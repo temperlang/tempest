@@ -9,7 +9,7 @@ weeks old, so a bad release has time to be caught first.
 ## What runs where
 
 Linux x64 on every push and pull request, so a change is checked in
-minutes; every other platform tempest is released for nightly or
+minutes; every other platform `temper` is released for nightly or
 weekly, and whenever someone asks (below).
 
 ### Every push and pull request: Linux x64
@@ -21,14 +21,14 @@ run takes about as long as its slowest job:
 | Job | What it checks |
 | --- | --- |
 | `lint, core` | formatting; clippy, with and without default features; the workflows parse as YAML; the docs' links; Temper's functional tests on the interpreter; the size and speed charts; the rules for release tags; then every crate's tests but the backends' and `tempest`'s, and again without default features, `tempest`'s included |
-| `cli` | `tempest`'s tests with every backend, so every toolchain |
+| `cli` | The `tempest` crate's tests with every backend, so every toolchain |
 | `py, js, lua, rust` | those backends' tests, with mypy, pyright, TypeScript, Mocha, LuaLS, Lua 5.4.6 and LuaSocket, and again on LuaJIT; the Rust runtime's own; and the version's spellings, sorted by each ecosystem's comparator |
 | `java, csharp, cpp` | those backends' tests, with Java 21 and JUnit, .NET 6, and g++ 13, sanitized too, and libcurl; and `strict`: all generated C++ at -O2 by g++ 12 and 14 and clang++ |
-| `release, playground` | tempest's release build, the VS Code extension (tested in a real VS Code), the docs' examples, and the docs site; the wasm build, the playground, and its smoke test in headless Chromium |
+| `release, playground` | `temper`'s release build, the VS Code extension (tested in a real VS Code), the docs' examples, and the docs site; the wasm build, the playground, and its smoke test in headless Chromium |
 
 `cli` and `release, playground` check out the whole history and its
 tags (`fetch-depth: 0`), as binaries.yml and pages.yml do, so the
-tempest and playground they build name a real dev build
+`temper` and playground they build name a real dev build
 (`0.7.0-alpha.0.123`); the other jobs' builds don't say their version,
 so they check out only the commit.
 
@@ -38,7 +38,7 @@ fails, so a failure names its check, and one doesn't hide another
 toolchains its tests use, through one local action,
 [.github/actions/toolchains](../../.github/actions/toolchains/action.yml),
 which also says why each tool is there. The tests run with
-`TEMPEST_REQUIRE_CHECKERS`, so a missing tool fails them rather than
+`TEMPER_REQUIRE_CHECKERS`, so a missing tool fails them rather than
 skipping.
 
 **What a change runs.** A first job, `changes`, lists the files changed
@@ -61,7 +61,7 @@ Each job caches its build with `Swatinem/rust-cache`, keyed by job (and
 by group's `id`, for the backends, since keys can't have commas), saved
 only from `main`; pull requests read
 `main`'s. The cache holds third-party crates, built, and cargo's
-downloads: tempest's own crates are rebuilt in each job, which is most
+downloads: the workspace's own crates are rebuilt in each job, which is most
 of a job's build, so there are few jobs, each running many checks. A
 newer push to a pull request cancels the older run.
 
@@ -100,8 +100,8 @@ for, one job each from one definition, in two tiers:
 | `x86_64-pc-windows-msvc`    | `windows-2025`     |
 | `aarch64-pc-windows-msvc`   | `windows-11-arm`   |
 
-There's no Intel macOS (`x86_64-apple-darwin`) binary, as in Kotlin
-Temper's regular bundles; Intel Macs can build tempest from source with
+There's no Intel macOS (`x86_64-apple-darwin`) binary, as in Temper's
+earlier releases' bundles; Intel Macs can build `temper` from source with
 cargo.
 
 - **`platforms-quick`, nightly,** tests the code that differs by
@@ -114,10 +114,10 @@ cargo.
   Support` on macOS, `%APPDATA%` on Windows); and child processes'
   (`temper-tmpl`'s `children.rs`): process groups and time limits on
   Unix, and time limits alone on Windows, which has no process groups
-  yet. Then all of `tempest`'s tests without backends.
+  yet. Then all of `temper`'s tests without backends.
 - **`platforms`, weekly,** does the same, then each backend's tests, a
   step each, with the same toolchain action as `ci.yml`'s, and
-  `tempest`'s tests with that platform's backends built in. It repeats
+  `temper`'s tests with that platform's backends built in. It repeats
   the quick tier's steps, which share its build, so every run of
   either tier checks the REPL and child processes.
 
@@ -132,13 +132,13 @@ can't pass by leaving tests out,
 unless at least a given number of tests passed (for the REPL's
 command, all of them on macOS and Windows); raise its counts as
 tests are added. The backends' tests run with
-`TEMPEST_REQUIRE_CHECKERS`, so a missing tool fails, except what a
+`TEMPER_REQUIRE_CHECKERS`, so a missing tool fails, except what a
 platform is let off by name (below). Windows checks text files out
 with CRLF line ends, so the job turns that off (`core.autocrlf false`)
 before checking out. Warnings are errors (`RUSTFLAGS`), so code only
 these platforms compile stays as clean as clippy keeps Linux's; the
-last step, `tempest`'s tests with backends, builds without, as
-`tempest test -b rust` passes them on to cargo on generated crates.
+last step, `temper`'s tests with backends, builds without, as
+`temper test -b rust` passes them on to cargo on generated crates.
 
 **Each platform's toolchains:**
 
@@ -159,7 +159,7 @@ What's left out, and why:
 - **LuaLS** is checked against a SHA-256 recorded for each platform's
   download in [install.py](../../.github/ci-tools/install.py)'s
   `LUALS_SHA256`, and only Linux x64's is recorded. The job lets it be
-  missing (`TEMPEST_ALLOW_MISSING: LuaLS`), so the Lua tests skip their
+  missing (`TEMPER_ALLOW_MISSING: LuaLS`), so the Lua tests skip their
   type check, saying so. To check LuaLS on a platform, record the
   `sha256sum` of its asset (`lua-language-server-VERSION-linux-arm64.tar.gz`,
   `-darwin-arm64.tar.gz`, or `-win32-x64.zip`) there; once all three
@@ -172,18 +172,18 @@ What's left out, and why:
 - **The C++ backend's own runs on macOS and Windows** (`runs`,
   `strict`, `co_await_interop`, and `net_client_from_host`, skipped by
   name): they build with g++'s options and sanitizers. C++ is tested
-  there through CMake, as users build it, by `tempest`'s tests
-  (`tempest test -b cpp` and CMake's build of `tempest build`'s
+  there through CMake, as users build it, by `temper`'s tests
+  (`temper test -b cpp` and CMake's build of `temper build`'s
   output); the C++ backend's goldens and other tests still run.
 - **LuaJIT** runs on Linux x64 only, in `ci.yml`.
 
-`TEMPEST_ALLOW_MISSING` takes comma-separated words, each matched in a
+`TEMPER_ALLOW_MISSING` takes comma-separated words, each matched in a
 missing tool's message; the test still says what it skipped.
 
 **Timings,** to be checked against the first runs: `platforms`' jobs
-build tempest twice (with and without `RUSTFLAGS`) and each backend's
+build `temper` twice (with and without `RUSTFLAGS`) and each backend's
 tests, so perhaps 30 to 60 minutes, Windows the slowest;
-`platforms-quick`'s build tempest once, without toolchains, so perhaps
+`platforms-quick`'s build `temper` once, without toolchains, so perhaps
 10 to 15. Standard runners are free for public repositories, on every
 OS; `platforms` runs weekly, and the nightly jobs skip a day without
 commits, to keep the queue short and spare GitHub's machines.
@@ -199,7 +199,7 @@ tested.
 
 [release.yml](../../.github/workflows/release.yml) checks the tag
 against the workspace's version, calls binaries.yml for the binaries,
-packs the runtimes and std for each registry with the Linux x64 tempest
+packs the runtimes and std for each registry with the Linux x64 `temper`
 just built ([release.py](../../.github/ci-tools/release.py)), and makes
 the GitHub release, a pre-release for an alpha, beta, or rc tag
 ([Releasing](releasing.md)). It publishes to no package registry.

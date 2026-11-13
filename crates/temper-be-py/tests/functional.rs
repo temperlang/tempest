@@ -39,7 +39,7 @@
 //!   once per case; a case it finds problems in is checked again alone,
 //!   and that message reported (`check_types`). Skipped, with
 //!   a message, without Python 3.11 or later (`python3`, or `PYTHON`);
-//!   with `TEMPEST_REQUIRE_CHECKERS` set, as in CI, a missing Python or
+//!   with `TEMPER_REQUIRE_CHECKERS` set, as in CI, a missing Python or
 //!   checker fails it instead. A library that imports another
 //!   (`imports-library`) runs with it beside it. `python -m py_compile`
 //!   checks each tests file; a test that runs as tests
@@ -51,7 +51,7 @@
 //!   (`tests/module_names.py`). The cases that log run in one
 //!   interpreter (`tests/bulk_runner.py`), and any that doesn't log what
 //!   it expects runs again alone, whose result counts; with
-//!   `TEMPEST_PY_BULK=0`, each runs alone (notes/test-speed.md,
+//!   `TEMPER_PY_BULK=0`, each runs alone (notes/test-speed.md,
 //!   "Python's functional tests in bulk").
 
 use std::path::{Path, PathBuf};
@@ -688,8 +688,8 @@ fn runs() {
         let out = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("be-py");
         let mut failures = Vec::new();
         // The cases that log run in one interpreter after the others
-        // (`run_batch`), unless `TEMPEST_PY_BULK=0`.
-        let bulk = env::var("TEMPEST_PY_BULK").map_or(true, |v| v != "0");
+        // (`run_batch`), unless `TEMPER_PY_BULK=0`.
+        let bulk = env::var("TEMPER_PY_BULK").map_or(true, |v| v != "0");
         let mut batch = Vec::new();
         // Every library module generated, for `check_module_names`.
         let mut modules = Vec::new();

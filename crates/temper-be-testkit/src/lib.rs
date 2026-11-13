@@ -22,7 +22,7 @@
 //! - **Tools:** [`tool`] finds one named by an environment variable or on
 //!   `PATH` ([`temper_tmpl::tools`], which backends' own test runners
 //!   share, as they share its JUnit XML reading); a missing one skips its test with a message ([`missing`]),
-//!   unless `TEMPEST_REQUIRE_CHECKERS` is set, as in CI, when it fails.
+//!   unless `TEMPER_REQUIRE_CHECKERS` is set, as in CI, when it fails.
 //! - **Runtimes:** [`cached`] builds something once under
 //!   `CARGO_TARGET_TMPDIR`, keyed by a hash of its inputs, and keeps it
 //!   until they change.
@@ -384,7 +384,7 @@ pub fn cases(backend: &str, programs: &[&str]) -> Vec<Case> {
 }
 
 /// The functional tests that backends' other runs read, besides
-/// [`COVERED`]'s, which `TEMPEST_CASES` keeps.
+/// [`COVERED`]'s, which `TEMPER_CASES` keeps.
 const READ_ELSEWHERE: [&str; 4] = [
     "classes/static-properties",
     "functions/connected",
@@ -395,11 +395,11 @@ const READ_ELSEWHERE: [&str; 4] = [
 /// [`cases`], with more functional tests: `tests`, as [`CLASSES`].
 pub fn cases_with(backend: &str, programs: &[&str], tests: &[&str]) -> Vec<Case> {
     let mut cases = functional_cases(backend, tests);
-    // `TEMPEST_CASES=casts-as-expr,locals` runs only the functional tests
+    // `TEMPER_CASES=casts-as-expr,locals` runs only the functional tests
     // whose keys contain one of these, to work on a few; the shared
     // programs stay, and [`COVERED`] and [`READ_ELSEWHERE`], as other runs
     // read them.
-    if let Ok(only) = env::var("TEMPEST_CASES") {
+    if let Ok(only) = env::var("TEMPER_CASES") {
         let only: Vec<&str> = only.split(',').filter(|s| !s.is_empty()).collect();
         let only = if only.is_empty() { vec![""] } else { only };
         let kept = |key: &str| {
@@ -412,7 +412,7 @@ pub fn cases_with(backend: &str, programs: &[&str], tests: &[&str]) -> Vec<Case>
     cases
 }
 
-/// [`cases_with`] whatever `TEMPEST_CASES` keeps: each case's key and
+/// [`cases_with`] whatever `TEMPER_CASES` keeps: each case's key and
 /// library, for what must not depend on which run, as names a backend
 /// gives libraries of one name (C++'s).
 pub fn all_libraries(programs: &[&str], tests: &[&str]) -> Vec<(String, String)> {
@@ -422,7 +422,7 @@ pub fn all_libraries(programs: &[&str], tests: &[&str]) -> Vec<(String, String)>
 }
 
 /// [`COVERED`]'s functional tests and `tests`, as [`cases_with`] gives
-/// them, before `TEMPEST_CASES` filters them.
+/// them, before `TEMPER_CASES` filters them.
 pub fn functional_cases(backend: &str, tests: &[&str]) -> Vec<Case> {
     let mut cases = Vec::new();
     let suite = temper_funtests::suite_dir();
@@ -866,26 +866,26 @@ impl Goldens {
     }
 }
 
-/// Whether checkers are required (`TEMPEST_REQUIRE_CHECKERS`, as in CI),
+/// Whether checkers are required (`TEMPER_REQUIRE_CHECKERS`, as in CI),
 /// so a missing one fails rather than skips.
 pub fn required() -> bool {
-    env::var_os("TEMPEST_REQUIRE_CHECKERS").is_some()
+    env::var_os("TEMPER_REQUIRE_CHECKERS").is_some()
 }
 
 /// Something a test needs is missing: skipped, with a message, unless
 /// checkers are required, when it fails; but for what
-/// `TEMPEST_ALLOW_MISSING` names (comma-separated, each found in `what`,
+/// `TEMPER_ALLOW_MISSING` names (comma-separated, each found in `what`,
 /// as `LuaLS`), which CI sets where a tool can't be set up on a platform.
 pub fn missing(what: &str) {
-    let allowed = env::var("TEMPEST_ALLOW_MISSING").is_ok_and(|names| {
+    let allowed = env::var("TEMPER_ALLOW_MISSING").is_ok_and(|names| {
         (names.split(',').map(str::trim)).any(|name| !name.is_empty() && what.contains(name))
     });
     assert!(
         !required() || allowed,
-        "{what} (needed with TEMPEST_REQUIRE_CHECKERS)"
+        "{what} (needed with TEMPER_REQUIRE_CHECKERS)"
     );
     match allowed {
-        true => eprintln!("skipped: {what} (allowed by TEMPEST_ALLOW_MISSING)"),
+        true => eprintln!("skipped: {what} (allowed by TEMPER_ALLOW_MISSING)"),
         false => eprintln!("skipped: {what}"),
     }
 }

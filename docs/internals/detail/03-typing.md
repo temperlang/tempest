@@ -87,7 +87,7 @@ read. Most typing runs after the loop, not in it
 
 **Why:** Temper requires signatures at module boundaries, so local
 inference covers what the language asks for, and it fits the loop.
-Tempest's design.
+This compiler's design.
 
 ### One interned type representation
 
@@ -222,7 +222,7 @@ invariance would reject.
 
 **Status:** invariance is Temper's plan, since C++ and Rust can't
 express variance well, and the team treats Kotlin's invariant choices
-as deliberate. Tempest decided (2026-10-28) to stay invariant and to
+as deliberate. We decided (2026-10-28) to stay invariant and to
 ignore `@out` and `@in`, and asks Kotlin to drop them. Its checks are
 looser than its rule, though: it accepts programs that only variance
 would allow, which the team means to reject. That gap closes once it's
@@ -264,10 +264,10 @@ Kotlin Temper on purpose, each with tests. Where they stand
 | Change | Status |
 |---|---|
 | Fields first: no use of `this` in a constructor until every field is set ([`check_fields_first`](../../../crates/temper-frontend/src/typing/fields_first.rs)) | Decided by the Temper team, 2026-11-02 |
-| Named `@fun` interfaces are nominal, and a function literal needs a type wanted ([`fun_interfaces`](../../../crates/temper-frontend/src/typing/fun_interfaces.rs)) | Tempest's decision (2026-10-29); proposed to the team |
+| Named `@fun` interfaces are nominal, and a function literal needs a type wanted ([`fun_interfaces`](../../../crates/temper-frontend/src/typing/fun_interfaces.rs)) | This compiler's decision (2026-10-29); proposed to the team |
 | Object literals take their class from the type wanted | Proposed |
 | Narrowing through `&&`, `\|\|`, `!`, `while`, and after an early exit | Proposed; accepts more than Kotlin |
-| Invariance, with `@out` and `@in` ignored | Temper's plan; tempest's checks are looser for now |
+| Invariance, with `@out` and `@in` ignored | Temper's plan; this compiler's checks are looser for now |
 
 The ones that reject what Kotlin accepts (nominal `@fun` interfaces,
 fields first) mean a library can pass one compiler and fail the other

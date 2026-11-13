@@ -1,9 +1,9 @@
-//! How JavaScript runs built libraries' tests, for `tempest test -b js`:
+//! How JavaScript runs built libraries' tests, for `temper test -b js`:
 //! Mocha (`mocha`, or `MOCHA`) in each library's package, `mocha test
 //! --recursive` with its xunit reporter, Node finding `@temperlang/core`,
 //! `@temperlang/std`, and the libraries in `temper.out/js/node_modules`,
 //! linked to their directories, as npm's workspace that Kotlin makes
-//! links them. `tempest run -b js` imports the library's package under
+//! links them. `temper run -b js` imports the library's package under
 //! Node (`node`, or `NODE`), as Kotlin's `index.js` does.
 
 use std::path::Path;

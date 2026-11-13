@@ -87,7 +87,7 @@ As built with the Python backend (2026-10-30):
   installed at their latest versions each run, since the two sometimes
   disagree; locally mypy is optional (`MYPY` names one). A test skips a
   missing checker with a message, except in CI, where
-  `TEMPEST_REQUIRE_CHECKERS` makes a missing one fail.
+  `TEMPER_REQUIRE_CHECKERS` makes a missing one fail.
 - **Rust** (2026-10-30): the compiler, by building every generated
   crate, and clippy, with `-D warnings` but for three lints that fire
   on what the functional tests do on purpose (`self_assignment` for
@@ -100,7 +100,7 @@ As built with the Python backend (2026-10-30):
   `temper-core`'s one dependency, `indexmap`, must be in cargo's cache
   (CI fetches it first). The goldens are also checked to be as rustfmt
   lays them out. A missing cargo, clippy, rustfmt, or `indexmap` skips
-  with a message, or fails with `TEMPEST_REQUIRE_CHECKERS`. The shared
+  with a message, or fails with `TEMPER_REQUIRE_CHECKERS`. The shared
   programs (`crates/temper-be-testkit/programs/`, the Rust backend's
   own until 2026-10-30) cover what the functional tests don't yet; one
   is hand-written tmpl, for constructs the frontend doesn't translate
@@ -126,7 +126,7 @@ As built with the Python backend (2026-10-30):
   timers; Deno's shim reportedly lacks `beforeEach`/`afterEach`), so
   plain `describe`/`it`/`assert` would be the portable subset. A
   missing Node or `tsc` skips with a message, or fails
-  with `TEMPEST_REQUIRE_CHECKERS`. Besides the 7 functional tests, the
+  with `TEMPER_REQUIRE_CHECKERS`. Besides the 7 functional tests, the
   JS backend runs the shared programs
   (`crates/temper-be-testkit/programs/`), with goldens of its own.
 - **JS source maps** (2026-10-30): goldens of each program's map,
@@ -150,7 +150,7 @@ As built with the Python backend (2026-10-30):
   leaves out of `javadoc`'s too. No lint is allowed, and Kotlin's own
   output passes the same flags. Then `java` (or `JAVA`) runs each
   program's main class. CI sets up Temurin 21. A missing `javac` or
-  `java` skips with a message, or fails with `TEMPEST_REQUIRE_CHECKERS`.
+  `java` skips with a message, or fails with `TEMPER_REQUIRE_CHECKERS`.
   Besides the 7 functional tests, it runs the Rust backend's programs,
   as JS does. A test that runs as tests (`testing/asserts`) compiles
   with std and JUnit 5.9.2's jars from Maven's cache (CI fetches them
@@ -176,7 +176,7 @@ As built with the Python backend (2026-10-30):
   `Microsoft.Extensions.Logging` 8.0.0, comes from NuGet's cache, never
   the network; CI restores a copy of the runtime's project to put it
   there. A missing SDK, targeting pack, or package skips with a
-  message, or fails with `TEMPEST_REQUIRE_CHECKERS`. Besides the 7
+  message, or fails with `TEMPER_REQUIRE_CHECKERS`. Besides the 7
   functional tests, it runs the Rust backend's programs, and one of its
   own, `hiding`: names that would hide the classes the translator names
   (`Math`, `Core`, `Support`), which it qualifies from `global::`, a
@@ -225,7 +225,7 @@ As built with the Python backend (2026-10-30):
   randomization; CI narrows it
   with `sysctl vm.mmap_rnd_bits=28`). Any sanitizer report fails the
   test. A missing `g++` skips with a message, or fails with
-  `TEMPEST_REQUIRE_CHECKERS`. Besides the 7 functional tests and the
+  `TEMPER_REQUIRE_CHECKERS`. Besides the 7 functional tests and the
   Rust backend's programs, one of its own, `hiding`: names C++
   reserves or the translator prints (`std`, `core`, `int32_t`,
   `explicit`, `M_PI`), `Boolean`'s `<`, a trigraph and a NUL in
@@ -233,7 +233,7 @@ As built with the Python backend (2026-10-30):
   with CMake, as a user's project would (not in the tests). `strict`
   (2026-11-09) compiles every generated `.cpp` again, not linked, at
   `-O2` with `STRICT` by `g++-12` and `g++-14` (those installed, or
-  `TEMPEST_STRICT_CXX`'s list), as release builds would, and the newest
+  `TEMPER_STRICT_CXX`'s list), as release builds would, and the newest
   GCC at `-O3` too: `-O1` misses some of GCC's path-following warnings,
   such as a null upcast's `-Wnull-dereference`, and only `-O3` showed
   libstdc++'s `vector<bool>` `-Warray-bounds`. CI adds clang++ with its own set
@@ -262,7 +262,7 @@ As built with the Python backend (2026-10-30):
   and runs the programs again under LuaJIT 2.1 (`LUA` names the
   interpreter).
   A missing `lua` or LuaLS skips with a
-  message, or fails with `TEMPEST_REQUIRE_CHECKERS`. Besides the 7
+  message, or fails with `TEMPER_REQUIRE_CHECKERS`. Besides the 7
   functional tests and the Rust backend's four programs, three of its
   own: `hiding` (checked against the interpreter), `repeats` (tmpl, for
   jumps the frontend doesn't translate yet), and `locals` (generated:

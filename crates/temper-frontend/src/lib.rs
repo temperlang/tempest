@@ -25,7 +25,7 @@
 //!   memory, in layers.
 //! - [`project`]: libraries on disk, found as `temper test` finds them.
 //! - [`repl`]: a REPL session, settling and running one input at a time.
-//! - [`library_tests`]: running libraries' tests, for `tempest test`.
+//! - [`library_tests`]: running libraries' tests, for `temper test`.
 //! - [`log`]: commands' reports as text or JSON records
 //!   (`--logformat`).
 //! - [`stdlib`]: Temper's std library, built in.

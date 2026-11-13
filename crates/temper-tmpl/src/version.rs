@@ -273,7 +273,7 @@ pub fn workspace() -> [u64; 3] {
 static CURRENT: OnceLock<Version> = OnceLock::new();
 
 /// The version this process names for the runtimes, std, and core: the
-/// build's, where the program set it ([`set_current`], as `tempest` does
+/// build's, where the program set it ([`set_current`], as `temper` does
 /// with `temper_driver::version::init`), or else a dev build of the
 /// workspace's version with no commits counted, `0.7.0-alpha.0.0`, which
 /// tests and the playground see, so their output stays the same from
@@ -380,7 +380,7 @@ pub struct Unpublished {
 }
 
 /// Where a runtime names its version ([`VersionSpot`]s) and what keeps
-/// it from being published ([`Unpublished`]), which `tempest build`
+/// it from being published ([`Unpublished`]), which `temper build`
 /// handles as it writes the runtime ([`fill_runtime`]).
 #[derive(Clone, Copy, Debug)]
 pub struct RuntimeVersion {
@@ -392,7 +392,7 @@ pub struct RuntimeVersion {
 
 /// A runtime's files with each [`VersionSpot`] filled with `version`,
 /// and, where `version` is a release (no pre-release part), each
-/// [`Unpublished`] removed, as `tempest build` writes them into
+/// [`Unpublished`] removed, as `temper build` writes them into
 /// `temper.out`. A spot or marker that isn't in its file, exactly once,
 /// is a bug; each backend's tests check theirs ([`check_spots`]).
 pub fn fill_runtime(

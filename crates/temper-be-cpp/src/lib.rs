@@ -193,7 +193,7 @@ pub const BACKEND: temper_tmpl::Backend = temper_tmpl::Backend {
 /// that's missing is [`NotYet`], where Kotlin's fails in `g++`.
 ///
 /// Kotlin also copies the runtime beside the library, as `temper-core/`,
-/// which the files include from the directory above; `tempest build`
+/// which the files include from the directory above; `temper build`
 /// does too ([`runtime`]). Kotlin's `main.cpp` runs the tests where there
 /// are some, and its modules' `.cpp`s define them always, needing std;
 /// here they're defined only for `test.cpp`'s build ([`test_main`]).

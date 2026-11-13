@@ -9,9 +9,9 @@
 #       with:
 #         backends: py js
 #
-# The tests run with TEMPEST_REQUIRE_CHECKERS, so a tool this leaves
+# The tests run with TEMPER_REQUIRE_CHECKERS, so a tool this leaves
 # out fails them, unless the job lets it be missing
-# (TEMPEST_ALLOW_MISSING); docs/contributing/ci.md lists what each
+# (TEMPER_ALLOW_MISSING); docs/contributing/ci.md lists what each
 # platform has.
 name: Toolchains for generated code
 description: Sets up the named backends' toolchains and checkers for their tests.
@@ -162,8 +162,8 @@ runs:
         dotnet add "$temp/temper-core/TemperLang.Core.csproj" package MSTest.TestFramework --version 3.1.1 --no-restore
         dotnet restore "$temp/temper-core/TemperLang.Core.csproj"
 
-    # C++ on Windows: MSVC, through CMake, for `tempest test -b cpp` and
-    # `tempest build`'s CMake projects (.github/ci-tools/msvc_env.py).
+    # C++ on Windows: MSVC, through CMake, for `temper test -b cpp` and
+    # `temper build`'s CMake projects (.github/ci-tools/msvc_env.py).
     # The C++ backend's own tests build with g++'s options, sanitizers
     # included, so run on Linux only. macOS uses Apple's clang and the
     # image's CMake as they are.

@@ -27,7 +27,7 @@
    bundles import nothing else, so no other URLs need it.
 
 7. With `--smoke`, runs smoke.mjs on the output: each example in
-   headless Chromium (`--chromium PATH`, else $TEMPEST_CHROMIUM, else
+   headless Chromium (`--chromium PATH`, else $TEMPER_CHROMIUM, else
    Playwright's), with site/docs/mermaid's playwright-core.
 
 Serve the output with `python3 -m http.server -d site/_out/playground`.
@@ -163,7 +163,7 @@ def main() -> int:
     parser.add_argument("--skip-wasm", action="store_true", help="use the wasm already built")
     parser.add_argument("--out", type=Path, default=ROOT / "site/_out/playground")
     parser.add_argument("--smoke", action="store_true", help="then run smoke.mjs on it in headless Chromium")
-    parser.add_argument("--chromium", help="Chromium for --smoke (default $TEMPEST_CHROMIUM, else Playwright's)")
+    parser.add_argument("--chromium", help="Chromium for --smoke (default $TEMPER_CHROMIUM, else Playwright's)")
     args = parser.parse_args()
 
     if not args.skip_wasm:

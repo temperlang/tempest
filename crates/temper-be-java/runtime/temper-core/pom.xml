@@ -23,7 +23,7 @@
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-    <!-- tempest build drops this and the next two lines only for a release. -->
+    <!-- temper build drops this and the next two lines only for a release. -->
     <skipPublishing>true</skipPublishing>
     <maven.deploy.skip>true</maven.deploy.skip>
   </properties>

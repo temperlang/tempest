@@ -1,11 +1,11 @@
 //! What tools share over the backends, as a library: the registry of
 //! backends this build has ([`Registry`]); one way from a settled
 //! library to each backend's files ([`checked`], [`with_std`],
-//! [`translate`]), which `tempest build` ([`build`]) and the
+//! [`translate`]), which `temper build` ([`build`]) and the
 //! playground's wasm (`temper-wasm`) both take; and, natively, running
 //! built libraries' tests ([`test_run`]) and top levels ([`run`]) with
 //! each language's own tools, as each backend says
-//! ([`temper_tmpl::Tools`]); `tempest init`'s skeleton ([`init`]); and
+//! ([`temper_tmpl::Tools`]); `temper init`'s skeleton ([`init`]); and
 //! the build's version, from git ([`version`]).
 //!
 //! Each built-in backend is a cargo feature (`cpp`, `csharp`, `java`,

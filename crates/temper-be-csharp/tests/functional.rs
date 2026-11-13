@@ -47,7 +47,7 @@
 //!   MSTest's framework from NuGet's cache, and runs by reflection
 //!   ([`RUN_TESTS`]), its failures compared with its `expectedFailures`.
 //!   Skipped, with a message, without `dotnet`, the .NET 6 targeting pack,
-//!   or those packages; with `TEMPEST_REQUIRE_CHECKERS` set, as in CI,
+//!   or those packages; with `TEMPER_REQUIRE_CHECKERS` set, as in CI,
 //!   any of them missing fails it instead.
 
 use std::path::{Path, PathBuf};

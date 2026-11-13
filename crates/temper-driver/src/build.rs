@@ -1,4 +1,4 @@
-//! `tempest build`: every library under a work root, translated by each
+//! `temper build`: every library under a work root, translated by each
 //! backend asked for, written to `temper.out` as Kotlin Temper's `temper
 //! build` lays it out.
 //!
@@ -35,7 +35,7 @@
 //!   reports each, then translates and writes the library anyway, each
 //!   error failing where it runs, as `bubble()` does (tmpl's `Error`), so
 //!   its good parts work in every language. [`Built::errors`] counts
-//!   them, and `tempest build` exits with 1 when there are any.
+//!   them, and `temper build` exits with 1 when there are any.
 //! - **What isn't covered yet** fails that library, with the first reason
 //!   on a line of its own (`LIBRARY: BACKEND: why`), and the build goes on
 //!   with the others. With `--verbose`, every gap in tmpl's translation

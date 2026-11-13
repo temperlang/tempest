@@ -7,7 +7,7 @@ and `MapBuilder`, with nullables mixed in; and generic functions and a
 method with a type parameter that no parameter's type mentions, which
 the frontend binds to its bound unless the call says, and which Rust,
 C#, and C++ then spell out; and an exported generic function that calls
-a private one. The log is what tempest's interpreter gives.
+a private one. The log is what the interpreter gives.
 
     export interface Holder<T> {
       public get held(): T;

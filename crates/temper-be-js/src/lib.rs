@@ -136,7 +136,7 @@ pub const BACKEND: temper_tmpl::Backend = temper_tmpl::Backend {
 /// another's exports from its public file, and its tests import from its
 /// `.internal.js`, which exports what they use, and a setter, `NAME$set`,
 /// for each `var` they assign. Kotlin also copies `@temperlang/core` beside the package;
-/// `tempest build` does too ([`runtime`]).
+/// `temper build` does too ([`runtime`]).
 ///
 /// A library's own `.js` and `.mjs` files, its host code, are copied
 /// into the package at their paths under its root, as Kotlin copies them

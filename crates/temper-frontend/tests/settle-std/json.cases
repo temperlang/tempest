@@ -193,7 +193,7 @@ class N(public y: Int) extends S {}
 @json class Q(@jsonName(1) public q: Int) {}
 --- settled
 error 16..17: Cannot auto-derive JSON adapter for un-sealed interface I
-error 33..34: tempest doesn't yet derive JSON adapters for generic type G
+error 33..34: Temper doesn't yet derive JSON adapters for generic type G
 error 66..67: Missing type info for JSON adapter for property D.x
 error 97..98: No JsonAdapter for property m with type Map<String, Int>
 error 142..143: E declared encodeToJson but has no corresponding decodeFromJson

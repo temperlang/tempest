@@ -6,7 +6,7 @@ nullable value; an `orelse` whose body has statements, also as a
 function's last value; an `orelse` whose fallback bubbles and whose
 body takes lines, held in a local that a parameter's name mustn't
 clash with; and a nullable class value narrowed and called.
-The log is what tempest's interpreter gives.
+The log is what the interpreter gives.
 
     export class Label(public var text: String?) {
       public shown(): String {

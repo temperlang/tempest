@@ -133,7 +133,7 @@ fn helpers_are_the_runtimes_and_typed() {
     }
 }
 
-/// The rockspec `tempest build` writes names the version generated
+/// The rockspec `temper build` writes names the version generated
 /// rockspecs depend on, in its name and its text.
 #[test]
 fn runtime_version_is_the_rockspecs() {

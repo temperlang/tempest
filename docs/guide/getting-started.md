@@ -7,10 +7,7 @@ by writing a very simple library.
 > Temper hasn't yet reached 1.0, and may have backward incompatible
 > changes before then.
 
-> **Note:** this compiler's command is `tempest`; these steps write
-> `temper`, the command's name in Temper's earlier releases. They take
-> the same commands and flags, so type `tempest` for `temper` (or link
-> it as `temper`). `watch` and `doc` aren't in tempest yet
+> **Note:** `temper watch` and `temper doc` aren't available yet
 > ([the command line](../tools/cli.md);
 > [inconsistencies](../inconsistencies.md#i9-the-command-line)).
 
@@ -33,24 +30,24 @@ Detailed instructions follow.
 To set up Temper's command-line tool, do the following:
 
 1. Download the compiler for your system from the
-   [latest release][LatestRelease]: `tempest-VERSION-TARGET.tar.gz`
+   [latest release][LatestRelease]: `temper-VERSION-TARGET.tar.gz`
    (`.zip` on Windows), for Linux (x64 and Arm64), macOS (Apple
    silicon), and Windows (x64 and Arm64). The *riskier*
    [nightly][Nightly] prerelease has the newest `main`, as
-   `tempest-TARGET.tar.gz`. `SHA256SUMS` beside them checks a download.
+   `temper-TARGET.tar.gz`. `SHA256SUMS` beside them checks a download.
 2. Extract it somewhere convenient for you. It's one binary,
-   `tempest`, with Temper's standard library built in.
+   `temper`, with Temper's standard library built in.
 3. Add that directory to your system path.
 
 Or build it from source, with [Rust](https://rustup.rs/) 1.85 or later,
 in a clone of this repository: `cargo build --release -p tempest` writes
-`target/release/tempest`.
+`target/release/temper`.
 
 You can try out the install with the following commands:
 
 ```
-tempest version
-tempest help
+temper version
+temper help
 ```
 
 For VS Code, the same release has the Temper extension, a `.vsix` file
@@ -153,7 +150,7 @@ This command creates several output files, including the following:
 ./temper.out/rust/hello/src/mod.rs
 ```
 
-> **Note:** this list now shows what tempest writes; Temper's older
+> **Note:** this list now shows what `temper` writes; Temper's older
 > docs showed `src/Hello/HelloGlobal.cs`, `src/main/java/hello/hello/`,
 > and `hello.lua` ([inconsistencies](../inconsistencies.md#i6-the-temperout-layout)).
 
@@ -208,8 +205,8 @@ Congratulations! You've used a Temper-built library in C\#.
 ## Use the library from Java
 
 A variety of package management and build tools exist for Java. Here, we use
-Gradle. Also, the "java" backend for Temper requires Java 17+. (Kotlin
-Temper's "java8" backend, for Java 8, isn't in tempest yet.)
+Gradle. Also, the "java" backend for Temper requires Java 17+. (Earlier
+versions' "java8" backend, for Java 8, isn't available yet.)
 
 To consume a Temper-built Java library using Gradle, create a Gradle project
 called "greet-java" using `gradle init --type java-application`. Choose default

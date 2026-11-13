@@ -1,8 +1,8 @@
-//! How Python runs built libraries' tests, for `tempest test -b py`, as
+//! How Python runs built libraries' tests, for `temper test -b py`, as
 //! Kotlin's `RunPython`: `python3 -B -m temper_core.testing result.xml`
 //! in each library's directory, with `temper-core`, `std`, and the
 //! libraries on `PYTHONPATH` (or `PYTHON` for the interpreter), reading
-//! the JUnit XML it writes. `tempest run -b py` imports the library's
+//! the JUnit XML it writes. `temper run -b py` imports the library's
 //! package as Kotlin's `top.py` does, with logging to standard output,
 //! then waits for its async blocks.
 

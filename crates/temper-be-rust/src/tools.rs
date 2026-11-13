@@ -1,7 +1,7 @@
-//! How Rust runs built libraries' tests, for `tempest test -b rust`:
+//! How Rust runs built libraries' tests, for `temper test -b rust`:
 //! `cargo test` in each library's crate (`CARGO`), offline, with one
 //! target directory, `temper.out/rust/target`, for them all, reading
-//! what it prints. `tempest run -b rust` builds the library's crate the
+//! what it prints. `temper run -b rust` builds the library's crate the
 //! same way, quietly, then runs its program (`src/main.rs`), as
 //! Kotlin's `cargo run` does.
 

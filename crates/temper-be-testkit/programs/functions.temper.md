@@ -13,7 +13,7 @@ nullable `@fun` value held in a local and called after a null check;
 and instance extensions, functions marked `@extension("name")` that
 `x.name(…)` calls with `x` first, of a builtin type, a generic one, a
 nullable one, and a class, whose own method of that name wins where its
-parameters fit. The log is what tempest's interpreter gives.
+parameters fit. The log is what the interpreter gives.
 
     @fun interface Counter(): Int;
     @fun interface IntOp(x: Int): Int;
