@@ -113,7 +113,23 @@ impl Settle {
                 }
                 let statements = self.lib.tree.children(block).to_vec();
                 for statement in statements {
-                    children.extend(self.lower_member(statement, 0, false));
+                    let lowered = self.lower_member(statement, 0, false);
+                    if let Some(m) = lowered.filter(|&m| self.is_static_accessor(m)) {
+                        // Nothing reads `C.p` with a static `get p`, in
+                        // Kotlin or backends, so it's rejected and
+                        // dropped, as Kotlin's `TypeDisambiguateMacro`
+                        // does, decorations and all.
+                        let kind = match self.lib.tree.data(m) & ROLE_MASK {
+                            ROLE_GETTER => "get",
+                            _ => "set",
+                        };
+                        let name = self.member_text(m).to_string();
+                        let span = self.lib.tree.span(statement);
+                        let message = Message::StaticAccessor(kind.into(), name);
+                        self.lib.report(Level::Error, message, span);
+                        continue;
+                    }
+                    children.extend(lowered);
                 }
                 self.check_members(*name, &children[first_member..], interface);
             }
@@ -686,6 +702,46 @@ impl Settle {
         }
     }
 
+    /// An explicit constructor can't take on header parameters, nor
+    /// several constructors a field's initializer, which each would need
+    /// a copy of, as Kotlin's `TypeSyntaxMacro` checks.
+    fn check_constructors(&mut self, members: &[NodeId]) {
+        let tree = &self.lib.tree;
+        let role = |m: NodeId| tree.data(m) & ROLE_MASK;
+        let is_static = |m: NodeId| tree.data(m) & MEMBER_STATIC != 0;
+        let constructors = (members.iter())
+            .filter(|&&m| role(m) == ROLE_CONSTRUCTOR && !is_static(m))
+            .count();
+        if constructors == 0 {
+            return;
+        }
+        let mut problems = Vec::new();
+        for &m in members {
+            let message = match role(m) {
+                ROLE_PARAM => Message::InputWithConstructor,
+                0 if constructors > 1 && !is_static(m) && let_parts(tree, m).2.is_some() => {
+                    Message::InitializerWithConstructors
+                }
+                _ => continue,
+            };
+            // From its name: a `var`'s span starts after the `var`.
+            let span = Span {
+                start: tree.span(tree.children(m)[0]).start,
+                end: tree.span(m).end,
+            };
+            problems.push((message(self.member_text(m).to_string()), span));
+        }
+        for (message, span) in problems {
+            self.lib.report(Level::Error, message, span);
+        }
+    }
+
+    /// Whether a member is a `static get` or `static set`.
+    fn is_static_accessor(&self, member: NodeId) -> bool {
+        let data = self.lib.tree.data(member);
+        data & MEMBER_STATIC != 0 && matches!(data & ROLE_MASK, ROLE_GETTER | ROLE_SETTER)
+    }
+
     fn add_flags(&mut self, let_node: NodeId, flags: u32) -> NodeId {
         if flags != 0 {
             let data = self.lib.tree.data(let_node) | flags;
@@ -696,11 +752,15 @@ impl Settle {
     }
 
     /// Reports what's wrong with a class's or interface's own members:
-    /// an interface's backed properties and generic methods, and a
-    /// class's members without a visibility, listed as Kotlin's
+    /// an interface's backed properties and generic methods, a class's
+    /// constructors that can't take on its header parameters or
+    /// initializers, and its members without a visibility, listed as Kotlin's
     /// `checkForMissingVisibility` does, fields first, then methods, then
     /// static members.
     fn check_members(&mut self, name: NodeId, members: &[NodeId], interface: bool) {
+        if !interface {
+            self.check_constructors(members);
+        }
         let tree = &self.lib.tree;
         let role = |m: NodeId| tree.data(m) & ROLE_MASK;
         let is_static = |m: NodeId| tree.data(m) & MEMBER_STATIC != 0;
@@ -910,7 +970,8 @@ impl Settle {
     /// Checks a class against its supertypes, as Kotlin's
     /// `TypeDeclChecker` and `TypeDefinitionMacro` do: it extends only
     /// interfaces, implements what they leave abstract unless it's an
-    /// interface itself, and doesn't narrow what it overrides.
+    /// interface itself, doesn't narrow what it overrides, and, below a
+    /// sealed interface, adds no type parameters.
     fn check_supertypes(&mut self, class: NodeId, ancestors: &[NodeId]) {
         let mut problems = Vec::new();
         let tree = &self.lib.tree;
@@ -922,6 +983,26 @@ impl Settle {
                 if !is_interface(decl) {
                     let text = self.member_text(decl).to_string();
                     problems.push((Message::CannotExtendConcrete(text), tree.span(sup)));
+                }
+                // A sealed interface's direct subtypes can't add type
+                // parameters, as Kotlin's `checkSubTypeParams` checks:
+                // each must be one of the type arguments it gives it.
+                if tree.data(decl) & CLASS_SEALED != 0 {
+                    let args: Vec<NameId> = match tree.kind(sup) {
+                        NodeKind::Call => (tree.children(sup).iter().skip(2))
+                            .filter(|&&a| tree.kind(a) == NodeKind::RightName)
+                            .filter_map(|&a| self.lib.name(a))
+                            .collect(),
+                        _ => Vec::new(),
+                    };
+                    for &param in type_params(tree, class) {
+                        let name = let_parts(tree, param).0;
+                        if !self.lib.name(name).is_some_and(|n| args.contains(&n)) {
+                            let text = self.member_text(class).to_string();
+                            let message = Message::SealedSubtypeTypeParam(text);
+                            problems.push((message, tree.span(name)));
+                        }
+                    }
                 }
             }
         }
@@ -961,6 +1042,33 @@ impl Settle {
                 seen.push((name, ROLE_GETTER));
                 if data & LET_VAR != 0 {
                     seen.push((name, ROLE_SETTER));
+                }
+            }
+        }
+        // A property, as a getter, or a getter overriding one: Kotlin's
+        // `TypeChecker` reports one narrower than what it overrides in
+        // other words than methods' ([`Message::OverrideLowersVisibility`]).
+        let is_field = |m: NodeId| {
+            matches!(role(m), 0 | ROLE_PARAM)
+                && tree.data(m) & (MEMBER_STATIC | MEMBER_NO_PROPERTY) == 0
+        };
+        let readable = |m: NodeId| is_field(m) || (is_method(m) && role(m) == ROLE_GETTER);
+        let name_of = |m: NodeId| self.lib.name(tree.children(m)[0]);
+        for &ancestor in ancestors {
+            let from = self.member_text(ancestor);
+            for &m in class_parts(tree, ancestor).2 {
+                if !readable(m) || tree.data(m) & MEMBER_PRIVATE != 0 {
+                    continue;
+                }
+                let narrower = members.iter().copied().find(|&o| {
+                    readable(o)
+                        && (is_field(o) || is_field(m))
+                        && name_of(o) == name_of(m)
+                        && visibility_rank(tree.data(o)) < visibility_rank(tree.data(m))
+                });
+                if let Some(o) = narrower {
+                    let message = Message::OverrideLowersVisibility(from.to_string());
+                    problems.push((message, tree.span(o)));
                 }
             }
         }

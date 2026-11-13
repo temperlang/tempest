@@ -221,7 +221,6 @@ error 107..121: Type M has method g but its visibility is protected which is nar
 === class members need a visibility, but interface members don't
 interface I { f(): Int; }
 class Q(x: Int, @noProperty y: Int, public z: Int) {
-  public constructor(x: Int, y: Int, z: Int) {}
   get g(): Int { 1 }
   set g(v: Int): Void {}
   static s = 1;
@@ -239,17 +238,14 @@ class Q(x: Int, @noProperty y: Int, public z: Int) {
     (Param ^x:5 Int)
     (Param private ^y:6 Int)
     (Param ^z:7 Int)
-    (Constructor
-      ^constructor:8
-      (Fn (Let ^x:17 Int) (Let ^y:18 Int) (Let ^z:19 Int) (Block)))
-    (Get ^g:9 (Fn Int (Block 1)))
-    (Set ^g:10 (Fn (Let ^v:20 Int) Void (Block)))
-    (Let static ^s:11 1)
-    (Method static ^t:12 (Fn Int (Block 1)))
-    (Let private ^p:13 1)
-    (Let ^y:14 Int 2)
-    (Let ^w:15 Int 3)
-    (Method ^f:16 (Fn Int (Block 1)))))
+    (Get ^g:8 (Fn Int (Block 1)))
+    (Set ^g:9 (Fn (Let ^v:16 Int) Void (Block)))
+    (Let static ^s:10 1)
+    (Method static ^t:11 (Fn Int (Block 1)))
+    (Let private ^p:12 1)
+    (Let ^y:13 Int 2)
+    (Let ^w:14 Int 3)
+    (Method ^f:15 (Fn Int (Block 1)))))
 error 34..40: Members of class Q require explicit visibility: [.x, .w, get.g(...), set.g(...), .f(...), static.s, static.t(...)]
 
 === assigning a member that isn't a var
@@ -756,3 +752,160 @@ error 512..516: Export depends publicly on non-exported symbol Fine
 error 637..641: Export depends publicly on non-exported symbol Fine
 error 694..700: Export depends publicly on non-exported symbol Hidden
 log runs
+
+=== static getters and setters are rejected, as Kotlin's static-getters-and-setters-rejected
+// Nothing would read `C.answer` with them, so they're dropped.
+class C {
+  public static get answer(): Int { 42 }
+  public static set count(v: Int): Void {}
+  public get age(): Int { 1 }
+  public static twice(x: Int): Int { x * 2 }
+}
+console.log("${C.twice(2)} ${new C().age}");
+--- settled
+(Block
+  (Class
+    ^C:0
+    (Get ^age:2 (Fn Int (Block 1)))
+    (Method static ^twice:3 (Fn (Let ^x:4 Int) Int (Block (Call * x:4 2)))))
+  (Call
+    (Call . console \log)
+    (Call cat (Call (Call . C:0 \twice) 2) " " (Call . (Call new C:0) \age)))
+  #void)
+error 76..114: `static get answer` is not supported; use a static method instead
+error 117..157: `static set count` is not supported; use a static method instead
+log 4 1
+
+=== constructors beside header parameters or initializers, as Kotlin's constructors-and-property-initialization
+// OK: the implied constructor sets k.
+class NeedsConstructor(
+  @noProperty i: Int32,
+  public j: Int32 = 1,
+) {
+  public k: Int32 = i + 1;
+}
+// OK: one constructor runs the initializer.
+class HasConstructorAndInitializedProperty {
+  private var b: Boolean = false;
+  private let i: Int32;
+  public constructor(i: Int32) {
+    this.i = i;
+  }
+  public f(): Int32 {
+    b = !b;
+    i + (if (b) { 1 } else { 0 })
+  }
+}
+// Each would need a copy of the initializer; a static one's fine.
+class HasTooManyConstructors {
+  private var b: Boolean = false;
+  public static s: Int = 1;
+  public constructor() {}
+  public constructor(c: Boolean) {
+    if (c) { this.b = !this.b; }
+  }
+}
+// Header parameters don't fold into an explicit constructor.
+class HasConstructorAndParenthesizedArguments(
+  public s: String,
+  @noProperty t: String,
+) {
+  public constructor() {}
+}
+console.log("${new NeedsConstructor(1).k} ${new HasConstructorAndInitializedProperty(2).f()}");
+--- settled
+(Block
+  (Class
+    ^NeedsConstructor:0
+    (Param private ^i:5 Int32)
+    (Param ^j:6 Int32 1)
+    (Let ^k:7 Int32 (Call + i:5 1)))
+  (Class
+    ^HasConstructorAndInitializedProperty:1
+    (Var private ^b:9 Boolean false)
+    (Let private ^i:10 Int32)
+    (Constructor
+      ^constructor:11
+      (Fn (Let ^i:13 Int32) (Block (Assign (Call . this#8 \i) i:13) #void)))
+    (Method
+      ^f:12
+      (Fn
+        Int32
+        (Block
+          (Assign b:9 (Call ! b:9))
+          (Call + i:10 (If b:9 (Block 1) (Block 0)))))))
+  (Class
+    ^HasTooManyConstructors:2
+    (Var private ^b:15 Boolean false)
+    (Let static ^s:16 Int 1)
+    (Constructor ^constructor:17 (Fn (Block)))
+    (Constructor
+      ^constructor:18
+      (Fn
+        (Let ^c:19 Boolean)
+        (Block
+          (If
+            c:19
+            (Block
+              (Assign (Call . this#14 \b) (Call ! (Call . this#14 \b)))
+              #void)
+            (Block))))))
+  (Class
+    ^HasConstructorAndParenthesizedArguments:3
+    (Param ^s:21 String)
+    (Param private ^t:22 String)
+    (Constructor ^constructor:23 (Fn (Block))))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call . (Call new NeedsConstructor:0 1) \k)
+      " "
+      (Call (Call . (Call new HasConstructorAndInitializedProperty:1 2) \f))))
+  #void)
+error 530..548: More than one constructor needs to adopt initializer for property b
+error 796..805: Constructor input s specified but there is already a constructor
+error 821..830: Constructor input t specified but there is already a constructor
+log 2 3
+
+=== connected functions that list backends need a body, as Kotlin's connected-backends
+// Fine: backends not listed use the body.
+@connected(["cpp", "rust"])
+export let withBody(i: Int): Int { i + 1 }
+// Fine: no list means every backend has connected code.
+@connected
+export let everywhere(i: Int): Int;
+// Fine: an empty list names none, so all use the body.
+@connected([])
+export let nowhere(i: Int): Int { i + 3 }
+// Backends not listed would have no body to use.
+@connected(["cpp"])
+export let noBody(i: Int): Int;
+// Not a list of backend names: connected as if without a list.
+@connected("cpp")
+export let notAList(i: Int): Int { i + 2 }
+@connected(["cpp", 1])
+export let notNames(i: Int): Int { i + 4 }
+console.log("${withBody(1)} ${nowhere(1)} ${notAList(1)}");
+--- settled
+(Block
+  (Let ^withBody:0 (Fn (Let ^i:6 Int) Int (Block (Call + i:6 1))))
+  (Let connected ^everywhere:1 (Call FnType Int Int))
+  (Let ^nowhere:2 (Fn (Let ^i:7 Int) Int (Block (Call + i:7 3))))
+  (Let connected ^noBody:3 (Call FnType Int Int))
+  (Let ^notAList:4 (Fn (Let ^i:8 Int) Int (Block (Call + i:8 2))))
+  (Let ^notNames:5 (Fn (Let ^i:9 Int) Int (Block (Call + i:9 4))))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call withBody:0 1)
+      " "
+      (Call nowhere:2 1)
+      " "
+      (Call notAList:4 1)))
+  #void)
+error 412..418: A @connected function that lists backends needs a Temper body for the backends not listed
+error 508..513: @connected expects a list of backend names, like ["cpp", "rust"], not "cpp"
+error 569..579: @connected expects a list of backend names, like ["cpp", "rust"], not ["cpp", 1]
+log 2 4 3

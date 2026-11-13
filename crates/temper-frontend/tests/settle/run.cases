@@ -1066,6 +1066,32 @@ log B 2 0
 log 3
 Failed: Multiple types have matching constructors: A, B
 
+=== object literals are ambiguous across nested scopes, as Kotlin's object-literal-multiple-matches-nested
+// A private property still names a constructor parameter.
+class Apple(private hi: Int) {}
+let nest(): Void {
+  class Banana(private hi: Int, public ha: Int = 0) {}
+  { hi: 5 };
+  console.log("unreached");
+}
+nest();
+--- settled
+(Block
+  (Class ^Apple:0 (Param private ^hi:3 Int))
+  (Let
+    ^nest:1
+    (Fn
+      Void
+      (Block
+        (Class ^Banana:4 (Param private ^hi:6 Int) (Param ^ha:7 Int 0))
+        (Error)
+        (Call (Call . console \log) "unreached")
+        #void)))
+  (Call nest:1)
+  #void)
+error 167..176: Multiple types have matching constructors: Apple, Banana
+Failed: Multiple types have matching constructors: Apple, Banana
+
 === object literal values run in the order written
 class P(public a: String = "a", public b: String = "b") {
   public toString(): String { "${a}${b}" }

@@ -415,7 +415,8 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   concrete class (bare `@connected`, or with a list of backends), but
   not an interface ("At this time, users can connect only classes or
   top-level functions"); `@connected("X")` with a key, as core's, is an
-  error there ("@connected expects a list of backend names"); and a
+  error there ("@connected expects a list of backend names", which
+  tempest also reports, 2026-11-13, connecting it as without a list); and a
   connected class can be the target of `is` or `as` only from a sealed
   supertype ("Connected types cannot be targeted with is or as runtime
   type checks …"). Tempest treats them as ordinary classes for now and
@@ -430,7 +431,9 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   ("… that lists backends needs a Temper body for the backends not
   listed"), and default arguments ("Method scale of a connected class
   can't have default arguments, …"), which tempest reported nowhere
-  before. Kotlin reports these only while generating code; tempest
+  before; and for a function (2026-11-13), a list without a body ("A
+  @connected function that lists backends needs a Temper body …"), at
+  its name where Kotlin's position is empty, after its signature. Kotlin reports these only while generating code; tempest
   reports them while typing, in every module, skipping std's
   connected classes and core-style ones that connect members. A bodiless
   method of a user's connected class fails in the interpreter as "No
@@ -444,8 +447,29 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   Test: settle/classes.cases, "a connected class's Temper implementation
   must be complete", "a connected class without a Temper implementation
   runs only host code", and "a connected class's constructor can't have
-  defaults either"; each backend's `missing_host_code` and
-  `kit::CONNECTED` runs, as is and under `--no-connected`.
+  defaults either", and "connected functions that list backends need
+  a body, as Kotlin's connected-backends"; each backend's
+  `missing_host_code` and `kit::CONNECTED` runs, as is and under
+  `--no-connected`.
+- **Declaration errors' positions** (2026-11-13): tempest reports
+  Kotlin's "More than one constructor needs to adopt initializer for
+  property b" and "Constructor input s specified but there is already a
+  constructor" without the constructors' positions Kotlin appends ("at
+  test/test.temper+687-698"), as its messages don't name places; the
+  error is at the field or parameter, from its name. "Override has lower
+  visibility than in I", for a property, or a getter overriding one, is
+  at the member, where Kotlin's is at its `protected` or `private`.
+  Test: settle/classes.cases, "constructors beside header parameters or
+  initializers, as Kotlin's constructors-and-property-initialization";
+  settle/class-types.cases, "a property narrower than what it
+  overrides, as Kotlin's hide-override-property".
+- **Several constructors** without a field initializer they'd each
+  need, `class Thing { public constructor(hi: Int) {} public
+  constructor(lo: Int) {} }`, are accepted by Kotlin, which generates
+  both (two `constructor`s in one JS class, a syntax error), and an
+  object literal, `{ lo: 5 }`, becomes `new Thing(5)`. Tempest silently uses the first, so `{ lo: 5
+  }` and `new Thing(…)` match only `hi` ("No signature matches").
+  Either an error or real overloads is up to the team; not fixed yet.
 - **Connected wrappers' null defaults in JS:** Kotlin's wrapper for
   `@connected let f(s: String? = null)` passes `undefined` to host code
   for a left-out `s`, which strict `tsc` rejects against host code

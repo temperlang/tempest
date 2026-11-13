@@ -136,6 +136,25 @@ pub enum Message {
     /// An override narrower than what it overrides: the class, the member,
     /// its visibility, and the type declaring the overridden one.
     IncompatibleVisibility(String, String, String, String),
+    /// A property, or a getter overriding one, narrower than what it
+    /// overrides: the type declaring that.
+    OverrideLowersVisibility(String),
+    /// A type parameter of a sealed interface's direct subtype that isn't
+    /// one of the type arguments it gives the interface: the subtype.
+    SealedSubtypeTypeParam(String),
+    /// `static get p` or `static set p`: `get` or `set`, and the name.
+    StaticAccessor(String, String),
+    /// A field's initializer in a class with several constructors, which
+    /// each would need: the field.
+    InitializerWithConstructors(String),
+    /// A header parameter, `class C(x: Int)`, beside an explicit
+    /// constructor: the parameter.
+    InputWithConstructor(String),
+    /// `@connected(x)` with `x` not a list of backend names: its text.
+    ConnectedBackendsNotNames(String),
+    /// A function that lists backends in `@connected([…])` without a
+    /// Temper body for the others.
+    ConnectedBackendsNeedBody,
     /// An override whose signature differs from what it overrides: the
     /// class, the member as [`Message::IncompatibleVisibility`] names it,
     /// its signature, the one it should have, and the supertype.
@@ -306,6 +325,7 @@ impl Message {
                 | Message::ExpectedValueOfType(..)
                 | Message::IncompatibleSignature(..)
                 | Message::IncompatibleVisibility(..)
+                | Message::OverrideLowersVisibility(..)
         )
     }
 
@@ -371,6 +391,27 @@ impl Message {
                 "Type {class} has method {member} but its visibility is {visibility} which is \
                  narrower than the method it overrides in {from}"
             ),
+            Message::OverrideLowersVisibility(from) => {
+                format!("Override has lower visibility than in {from}")
+            }
+            Message::SealedSubtypeTypeParam(sub) => {
+                format!("Cannot introduce type parameters in sealed subtype {sub}")
+            }
+            Message::StaticAccessor(kind, name) => {
+                format!("`static {kind} {name}` is not supported; use a static method instead")
+            }
+            Message::InitializerWithConstructors(name) => {
+                format!("More than one constructor needs to adopt initializer for property {name}")
+            }
+            Message::InputWithConstructor(name) => {
+                format!("Constructor input {name} specified but there is already a constructor")
+            }
+            Message::ConnectedBackendsNotNames(text) => format!(
+                "@connected expects a list of backend names, like [\"cpp\", \"rust\"], not {text}"
+            ),
+            Message::ConnectedBackendsNeedBody => "A @connected function that lists backends \
+                                                   needs a Temper body for the backends not listed"
+                .into(),
             Message::IncompatibleSignature(class, member, sig, wanted, from) => format!(
                 "Type {class} has method {member} with signature {sig}, but it should be \
                  {wanted} to correctly override from {from}"

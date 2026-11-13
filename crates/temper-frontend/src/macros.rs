@@ -1113,6 +1113,18 @@ impl Settle {
         true
     }
 
+    /// Whether a node is a list literal of string literals, as
+    /// `["cpp", "rust"]`.
+    fn is_string_list(&self, node: NodeId) -> bool {
+        let tree = &self.lib.tree;
+        let Some((&callee, items)) = tree.children(node).split_first() else {
+            return false;
+        };
+        tree.kind(node) == NodeKind::Call
+            && self.lib.value(callee) == Some(&Value::Builtin(SyntaxBuiltin::List))
+            && (items.iter()).all(|&i| matches!(self.lib.value(i), Some(Value::String(_))))
+    }
+
     /// The string values in a tree, in order, as the backends a
     /// `@connected(["cpp", "rust"])` lists.
     fn strings_in(&self, node: NodeId) -> Vec<String> {
@@ -1152,6 +1164,17 @@ impl Settle {
         }
         let Some(body) = sig.body.and_then(|b| self.block_of(b)) else {
             if connected && sig.body.is_none() {
+                // Backends not listed would have no body to use.
+                if self
+                    .lib
+                    .connected
+                    .get(&call)
+                    .is_some_and(|c| c.backends.is_some())
+                {
+                    let span = self.lib.tree.span(*name);
+                    let message = Message::ConnectedBackendsNeedBody;
+                    self.lib.report(Level::Error, message, span);
+                }
                 // Implemented outside Temper: its type, `fn (A): B`.
                 let lowered = self.lower_params(&sig.params);
                 // Its parameters' names, for backends' wrappers of host code.
@@ -1826,7 +1849,7 @@ impl Settle {
             self.json.at.entry(call).or_insert(at);
         }
         self.json_extra(call, decorator);
-        // `@connected` or `@connected("key")`.
+        // `@connected` or `@connected(["cpp", "rust"])`.
         let callee = match self.lib.tree.kind(decorator) {
             NodeKind::Call => self.lib.tree.children(decorator).first().copied(),
             _ => Some(decorator),
@@ -1836,16 +1859,23 @@ impl Settle {
             .is_some_and(|n| self.lib.names.get(n) == "connected")
         {
             self.connected.insert(call);
-            // A list of backends, as `["cpp", "rust"]`, rather than core's
-            // and std's key, as `@connected("String::length")`.
+            // A list of backends, as `["cpp", "rust"]`; anything else,
+            // as a key, `@connected("X")`, is an error.
             let args = match self.lib.tree.kind(decorator) {
                 NodeKind::Call => &self.lib.tree.children(decorator)[1..],
                 _ => &[],
             };
             if let [arg] = *args {
-                if !matches!(self.lib.value(arg), Some(Value::String(_))) {
+                if self.is_string_list(arg) {
                     let listed = self.strings_in(arg);
                     self.connected_lists.insert(call, listed);
+                } else {
+                    // Reported, and connected as if without a list, as
+                    // Kotlin's `ConnectedDecorator` does.
+                    let span = self.lib.tree.span(arg);
+                    let text = self.lib.source_text(span).to_string();
+                    let message = Message::ConnectedBackendsNotNames(text);
+                    self.lib.report(Level::Error, message, span);
                 }
             }
         }

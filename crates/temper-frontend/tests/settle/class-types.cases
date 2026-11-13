@@ -1619,3 +1619,89 @@ error 649..669: Unrelated types cannot be targeted with is or as runtime type ch
 error 1070..1086: Unrelated types cannot be targeted with is or as runtime type checks: <[Sub2<T>]> from Sup<T>
 error 1183..1202: Type arguments cannot be introduced with is or as runtime type checks, because a type argument's run-time type can't be checked: <[Sup2<T, U>]> from Sup<U>
 error 1626..1639: Unrelated types cannot be targeted with is or as runtime type checks: <[Sub4]> from Sup<T>
+
+=== a property narrower than what it overrides, as Kotlin's hide-override-property
+// Kotlin's TypeChecker words it otherwise than for methods. A field is a
+// getter, so a getter overriding one is checked too, and one a getter
+// overrides.
+interface I { public x: Int; public get y(): Int; public z: Int; }
+class C(protected x: Int) extends I {
+  private y: Int = 1;
+  protected get z(): Int { 1 }
+}
+interface J { protected w: Int; private v: Int; }
+// As wide or wider is fine, and private members aren't overridden.
+class D(public x: Int, @noProperty w: Int) extends I & J {
+  public y: Int = 2;
+  public get z(): Int { 3 }
+  private v: Int = 4;
+}
+console.log(new D(1, 2).z.toString());
+--- settled
+(Block
+  (Interface ^I:0 (Let ^x:5 Int) (Get ^y:6 (Signature Int)) (Let ^z:7 Int))
+  (Class
+    ^C:1
+    I:0
+    (Param ^x:9 Int)
+    (Let private ^y:10 Int 1)
+    (Get ^z:11 (Fn Int (Block 1))))
+  (Interface ^J:2 (Let ^w:13 Int) (Let private ^v:14 Int))
+  (Class
+    ^D:3
+    I:0
+    J:2
+    (Param ^x:16 Int)
+    (Param private ^w:17 Int)
+    (Let ^y:18 Int 2)
+    (Get ^z:19 (Fn Int (Block 3)))
+    (Let private ^v:20 Int 4))
+  (Call
+    (Call . console \log)
+    (Call (Call . (Call . (Call new D:3 1 2) \z) \toString)))
+  #void)
+error 244..250: Override has lower visibility than in I
+error 274..284: Override has lower visibility than in I
+error 298..316: Override has lower visibility than in I
+log 3
+
+=== sealed subtypes can't add type parameters, as Kotlin's sealed-subtypes-reject-new-type-params
+sealed interface Something<T> {}
+// Each of a sealed type's direct subtypes' type parameters must be one of
+// the type arguments it gives the sealed type.
+class Subversive<T, U> extends Something<T> {}
+// Renamed is fine.
+interface Simple<V> extends Something<V> {}
+// Further down, they're fine: nothing can be cast to them anyway.
+class Satisfying<T, U> extends Simple<T> {}
+sealed interface Two<A, B> {}
+class Swapped<B, A> extends Two<A, B> {}
+class Fixed<C> extends Two<C, Int> {}
+class Neither extends Two<String, Int> {}
+console.log("runs");
+--- settled
+(Block
+  (Interface ^Something:0 (TypeParam ^T:8))
+  (Class
+    ^Subversive:1
+    (TypeParam ^T:10)
+    (TypeParam ^U:11)
+    (Call <> Something:0 T:10))
+  (Interface ^Simple:2 (TypeParam ^V:13) (Call <> Something:0 V:13))
+  (Class
+    ^Satisfying:3
+    (TypeParam ^T:15)
+    (TypeParam ^U:16)
+    (Call <> Simple:2 T:15))
+  (Interface ^Two:4 (TypeParam ^A:18) (TypeParam ^B:19))
+  (Class
+    ^Swapped:5
+    (TypeParam ^B:21)
+    (TypeParam ^A:22)
+    (Call <> Two:4 A:22 B:21))
+  (Class ^Fixed:6 (TypeParam ^C:24) (Call <> Two:4 C:24 Int))
+  (Class ^Neither:7 (Call <> Two:4 String Int))
+  (Call (Call . console \log) "runs")
+  #void)
+error 176..177: Cannot introduce type parameters in sealed subtype Subversive
+log runs
