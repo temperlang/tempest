@@ -344,6 +344,7 @@ builds.
 | [`hover`](../../../crates/temper-wasm/src/lib.rs), [`definition`](../../../crates/temper-wasm/src/lib.rs), [`completions`](../../../crates/temper-wasm/src/lib.rs), [`references`](../../../crates/temper-wasm/src/lib.rs), [`signature_help`](../../../crates/temper-wasm/src/lib.rs) | a UTF-16 offset | the answer, or `null` |
 | [`rename`](../../../crates/temper-wasm/src/lib.rs) | an offset, the new name (empty to check) | edits, or `{"error": ...}` |
 | [`backends`](../../../crates/temper-wasm/src/lib.rs) | | the built-in backends' names, in mask order |
+| [`version`](../../../crates/temper-wasm/src/lib.rs) | | the build's version and commit, as `tempest --version` says them, which About shows; generated code still names the version with no commits counted |
 | [`std_library`](../../../crates/temper-wasm/src/lib.rs) | a backend's place in `backends` | std's files for it, kept |
 | [`parse`](../../../crates/temper-wasm/src/lib.rs), [`run`](../../../crates/temper-wasm/src/lib.rs), [`generate`](../../../crates/temper-wasm/src/lib.rs) | source (and a backend for `generate`) | the older single-purpose calls |
 | [`output_ptr`](../../../crates/temper-wasm/src/lib.rs), [`output_len`](../../../crates/temper-wasm/src/lib.rs) | | where the last result is |

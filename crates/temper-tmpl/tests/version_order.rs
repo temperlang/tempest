@@ -13,8 +13,9 @@
 //!   `MAVEN_ARTIFACT_JAR` or beside `mvn`, with `java`;
 //! - NuGet: `NuGet.Versioning`, in `NUGET_VERSIONING_DLL` or the .NET
 //!   SDK's directory, with `dotnet fsi`;
-//! - LuaRocks: `luarocks.core.vers`, beside `luarocks`, with `lua`
-//!   (`LUA`).
+//! - LuaRocks: `luarocks.core.vers`, in `LUAROCKS_MODULES` (LuaRocks'
+//!   `src`, or wherever its `luarocks/` is) or beside `luarocks`, with
+//!   `lua` (`LUA`).
 //!
 //! Cargo, Go, Gradle, vcpkg, and Conan aren't run here: Cargo and Go
 //! follow SemVer's precedence as npm does, and the others are checked
@@ -275,8 +276,12 @@ printfn \"checked\"
     report("NuGet", output);
 }
 
-/// LuaRocks' own Lua modules, beside its `luarocks` script.
+/// LuaRocks' own Lua modules: in `LUAROCKS_MODULES`, as CI has them
+/// from LuaRocks' sources, or beside its `luarocks` script.
 fn luarocks_modules() -> Option<PathBuf> {
+    if let Some(dir) = env::var_os("LUAROCKS_MODULES") {
+        return Some(PathBuf::from(dir));
+    }
     let luarocks = match env::var_os("LUAROCKS") {
         Some(path) => PathBuf::from(path),
         None => on_path("luarocks")?,

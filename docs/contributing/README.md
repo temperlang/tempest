@@ -20,6 +20,8 @@ This repository is tempest, Temper's compiler in Rust. Start with:
 - [Writing these docs](docs.md): their conventions, how their examples
   are checked, and the plan for rendering them.
 - [CI and supply chain](ci.md): what CI pins, and how to bump it.
+- [Releasing](releasing.md): tagging a release, release candidates
+  first, reviewing what the release workflow makes, and undoing a bad tag.
 
 ### Principles
 
@@ -150,11 +152,13 @@ Between releases, builds are dev builds named by the commits since the
 last release tag (`0.7.0-alpha.0.123`), which `tempest --version` shows
 with the commit.
 
-Releases are tag-driven: a signed `v` tag on `main` (`v0.7.0-beta.1`,
-`v0.7.0`) names the release, and only tagged builds are published. CI
-needs the whole history and the tags (`fetch-depth: 0`) to name dev
-builds. The release steps and the workflow that publishes each
-ecosystem's packages are still to come.
+Releases are tag-driven: a signed `v` tag on `main` (`v0.7.0-rc.1`,
+`v0.7.0`) names the release, and pushing one makes a GitHub release
+automatically, with the binaries, the runtimes and std packaged for
+each registry, and checksums ([Releasing](releasing.md)). Nothing is
+published to package registries yet. CI's builds that say their
+version check out the whole history and the tags (`fetch-depth: 0`),
+to name dev builds.
 
 ## Questions?
 

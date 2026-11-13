@@ -10,7 +10,9 @@
 //! source for the editor's queries, `hover`, `definition`,
 //! `completions`, `references`, `rename`, and `signature_help`, which
 //! [`temper_analysis`] answers; `backends`
-//! lists the backends built in, and `std_library` gives std's own
+//! lists the backends built in, `version` names the build's version
+//! (as `tempest --version`, from git when it was built), and
+//! `std_library` gives std's own
 //! output from one, for running generated tests. The older calls each do
 //! one thing: `parse` returns the parse tree and the grammar step's tree
 //! as text, `run` settles and runs source, with the std modules it
@@ -161,6 +163,17 @@ pub const TESTS: u32 = 4;
 pub extern "C" fn backends() {
     let names: Vec<String> = built_in().map(json_string).collect();
     OUTPUT.with_borrow_mut(|out| *out = format!("[{}]", names.join(",")));
+}
+
+/// This build's version, with its commit, as a JSON string, as
+/// `tempest --version` says it: `"0.7.0-alpha.0.123 (3f2b063)"`. Output
+/// still names the version with no commits counted
+/// ([`temper_tmpl::version::current`]), as tests' does.
+#[allow(unsafe_code)]
+#[unsafe(no_mangle)]
+pub extern "C" fn version() {
+    let text = json_string(&temper_driver::version::describe());
+    OUTPUT.with_borrow_mut(|out| *out = text);
 }
 
 /// The backends this build has, alphabetically.

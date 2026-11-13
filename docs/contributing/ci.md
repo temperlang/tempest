@@ -20,11 +20,17 @@ run takes about as long as its slowest job:
 
 | Job | What it checks |
 | --- | --- |
-| `lint, core` | formatting; clippy, with and without default features; the workflows parse as YAML; the docs' links; Temper's functional tests on the interpreter; the size and speed charts; then every crate's tests but the backends' and `tempest`'s, and again without default features, `tempest`'s included |
+| `lint, core` | formatting; clippy, with and without default features; the workflows parse as YAML; the docs' links; Temper's functional tests on the interpreter; the size and speed charts; the rules for release tags; then every crate's tests but the backends' and `tempest`'s, and again without default features, `tempest`'s included |
 | `cli` | `tempest`'s tests with every backend, so every toolchain |
-| `py, js, lua, rust` | those backends' tests, with mypy, pyright, TypeScript, Mocha, LuaLS, Lua 5.4.6 and LuaSocket, and again on LuaJIT; and the Rust runtime's own |
+| `py, js, lua, rust` | those backends' tests, with mypy, pyright, TypeScript, Mocha, LuaLS, Lua 5.4.6 and LuaSocket, and again on LuaJIT; the Rust runtime's own; and the version's spellings, sorted by each ecosystem's comparator |
 | `java, csharp, cpp` | those backends' tests, with Java 21 and JUnit, .NET 6, and g++ 13, sanitized too, and libcurl; and `strict`: all generated C++ at -O2 by g++ 12 and 14 and clang++ |
 | `release, playground` | tempest's release build, the VS Code extension (tested in a real VS Code), the docs' examples, and the docs site; the wasm build, the playground, and its smoke test in headless Chromium |
+
+`cli` and `release, playground` check out the whole history and its
+tags (`fetch-depth: 0`), as binaries.yml and pages.yml do, so the
+tempest and playground they build name a real dev build
+(`0.7.0-alpha.0.123`); the other jobs' builds don't say their version,
+so they check out only the commit.
 
 Each check is a step of its own that runs even when an earlier one
 fails, so a failure names its check, and one doesn't hide another
@@ -189,6 +195,15 @@ binaries nightly, cross-compiling Windows Arm64 on x64, and runs
 nothing on them; nightly.yml's `platforms` jobs are where they're
 tested.
 
+### On a `v` tag: the release
+
+[release.yml](../../.github/workflows/release.yml) checks the tag
+against the workspace's version, calls binaries.yml for the binaries,
+packs the runtimes and std for each registry with the Linux x64 tempest
+just built ([release.py](../../.github/ci-tools/release.py)), and makes
+the GitHub release, a pre-release for an alpha, beta, or rc tag
+([Releasing](releasing.md)). It publishes to no package registry.
+
 ## What's pinned
 
 - **Actions,** GitHub's own and third parties', by full commit SHA with
@@ -197,9 +212,14 @@ tested.
   branch, which names the toolchain; it has no version tags.
 - **Tokens:** every workflow's token is read-only (`permissions:
   contents: read`) except where a job needs more: the `release` and
-  `nightly` jobs in [binaries.yml](../../.github/workflows/binaries.yml)
-  (`contents: write`) and [pages.yml](../../.github/workflows/pages.yml)
-  (`pages: write`, `id-token: write`).
+  `nightly` job in [binaries.yml](../../.github/workflows/binaries.yml)
+  and the `release` job in
+  [release.yml](../../.github/workflows/release.yml) (`contents:
+  write`), and [pages.yml](../../.github/workflows/pages.yml) (`pages:
+  write`, `id-token: write`). release.yml's call of binaries.yml grants
+  it `contents: write` too, as a called workflow can't otherwise have
+  what its `nightly` job asks for, though that job never runs for a
+  tag; binaries.yml's other jobs stay read-only.
 - **Crates:** every `cargo` command over the workspace runs with
   `--locked`, so CI builds exactly `Cargo.lock`. Crates the backends'
   tests generate have no lockfile and aren't locked.
@@ -219,6 +239,17 @@ tested.
   versions, so a change fails there, not in the tests.
 - **VS Code,** for the extension's tests, by `VSCODE_VERSION` in
   [editors/vscode/build.py](../../editors/vscode/build.py).
+- **The version comparators** (ci.yml's `Version comparators` step):
+  `packaging` 25.0 and node-semver 7.7.2, by exact version, into the
+  job's temp directory; LuaRocks' sources at v3.11.1's commit; Maven
+  and the .NET SDK as the image has them.
+- **Packing a release** (release.yml's `packages`): Rust 1.99.0 (its
+  `dtolnay/rust-toolchain` branch's SHA), as only cargo 1.90 and later
+  packs temper-std beside an unpublished temper-core; hatchling 1.27.0,
+  which builds the wheels and sdists (`PY_BUILD_CONSTRAINTS` in
+  release.py); LuaRocks, zip, and unzip from Ubuntu's archive; Java 21,
+  .NET 6, and Node 24, as the tests', and Java 8, the Maven toolchain
+  temper-core's pom asks for; Maven as the image has it.
 
 - **Runner images:** ci.yml's and pages.yml's jobs are pinned to
   `ubuntu-24.04`, for Lua (above); nightly.yml's `platforms` and `platforms-quick` to the

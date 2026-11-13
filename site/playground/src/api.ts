@@ -66,7 +66,8 @@ export type ToCompiler =
 
 /** The compiler's worker to the page. */
 export type FromCompiler =
-  | { type: "ready"; backends: string[] }
+  /** `version` as `tempest --version` says it: `0.7.0-alpha.0.123 (3f2b063)`. */
+  | { type: "ready"; backends: string[]; version: string }
   | { type: "diagnostics"; id: number; ms: number; diagnostics: Diagnostic[] }
   | { type: "result"; id: number; ms: number; result: CompileResult }
   | { type: "answer"; qid: number; value: unknown }

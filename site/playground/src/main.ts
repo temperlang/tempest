@@ -644,6 +644,7 @@ function startWorker(module: WebAssembly.Module): void {
 function onCompiler(message: FromCompiler): void {
   switch (message.type) {
     case "ready":
+      showVersion(message.version);
       if (backends.join() !== message.backends.join()) {
         backends = message.backends;
         buildTabs();
@@ -728,6 +729,19 @@ function show(result: CompileResult, ms: number): void {
   showInterpreter(result.run);
   runJs(result.backends.js);
   status(`Compiled in ${ms < 10 ? ms.toFixed(1) : Math.round(ms)} ms`, false);
+}
+
+/** The compiler's version, as `tempest --version` says it, in About. */
+function showVersion(version: string): void {
+  const list = document.querySelector("#about ul");
+  if (!version || !list) return;
+  let item = document.getElementById("about-version");
+  if (!item) {
+    item = document.createElement("li");
+    item.id = "about-version";
+    list.prepend(item);
+  }
+  item.textContent = `Temper ${version}`;
 }
 
 function status(text: string, bad: boolean): void {

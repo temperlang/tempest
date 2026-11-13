@@ -6,10 +6,11 @@
 #
 # - `lint`: formatting, clippy (with and without default features), the
 #   workflows parsed as YAML, the docs' links, Temper's functional
-#   tests (crates/temper-funtests/cases/) on tempest's interpreter, and
-#   the size and speed charts; then `core`'s tests: every crate's but
-#   the backends' and `tempest`'s, and again without default features
-#   (no backends, no `net`), `tempest`'s included;
+#   tests (crates/temper-funtests/cases/) on tempest's interpreter, the
+#   size and speed charts, and release tags' rules (release.yml); then
+#   `core`'s tests: every crate's but the backends' and `tempest`'s, and
+#   again without default features (no backends, no `net`), `tempest`'s
+#   included;
 # - `cli`: `tempest`'s tests with every backend, so with every
 #   toolchain: `tempest test`, `build`, and `run` on small libraries;
 # - `backends`, two jobs, each with only its backends' toolchains
@@ -24,6 +25,8 @@
 #   an error, and run, also under AddressSanitizer,
 #   UndefinedBehaviorSanitizer, and ThreadSanitizer, and compiled at -O2
 #   by g++ 12 and 14 (14 at -O3 too) and clang++, every warning an error;
+#   and the version's spellings, sorted by each ecosystem's own
+#   comparator (npm's, PEP 440's, Maven's, NuGet's, and LuaRocks');
 # - `release`: tempest's release build, the VS Code extension (type
 #   checked, bundled, packaged, and tested in a real VS Code against
 #   that build), the docs' examples on it, and the docs site (built,
@@ -49,7 +52,11 @@
 # from Ubuntu's archive can't change underneath the tests: noble's
 # lua5.4 is 5.4.6, its lua-socket 3.1.0, and its g++ 13. Each caches its
 # own build (Swatinem/rust-cache, keyed by job), saved only from main,
-# which pull requests read, so their caches don't crowd main's out.
+# which pull requests read, so their caches don't crowd main's out. The
+# jobs whose builds say their version (`cli` and `release`) check out
+# the whole history and its tags, so it's a real dev build's
+# (`0.7.0-alpha.0.123`), as `tempest --version` and the playground's
+# About show.
 name: CI
 
 on:
@@ -181,6 +188,10 @@ jobs:
       - name: Size and speed charts are current
         if: ${{ !cancelled() }}
         run: uv run compat/size_speed_charts.py --check
+      # Which tags release.yml takes (.github/ci-tools/release.py).
+      - name: Release tags' rules
+        if: ${{ !cancelled() }}
+        run: python3 .github/ci-tools/release.py self-test
       # `core`: everything but the backends' crates, which `backends`
       # tests, and `tempest` with backends, which `cli` tests. With the
       # docs' REPL transcripts (temper-frontend's repl_docs).
@@ -206,6 +217,9 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        # The whole history and the tags, for the version.
+        with:
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@cfcaf53ba4c621917ec7f78a66bff7a8848ddad4 # 1.85.0 branch, 2026-10-16
         # For `tempest test -b rust`, as the Rust backend's job.
         with:
@@ -291,6 +305,27 @@ jobs:
         run: |
           cargo test --locked -p temper-be-rust
           cargo test --locked --manifest-path crates/temper-be-rust/runtime/temper-core/Cargo.toml --target-dir target/rust-runtime
+      # Each ecosystem's own comparator sorts temper_tmpl::version's
+      # spellings (crates/temper-tmpl/tests/version_order.rs), required
+      # here: PEP 440's `packaging` and node-semver at exact versions,
+      # into the job's temp directory, not the image; LuaRocks' sources
+      # at v3.11.1's commit, run by the Lua 5.4 set up above; and, as
+      # they are, the image's Maven (`ComparableVersion`, in its
+      # maven-artifact jar) and .NET SDK (NuGet.Versioning).
+      - name: Version comparators
+        if: ${{ !cancelled() && matrix.id == 'checked' }}
+        env:
+          TEMPEST_REQUIRE_COMPARATORS: "1"
+        run: |
+          cmp="$RUNNER_TEMP/comparators"
+          uv venv -q "$cmp/py"
+          uv pip install -q --python "$cmp/py/bin/python" packaging==25.0
+          npm install --prefix "$cmp/npm" --no-save --ignore-scripts --no-audit --no-fund semver@7.7.2
+          git clone -q https://github.com/luarocks/luarocks.git "$cmp/luarocks"
+          git -C "$cmp/luarocks" checkout -q fa2736e7c68094710643577b0153dac72ce4bcdc
+          PYTHON="$cmp/py/bin/python" NODE_SEMVER="$cmp/npm/node_modules/semver" \
+            LUAROCKS_MODULES="$cmp/luarocks/src" \
+            cargo test --locked -p temper-tmpl --test version_order
       - name: Java
         if: ${{ !cancelled() && contains(matrix.backends, 'java') }}
         run: cargo test --locked -p temper-be-java
@@ -323,6 +358,9 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        # The whole history and the tags, for the version.
+        with:
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@cfcaf53ba4c621917ec7f78a66bff7a8848ddad4 # 1.85.0 branch, 2026-10-16
         with:
           targets: wasm32-unknown-unknown
@@ -339,7 +377,9 @@ jobs:
           node-version: 24
       - id: small
         name: Release build of tempest
-        run: cargo build --locked --profile small -p tempest
+        run: |
+          cargo build --locked --profile small -p tempest
+          target/small/tempest --version | tee -a "$GITHUB_STEP_SUMMARY"
       # The VS Code extension, type checked by its pinned tsc and bundled
       # by esbuild, its search for tempest tested under Node, its TextMate
       # grammars checked (check_grammar.py, and test/grammar.mjs with VS

@@ -128,6 +128,22 @@ fn the_workspace_is_not_published() {
     );
 }
 
+/// Python's runtime keeps a pyproject.toml for mypyc's compiled wheels,
+/// which `tempest build` neither ships nor fills (`temper-be-py`'s
+/// `runtime::FILES`), so it always refuses PyPI, as the runtimes do
+/// until a release.
+#[test]
+fn the_mypyc_build_is_not_published() {
+    let path = root().join("crates/temper-be-py/runtime/temper-core/mypyc/pyproject.toml");
+    let text = fs::read_to_string(&path).unwrap();
+    assert!(
+        text.lines()
+            .any(|l| l.trim() == "classifiers = [\"Private :: Do Not Upload\"]"),
+        "{}: no `Private :: Do Not Upload` classifier",
+        path.display()
+    );
+}
+
 #[test]
 fn names_whole_versions() {
     assert!(names("version = \"0.7.0\"", "0.7.0"));

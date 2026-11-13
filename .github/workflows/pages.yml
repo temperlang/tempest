@@ -40,6 +40,10 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        # The whole history and the tags, so the playground's About
+        # names the version (`0.7.0-alpha.0.123`).
+        with:
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@cfcaf53ba4c621917ec7f78a66bff7a8848ddad4 # 1.85.0 branch, 2026-10-16
         with:
           targets: wasm32-unknown-unknown

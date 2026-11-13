@@ -36,7 +36,7 @@ const INVENTORY: &[(&str, usize, &str)] = &[
     ),
     (
         "crates/temper-wasm/src/lib.rs",
-        17,
+        18,
         "#[unsafe(no_mangle)] on the playground's exports, and nothing else",
     ),
     (

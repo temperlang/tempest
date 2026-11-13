@@ -240,7 +240,8 @@ reject. `temper-tmpl`'s
 [`version_order`](../../../crates/temper-tmpl/tests/version_order.rs)
 test sorts each spelling with its ecosystem's own comparator where one
 is installed (pip's `packaging`, node-semver, Maven's
-`ComparableVersion`, `NuGet.Versioning`, and LuaRocks' `vers`).
+`ComparableVersion`, `NuGet.Versioning`, and LuaRocks' `vers`), all
+required in CI (`TEMPEST_REQUIRE_COMPARATORS`).
 
 Where the version comes from:
 
@@ -294,10 +295,13 @@ which is fine while only tagged releases are published.
 
 Releases are tag-driven: a release comes only from a `v` tag whose
 version is the workspace's (`v0.7.0`, or a pre-release of it as
-`v0.7.0-beta.1`, for `version = "0.7.0"`), and
-only tagged builds are published; the release workflow, still to be
-written, checks that before it publishes anything
-([contributing](../../contributing/README.md#versions-and-releases)).
+`v0.7.0-beta.1`, for `version = "0.7.0"`), which
+[release.yml](../../../.github/workflows/release.yml) checks
+([release.py](../../../.github/ci-tools/release.py)'s `check`) before
+it builds anything, and only tagged builds are released
+([releasing](../../contributing/releasing.md)). The playground's About
+names the build's version (temper-wasm's `version`); its generated code,
+like tests', names the version with no commits counted.
 
 ### Pluggable: a description per backend
 

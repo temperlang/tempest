@@ -31,6 +31,7 @@ interface Exports {
   rename(at: number, ptr: number, len: number): void;
   signature_help(at: number): void;
   backends(): void;
+  version(): void;
   std_library(backend: number): void;
   output_ptr(): number;
   output_len(): number;
@@ -80,6 +81,7 @@ function instantiate(m: WebAssembly.Module): Exports {
     rename: fn("rename"),
     signature_help: fn("signature_help"),
     backends: fn("backends"),
+    version: fn("version"),
     std_library: fn("std_library"),
     output_ptr: fn("output_ptr"),
     output_len: fn("output_len"),
@@ -146,7 +148,9 @@ self.onmessage = (event: MessageEvent<ToCompiler>) => {
     const e = current();
     e.backends();
     backends = toStrings(output(e));
-    post({ type: "ready", backends });
+    e.version();
+    const version = output(e);
+    post({ type: "ready", backends, version: typeof version === "string" ? version : "" });
     return;
   }
   if (message.type === "query") {
