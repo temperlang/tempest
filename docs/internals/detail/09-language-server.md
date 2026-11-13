@@ -338,8 +338,8 @@ library cache, which would at least keep imported libraries settled
 since each settle's arena replaces the last.
 
 **Cons:** cost grows with the library and everything it imports, std's
-modules included, each time. Switch-over notes it as "fast enough for
-the libraries we have"; there's no recorded measurement of latency.
+modules included, each time. It's been fast enough for the libraries
+we have, but there's no recorded measurement of latency.
 
 **Status:** tempest's choice for now; incremental settling is
 open.

@@ -702,7 +702,7 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   type's declaration's name. Tempest's error is type-only, so the code
   runs and is written as it is. Neither checks a private constructor's
   parameters, so a non-exported parameter type there, which Kotlin's C#
-  makes a public constructor's (CS0051), isn't caught (t300).
+  makes a public constructor's (CS0051), isn't caught.
   Test: settle/classes.cases, "exports that expose what isn't exported".
 - **A setter without a getter** (2026-11-13) can be assigned, as `c.p =
   5`, and the assignment used as a value, as `c.p = c.p = v`, in both;
@@ -1808,11 +1808,10 @@ copied Kotlin's:
   `Engine2`; exports keep their names, and two modules exporting one
   name are still an error. A module's init locals and tests are its
   own. And where a generic function, defined in the header, calls a
-  private function of its module (secure-composition's
-  `propagateOver`), the private one isn't `static` and the header
-  declares it; Kotlin's declares every function in the header. A
-  template that takes its module's lock is not yet supported, since
-  the lock is the `.cpp`'s.
+  private function of its module, the private one isn't `static` and
+  the header declares it; Kotlin's declares every function in the
+  header. A template that takes its module's lock is not yet
+  supported, since the lock is the `.cpp`'s.
   Test: programs/modules/ (`Engine`) and programs/generics.temper.md
   (`noneIn`), on every backend.
 - **C# names a namespace hides** (2026-11-13, regex engine): C# looks a
