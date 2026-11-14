@@ -3,49 +3,65 @@ tmpl 1 model 1 library `imports-library` 0.0.0
 uses renamed#2 0.0.0 {
   module ``#3 {
     class Checked#4 {
-      let end#19: Int32;
-      constructor constructor#20(end: Int32): Checked#4;
-      method delete#23(): Int32;
-      get local#24(): Int32;
+      let end#21: Int32;
+      constructor constructor#22(end: Int32): Checked#4;
+      method delete#25(): Int32;
+      get local#26(): Int32;
     }
-    fn lambda#21(n: Int32): Int32;
-    let native#22: Int32;
+    class Builtins#6 {
+      let hash#27: Int32;
+      constructor constructor#28(hash: Int32): Builtins#6;
+      method get#29(i: Int32): Int32;
+      method set#30(i: Int32): Int32;
+      method map#31(i: Int32): Int32;
+      method format#32(): String;
+      get int#33(): Int32;
+      method later#34(): Int32;
+      method print#35(): String;
+    }
+    fn lambda#23(n: Int32): Int32;
+    let native#24: Int32;
   }
 }
 
-uses modules#7 0.0.0 {
-  module ``#8 {
-    fn sum#9(n: Int32): Int32;
+uses modules#9 0.0.0 {
+  module ``#10 {
+    fn sum#11(n: Int32): Int32;
   }
-  module helpers#10 {
-    fn twice#11(x: Int32): Int32;
-    let base#12: Int32;
+  module helpers#12 {
+    fn twice#13(x: Int32): Int32;
+    let base#14: Int32;
   }
 }
 
-uses `temper-core`#13 0.1.0 {
-  interface Console#14 {
-    connected method log#15(message: String): Void;
+uses `temper-core`#15 0.0.0-alpha.0.0 {
+  interface Console#16 {
+    connected method log#17(message: String): Void;
   }
-  class Int32#17 {
-    connected method toString#18(radix?: Int32): String;
+  class Int32#19 {
+    connected method toString#20(radix?: Int32): String;
   }
-  connected fn getConsole#25(name?: String): Console#14;
+  connected fn getConsole#36(name?: String): Console#16;
 }
 
 module `imports-library`#0 {
-  let ~console#16: Console#14;
+  let ~console#18: Console#16;
 
-  export fn both#1(n#6: Int32): Int32 {
-    return %Int32.add(%Int32.add(sum#9(n#6), twice#11(n#6)), base#12);
+  export fn both#1(n#8: Int32): Int32 {
+    return %Int32.add(%Int32.add(sum#11(n#8), twice#13(n#8)), base#14);
   }
 
   let checked#5: Checked#4;
 
+  let b#7: Builtins#6;
+
   init {
-    init ~console#16 = getConsole#25(omitted);
-    ~console#16.log#15(%String.cat("both ", both#1(2).toString#18(omitted)));
-    init checked#5 = new constructor#20(lambda#21(native#22));
-    ~console#16.log#15(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat("renamed ", checked#5.delete#23().toString#18(omitted)), " "), checked#5.local#24().toString#18(omitted)), " "), checked#5.end#19.toString#18(omitted)));
+    init ~console#18 = getConsole#36(omitted);
+    ~console#18.log#17(%String.cat("both ", both#1(2).toString#20(omitted)));
+    init checked#5 = new constructor#22(lambda#23(native#24));
+    ~console#18.log#17(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat("renamed ", checked#5.delete#25().toString#20(omitted)), " "), checked#5.local#26().toString#20(omitted)), " "), checked#5.end#21.toString#20(omitted)));
+    init b#7 = new constructor#28(4);
+    ~console#18.log#17(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat("builtins ", b#7.hash#27.toString#20(omitted)), " "), b#7.get#29(1).toString#20(omitted)), " "), b#7.set#30(3).toString#20(omitted)), " "), b#7.map#31(5).toString#20(omitted)), " "), b#7.format#32()), " "), b#7.int#33().toString#20(omitted)), " "), b#7.later#34().toString#20(omitted)));
+    ~console#18.log#17(b#7.print#35());
   }
 }

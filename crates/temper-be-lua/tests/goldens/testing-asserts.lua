@@ -100,8 +100,9 @@ local function assertMoreThings(t, helper, strings)
 end
 
 local name = "case"
+local unitVecs = { Vec2(1.0, 0.0), Vec2(0.0, 1.0) }
 
 return {
   Vec2 = Vec2,
-  ["$test"] = { Vec2 = Vec2, TestHelper = TestHelper, normSquared = normSquared, assertMoreThings = assertMoreThings },
+  ["$test"] = { Vec2 = Vec2, TestHelper = TestHelper, normSquared = normSquared, assertMoreThings = assertMoreThings, unitVecs = unitVecs },
 }

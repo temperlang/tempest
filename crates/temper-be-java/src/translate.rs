@@ -2111,12 +2111,18 @@ fn jumps(body: &[Stmt], label: Option<&str>, innermost: bool, brk: bool) -> bool
     })
 }
 
-/// A library's package: std's is `temper.std`, as Kotlin's; others are
-/// [`crate::names::package`]'s.
-pub fn library_package(library: &str) -> String {
-    match library {
-        "std" => "temper.std".into(),
-        _ => crate::names::package(library),
+/// A library's package: std's is `temper.std`, as Kotlin's; another's is
+/// its config's `javaPackage`, each part as [`crate::names::package`]
+/// gives it, or else its `javaName` or its own name, as that gives it.
+pub fn library_package(p: &Program, library: &str) -> String {
+    let meta = p.metadata_of(library);
+    match (library, meta.get("javaPackage")) {
+        ("std", _) => "temper.std".into(),
+        (_, Some(package)) => (package.split('.'))
+            .map(crate::names::package)
+            .collect::<Vec<_>>()
+            .join("."),
+        _ => crate::names::package(meta.get("javaName").unwrap_or(library)),
     }
 }
 
@@ -2124,13 +2130,13 @@ pub fn library_package(library: &str) -> String {
 pub fn module_package(p: &Program, module: DeclId) -> String {
     let d = p.decls.get(module);
     let (library, path) = match d.kind {
-        DeclKind::Library => (library_package(p.name(module)), ""),
-        _ if !d.owner.is_none() => (library_package(p.name(d.owner)), p.name(module)),
+        DeclKind::Library => (library_package(p, p.name(module)), ""),
+        _ if !d.owner.is_none() => (library_package(p, p.name(d.owner)), p.name(module)),
         _ => {
             let path = (p.modules.iter())
                 .find(|m| m.decl == module)
                 .map_or("", |m| m.path.as_str());
-            (library_package(&p.library.name), path)
+            (library_package(p, &p.library.name), path)
         }
     };
     let mut out = library;

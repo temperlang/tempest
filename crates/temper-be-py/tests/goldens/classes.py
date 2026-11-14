@@ -1,5 +1,8 @@
 from abc import ABCMeta as _ABCMeta, abstractmethod as _abstractmethod
-from collections.abc import MutableSequence as _MutableSequence
+from collections.abc import (
+    MutableSequence as _MutableSequence,
+    Sequence as _Sequence,
+)
 from temper_core import (
     LoggingConsole as _LoggingConsole,
     boolean_to_string as _boolean_to_string,
@@ -98,6 +101,14 @@ class _Counter:
     @doubled.setter
     def doubled(self, value: int, /) -> None:
         self._count = _int_sub(value, self._count)
+
+    @property
+    def added(self, /) -> int:
+        raise AttributeError('added getter unavailable')
+
+    @added.setter
+    def added(self, value: int, /) -> None:
+        self._count = _int_add(self._count, value)
 
     def bump(self, /) -> '_Counter':
         self._count = _int_add(self._count, 1)
@@ -211,6 +222,39 @@ class _Version:
             return self._minor - other._minor
 
 
+class _Stock:
+    __slots__ = ('_count', '_items_var', '_size')
+    _count: int
+    _items_var: _Sequence[int]
+    _size: int
+
+    def __init__(self, /, items: _Sequence[int], count: int | None = None) -> None:
+        if count is None:
+            count = len(items)
+        self._count = count
+        self._items_var = items
+        self._size = len(items)
+
+    @property
+    def count(self, /) -> int:
+        return self._count
+
+    @property
+    def items(self, /) -> _Sequence[int]:
+        return self._items_var
+
+    @items.setter
+    def items(self, value: _Sequence[int], /) -> None:
+        self._items_var = value
+
+    @property
+    def size(self, /) -> int:
+        return self._size
+
+    def size_now(self, /) -> int:
+        return len(self.items)
+
+
 def _shape(x: Shape, /) -> Shape:
     return x
 
@@ -279,6 +323,13 @@ _console.log(str(_c.count))
 _c.doubled = 10
 _console.log(str(_c.doubled))
 _console.log(_boolean_to_string(_c.same(_Counter().bump().bump())))
+_c.added = 5
+_t = 2
+_c.added = _t
+_t2 = _t
+_c.added = _t2
+_added: int = _t2
+_console.log(f'{_added} {_c.count}')
 _console.log(f'{_boolean_to_string(_Point(1, 2) == _Point(1, 2))} {_boolean_to_string(_Point(1, 2) != _Point(2, 1))}')
 _console.log(_boolean_to_string(_Holder(_Loose(3), 'a') == _Holder(_Loose(-3), 'a')))
 _console.log(f'{_boolean_to_string(_Version(1, 2).compare_to(_Version(1, 3)) < 0)} {_boolean_to_string(_Version(2, 0).compare_to(_Version(1, 9)) >= 0)}')
@@ -287,6 +338,9 @@ _sq: Square = _cast_by_type(_q, Square)
 _console.log(str(_sq.area))
 if isinstance(_s, Rect):
     _console.log(str(_s.w))
+_st: _Stock = _Stock((4, 5))
+_st.items = (1, 2, 3)
+_console.log(f'{_st.count} {_st.size} {_st.size_now()} {len(_st.items)}')
 _favorite: type = _same(int)
 _named: int = 0
 _i = 0

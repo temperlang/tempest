@@ -106,6 +106,7 @@ end
 ---@field count integer
 ---@field hidden integer
 ---@field doubled integer
+---@field added integer
 ---@field bump fun(self: classes.Counter): classes.Counter
 ---@field same fun(self: classes.Counter, other: classes.Counter): boolean
 
@@ -129,6 +130,12 @@ end
 ---@param value integer
 function Counter.set.doubled(this, value)
   this.count = temper.int32_sub(value, this.count)
+end
+
+---@param this classes.Counter
+---@param value integer
+function Counter.set.added(this, value)
+  this.count = temper.int32_add(this.count, value)
 end
 
 ---@param this classes.Counter
@@ -260,6 +267,48 @@ function Version.methods.compareTo(this, other)
   end
 end
 
+---@class classes.Stock
+---@field count integer
+---@field itemsVar integer[]
+---@field items integer[]
+---@field size integer
+---@field sizeNow fun(self: classes.Stock): integer
+
+---@class classes.Stock.type: temper.Type
+---@operator call: classes.Stock
+local Stock = temper.type("classes.Stock")
+
+---@param this classes.Stock
+---@return integer[]
+function Stock.get.items(this)
+  return this.itemsVar
+end
+
+---@param this classes.Stock
+---@param value integer[]
+function Stock.set.items(this, value)
+  this.itemsVar = value
+end
+
+---@param this classes.Stock
+---@param items integer[]
+---@param count? integer|temper.Null
+function Stock.constructor(this, items, count)
+  if temper.is_null(count) then
+    count = temper.list_length(items)
+  end
+  ---@cast count integer
+  this.count = count
+  this.itemsVar = items
+  this.size = temper.list_length(items)
+end
+
+---@param this classes.Stock
+---@return integer
+function Stock.methods.sizeNow(this)
+  return temper.list_length(this.items)
+end
+
 ---@param x classes.Shape
 ---@return classes.Shape
 local function shape(x)
@@ -361,6 +410,13 @@ print(tostring(c.count))
 c.doubled = 10
 print(tostring(c.doubled))
 print(tostring(c:same(Counter():bump():bump())))
+c.added = 5
+local t = 2
+c.added = t
+local t2 = t
+c.added = t2
+local added = t2
+print(added .. " " .. c.count)
 print(tostring(Point(1, 2):eq(Point(1, 2))) .. " " .. tostring(not Point(1, 2):eq(Point(2, 1))))
 print(tostring(Holder(Loose(3), "a"):eq(Holder(Loose(-3), "a"))))
 print(tostring(Version(1, 2):compareTo(Version(1, 3)) < 0) .. " " .. tostring(Version(2, 0):compareTo(Version(1, 9)) >= 0))
@@ -370,6 +426,9 @@ print(tostring(sq.area))
 if temper.instance_of(s, Rect) then
   print(tostring((s --[[@as classes.Rect]]).w))
 end
+local st = Stock({ 4, 5 })
+st.items = { 1, 2, 3 }
+print(st.count .. " " .. st.size .. " " .. st:sizeNow() .. " " .. temper.list_length(st.items))
 local favorite = same("number")
 local named = 0
 do

@@ -51,6 +51,7 @@ pub mod tree;
 use std::fmt;
 use temper_tmpl::coroutines::CoroutineStrategy;
 use temper_tmpl::naming::{NamingRules, assign_checked};
+use temper_tmpl::version::{self, Spelling};
 use temper_tmpl::{Features, Profile, Program};
 
 /// A named set of translation choices for Python.
@@ -60,8 +61,6 @@ pub struct Variant {
     /// What it handles natively, which lowering and validation read.
     pub profile: Profile,
     pub rules: NamingRules,
-    /// The `temper-core` version its output depends on.
-    pub runtime_version: &'static str,
 }
 
 /// The first variant: Kotlin-compatible API and names, pretty bodies.
@@ -74,7 +73,6 @@ pub static PY: Variant = Variant {
         coroutines: CoroutineStrategy::TranslateToGenerator,
     },
     rules: names::RULES,
-    runtime_version: "0.6.0",
 };
 
 /// Every variant, by name.
@@ -105,6 +103,7 @@ pub const BACKEND: temper_tmpl::Backend = temper_tmpl::Backend {
     } else {
         runtime::FILES
     },
+    runtime_version: &runtime::VERSION,
     rules: &PY.rules,
     translate: |p, _| translate(p, &PY).map_err(|e| e.to_string()),
     default: true,
@@ -116,20 +115,42 @@ pub const BACKEND: temper_tmpl::Backend = temper_tmpl::Backend {
 
 /// `pyproject.toml`'s dependencies, as Kotlin writes them: the runtime
 /// and each library used, by its name, with `==` its version where it
-/// sets one, a quoted line each, sorted.
-fn dependencies(p: &Program, variant: &Variant) -> String {
-    let mut lines = vec![format!("temper-core=={}", variant.runtime_version)];
+/// sets one, in PEP 440's spelling, a quoted line each, sorted.
+fn dependencies(p: &Program) -> String {
+    let runtime = version::current().spell(Spelling::Python);
+    let mut lines = vec![format!("temper-core=={runtime}")];
     for (name, version) in p.dependencies() {
-        let name = translate::library_name(name);
+        let name = translate::library_name(p, name);
         let name = name.as_str();
         lines.push(match version {
             "0.0.0" | "" => name.to_string(),
-            v => format!("{name}=={v}"),
+            v => format!("{name}=={}", version::respell(v, Spelling::Python)),
         });
     }
     lines.sort();
     let quoted: Vec<String> = lines.iter().map(|l| format!("    \"{l}\"")).collect();
     quoted.join(",\n")
+}
+
+/// A config's `authors` as pyproject.toml's author: its name, without
+/// the commas a name there can't have, as Kotlin's, and its email apart
+/// where it ends with one, as `Name <name@example.com>`.
+fn author(authors: &str) -> String {
+    let quoted = temper_tmpl::json_string;
+    let (name, email) = match authors
+        .trim()
+        .strip_suffix('>')
+        .and_then(|a| a.rsplit_once('<'))
+    {
+        Some((name, email)) if email.contains('@') => (name.trim(), Some(email.trim())),
+        _ => (authors.trim(), None),
+    };
+    let name = name.replace(',', "");
+    match (name.as_str(), email) {
+        ("", Some(email)) => format!("{{ email = {} }}", quoted(email)),
+        (name, Some(email)) => format!("{{ name = {}, email = {} }}", quoted(name), quoted(email)),
+        (name, None) => format!("{{ name = {} }}", quoted(name)),
+    }
 }
 
 /// Translates a library, laid out as Kotlin's Python backend lays it out:
@@ -160,9 +181,15 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
         .flatten();
     let p = chained.as_ref().unwrap_or(p);
     let names = assign_checked(p, &variant.rules).map_err(|what| NotYet { what })?;
-    // std's is `temper-std`, its package `temper_std`, as Kotlin's.
-    let library = &translate::library_name(&p.library.name);
-    let package = names::library_package(library);
+    // std's is `temper-std`, its package `temper_std`, as Kotlin's; a
+    // config's `pyName` names the project and its package, but not its
+    // directory, which has the library's name.
+    let project = translate::library_name(p, &p.library.name);
+    let package = names::library_package(&project);
+    let library = match p.library.name.as_str() {
+        "std" => &project,
+        name => name,
+    };
     let mut translator = translate::Translator::new(p, &names);
     let mut sources = Vec::new();
     let mut tests = Vec::new();
@@ -232,26 +259,46 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
         String::new()
     };
     let init = format!("{}{root}", inits.concat());
+    let meta = p.metadata();
+    let quoted = temper_tmpl::json_string;
+    // A license as Kotlin's, which names none as proprietary.
+    let license = meta.get("license").unwrap_or("LicenseRef-Proprietary");
+    let authors = meta.get("authors").map_or(String::new(), author);
+    // The links, as `[project.urls]`, where pyproject.toml has them.
+    let urls: String = [("Homepage", "homepage"), ("Repository", "repository")]
+        .iter()
+        .filter_map(|(label, key)| {
+            meta.get(key)
+                .map(|url| format!("{label} = {}\n", quoted(url)))
+        })
+        .collect();
+    let urls = match urls.as_str() {
+        "" => String::new(),
+        urls => format!("\n[project.urls]\n{urls}"),
+    };
     let pyproject = format!(
         r#"[project]
-name = "{library}"
+name = "{project}"
 version = "{version}"
-description = ""
+description = {description}
 readme = {{text = "n/a", content-type = "text/plain"}}
 requires-python = ">=3.11"
-license = {{ text = "LicenseRef-Proprietary" }}
-authors = [  ]
+license = {{ text = {license} }}
+authors = [ {authors} ]
 
 dependencies = [
 {dependencies}
 ]
-
+{urls}
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 "#,
-        version = p.version_or_default(),
-        dependencies = dependencies(p, variant),
+        project = names::project_name(&project),
+        version = version::respell(p.version_or_default(), Spelling::Python),
+        description = quoted(meta.get("description").unwrap_or("")),
+        license = quoted(license),
+        dependencies = dependencies(p),
     );
     // Host code's other files, beside the modules, as Kotlin copies them;
     // each `__connected__.py` starts its module's file instead.

@@ -1,11 +1,13 @@
 # Classes
 
 Classes and interfaces: fields, constructors (made from a class's header,
-or its own), methods, getters and setters, static fields and functions,
-private members read on another instance, interfaces with abstract and
-default members, `@auto("==")` and `@operator` methods, `toString`, `is`, `as`, and narrowing. Calls chain on
+or its own), methods, getters and setters, a setter with no getter
+(assigned as a value too), static fields and functions,
+private members read on another instance, a `@noProperty` input that
+initializers read, though a getter and setter share its name, interfaces
+with abstract and default members, `@auto("==")` and `@operator` methods, `toString`, `is`, `as`, and narrowing. Calls chain on
 objects that methods return, which C++ must keep alive. The log is what
-tempest's interpreter gives.
+the interpreter gives.
 
     export interface Shape {
       public get area(): Int;
@@ -33,6 +35,7 @@ tempest's interpreter gives.
       private var hidden: Int = 0;
       public get doubled(): Int { count * 2 }
       public set doubled(value: Int) { count = value - count; }
+      public set added(value: Int) { count = count + value; }
       public bump(): Counter {
         count = count + 1;
         hidden = hidden + 1;
@@ -60,6 +63,14 @@ tempest's interpreter gives.
       }
     }
 
+    class Stock(@noProperty items: List<Int>, public count: Int = items.length) {
+      private var itemsVar: List<Int> = items;
+      public get items(): List<Int> { itemsVar }
+      public set items(value: List<Int>) { itemsVar = value; }
+      public size: Int = items.length;
+      public sizeNow(): Int { items.length }
+    }
+
     let shape(x: Shape): Shape { x }
 
     let r = new Rect(2, 3);
@@ -78,6 +89,9 @@ tempest's interpreter gives.
     c.doubled = 10;
     console.log(c.doubled.toString());
     console.log(c.same(new Counter().bump().bump()).toString());
+    c.added = 5;
+    let added = c.added = c.added = 2;
+    console.log("${added} ${c.count}");
     console.log("${new Point(1, 2) == new Point(1, 2)} ${new Point(1, 2) != new Point(2, 1)}");
     console.log("${new Holder(new Loose(3), "a") == new Holder(new Loose(-3), "a")}");
     console.log("${new Version(1, 2) < new Version(1, 3)} ${new Version(2, 0) >= new Version(1, 9)}");
@@ -87,6 +101,9 @@ tempest's interpreter gives.
     if (s is Rect) {
       console.log(s.w.toString());
     }
+    let st = new Stock([4, 5]);
+    st.items = [1, 2, 3];
+    console.log("${st.count} ${st.size} ${st.sizeNow()} ${st.items.length}");
 
 ```log
 Rect(2, 3)
@@ -99,12 +116,14 @@ Rect(5, 5)
 2
 16
 true
+2 17
 true true
 true
 true true
 true false
 16
 2
+2 2 3 3
 ```
 
 ## Types as values

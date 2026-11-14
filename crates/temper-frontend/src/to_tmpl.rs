@@ -80,7 +80,7 @@ mod classes;
 mod defaults;
 #[path = "to_tmpl_functions.rs"]
 mod functions;
-use classes::Member;
+use classes::{Assigned, Member};
 
 /// Core's members that tmpl knows, as external declarations.
 const CORE_FIXTURE: &str = include_str!("../../temper-tmpl/tests/fixtures/core.tmpl");
@@ -117,8 +117,9 @@ fn catalog() -> &'static Catalog {
             };
             keys.insert(key, d);
         }
-        let version = program.uses.first().map_or("0.1.0", |u| &u.version);
-        let version = version.to_string();
+        // Core's version is Temper's, as std's is, whatever the
+        // fixture says.
+        let version = temper_tmpl::version::current().to_string();
         Catalog {
             program,
             keys,
@@ -127,8 +128,11 @@ fn catalog() -> &'static Catalog {
     })
 }
 
-/// std's version, as its config gives it, for `uses std` sections.
-pub const STD_VERSION: &str = "0.6.0";
+/// std's version, for `uses std` sections and std's own packages:
+/// Temper's ([`temper_tmpl::version::current`]), as core's is.
+pub fn std_version() -> String {
+    temper_tmpl::version::current().to_string()
+}
 
 /// Where a settled module comes from: the library being translated, std,
 /// or another library under the work root, with its path from that
@@ -457,11 +461,16 @@ impl Translator<'_> {
             if self.kind(callee) == NodeKind::Error {
                 return Some(lib.error_text(callee));
             }
-            // A method that isn't there, as `s.lenght()` ("No member").
-            if self.dot_object(callee).is_some() {
+            // A method that isn't there, as `s.lenght()` ("No member"),
+            // or one of an object that's an error, as an undeclared
+            // name's `missing.toString()`, which fails before the call.
+            if let Some(object) = self.dot_object(callee) {
                 let span = lib.tree.span(callee);
                 if let Some(message) = self.errors.get(&(span.start, span.end)) {
                     return Some(message.clone());
+                }
+                if let Some(message) = self.error_at(object) {
+                    return Some(message);
                 }
             }
             // An operator typing couldn't resolve for an operand that's an
@@ -1021,11 +1030,20 @@ impl Translator<'_> {
         let var = self.data(decl) & LET_VAR != 0;
         let d = match init.filter(|&i| self.kind(i) == NodeKind::Fn) {
             Some(f) => {
-                if !core::type_params(&self.s.library.tree, f).is_empty() {
-                    return self.not_yet(at, "a generic function");
-                }
-                let sig = self.signature(f)?;
-                let d = self.b.declare(DeclKind::Function, &name, owner, sig);
+                // A generic one's type parameters first, which its
+                // signature names, as std's `listJsonAdapter<T>`.
+                let d = if core::type_params(&self.s.library.tree, f).is_empty() {
+                    let sig = self.signature(f)?;
+                    self.b.declare(DeclKind::Function, &name, owner, sig)
+                } else {
+                    let d = self
+                        .b
+                        .declare(DeclKind::Function, &name, owner, TypeId::NONE);
+                    self.declare_type_params(f, d)?;
+                    let sig = self.signature(f)?;
+                    self.b.set_decl_type(d, sig);
+                    d
+                };
                 let (params, ..) = core::fn_parts(&self.s.library.tree, f);
                 let names: Vec<String> = (params.iter())
                     .map(|&p| {
@@ -1065,11 +1083,11 @@ impl Translator<'_> {
             Some(&u) => u,
             None => {
                 let version = if library == "std" {
-                    STD_VERSION
+                    std_version()
                 } else {
-                    "0.0.0"
+                    "0.0.0".to_string()
                 };
-                let u = self.b.uses(library, version);
+                let u = self.b.uses(library, &version);
                 self.libraries.insert(library.to_string(), u);
                 u
             }
@@ -1118,6 +1136,12 @@ impl Translator<'_> {
         self.declare_formals(&formals, d, class)?;
         let supers = self.class_supers(class)?;
         self.b.set_supers(d, &supers);
+        // A `@fun` interface, with its `apply`, which gives a function
+        // literal or reference of its type its signature.
+        if self.data(class) & core::CLASS_FUN != 0 {
+            self.b.add_facts(d, temper_tmpl::Facts::FUN);
+            self.external_method_named(d, "apply", at)?;
+        }
         Ok(Some(d))
     }
 
@@ -1734,23 +1758,8 @@ impl Translator<'_> {
                 let [target, value] = children[..] else {
                     return self.not_yet(node, "an assignment's form");
                 };
-                if self.kind(target) != NodeKind::RightName {
-                    let Some((object, m)) = self.assigned_member(target) else {
-                        return self.not_yet(node, "an assignment to a property");
-                    };
-                    let object = self.static_object(object);
-                    let stmt = self.assign_member(m, object, value, node)?;
-                    out.push(self.own(stmt, node));
-                    return Ok(());
-                }
-                let member = self.s.scopes.resolved(target).and_then(|s| {
-                    let s = self.s.scopes.symbol(s);
-                    (s.kind == crate::scope::SymbolKind::Member)
-                        .then_some(s.decl)
-                        .flatten()
-                });
-                if let Some(m) = member {
-                    let stmt = self.assign_member(m, None, value, node)?;
+                if let Some((object, m)) = self.member_target(node, target)? {
+                    let stmt = self.assign_member(m, object, Assigned::Expr(value), node)?;
                     out.push(self.own(stmt, node));
                     return Ok(());
                 }
@@ -2159,6 +2168,7 @@ impl Translator<'_> {
             NodeKind::Break | NodeKind::Continue | NodeKind::Return => self.stmt(node, out),
             NodeKind::Block if !self.children(node).is_empty() => {
                 let children = self.children(node).to_vec();
+                self.predeclare_functions(&children)?;
                 let (&last, rest) = children.split_last().unwrap();
                 for &child in rest {
                     self.stmt(child, out)?;
@@ -2542,6 +2552,7 @@ impl Translator<'_> {
             return Ok(());
         }
         let children = self.children(node).to_vec();
+        self.predeclare_functions(&children)?;
         if let Some((&last, rest)) = children.split_last() {
             for &child in rest {
                 self.stmt(child, out)?;
@@ -2683,6 +2694,9 @@ impl Translator<'_> {
                     return self.read_member(m, None, node);
                 }
                 let decl = match self.declaration(node) {
+                    Some(d) if self.kind(d) == NodeKind::Class => {
+                        return self.not_yet(node, "a class or interface as a type value");
+                    }
                     Some(d) if self.decls.contains_key(&d) => Some(self.decls[&d]),
                     Some(d) => self.top_decl(d, node)?,
                     None => None,
@@ -2731,7 +2745,7 @@ impl Translator<'_> {
                         DeclKind::Local | DeclKind::Param
                     )
                 }) else {
-                    return self.not_yet(node, "an assignment as a value");
+                    return self.member_assignment_value(node);
                 };
                 let mut stmts = Vec::new();
                 self.stmt(node, &mut stmts)?;
@@ -2743,6 +2757,57 @@ impl Translator<'_> {
             }
             kind => self.not_yet(node, format!("{kind:?}")),
         }
+    }
+
+    /// For an assignment to a member, `o.p = v` or a bare `p = v` in its
+    /// class, the object, if any, and the member.
+    fn member_target(&self, node: FNode, target: FNode) -> Tx<Option<(Option<FNode>, FNode)>> {
+        if self.kind(target) != NodeKind::RightName {
+            let Some((object, m)) = self.assigned_member(target) else {
+                return self.not_yet(node, "an assignment to a property");
+            };
+            return Ok(Some((self.static_object(object), m)));
+        }
+        let member = self.s.scopes.resolved(target).and_then(|s| {
+            let s = self.s.scopes.symbol(s);
+            (s.kind == crate::scope::SymbolKind::Member)
+                .then_some(s.decl)
+                .flatten()
+        });
+        Ok(member.map(|m| (None, m)))
+    }
+
+    /// `o.p = v` as a value, as in `c.p = c.p = v`: `v` held in a local,
+    /// then the assignment, then the local, as Kotlin Temper writes it.
+    /// Only where reading `o` after `v` is the same as before it: `o` a
+    /// name that's never assigned again, or `this`.
+    fn member_assignment_value(&mut self, node: FNode) -> Tx<NodeId> {
+        let &[target, value] = self.children(node) else {
+            return self.not_yet(node, "an assignment as a value");
+        };
+        let Some((object, m)) = self.member_target(node, target)? else {
+            return self.not_yet(node, "an assignment as a value");
+        };
+        let steady = object.is_none_or(|o| {
+            self.kind(o) == NodeKind::RightName
+                && (self.s.scopes.resolved(o)).is_some_and(|b| !self.s.scopes.symbol(b).mutable)
+        });
+        if !steady {
+            return self.not_yet(node, "an assignment to a property as a value");
+        }
+        let held = self.expr(value)?;
+        let held = self.type_error_around(node, held);
+        let ty = self.b.program().nodes.ty(held);
+        let local = self.b.declare_made(DeclKind::Local, &["t"], self.owner, ty);
+        let span = self.span(node);
+        self.b.set_decl_spans(local, span, span);
+        let init = self.b.let_stmt(local, Some(held));
+        let assign = self.assign_member(m, object, Assigned::Held(local), node)?;
+        let stmts = [self.made(init, node), self.own(assign, node)];
+        let read = self.b.local(local);
+        let read = self.made(read, node);
+        let made = self.b.block_value(ty, &stmts, read);
+        Ok(self.made(made, node))
     }
 
     /// `a && b`, as `if (a) { b } else { false }`, or `a || b`, as `if (a)
@@ -3030,6 +3095,13 @@ impl Translator<'_> {
             }
             None if self.s.typing.identity_eq(node).is_some() => {
                 self.identity(node, f.unwrap_or(Function::Eq), args)
+            }
+            // In a library with errors, one that left the callee's type
+            // unknown, as `x.toString()` for `x: Undeclared`: the call
+            // fails where it runs, as the error's code does.
+            None if self.has_errors() => {
+                let made = self.b.error(TypeId::NONE, "a call of unknown type");
+                Ok(self.own(made, node))
             }
             None => self.not_yet(node, "a call typing didn't resolve"),
             Some(Resolved::Builtin(key)) => {
@@ -3734,6 +3806,15 @@ impl Translator<'_> {
             _ => ty,
         };
         let Some(class) = temper_tmpl::analysis::nominal_decl(self.b.program(), ty) else {
+            // In a library with errors, a value whose type one left
+            // unknown, which `unknown_ty` makes any value: the part fails
+            // where it runs, as the error's code does.
+            if ty == TypeId::ANY_VALUE && self.has_errors() {
+                let made = self
+                    .b
+                    .error(TypeId::STRING, "a template's part of unknown type");
+                return Ok(self.made(made, part));
+            }
             return self.not_yet(part, "a template's part of another type");
         };
         let mut owners = vec![class];

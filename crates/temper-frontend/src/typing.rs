@@ -23,7 +23,8 @@
 //! call, in [`generic_calls`], and the type a value's place wants, which
 //! types list literals, in [`targets`], and decides object literals'
 //! classes, in [`object_literals`], and which `@overload` method a call
-//! means, in [`overloads`]. Before
+//! means, in [`overloads`], or which `@extension` function, in
+//! [`instance_extensions`]. Before
 //! inferring, flow facts ([`crate::flow`]) find the uses of locals that
 //! null checks and `is` checks narrow, so typing a use of `a: String?`
 //! after `if (a != null)` gives `String`, and of `i: I` after `if (i is
@@ -40,16 +41,35 @@ use crate::types::{
 };
 use std::collections::{HashMap, HashSet};
 use temper_syntax::ast::Value;
+use temper_syntax::names::NameId;
 use temper_syntax::tree::{NodeId, NodeKind, Span};
+
+/// Builtin types whose members core's table has in full, and whose values
+/// are never functions.
+const FULL_TYPES: [&str; 10] = [
+    "Boolean",
+    "Float64",
+    "Int",
+    "Int32",
+    "Int64",
+    "List",
+    "ListBuilder",
+    "Map",
+    "MapBuilder",
+    "String",
+];
 
 mod bubbles;
 mod connected;
 mod core_members;
+mod definite;
+mod exports;
 mod exprs;
 mod fields_first;
 mod fun_interfaces;
 mod generic_calls;
 mod initializers;
+mod instance_extensions;
 mod members;
 mod object_literals;
 mod overloads;
@@ -390,9 +410,13 @@ impl Settle {
             NodeKind::Let | NodeKind::Loop => VOID,
             NodeKind::Return | NodeKind::Break | NodeKind::Continue | NodeKind::Fail => NEVER,
             // An assignment's value is what it assigns; one to a member is
-            // a setter's call.
+            // a setter's call, but passes the value on where it's used, as
+            // in `c.p = c.p = v`, not as a block's statement or result.
             NodeKind::Assign => match (first.and_then(|t| self.local_target(t)), last) {
                 (Some(_), Some(value)) => self.expr_type(value, forced)?,
+                (None, Some(value)) if self.assignment_used(node) => {
+                    self.expr_type(value, forced)?
+                }
                 _ => UNKNOWN,
             },
             NodeKind::Fn => self.literal_type(node, forced)?,
@@ -529,6 +553,9 @@ impl Settle {
             return self.list_type(node, forced);
         }
         self.resolve_overload(node, forced)?;
+        if self.resolve_extension(node, forced, false)? {
+            return self.call_type(node, forced);
+        }
         if self.list_of_parts(node).is_some() {
             return self.list_of_type(node, forced);
         }
@@ -876,6 +903,8 @@ impl Settle {
             self.check(root);
         }
         self.check_fields_first();
+        self.check_definite_assignment();
+        self.check_exports();
         // After the other checks, so an error there comes first.
         for m in 0..self.lib.modules.len() {
             let scope = self.modules[m];
@@ -885,7 +914,7 @@ impl Settle {
                 // A REPL input's own scope, which its root made.
                 let root = self.lib.files[f.0 as usize].root;
                 let scope = self.scopes.of_node(root).unwrap_or(scope);
-                self.check_members_exist(root, scope);
+                self.check_members_exist(root, scope, &mut Vec::new());
             }
         }
         self.type_all_exprs();
@@ -969,17 +998,188 @@ impl Settle {
         }
     }
 
-    /// [`Settle::check_member_exists`] for every member read or call, in
-    /// `scope` or the scope a node under it makes.
-    fn check_members_exist(&mut self, node: NodeId, scope: ScopeId) {
+    /// [`Settle::check_member_exists`] and [`Settle::check_member_access`]
+    /// for every member read or call, in `scope` or the scope a node under
+    /// it makes, inside `classes`.
+    fn check_members_exist(&mut self, node: NodeId, scope: ScopeId, classes: &mut Vec<NodeId>) {
         let scope = self.scopes.of_node(node).unwrap_or(scope);
+        let class = self.lib.tree.kind(node) == NodeKind::Class;
+        if class {
+            classes.push(node);
+        }
         for i in 0..self.lib.tree.children(node).len() {
             let child = self.lib.tree.children(node)[i];
-            self.check_members_exist(child, scope);
+            self.check_members_exist(child, scope, classes);
         }
-        if self.lib.tree.kind(node) == NodeKind::Call {
-            self.check_member_exists(node, scope);
+        if class {
+            classes.pop();
         }
+        match self.lib.tree.kind(node) {
+            NodeKind::Call => {
+                self.check_nullable_member(node);
+                self.check_member_access(node, classes);
+                self.check_member_exists(node, scope);
+            }
+            NodeKind::RightName => self.check_bare_static(node),
+            _ => {}
+        }
+    }
+
+    /// Reports a private member used outside the class that declares it,
+    /// as `c.secret` or `C.secret`, which Kotlin Temper's typer rejects
+    /// ("Member secret defined in C not publicly accessible"); code in the
+    /// class may use it on any instance (kotlin-differences.md). Also a
+    /// static member that isn't there, as `C.nope` ("No member nope in
+    /// C"), which [`Settle::check_member_exists`] leaves alone, and a
+    /// property of a type that's never a function called as a method, as
+    /// `c.count()` ("Member count defined in C incompatible with usage").
+    fn check_member_access(&mut self, node: NodeId, classes: &[NodeId]) {
+        let Some((object, key)) = self.dot_parts(node) else {
+            return;
+        };
+        let Some(name) = self.lib.symbol(key) else {
+            return;
+        };
+        let span = self.lib.tree.span(node);
+        let overlaps = |d: &crate::library::Diagnostic| {
+            d.level == Level::Error && d.span.start < span.end && span.start < d.span.end
+        };
+        if self.lib.diagnostics.iter().any(overlaps) {
+            return;
+        }
+        let tree = &self.lib.tree;
+        let callee = (self.typing.parent(node))
+            .is_some_and(|p| tree.kind(p) == NodeKind::Call && tree.children(p)[0] == node);
+        let named_class = (tree.kind(object) == NodeKind::RightName)
+            .then(|| self.scopes.resolved(object))
+            .flatten()
+            .and_then(|b| self.type_decl(b))
+            .filter(|_| self.builtin_type_named(object).is_none());
+        let (class, member) = match named_class {
+            Some(class) => {
+                let member = self.member_named(class, name, true, callee);
+                let none = member.is_none()
+                    && self.members_named(class, name, true).is_empty()
+                    && self.members_named(class, name, false).is_empty();
+                if none {
+                    let message = Message::NoMember(
+                        self.lib.names.get(name).to_string(),
+                        self.member_text(class).to_string(),
+                    );
+                    self.lib.report(Level::Error, message, span);
+                    return;
+                }
+                (class, member)
+            }
+            None => match self.dot_member_node(object, key, callee, false) {
+                Ok(Some((m, receiver, _))) => (receiver.class, Some(m)),
+                _ => return,
+            },
+        };
+        let Some(member) = member else {
+            return;
+        };
+        let owner = (self.ancestors(class).into_iter())
+            .find(|&c| core::class_parts(&self.lib.tree, c).2.contains(&member))
+            .unwrap_or(class);
+        let (name, owner_text) = (
+            self.lib.names.get(name).to_string(),
+            self.member_text(owner).to_string(),
+        );
+        // A property called as a method, which Kotlin reports first.
+        if callee && self.lib.tree.data(member) & ROLE_MASK != core::ROLE_METHOD {
+            let t = self.member_type(member);
+            let base = match self.typing.types.get(t) {
+                TypeData::Applied { base, .. } => *base,
+                _ => t,
+            };
+            if let TypeData::Builtin(i) = *self.typing.types.get(base) {
+                if FULL_TYPES.contains(&crate::builtins::TYPES[i as usize]) {
+                    let message = Message::IncompatibleUsage(name, owner_text);
+                    self.lib.report(Level::Error, message, span);
+                    return;
+                }
+            }
+        }
+        if self.lib.tree.data(member) & core::MEMBER_PRIVATE == 0 || classes.contains(&owner) {
+            return;
+        }
+        let message = Message::NotPubliclyAccessible(name, owner_text);
+        self.lib.report(Level::Error, message, span);
+    }
+
+    /// Reports a static member named bare, as `count` for `C.count` in
+    /// `C`'s methods, as Kotlin Temper does ("Type name required for
+    /// accessing static member"). It still runs as `C.count`.
+    fn check_bare_static(&mut self, node: NodeId) {
+        let Some(symbol) = self.scopes.resolved(node) else {
+            return;
+        };
+        let symbol = self.scopes.symbol(symbol);
+        let static_member = symbol.kind == SymbolKind::Member
+            && symbol
+                .decl
+                .is_some_and(|d| self.lib.tree.data(d) & core::MEMBER_STATIC != 0);
+        if !static_member {
+            return;
+        }
+        let span = self.lib.tree.span(node);
+        // Once, where `count += 1` reads and assigns it.
+        let reported = (self.lib.diagnostics.iter())
+            .any(|d| d.span == span && d.message == Message::StaticNeedsTypeName);
+        if !reported {
+            self.lib
+                .report(Level::Error, Message::StaticNeedsTypeName, span);
+        }
+    }
+
+    /// Reports an assignment to a static member, `C.count = 1` or `C.count
+    /// += 1`, even a `static var`, as Kotlin Temper does: statics are only
+    /// initialized at their declaration. A bare `count = 1` in `C` is
+    /// reported too, besides needing its type's name. Returns whether it
+    /// reported one; the assignment then fails where it runs.
+    fn check_static_assignment(&mut self, node: NodeId, target: NodeId) -> bool {
+        let (class, name) = match self.dot_parts(target) {
+            Some((object, key)) => {
+                let class = (self.lib.tree.kind(object) == NodeKind::RightName)
+                    .then(|| self.scopes.resolved(object))
+                    .flatten()
+                    .and_then(|b| self.type_decl(b))
+                    .filter(|_| self.builtin_type_named(object).is_none());
+                match (class, self.lib.symbol(key)) {
+                    (Some(class), Some(name)) => (class, name),
+                    _ => return false,
+                }
+            }
+            None => {
+                let Some(b) = self.scopes.resolved(target) else {
+                    return false;
+                };
+                let symbol = *self.scopes.symbol(b);
+                let is_static = symbol.kind == SymbolKind::Member
+                    && symbol
+                        .decl
+                        .is_some_and(|d| self.lib.tree.data(d) & core::MEMBER_STATIC != 0);
+                if !is_static {
+                    return false;
+                }
+                (self.scopes.get(symbol.owner).node, symbol.name)
+            }
+        };
+        // `C.x` for an instance member `x` names nothing assignable either,
+        // and Kotlin reports it the same way.
+        if self.members_named(class, name, true).is_empty()
+            && self.members_named(class, name, false).is_empty()
+        {
+            return false;
+        }
+        let message = Message::CannotAssignStatic(
+            self.lib.names.get(name).to_string(),
+            self.member_text(class).to_string(),
+        );
+        let span = self.lib.tree.span(node);
+        self.lib.report(Level::Error, message, span);
+        true
     }
 
     /// Checks a node after its children, as Kotlin Temper's `TypeChecker`
@@ -1005,7 +1205,7 @@ impl Settle {
                     let t = self.known_decl_type(decl);
                     self.check_value(t, value, Site::Assign(node));
                     self.check_not_void(value, node);
-                } else {
+                } else if !self.check_static_assignment(node, target) {
                     // A setter's call, as Kotlin Temper reports it.
                     let t = self.member_target_type(target);
                     self.check_value(t, value, Site::Arg);
@@ -1248,6 +1448,7 @@ impl Settle {
 
     fn check_call(&mut self, node: NodeId) {
         let _ = self.resolve_overload(node, false);
+        let _ = self.resolve_extension(node, false, true);
         let children = self.lib.tree.children(node).to_vec();
         let Some((&callee, args)) = children.split_first() else {
             return;
@@ -1277,7 +1478,19 @@ impl Settle {
             None if self.check_generic_call(node) => return,
             None => {
                 self.check_console_call(node, callee, args);
-                let callee_type = self.known_callee_type(callee);
+                let mut callee_type = self.known_callee_type(callee);
+                // A function that may be null, as `act(i)` for `act: (fn
+                // (Int): Void)?`, as Kotlin Temper reports it; the
+                // arguments are checked against what it is when not null.
+                if let TypeData::Nullable(inner) = *self.typing.types.get(callee_type) {
+                    if let Some(f) = self.typing.types.as_fn(inner) {
+                        let (to, from) = (self.show(inner), self.show(callee_type));
+                        let span = self.lib.tree.span(callee);
+                        self.lib
+                            .report(Level::Error, Message::ExpectedSubType(to, from), span);
+                        callee_type = f;
+                    }
+                }
                 match self.typing.types.get(callee_type) {
                     TypeData::Fn { params, .. } => params.clone(),
                     _ => return,
@@ -1311,33 +1524,52 @@ impl Settle {
         }
     }
 
+    /// Reports `object.key` where `object` may be null, as `c.n` for `c:
+    /// Counter?` with no null check that narrows it (`flow`), a property's
+    /// read or assignment or a method's call, as Kotlin Temper rejects it,
+    /// though in odder words ("No member n in AnyValue"): "No member n in
+    /// Counter?". Beside [`Settle::check_call`]'s nullable function value.
+    /// `c?.n` is fine, and so is a value Kotlin might work out while
+    /// compiling ([`Settle::may_fold`]), as `s.isEmpty` for `let s:
+    /// String? = "q"`. Code is still generated; the access fails where it
+    /// runs, as for a member that isn't there.
+    fn check_nullable_member(&mut self, node: NodeId) {
+        let Some((object, key)) = self.dot_parts(node) else {
+            return;
+        };
+        let Some(name) = self.lib.symbol(key) else {
+            return;
+        };
+        let t = self.known_type(object);
+        if !matches!(self.typing.types.get(t), TypeData::Nullable(_)) || self.may_fold(object, 0) {
+            return;
+        }
+        let span = self.lib.tree.span(node);
+        let overlaps = |d: &crate::library::Diagnostic| {
+            d.level == Level::Error && d.span.start < span.end && span.start < d.span.end
+        };
+        if self.lib.diagnostics.iter().any(overlaps) {
+            return;
+        }
+        let message = Message::NoMember(self.lib.names.get(name).to_string(), self.show(t));
+        self.lib.report(Level::Error, message, span);
+    }
+
     /// Reports `object.key` where `object`'s type has no member `key`,
     /// of its own, inherited, or core's, as Kotlin Temper does ("No
     /// member key in T"), so a misspelled member is an error that fails
     /// where it runs (tmpl's `Error`), not code that can't be translated.
     /// Only where typing knows every member: of a class's value, or of a
-    /// builtin type whose members core's table has in full ([`FULL`]);
+    /// builtin type whose members core's table has in full ([`FULL_TYPES`]);
     /// not of an interface's value, as Kotlin lets `this.toString()` be
     /// in one, nor of a nullable value or a type parameter's (Kotlin's
     /// messages there are odd; kotlin-differences.md), nor a static
-    /// member, as `C.key`, nor a destructuring's, nor where an
-    /// `@extension("key")` is visible, declared or imported (extensions
-    /// aren't supported yet), nor where an error is reported already, as
-    /// for a method inherited twice.
+    /// member, as `C.key`, nor a destructuring's, nor a call where an
+    /// `@extension("key")` is visible, declared or imported, that typing
+    /// left a method call after reporting why ([`instance_extensions`]),
+    /// nor where an error is reported already, as for a method inherited
+    /// twice.
     fn check_member_exists(&mut self, node: NodeId, scope: ScopeId) {
-        /// Builtin types whose members core's table has in full.
-        const FULL: [&str; 10] = [
-            "Boolean",
-            "Float64",
-            "Int",
-            "Int32",
-            "Int64",
-            "List",
-            "ListBuilder",
-            "Map",
-            "MapBuilder",
-            "String",
-        ];
         let Some((object, key)) = self.dot_parts(node) else {
             return;
         };
@@ -1347,7 +1579,9 @@ impl Settle {
         let names_type = self.lib.tree.kind(object) == NodeKind::RightName
             && (self.builtin_type_named(object).is_some()
                 || (self.scopes.resolved(object)).is_some_and(|b| self.type_decl(b).is_some()));
-        if names_type || self.is_temporary(object) {
+        let destructured = self.is_temporary(object)
+            && self.lib.name(object).map(|n| self.lib.names.get(n)) == Some("destructured");
+        if names_type || destructured {
             return;
         }
         let t = self.known_type(object);
@@ -1360,17 +1594,30 @@ impl Settle {
                 self.lib.tree.kind(c) == NodeKind::Class
                     && self.lib.tree.data(c) & core::CLASS_INTERFACE == 0
             }),
-            TypeData::Builtin(i) => FULL.contains(&crate::builtins::TYPES[i as usize]),
+            TypeData::Builtin(i) => FULL_TYPES.contains(&crate::builtins::TYPES[i as usize]),
             _ => false,
         };
         let span = self.lib.tree.span(node);
         let overlaps = |d: &crate::library::Diagnostic| {
             d.level == Level::Error && d.span.start < span.end && span.start < d.span.end
         };
+        // A method call an extension might be, which typing left as it
+        // is after reporting why.
+        let tree = &self.lib.tree;
+        let callee = (self.typing.parent(node))
+            .is_some_and(|p| tree.kind(p) == NodeKind::Call && tree.children(p)[0] == node);
         if !known
             || self.lib.diagnostics.iter().any(overlaps)
-            || self.extension_visible(scope, name, node)
+            || (callee && self.extension_visible(scope, name, node))
         {
+            return;
+        }
+        // A setter-only property assigned, as `c.p = 5` for `set p(v: Int)`.
+        let tree = &self.lib.tree;
+        let assigned = (self.typing.parent(node)).is_some_and(|p| {
+            tree.kind(p) == NodeKind::Assign && tree.children(p).first() == Some(&node)
+        });
+        if assigned && self.has_setter(t, name) {
             return;
         }
         let name = self.lib.names.get(name).to_string();
@@ -1386,6 +1633,28 @@ impl Settle {
         }
         let message = Message::NoMember(name, self.show(t));
         self.lib.report(Level::Error, message, span);
+    }
+
+    /// Whether an assignment's value is used, as an initializer's, an
+    /// argument's or another assignment's, not as a block's statement or
+    /// result.
+    fn assignment_used(&self, node: NodeId) -> bool {
+        let tree = &self.lib.tree;
+        (self.typing.parent(node)).is_some_and(|p| match tree.kind(p) {
+            NodeKind::Let | NodeKind::Call => true,
+            NodeKind::Assign => tree.children(p).get(1) == Some(&node),
+            _ => false,
+        })
+    }
+
+    /// Whether a value of type `t` has an instance setter named `name`.
+    fn has_setter(&mut self, t: TypeId, name: NameId) -> bool {
+        let Some(receiver) = self.receiver(t) else {
+            return false;
+        };
+        let tree = &self.lib.tree;
+        (self.members_named(receiver.class, name, false).iter())
+            .any(|&m| tree.data(m) & ROLE_MASK == core::ROLE_SETTER)
     }
 
     /// Reports a `Void` value stored in a declaration or passed as an

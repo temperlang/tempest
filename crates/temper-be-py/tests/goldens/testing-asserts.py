@@ -78,3 +78,4 @@ def _assert_more_things(t: _Test, helper: _TestHelper, strings: _Sequence[_Seque
 
 
 _name: str = 'case'
+_unit_vecs: _Sequence[Vec2] = (Vec2(1.0, 0.0), Vec2(0.0, 1.0))

@@ -758,9 +758,19 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
             let mut text = String::new();
             stmt(&mut text, s, depth);
             let text = text.trim_start();
-            let (first, rest) = text.split_once('\n').unwrap_or((text, ""));
+            // On a decorated function's `def` line, where checkers report.
+            let decorators = match &**s {
+                Stmt::Def { decorators, .. } => decorators.len(),
+                _ => 0,
+            };
+            let mut lines = text.split_inclusive('\n');
+            for line in lines.by_ref().take(decorators) {
+                out.push_str(line);
+            }
+            let line = lines.next().unwrap_or("");
+            let first = line.strip_suffix('\n').unwrap_or(line);
             let _ = writeln!(out, "{first}  # {comment}");
-            out.push_str(rest);
+            out.extend(lines);
         }
         Stmt::Try {
             body,

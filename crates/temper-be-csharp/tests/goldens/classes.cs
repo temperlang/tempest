@@ -68,6 +68,15 @@ public static class ClassesGlobal
         c.Doubled = 10;
         console.Log(c.Doubled.ToString(CultureInfo.InvariantCulture));
         console.Log(c.Same(new Counter().Bump().Bump()) ? "true" : "false");
+        c.Added = 5;
+        int added;
+        int t2;
+        int t = 2;
+        c.Added = t;
+        t2 = t;
+        c.Added = t2;
+        added = t2;
+        console.Log(string.Create(CultureInfo.InvariantCulture, $"{added} {c.Count}"));
         console.Log((new Point(1, 2).Eq(new Point(1, 2)) ? "true" : "false") + " " + (!new Point(1, 2).Eq(new Point(2, 1)) ? "true" : "false"));
         console.Log(new Holder(new Loose(3), "a").Eq(new Holder(new Loose(-3), "a")) ? "true" : "false");
         console.Log((new Version(1, 2).CompareTo(new Version(1, 3)) < 0 ? "true" : "false") + " " + (new Version(2, 0).CompareTo(new Version(1, 9)) >= 0 ? "true" : "false"));
@@ -78,6 +87,9 @@ public static class ClassesGlobal
         {
             console.Log(((Rect)s).W.ToString(CultureInfo.InvariantCulture));
         }
+        Stock st = new Stock(Listed.CreateReadOnlyList<int>(4, 5));
+        st.Items = Listed.CreateReadOnlyList<int>(1, 2, 3);
+        console.Log(string.Create(CultureInfo.InvariantCulture, $"{st.Count} {st.Size} {st.SizeNow()} {st.Items.Count}"));
         Type favorite = Same(typeof(long));
         int named = 0;
         {

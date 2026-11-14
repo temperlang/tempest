@@ -1,76 +1,157 @@
 tmpl 1 model 1 library modules 0.0.0
 
-uses `temper-core`#11 0.1.0 {
-  interface Console#12 {
-    connected method log#13(message: String): Void;
+uses `temper-core`#29 0.0.0-alpha.0.0 {
+  interface Console#30 {
+    connected method log#31(message: String): Void;
   }
-  connected fn getConsole#15(name?: String): Console#12;
-  class Int32#24 {
-    connected method toString#25(radix?: Int32): String;
+  connected fn getConsole#33(name?: String): Console#30;
+  class Int32#55 {
+    connected method toString#56(radix?: Int32): String;
+  }
+}
+
+uses std#46 0.0.0-alpha.0.0 {
+  module regex#47 {
+    class Repeat#48 extends RegexNode#49 {
+      let min#50: Int32;
+    }
+    interface RegexNode#49 {}
+    fn oneOrMore#51(item: RegexNode#49, reluctant?: Boolean?): Repeat#48;
+    interface Special#52 extends RegexNode#49 {}
+    let Dot#53: Special#52;
   }
 }
 
 module `helpers/deep`#0 in "helpers/deep" {
-  export fn greet#4(who#5: String): String {
-    return %String.cat(%String.cat("hello, ", who#5), " from deep");
+  export fn greet#20(who#21: String): String {
+    return %String.cat(%String.cat("hello, ", who#21), " from deep");
   }
 
   init {}
 }
 
 module helpers#1 in "helpers" {
-  let ~console#14: Console#12;
+  let ~console#32: Console#30;
 
-  export fn twice#6(x#10: Int32): Int32 {
-    return %Int32.mul(x#10, 2);
+  export fn twice#22(x#27: Int32): Int32 {
+    return %Int32.mul(x#27, 2);
   }
 
-  export let base#7: Int32;
+  export fn intDoubled#23(x#28: Int32): Int32 {
+    return twice#22(x#28);
+  }
 
-  export var calls#8: Int32;
+  export let base#24: Int32;
 
-  export fn bump#9(): Int32 {
-    calls#8 = %Int32.add(calls#8, 1);
-    return calls#8;
+  export var calls#25: Int32;
+
+  export fn bump#26(): Int32 {
+    calls#25 = %Int32.add(calls#25, 1);
+    return calls#25;
   }
 
   init {
-    init ~console#14 = getConsole#15(omitted);
-    init base#7 = 10;
-    init calls#8 = 0;
-    ~console#14.log#13(greet#4("helpers"));
+    init ~console#32 = getConsole#33(omitted);
+    init base#24 = 10;
+    init calls#25 = 0;
+    ~console#32.log#31(greet#20("helpers"));
   }
 }
 
 module core#2 in "core" {
-  export fn share#16(n#17: Int32, d#18: Int32): Int32 {
-    return (orelse(%Int32.div(n#17, d#18)^, 0)): Int32;
+  export fn share#34(n#35: Int32, d#36: Int32): Int32 {
+    return (orelse(%Int32.div(n#35, d#36)^, 0)): Int32;
   }
 
   init {}
 }
 
-module modules#3 {
-  let ~console#23: Console#12;
+module state#3 in "state" {
+  export class State#8 {
+    let id#12: Int32;
+    constructor constructor#13(id#38: Int32): State#8 {
+      this.id#12 = id#38;
+    }
+  }
 
-  let calls#19: Int32;
+  export class Engine#9 {
+    let n#14: Int32;
+    constructor constructor#15(n#39: Int32): Engine#9 {
+      this.n#14 = n#39;
+    }
+  }
 
-  let base#20: Int32;
+  export class Parts#10 {
+    let count#16: Int32;
+    constructor constructor#17(count#40: Int32): Parts#10 {
+      this.count#16 = count#40;
+    }
+  }
 
-  export fn sum#21(n#22: Int32): Int32 {
-    return %Int32.add(%Int32.add(twice#6(n#22), base#7), base#20);
+  export let firstId#37: Int32;
+
+  init {
+    init firstId#37 = 1;
+  }
+}
+
+module `parts/regex`#4 in "parts/regex" {
+  export fn wheels#41(): Int32 {
+    return 4;
+  }
+
+  init {}
+}
+
+module machine#5 in "machine" {
+  export fn describe#42(): String {
+    let state#43: State#8 = new constructor#13(firstId#37);
+    let engine#44: Engine#9 = new constructor#15(wheels#41());
+    let least#45: Int32 = oneOrMore#51((upcast(Dot#53)): RegexNode#49, omitted).min#50;
+    let parts#54: Parts#10 = new constructor#17(%Int32.add(engine#44.n#14, least#45));
+    return %String.cat(%String.cat(%String.cat(%String.cat(%String.cat("state ", state#43.id#12.toString#56(omitted)), " engine "), engine#44.n#14.toString#56(omitted)), " parts "), parts#54.count#16.toString#56(omitted));
+  }
+
+  init {}
+}
+
+module modules#6 {
+  let ~console#62: Console#30;
+
+  let calls#57: Int32;
+
+  class Engine#11 {
+    let name#18: String;
+    constructor constructor#19(name#60: String): Engine#11 {
+      this.name#18 = name#60;
+    }
+  }
+
+  let base#58: Int32;
+
+  export fn sum#59(n#61: Int32): Int32 {
+    return %Int32.add(%Int32.add(twice#22(n#61), base#24), base#58);
   }
 
   init {
-    init ~console#23 = getConsole#15(omitted);
-    init calls#19 = calls#8;
-    init base#20 = 1;
-    ~console#23.log#13(greet#4("modules"));
-    ~console#23.log#13(%String.cat("sum ", sum#21(3).toString#25(omitted)));
-    ~console#23.log#13(%String.cat("share ", share#16(7, 2).toString#25(omitted)));
-    bump#9();
-    bump#9();
-    ~console#23.log#13(%String.cat("calls ", calls#19.toString#25(omitted)));
-    ~console#23.log#13(%String.cat("calls now ", bump#9().toString#25(omitted)));
+    init ~console#62 = getConsole#33(omitted);
+    init calls#57 = calls#25;
+    init base#58 = 1;
+    ~console#62.log#31(greet#20("modules"));
+    ~console#62.log#31(%String.cat("sum ", sum#59(3).toString#56(omitted)));
+    ~console#62.log#31(%String.cat(%String.cat(%String.cat("share ", share#34(7, 2).toString#56(omitted)), " "), intDoubled#23(21).toString#56(omitted)));
+    ~console#62.log#31(%String.cat(%String.cat(new constructor#19("own").name#18, ", "), describe#42()));
+    bump#26();
+    bump#26();
+    ~console#62.log#31(%String.cat("calls ", calls#57.toString#56(omitted)));
+    ~console#62.log#31(%String.cat("calls now ", bump#26().toString#56(omitted)));
   }
+}
+
+module client#7 in "client" {
+  export fn sumTwice#63(n#64: Int32): Int32 {
+    return %Int32.mul(sum#59(n#64), 2);
+  }
+
+  init {}
 }

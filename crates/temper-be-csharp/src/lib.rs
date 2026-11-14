@@ -63,10 +63,6 @@ pub struct Variant {
     /// What it handles natively, which lowering and validation read.
     pub profile: Profile,
     pub rules: NamingRules,
-    /// The `TemperLang.Core` version its output depends on, as a project
-    /// beside the library's (`../../temper-core/TemperLang.Core.csproj`),
-    /// as Kotlin's.
-    pub runtime_version: &'static str,
     /// The .NET target framework, `<TargetFramework>` in each `.csproj`.
     pub target_framework: &'static str,
 }
@@ -82,7 +78,6 @@ pub static CSHARP: Variant = Variant {
         coroutines: CoroutineStrategy::TranslateToGenerator,
     },
     rules: names::RULES,
-    runtime_version: "0.6.0",
     target_framework: "net6.0",
 };
 
@@ -114,6 +109,7 @@ pub const BACKEND: temper_tmpl::Backend = temper_tmpl::Backend {
     } else {
         runtime::FILES
     },
+    runtime_version: &runtime::VERSION,
     rules: &CSHARP.rules,
     translate: |p, _| translate(p, &CSHARP).map_err(|e| e.to_string()),
     default: true,
@@ -145,28 +141,28 @@ pub const BACKEND: temper_tmpl::Backend = temper_tmpl::Backend {
 /// build` does too ([`runtime`]).
 /// std's modules with support code, as Kotlin's C# backend writes it
 /// into std's output: each module's path, and its support files
-/// (vendored from Kotlin's) beside its own, whose static methods its
+/// (begun as Kotlin's, in `runtime/std/`) beside its own, whose static methods its
 /// connected members call (`RegexSupport.CompiledFind(this, …)`).
 pub const STD_SUPPORT: &[(&str, &str, &str)] = &[
     (
         "regex",
         "IntRangeSet.cs",
-        include_str!("../../../vendor/temper/be-csharp/std/Regex/IntRangeSet.cs"),
+        include_str!("../runtime/std/Regex/IntRangeSet.cs"),
     ),
     (
         "regex",
         "RegexSupport.cs",
-        include_str!("../../../vendor/temper/be-csharp/std/Regex/RegexSupport.cs"),
+        include_str!("../runtime/std/Regex/RegexSupport.cs"),
     ),
     (
         "net",
         "NetSupport.cs",
-        include_str!("../../../vendor/temper/be-csharp/std/Net/NetSupport.cs"),
+        include_str!("../runtime/std/Net/NetSupport.cs"),
     ),
     (
         "temporal",
         "TemporalSupport.cs",
-        include_str!("../../../vendor/temper/be-csharp/std/Temporal/TemporalSupport.cs"),
+        include_str!("../runtime/std/Temporal/TemporalSupport.cs"),
     ),
 ];
 
@@ -189,7 +185,7 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
     let p = spilled.as_ref().unwrap_or(p);
     let names = assign_checked(p, &variant.rules).map_err(|what| NotYet { what })?;
     let library = &p.library.name;
-    let root = translate::library_namespace(library);
+    let root = translate::library_namespace(p, library);
     let mut sources = Vec::new();
     let mut tests = Vec::new();
     let mut program_loads = Vec::new();
@@ -235,7 +231,7 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
         }
     }
     // A library without a root module loads every module, as Lua's
-    // `init.lua` requires each, so `tempest run` runs them all.
+    // `init.lua` requires each, so `temper run` runs them all.
     if !p.modules.iter().any(|m| m.path.is_empty()) {
         for module in &p.modules {
             for class in loads(p, module) {
@@ -353,8 +349,8 @@ fn libraries_used(p: &Program, tests: bool) -> Vec<String> {
 
 /// A reference to a library's project beside this one's: std's as
 /// Kotlin's, `../../std/src/TemperLang.Std.csproj`.
-fn project_reference(name: &str) -> String {
-    let project = translate::library_namespace(name);
+fn project_reference(p: &Program, name: &str) -> String {
+    let project = translate::library_namespace(p, name);
     format!("\n    <ProjectReference Include=\"../../{name}/src/{project}.csproj\"/>")
 }
 
@@ -366,7 +362,7 @@ fn test_project(p: &Program, root: &str, variant: &Variant) -> String {
     let in_code = libraries_in_code(p);
     let dependencies: String = (p.dependencies().iter())
         .filter(|(name, _)| !in_code.iter().any(|l| l == name))
-        .map(|(name, _)| project_reference(name))
+        .map(|(name, _)| project_reference(p, name))
         .collect();
     format!(
         r#"<Project Sdk="Microsoft.NET.Sdk">
@@ -400,6 +396,28 @@ fn version_line(version: &str) -> String {
     }
 }
 
+/// The config's metadata, as Kotlin's `CsProj` writes it, a property a
+/// line: the authors and description before `IsPackable`, then the
+/// license and the project's URL after it. The URL is the homepage, or
+/// else the repository, which also goes in `RepositoryUrl`, where Kotlin
+/// gives only the repository, as the project's URL.
+fn package_metadata(p: &Program) -> (String, String) {
+    let meta = p.metadata();
+    let line = |tag: &str, value: Option<&str>| match value {
+        Some(value) => format!("    <{tag}>{}</{tag}>\n", temper_tmpl::xml_text(value)),
+        None => String::new(),
+    };
+    let about =
+        line("Authors", meta.get("authors")) + &line("Description", meta.get("description"));
+    let links = line("PackageLicenseExpression", meta.get("license"))
+        + &line(
+            "PackageProjectUrl",
+            meta.get("homepage").or(meta.get("repository")),
+        )
+        + &line("RepositoryUrl", meta.get("repository"));
+    (about, links)
+}
+
 /// The library's project, as Kotlin's `CsProj` writes it for a library
 /// without tests, and with a reference to each library it uses: its
 /// tests' project may see its
@@ -408,12 +426,13 @@ fn version_line(version: &str) -> String {
 fn library_project(p: &Program, root: &str, variant: &Variant) -> String {
     let framework = variant.target_framework;
     let version = version_line(&p.library.version);
+    let (about, links) = package_metadata(p);
     // Each library its code uses, by its project beside this one's
     // library; what only its tests use, their project refers to.
     let in_code = libraries_in_code(p);
     let dependencies: String = (p.dependencies().iter())
         .filter(|(name, _)| in_code.iter().any(|l| l == name))
-        .map(|(name, _)| project_reference(name))
+        .map(|(name, _)| project_reference(p, name))
         .collect();
     // std's `testing` throws MSTest's `AssertFailedException`, so std has
     // the packages its C# configuration lists.
@@ -432,8 +451,8 @@ fn library_project(p: &Program, root: &str, variant: &Variant) -> String {
   <PropertyGroup>
     <TargetFramework>{framework}</TargetFramework>
     <RootNamespace>{root}</RootNamespace>
-{version}    <IsPackable>true</IsPackable>
-    <Nullable>enable</Nullable>
+{version}{about}    <IsPackable>true</IsPackable>
+{links}    <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="{root}Test"/>

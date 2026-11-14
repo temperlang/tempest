@@ -1,6 +1,6 @@
 //! The Java backend on Kotlin Temper's functional tests that tmpl's
-//! translation covers so far, from the vendored copy
-//! (`temper-funtests`), and on the shared programs
+//! translation covers so far, in `temper-funtests`'s
+//! `cases/`, and on the shared programs
 //! (`crates/temper-be-testkit/programs/`), which cover operators,
 //! jumps, module state, several modules, imports, tests, classes, and
 //! nullables beyond those tests; with the class tests
@@ -28,8 +28,8 @@
 //!   too, as `functions-connected.WorkConnected.java`). To accept new or
 //!   changed output,
 //!   run with `UPDATE_SNAPSHOTS=1` and review the diff.
-//! - `runs`: without Maven, `javac` (or `JAVAC`) compiles the vendored
-//!   `temper-core` (`vendor/temper/be-java/temper-core`) once, for Java 8
+//! - `runs`: without Maven, `javac` (or `JAVAC`) compiles
+//!   `temper-core` (`crates/temper-be-java/runtime/temper-core`) once, for Java 8
 //!   as its `pom.xml` says, into `CARGO_TARGET_TMPDIR`, reused until its
 //!   sources or the JDK change; then every generated package, and a
 //!   harness that runs `module-state` from 8 threads, in one more `javac`,
@@ -42,7 +42,7 @@
 //!   cache, as strictly, and runs through JUnit's launcher
 //!   ([`tools::RUN_TESTS`]), its failures compared with its
 //!   `expectedFailures`. Skipped, with a message, without
-//!   `javac` or `java`; with `TEMPEST_REQUIRE_CHECKERS` set, as in CI,
+//!   `javac` or `java`; with `TEMPER_REQUIRE_CHECKERS` set, as in CI,
 //!   either missing fails it instead.
 
 use std::path::{Path, PathBuf};
@@ -166,7 +166,10 @@ fn goldens() {
             let pom = &files[0].text;
             for part in [
                 format!("<groupId>{package}</groupId>\n  <artifactId>{library}</artifactId>"),
-                "<artifactId>temper-core</artifactId>\n      <version>0.6.0</version>".into(),
+                format!(
+                    "<artifactId>temper-core</artifactId>\n      <version>{}</version>",
+                    temper_tmpl::version::current()
+                ),
                 "<release>17</release>".into(),
                 format!("<mainClass>{package}.{class}Main</mainClass>"),
             ] {
@@ -205,7 +208,7 @@ fn goldens() {
 }
 
 fn runtime() -> PathBuf {
-    kit::vendored("be-java/temper-core/src/main/java")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("runtime/temper-core/src/main/java")
 }
 
 fn javac(
@@ -220,11 +223,21 @@ fn javac(
     // fails internally (as when out of memory); keep those out of the
     // crate.
     command.current_dir(env!("CARGO_TARGET_TMPDIR"));
+    command.arg(tools::ARGFILE_ENCODING);
     command.args(options).arg("-d").arg(out);
     if let Some(cp) = classpath {
         command.arg("-cp").arg(cp);
     }
-    command.args(files).output().unwrap()
+    // The files in an argument file beside `out`, as `temper test -b
+    // java` names them, since a command line naming them all can be
+    // more than Windows takes.
+    let list = out.with_extension("args");
+    let sources =
+        tools::argfile(&list, files).unwrap_or_else(|e| panic!("{}: {e}", list.display()));
+    command
+        .arg(sources)
+        .output()
+        .unwrap_or_else(|e| panic!("javac, {} files in {}: {e}", files.len(), list.display()))
 }
 
 /// The runtime's classes, compiled once and kept under
@@ -283,7 +296,7 @@ public final class ModuleStateThreads {
 
 /// A run as tests, as Kotlin's `RunJava`: std's package and the
 /// library's main and test sources compiled with JUnit, its tests run
-/// through JUnit's launcher ([`tools::RUN_TESTS`], as `tempest test -b
+/// through JUnit's launcher ([`tools::RUN_TESTS`], as `temper test -b
 /// java` runs them), and their failures compared
 /// with its `expectedFailures`.
 fn run_tests(
@@ -309,7 +322,7 @@ fn run_tests(
             sources.push(path);
         }
     }
-    let runner = root.join("tempest/RunTests.java");
+    let runner = root.join("temper/RunTests.java");
     fs::create_dir_all(runner.parent().unwrap()).unwrap();
     fs::write(&runner, tools::RUN_TESTS).unwrap();
     sources.push(runner);
@@ -337,7 +350,7 @@ fn run_tests(
         .current_dir(env!("CARGO_TARGET_TMPDIR"))
         .args(["-XX:TieredStopAtLevel=1", "-XX:+UseSerialGC", "-cp"])
         .arg(&classpath)
-        .arg("tempest.RunTests")
+        .arg("temper.RunTests")
         .arg(&classes)
         .output()
         .unwrap();

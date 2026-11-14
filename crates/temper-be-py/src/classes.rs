@@ -36,6 +36,10 @@ fn not_yet<T>(what: impl Into<String>) -> R<T> {
 /// where tmpl allows it: a private static's initializer, or a static's
 /// initializer that calls a private static function.
 const PRIVATE_USAGE: &str = "pyright: ignore[reportPrivateUsage]";
+/// A static method that a supertype's of the same name doesn't fit, as
+/// `@json`'s `jsonAdapter()`, which Python's checkers take for an
+/// override; pyright also reads `type: ignore`.
+const STATIC_OVERRIDE: &str = "type: ignore[override]";
 
 impl Translator<'_> {
     /// Whether a declaration is a class's or interface's member.
@@ -314,10 +318,19 @@ impl Translator<'_> {
         if !done.insert(decl) {
             return Ok(());
         }
-        for &s in self.p.decls.supers(decl) {
-            let Some(up) = nominal_decl(self.p, s) else {
-                continue;
-            };
+        // The supertypes, and the classes their type arguments name, as
+        // `JsonAdapter[Point]` for `@json`'s `PointJsonAdapter`, which
+        // Python reads when it makes the class.
+        let mut named = Vec::new();
+        let mut types: Vec<TypeId> = self.p.decls.supers(decl).to_vec();
+        let mut i = 0;
+        while i < types.len() && i < 64 {
+            let t = types[i];
+            i += 1;
+            named.extend(nominal_decl(self.p, t));
+            types.extend(self.p.types.args(t));
+        }
+        for up in named {
             if home(self.p, up) != Some(self.here) {
                 continue;
             }
@@ -480,7 +493,12 @@ impl Translator<'_> {
                 },
                 Node::Function { decl: d, .. } => {
                     let name = self.member_name(d);
-                    body.push(self.function(m, name, vec!["staticmethod".into()])?);
+                    let def = self.function(m, name, vec!["staticmethod".into()])?;
+                    body.push(if self.static_clash(d) {
+                        Stmt::Commented(Box::new(def), STATIC_OVERRIDE.into())
+                    } else {
+                        def
+                    });
                 }
                 _ => {}
             }
@@ -556,7 +574,29 @@ impl Translator<'_> {
                     body: vec![Stmt::Return(Some(storage))],
                 });
             }
-            (None, None) => return not_yet(format!("a setter without a getter, {name}")),
+            // A getter that fails, as Kotlin's Python writes one, since a
+            // property's setter needs one; Temper code never reads it.
+            (None, None) => {
+                let setter_decl = match setter.map(|s| p.nodes.get(s)) {
+                    Some(Node::Method { decl, .. } | Node::AbstractMethod { decl, .. }) => decl,
+                    _ => return not_yet(format!("a property without a getter, {name}")),
+                };
+                let Some(&ty) = p.signature(setter_decl).and_then(|s| s.params.first()) else {
+                    return not_yet(format!("a setter without a parameter, {name}"));
+                };
+                let ann = self.ann(ty)?;
+                let message = Expr::Str(format!("{name} getter unavailable"));
+                out.push(Stmt::Def {
+                    decorators: vec!["property".into()],
+                    name: name.into(),
+                    params: vec![("self".into(), String::new())],
+                    positional: 1,
+                    result: ann,
+                    body: vec![Stmt::Raise(
+                        Expr::name("AttributeError").call(vec![message]),
+                    )],
+                });
+            }
         }
         match (setter, field) {
             (Some(s), _) => out.push(accessor(self, s, format!("{name}.setter"))?),
@@ -670,6 +710,39 @@ impl Translator<'_> {
 
     /// Whether a type is an interface with an `@abstractmethod`, its own
     /// or one it inherits, which mypy takes as abstract.
+    /// Whether a static method has the name of a supertype's static
+    /// method whose signature it doesn't fit: other parameters, or a
+    /// result that isn't the same or a subclass of its, as
+    /// `JsonAdapter[Circle]` for `JsonAdapter[Shape]`, which Python's
+    /// generics don't let vary.
+    fn static_clash(&self, decl: DeclId) -> bool {
+        let p = self.p;
+        let me = p.decls.get(decl);
+        let Some(mine) = p.types.signature(me.ty) else {
+            return false;
+        };
+        ancestors(p, me.owner).into_iter().any(|up| {
+            (p.decls.ids()).any(|d| {
+                let theirs = p.decls.get(d);
+                if theirs.owner != up || theirs.kind != me.kind || theirs.name != me.name {
+                    return false;
+                }
+                let Some(sig) = p.types.signature(theirs.ty) else {
+                    return false;
+                };
+                let narrower = match (nominal_decl(p, mine.result), nominal_decl(p, sig.result)) {
+                    (Some(a), Some(b)) => {
+                        p.types.args(mine.result).is_empty()
+                            && p.types.args(sig.result).is_empty()
+                            && ancestors(p, a).contains(&b)
+                    }
+                    _ => false,
+                };
+                sig.params != mine.params || (sig.result != mine.result && !narrower)
+            })
+        })
+    }
+
     pub(crate) fn is_abstract(&self, ty: TypeId) -> bool {
         let p = self.p;
         let Some(class) = nominal_decl(p, ty) else {
@@ -677,6 +750,15 @@ impl Translator<'_> {
         };
         if p.decls.get(class).kind != DeclKind::Interface {
             return false;
+        }
+        // Another library's, as std's `JsonNumeric`, which lists only the
+        // methods used, without bodies: abstract if it has any, as an
+        // interface that isn't all default methods is.
+        if !self.class_nodes.contains_key(&class) && library_of(p, class) != "core" {
+            return (p.decls.ids()).any(|d| {
+                let d = p.decls.get(d);
+                d.owner == class && d.kind == DeclKind::Method
+            });
         }
         let mut ups = ancestors(p, class);
         ups.insert(0, class);

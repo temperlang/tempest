@@ -22,6 +22,17 @@ pub(crate) fn init() -> temper_core::Result<()> {
             c.set_doubled(10);
             println!("{}", c.doubled());
             println!("{}", c.same(Counter::new().bump().bump()));
+            c.set_added(5);
+            let added = {
+                let t2 = {
+                    let t: i32 = 2;
+                    c.set_added(t);
+                    t
+                };
+                c.set_added(t2);
+                t2
+            };
+            println!("{added} {}", c.count());
             println!(
                 "{} {}",
                 Point::new(1, 2) == Point::new(1, 2),
@@ -46,6 +57,15 @@ pub(crate) fn init() -> temper_core::Result<()> {
             if temper_core::is::<Rect>(s.clone()) {
                 println!("{}", temper_core::cast::<Rect>(s.clone()).unwrap().0.w);
             }
+            let st = Stock::new(Arc::new(vec![4, 5]), None);
+            st.set_items(Arc::new(vec![1, 2, 3]));
+            println!(
+                "{} {} {} {}",
+                st.0.count,
+                st.0.size,
+                st.size_now(),
+                temper_core::ListedTrait::len(&st.items())
+            );
             let _favorite = same(std::any::TypeId::of::<i64>());
             let mut named: i32 = 0;
             {
@@ -244,6 +264,10 @@ impl Counter {
         *self.0.count.write().unwrap() = value.wrapping_sub(self.count());
     }
 
+    pub fn set_added(&self, value: i32) {
+        *self.0.count.write().unwrap() = self.count().wrapping_add(value);
+    }
+
     pub fn bump(&self) -> Counter {
         *self.0.count.write().unwrap() = self.count().wrapping_add(1);
         *self.0.hidden.write().unwrap() = self.hidden().wrapping_add(1);
@@ -382,6 +406,46 @@ impl Version {
 }
 
 temper_core::impl_any_value_trait!(Version, []);
+
+struct StockStruct {
+    count: i32,
+    items_var: RwLock<temper_core::List<i32>>,
+    size: i32,
+}
+
+#[derive(Clone)]
+pub(crate) struct Stock(Arc<StockStruct>);
+
+impl Stock {
+    pub fn items(&self) -> temper_core::List<i32> {
+        self.items_var()
+    }
+
+    pub fn set_items(&self, value: impl temper_core::ToList<i32>) {
+        let value = value.to_list();
+        *self.0.items_var.write().unwrap() = value.clone();
+    }
+
+    pub fn new(items: impl temper_core::ToList<i32>, count: Option<i32>) -> Stock {
+        let items = items.to_list();
+        let count = count.unwrap_or_else(|| temper_core::ListedTrait::len(&items));
+        Stock(Arc::new(StockStruct {
+            count,
+            items_var: RwLock::new(items.clone()),
+            size: temper_core::ListedTrait::len(&items),
+        }))
+    }
+
+    pub fn size_now(&self) -> i32 {
+        temper_core::ListedTrait::len(&self.items())
+    }
+
+    fn items_var(&self) -> temper_core::List<i32> {
+        self.0.items_var.read().unwrap().clone()
+    }
+}
+
+temper_core::impl_any_value_trait!(Stock, []);
 
 pub(crate) fn shape(x: Shape) -> Shape {
     x.clone()

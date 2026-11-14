@@ -519,6 +519,22 @@ fn impl_head(head: &str) -> String {
     }
 }
 
+/// Where an impl's head has its trait's ` for ` (outside its generics),
+/// if it does.
+fn impl_for(head: &str) -> Option<usize> {
+    let mut depth = 0i32;
+    for (i, c) in head.char_indices() {
+        match c {
+            '<' => depth += 1,
+            // Not a function type's `->`.
+            '>' if !head[..i].ends_with('-') => depth -= 1,
+            ' ' if depth == 0 && head[i..].starts_with(" for ") => return Some(i),
+            _ => {}
+        }
+    }
+    None
+}
+
 fn item_at(item: &Item, indent: usize) -> String {
     let pad = pad(indent);
     match item {
@@ -564,21 +580,37 @@ fn item_at(item: &Item, indent: usize) -> String {
             vis,
             name,
             types,
-        } => format!(
-            "{}{pad}{}struct {name}({});\n",
-            attrs_text(attrs, &pad),
-            vis_text(vis),
-            types.join(", ")
-        ),
+        } => {
+            let line = format!("{pad}{}struct {name}({});", vis_text(vis), types.join(", "));
+            if width(&line) <= MAX {
+                return format!("{}{line}\n", attrs_text(attrs, &pad));
+            }
+            // Too wide: a type per line, as rustfmt lays it out.
+            let mut out = attrs_text(attrs, &pad);
+            out.push_str(&format!("{pad}{}struct {name}(\n", vis_text(vis)));
+            for ty in types {
+                out.push_str(&format!("{pad}    {ty},\n"));
+            }
+            out.push_str(&format!("{pad});\n"));
+            out
+        }
         Item::Impl { head, items } => {
-            if items.is_empty() {
-                format!("{pad}impl{} {{}}\n", impl_head(head))
+            let head = impl_head(head);
+            let body = if items.is_empty() {
+                "{}".to_string()
             } else {
-                format!(
-                    "{pad}impl{} {{\n{}{pad}}}\n",
-                    impl_head(head),
-                    members(items, indent + 4)
-                )
+                format!("{{\n{}{pad}}}", members(items, indent + 4))
+            };
+            let line = format!("{pad}impl{head} {{");
+            match impl_for(&head) {
+                // Too wide: `for Type` on the next line and the brace on
+                // its own, as rustfmt lays it out.
+                Some(at) if width(&line) > MAX => format!(
+                    "{pad}impl{}\n{pad}    {}\n{pad}{body}\n",
+                    &head[..at],
+                    &head[at + 1..]
+                ),
+                _ => format!("{pad}impl{head} {body}\n"),
             }
         }
         Item::Trait {
@@ -859,12 +891,14 @@ enum Link<'a> {
 }
 
 impl Link<'_> {
-    /// Whether rustfmt keeps it on the line of the link before: `?` and a
-    /// tuple's field (`.0`).
-    fn joins(self) -> bool {
+    /// Whether rustfmt keeps it on the line of the link before, `after`:
+    /// `?`, and a tuple's field (`.0`) unless after a `?`.
+    fn joins(self, after: Option<Link<'_>>) -> bool {
         match self {
             Link::Try => true,
-            Link::Field(name) => name.chars().all(|c| c.is_ascii_digit()),
+            Link::Field(name) => {
+                name.chars().all(|c| c.is_ascii_digit()) && !matches!(after, Some(Link::Try))
+            }
             Link::Call(..) => false,
         }
     }
@@ -916,7 +950,7 @@ fn chain_groups<'a>(root_width: usize, links: &[Link<'a>]) -> (Vec<Link<'a>>, Ve
     if root_width <= 4 && head.is_empty() {
         if let Some(l) = rest.next() {
             head.push(l);
-            while let Some(l) = rest.next_if(|l| l.joins()) {
+            while let Some(l) = rest.next_if(|l| l.joins(head.last().copied())) {
                 head.push(l);
             }
         }
@@ -924,7 +958,7 @@ fn chain_groups<'a>(root_width: usize, links: &[Link<'a>]) -> (Vec<Link<'a>>, Ve
     let mut groups: Vec<Vec<Link>> = Vec::new();
     for l in rest {
         match groups.last_mut() {
-            Some(g) if l.joins() => g.push(l),
+            Some(g) if l.joins(g.last().copied()) => g.push(l),
             _ => groups.push(vec![l]),
         }
     }

@@ -1,5 +1,6 @@
 package classes;
 
+import java.util.List;
 import java.util.logging.Logger;
 import temper.core.Core;
 import temper.core.Core.Console;
@@ -49,6 +50,13 @@ public final class ClassesGlobal {
         c.setDoubled(10);
         console.log(Integer.toString(c.getDoubled()));
         console.log(Boolean.toString(c.same(new Counter().bump().bump())));
+        c.setAdded(5);
+        int t = 2;
+        c.setAdded(t);
+        int t2 = t;
+        c.setAdded(t2);
+        int added = t2;
+        console.log(added + " " + c.count);
         console.log(new Point(1, 2).eq(new Point(1, 2)) + " " + !new Point(1, 2).eq(new Point(2, 1)));
         console.log(Boolean.toString(new Holder(new Loose(3), "a").eq(new Holder(new Loose(-3), "a"))));
         console.log((new Version(1, 2).compareTo(new Version(1, 3)) < 0) + " " + (new Version(2, 0).compareTo(new Version(1, 9)) >= 0));
@@ -58,6 +66,9 @@ public final class ClassesGlobal {
         if (s instanceof Rect) {
             console.log(Integer.toString(((Rect) s).w));
         }
+        Stock st = new Stock(List.of(4, 5));
+        st.setItems(List.of(1, 2, 3));
+        console.log(st.count + " " + st.size + " " + st.sizeNow() + " " + st.getItems().size());
         Class<?> favorite = same(Long.class);
         int named = 0;
         {

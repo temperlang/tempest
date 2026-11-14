@@ -132,26 +132,26 @@ class CodePoints(CodePart):
 
 
 class CodeRange(CodePart):
-    __slots__ = ('_min_', '_max_')
-    _min_: int
-    _max_: int
+    __slots__ = ('_min', '_max')
+    _min: int
+    _max: int
 
     def __init__(self, /, min_: int, max_: int) -> None:
-        self._min_ = min_
-        self._max_ = max_
+        self._min = min_
+        self._max = max_
 
     @property
-    def min_(self, /) -> int:
-        return self._min_
+    def min(self, /) -> int:
+        return self._min
 
     @property
-    def max_(self, /) -> int:
-        return self._max_
+    def max(self, /) -> int:
+        return self._max
 
     def eq(self, other: RegexNode, /) -> bool:
         if isinstance(other, CodeRange):
-            if self._min_ == other._min_:
-                return self._max_ == other._max_
+            if self._min == other._min:
+                return self._max == other._max
             else:
                 return False
         else:
@@ -230,18 +230,18 @@ class Or(RegexNode):
 
 
 class Repeat(RegexNode):
-    __slots__ = ('_item', '_min_', '_max_', '_reluctant')
+    __slots__ = ('_item', '_min', '_max', '_reluctant')
     _item: RegexNode
-    _min_: int
-    _max_: int | None
+    _min: int
+    _max: int | None
     _reluctant: bool
 
     def __init__(self, /, item: RegexNode, min_: int, max_: int | None, reluctant: bool | None = None) -> None:
         if reluctant is None:
             reluctant = False
         self._item = item
-        self._min_ = min_
-        self._max_ = max_
+        self._min = min_
+        self._max = max_
         self._reluctant = reluctant
 
     @property
@@ -249,12 +249,12 @@ class Repeat(RegexNode):
         return self._item
 
     @property
-    def min_(self, /) -> int:
-        return self._min_
+    def min(self, /) -> int:
+        return self._min
 
     @property
-    def max_(self, /) -> int | None:
-        return self._max_
+    def max(self, /) -> int | None:
+        return self._max
 
     @property
     def reluctant(self, /) -> bool:
@@ -263,8 +263,8 @@ class Repeat(RegexNode):
     def eq(self, other: RegexNode, /) -> bool:
         if isinstance(other, Repeat):
             if self._item.eq(other._item):
-                if self._min_ == other._min_:
-                    if self._max_ == other._max_:
+                if self._min == other._min:
+                    if self._max == other._max:
                         return self._reluctant == other._reluctant
                     else:
                         return False
@@ -521,9 +521,9 @@ class _RegexFormatter:
 
     @staticmethod
     def regex_format(data: RegexNode, /) -> str:
-        return _RegexFormatter().format_(data)
+        return _RegexFormatter().format(data)
 
-    def format_(self, regex: RegexNode, /) -> str:
+    def format(self, regex: RegexNode, /) -> str:
         self._push_regex(regex)
         return ''.join(self._out)
 
@@ -599,9 +599,9 @@ class _RegexFormatter:
         self._out.append(']')
 
     def _push_code_range_unwrapped(self, code_range: CodeRange, /) -> None:
-        self._push_code(code_range.min_, True)
+        self._push_code(code_range.min, True)
         self._out.append('-')
-        self._push_code(code_range.max_, True)
+        self._push_code(code_range.max, True)
 
     def _push_code_set(self, code_set: CodeSet, /) -> None:
         adjusted = self._adjust_code_set(code_set, _regex_refs)
@@ -649,8 +649,8 @@ class _RegexFormatter:
         self._out.append('(?:')
         self._push_regex(repeat.item)
         self._out.append(')')
-        min_ = repeat.min_
-        max_: int | None = repeat.max_
+        min_ = repeat.min
+        max_: int | None = repeat.max
         if False:
             pass
         elif min_ == 0 and max_ == 1:
@@ -690,7 +690,7 @@ class _RegexFormatter:
                     index = _string_next(value, index)
                 return max_
         elif isinstance(code_part, CodeRange):
-            return code_part.max_
+            return code_part.max
         elif code_part.eq(digit):
             return _Codes.digit9
         elif code_part.eq(space):

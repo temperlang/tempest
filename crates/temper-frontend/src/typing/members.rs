@@ -785,7 +785,11 @@ impl Settle {
         let symbol = *self.scopes.symbol(symbol);
         let class = self.scopes.get(symbol.owner).node;
         let is_static = self.lib.tree.data(symbol.decl?) & MEMBER_STATIC != 0;
-        let m = self.member_named(class, symbol.name, is_static, callee)?;
+        // A `@noProperty` input is itself, not a member by its name.
+        let m = match symbol.input {
+            true => symbol.decl?,
+            false => self.member_named(class, symbol.name, is_static, callee)?,
+        };
         let receiver = self.own_receiver(class, is_static);
         let this = (!is_static).then(|| self.class_or_own_type(class));
         Some((m, receiver, this))
@@ -1074,7 +1078,8 @@ impl Settle {
     }
 
     /// A class's members named `name`: its instances' own and inherited
-    /// ones, or if `statics`, its own static ones. Not constructors.
+    /// ones, or if `statics`, its own static ones. Not constructors, nor
+    /// `@noProperty` inputs, which only initializers read, by name.
     pub(super) fn members_named(&self, class: NodeId, name: NameId, statics: bool) -> Vec<NodeId> {
         let Some(scope) = self.scopes.of_node(class) else {
             return Vec::new();
@@ -1087,6 +1092,7 @@ impl Settle {
                 tree.kind(m) == NodeKind::Let
                     && (tree.data(m) & MEMBER_STATIC != 0) == statics
                     && tree.data(m) & ROLE_MASK != ROLE_CONSTRUCTOR
+                    && tree.data(m) & core::MEMBER_NO_PROPERTY == 0
             })
             .collect()
     }

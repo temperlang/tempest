@@ -207,6 +207,131 @@ log 5
 log 7
 log 15
 
+=== compound assignment on index targets evaluates the list and index once
+let ls = new ListBuilder<Int>();
+ls.add(1);
+ls.add(10);
+let m = new Map<String, Int>([new Pair("a", 3)]).toMapBuilder();
+var calls = 0;
+let at(i: Int): Int { calls += 1; i }
+ls[0] += 4;
+ls[at(1)] *= 2;
+console.log((ls[0]++).toString());
+console.log((++ls[at(0)]).toString());
+console.log((ls[1]--).toString());
+--ls[1];
+// A `var` index is held, as the value may assign it, and so is a call.
+var j = 1;
+ls[j] -= do { j = 0; 1 };
+let pick(): ListBuilder<Int> { calls += 1; ls }
+pick()[j] += 3;
+m["a"] -= 1;
+m["a"]++;
+console.log("${ls[0]} ${ls[1]} ${m["a"]} ${calls}");
+--- settled
+(Block
+  (Let ^ls:0 (Call new (Call <> ListBuilder Int)))
+  (Call (Call . ls:0 \add) 1)
+  (Call (Call . ls:0 \add) 10)
+  (Let
+    ^m:1
+    (Call
+      (Call
+        .
+        (Call new (Call <> Map String Int) (Call list (Call new Pair "a" 3)))
+        \toMapBuilder)))
+  (Var ^calls:2 0)
+  (Let
+    ^pick:5
+    (Fn
+      (Call <> ListBuilder Int)
+      (Block (Assign calls:2 (Call + calls:2 1)) ls:0)))
+  (Let
+    ^at:3
+    (Fn (Let ^i:6 Int) Int (Block (Assign calls:2 (Call + calls:2 1)) i:6)))
+  (Block (Call (Call . ls:0 \set) 0 (Call + (Call [] ls:0 0) 4)))
+  (Block
+    (Let ^k#7 (Call at:3 1))
+    (Call (Call . ls:0 \set) k#7 (Call * (Call [] ls:0 k#7) 2)))
+  (Call
+    (Call . console \log)
+    (Call
+      (Call
+        .
+        (Block
+          (Let ^t#8 (Call [] ls:0 0))
+          (Call (Call . ls:0 \set) 0 (Call + t#8 1))
+          t#8)
+        \toString)))
+  (Call
+    (Call . console \log)
+    (Call
+      (Call
+        .
+        (Block
+          (Let ^k#9 (Call at:3 0))
+          (Let ^t#10 (Call + (Call [] ls:0 k#9) 1))
+          (Call (Call . ls:0 \set) k#9 t#10)
+          t#10)
+        \toString)))
+  (Call
+    (Call . console \log)
+    (Call
+      (Call
+        .
+        (Block
+          (Let ^t#11 (Call [] ls:0 1))
+          (Call (Call . ls:0 \set) 1 (Call - t#11 1))
+          t#11)
+        \toString)))
+  (Block
+    (Let ^t#12 (Call - (Call [] ls:0 1) 1))
+    (Call (Call . ls:0 \set) 1 t#12)
+    t#12)
+  (Var ^j:4 1)
+  (Block
+    (Let ^k#13 j:4)
+    (Call
+      (Call . ls:0 \set)
+      k#13
+      (Call - (Call [] ls:0 k#13) (Block (Assign j:4 0) 1))))
+  (Block
+    (Let ^o#14 (Call pick:5))
+    (Let ^k#15 j:4)
+    (Call (Call . o#14 \set) k#15 (Call + (Call [] o#14 k#15) 3)))
+  (Block (Call (Call . m:1 \set) "a" (Call - (Call [] m:1 "a") 1)))
+  (Block
+    (Let ^t#16 (Call [] m:1 "a"))
+    (Call (Call . m:1 \set) "a" (Call + t#16 1))
+    t#16)
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call [] ls:0 0)
+      " "
+      (Call [] ls:0 1)
+      " "
+      (Call [] m:1 "a")
+      " "
+      calls:2))
+  #void)
+log 5
+log 7
+log 20
+log 10 17 3 3
+
+=== compound assignment on an immutable list's index
+let ls = [1, 2];
+ls[0] += 1;
+--- settled
+(Block
+  (Let ^ls:0 (Call list 1 2))
+  (Block (Call (Call . ls:0 \set) 0 (Call + (Call [] ls:0 0) 1)))
+  #void)
+error 17..27: No member set in List<Int32>
+Failed: No member set in List<Int32>
+
 === string interpolation
 let name = "World";
 let n = 3;

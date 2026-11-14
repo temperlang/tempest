@@ -19,6 +19,7 @@ struct Point;
 struct Loose;
 struct Holder;
 struct Version;
+struct Stock;
 struct Sql;
 
 struct Shape : public virtual temper::core::AnyValueBase {
@@ -54,6 +55,7 @@ struct Counter : public std::enable_shared_from_this<Counter> {
   static std::shared_ptr<Counter> make();
   int32_t get_doubled();
   void set_doubled(int32_t value);
+  void set_added(int32_t value);
   std::shared_ptr<Counter> bump();
   bool same(std::shared_ptr<Counter> const & other) const;
   static std::shared_ptr<Counter> zero();
@@ -92,6 +94,19 @@ struct Version : public std::enable_shared_from_this<Version> {
   int32_t compareTo(std::shared_ptr<Version> const & other) const;
   int32_t get_major() const;
   int32_t get_minor() const;
+};
+
+struct Stock : public std::enable_shared_from_this<Stock> {
+  int32_t count;
+  std::shared_ptr<std::vector<int32_t>> itemsVar;
+  int32_t size;
+  std::shared_ptr<std::vector<int32_t>> get_items();
+  void set_items(std::shared_ptr<std::vector<int32_t>> const & value);
+  static std::shared_ptr<Stock> make(std::shared_ptr<std::vector<int32_t>> const & items, temper::core::NullableParam<int32_t> count);
+  static std::shared_ptr<Stock> make(std::shared_ptr<std::vector<int32_t>> const & items);
+  int32_t sizeNow();
+  int32_t get_count();
+  int32_t get_size() const;
 };
 
 struct Sql : public std::enable_shared_from_this<Sql> {
@@ -183,6 +198,10 @@ int32_t Counter::get_doubled() {
 
 void Counter::set_doubled(int32_t value) {
   this->count = core::Int::sub(value, this->count);
+}
+
+void Counter::set_added(int32_t value) {
+  this->count = core::Int::add(this->count, value);
 }
 
 std::shared_ptr<Counter> Counter::bump() {
@@ -292,6 +311,41 @@ int32_t Version::get_minor() const {
   return this->minor;
 }
 
+std::shared_ptr<std::vector<int32_t>> Stock::get_items() {
+  return this->itemsVar;
+}
+
+void Stock::set_items(std::shared_ptr<std::vector<int32_t>> const & value) {
+  std::shared_ptr<Stock> self = shared_from_this();
+  self->itemsVar = value;
+}
+
+std::shared_ptr<Stock> Stock::make(std::shared_ptr<std::vector<int32_t>> const & items, core::NullableParam<int32_t> count) {
+  std::shared_ptr<Stock> self = std::make_shared<Stock>();
+  int32_t count2 = count == nullptr ? core::List::length<int32_t>(items) : count.value;
+  self->count = count2;
+  self->itemsVar = items;
+  self->size = core::List::length<int32_t>(items);
+  return self;
+}
+
+std::shared_ptr<Stock> Stock::make(std::shared_ptr<std::vector<int32_t>> const & items) {
+  return make(items, nullptr);
+}
+
+int32_t Stock::sizeNow() {
+  std::shared_ptr<Stock> self = shared_from_this();
+  return core::List::length<int32_t>(self->get_items());
+}
+
+int32_t Stock::get_count() {
+  return this->count;
+}
+
+int32_t Stock::get_size() const {
+  return this->size;
+}
+
 static std::shared_ptr<Shape> shape(std::shared_ptr<Shape> const & x) {
   return x;
 }
@@ -371,6 +425,13 @@ void global_init_init() {
     c->set_doubled(10);
     core::Console::log(console, std::to_string(c->get_doubled()));
     core::Console::log(console, core::Boolean::toString(c->same(Counter::make()->bump()->bump())));
+    c->set_added(5);
+    int32_t t = 2;
+    c->set_added(t);
+    int32_t t2 = t;
+    c->set_added(t2);
+    int32_t added = t2;
+    core::Console::log(console, std::to_string(added) + " " + std::to_string(c->count));
     core::Console::log(console, core::Boolean::toString(Point::make(1, 2)->eq(Point::make(1, 2))) + " " + core::Boolean::toString(!Point::make(1, 2)->eq(Point::make(2, 1))));
     core::Console::log(console, core::Boolean::toString(Holder::make(Loose::make(3), TEMPER_STR("a"))->eq(Holder::make(Loose::make(-3), TEMPER_STR("a")))));
     core::Console::log(console, core::Boolean::toString(Version::make(1, 2)->compareTo(Version::make(1, 3)) < 0) + " " + core::Boolean::toString(Version::make(2, 0)->compareTo(Version::make(1, 9)) >= 0));
@@ -380,6 +441,9 @@ void global_init_init() {
     if (dynamic_cast<Rect const *>(s.get()) != nullptr) {
       core::Console::log(console, std::to_string(core::checked_cast<Rect>(s)->w));
     }
+    std::shared_ptr<Stock> st = Stock::make(core::List::make<int32_t>(4, 5));
+    st->set_items(core::List::make<int32_t>(1, 2, 3));
+    core::Console::log(console, std::to_string(st->count) + " " + std::to_string(st->size) + " " + std::to_string(st->sizeNow()) + " " + std::to_string(core::List::length<int32_t>(st->get_items())));
     std::type_index favorite = classes::same(std::type_index(typeid(int64_t)));
     static_cast<void>(favorite);
     int32_t named = 0;

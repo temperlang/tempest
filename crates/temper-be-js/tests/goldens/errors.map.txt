@@ -78,7 +78,7 @@
 111:3 -> ../errors.temper.md:48:22  get value() { <- value: Int) {
 111:7 -> ../errors.temper.md:48:22 (value)  value() { <- value: Int) {
 115:3 -> ../errors.temper.md:49:14  /** @returns {number} */ <- get(): Int { value }
-116:3 -> ../errors.temper.md:49:14 (get)  get_() { <- get(): Int { value }
+116:3 -> ../errors.temper.md:49:14 (get)  get() { <- get(): Int { value }
 117:5 -> ../errors.temper.md:49:27  return this.#value; <- value }
 120:3 -> ../errors.temper.md:50:14  /** @returns {string} */ <- bad(): String throws Bubble
 121:3 -> ../errors.temper.md:50:14 (bad)  bad() { <- bad(): String throws Bubble

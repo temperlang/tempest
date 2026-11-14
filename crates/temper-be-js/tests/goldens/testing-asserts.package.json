@@ -9,8 +9,8 @@
         "test": "mocha test --recursive --reporter mocha-junit-reporter"
     },
     "dependencies": {
-        "@temperlang/core": "0.6.0",
-        "@temperlang/std": "0.6.0"
+        "@temperlang/core": "0.0.0-alpha.0.0",
+        "@temperlang/std": "0.0.0-alpha.0.0"
     },
     "devDependencies": {
         "mocha": "^10.0.0",

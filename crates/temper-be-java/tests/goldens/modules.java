@@ -4,6 +4,7 @@ import java.util.logging.Logger;
 import modules.core.CoreGlobal;
 import modules.helpers.HelpersGlobal;
 import modules.helpers.deep.DeepGlobal;
+import modules.machine.MachineGlobal;
 import temper.core.Core;
 import temper.core.Core.Console;
 
@@ -22,7 +23,8 @@ public final class ModulesGlobal {
         base2 = 1;
         console.log(DeepGlobal.greet("modules"));
         console.log("sum " + sum(3));
-        console.log("share " + CoreGlobal.share(7, 2));
+        console.log("share " + CoreGlobal.share(7, 2) + " " + HelpersGlobal.intDoubled(21));
+        console.log(new Engine("own").name + ", " + MachineGlobal.describe());
         HelpersGlobal.bump();
         HelpersGlobal.bump();
         console.log("calls " + calls2);

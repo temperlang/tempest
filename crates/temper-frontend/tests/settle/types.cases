@@ -86,7 +86,8 @@ let f: String = d;
   (Let ^f:5 String d:3)
   #void)
 error 16..17: Cannot assign to String from Int32
-Failed: d has not been initialized
+error 64..65: d is not initialized along branches
+Failed: d is not initialized along branches
 
 === locals typed from their initializers
 var a;
@@ -116,7 +117,8 @@ c = c + 1;
 error 14..23: Cannot assign to Int32 from String
 error 41..42: Cannot assign to String from Int32
 error 108..109: Cannot assign to Int32 from String?
-Failed: c has not been initialized
+error 122..123: c is not initialized along branches
+Failed: c is not initialized along branches
 
 === null where a type isn't nullable
 let a: String = null;
@@ -2569,7 +2571,110 @@ error 440..443: No member m in P
 error 449..456: No member size in List<Int32>
 error 483..492: No member lengthy in String
 log -1
-Failed: No method lengthy for String
+Failed: No member lengthy in String
+
+=== a member of a nullable value is an error that fails where it runs
+// As Kotlin's "No member n in AnyValue", with no null check that narrows
+// the value (flow.cases has the accepted forms): a property's read or
+// assignment, a method's call, a chained member, a builtin type's member,
+// a `var` (never narrowed), and `orelse`, which doesn't catch null. Only
+// the first of a chain is reported. A value Kotlin might work out while
+// compiling isn't reported, as `take(c)` for `let c: String? = "q"` isn't.
+class Counter(public var n: Int) {
+  public inc(): Void { n += 1; }
+  public get next(): Counter? { null }
+}
+let r1(c: Counter?): Int { c.n }
+let r2(c: Counter?): Void { c.inc() }
+let r3(c: Counter?): Void { c.n = 2; }
+let r4(c: Counter): Int { c.next.n }
+let r5(c: Counter?): Int { c.next.n }
+let r6(s: String?): Boolean { s.isEmpty }
+let r7(ls: List<Int>?): Int { ls.length }
+let r8(var x: Int?): String? { if (x != null) { x.toString() } else { null } }
+let r9(c: Counter?): Int { var d = c; if (d != null) { d.n } else { 0 } }
+let r10(c: Counter?): Int { c.n orelse 0 }
+let r11(): Boolean { let s: String? = "q"; s.isEmpty }
+console.log(r11().toString());
+console.log(r1(new Counter(1)).toString());
+console.log(r1(null).toString());
+--- settled
+(Block
+  (Class
+    ^Counter:0
+    (Param var ^n:13 Int)
+    (Method ^inc:14 (Fn Void (Block (Assign n:13 (Call + n:13 1)) #void)))
+    (Get ^next:15 (Fn (Call ? Counter:0) (Block null))))
+  (Let ^r1:1 (Fn (Let ^c:16 (Call ? Counter:0)) Int (Block (Call . c:16 \n))))
+  (Let
+    ^r2:2
+    (Fn (Let ^c:17 (Call ? Counter:0)) Void (Block (Call (Call . c:17 \inc)))))
+  (Let
+    ^r3:3
+    (Fn
+      (Let ^c:18 (Call ? Counter:0))
+      Void
+      (Block (Assign (Call . c:18 \n) 2) #void)))
+  (Let
+    ^r4:4
+    (Fn (Let ^c:19 Counter:0) Int (Block (Call . (Call . c:19 \next) \n))))
+  (Let
+    ^r5:5
+    (Fn
+      (Let ^c:20 (Call ? Counter:0))
+      Int
+      (Block (Call . (Call . c:20 \next) \n))))
+  (Let
+    ^r6:6
+    (Fn (Let ^s:21 (Call ? String)) Boolean (Block (Call . s:21 \isEmpty))))
+  (Let
+    ^r7:7
+    (Fn
+      (Let ^ls:22 (Call ? (Call <> List Int)))
+      Int
+      (Block (Call . ls:22 \length))))
+  (Let
+    ^r8:8
+    (Fn
+      (Var ^x:23 (Call ? Int))
+      (Call ? String)
+      (Block
+        (If
+          (Call != x:23 null)
+          (Block (Call (Call . x:23 \toString)))
+          (Block null)))))
+  (Let
+    ^r9:9
+    (Fn
+      (Let ^c:24 (Call ? Counter:0))
+      Int
+      (Block
+        (Var ^d:25 c:24)
+        (If (Call != d:25 null) (Block (Call . d:25 \n)) (Block 0)))))
+  (Let
+    ^r10:10
+    (Fn (Let ^c:26 (Call ? Counter:0)) Int (Block (Orelse (Call . c:26 \n) 0))))
+  (Let
+    ^r11:11
+    (Fn Boolean (Block (Let ^s:27 (Call ? String) "q") (Call . s:27 \isEmpty))))
+  (Call (Call . console \log) (Call (Call . (Call r11:11) \toString)))
+  (Call
+    (Call . console \log)
+    (Call (Call . (Call r1:1 (Call new Counter:0 1)) \toString)))
+  (Call (Call . console \log) (Call (Call . (Call r1:1 null) \toString)))
+  #void)
+error 579..582: No member n in Counter?
+error 613..618: No member inc in Counter?
+error 651..654: No member n in Counter?
+error 688..696: No member n in Counter?
+error 726..732: No member next in Counter?
+error 767..776: No member isEmpty in String?
+error 809..818: No member length in List<Int32>?
+error 869..879: No member toString in Int32?
+error 955..958: No member n in Counter?
+error 1002..1005: No member n in Counter?
+log false
+Failed: No member n in Counter?
 
 === a comment mentioning @extension doesn't hide a missing member
 // Only an `@extension("y")` visible where `p.y` is read would.
@@ -2586,10 +2691,10 @@ console.log(p.y.toString());
 error 143..146: No member y in P
 Failed: No member y in P
 
-=== a visible @extension keeps its name from being a missing member
-// Instance extensions aren't supported yet, but `s.isPal()` isn't "No
-// member" where `@extension("isPal")` is visible; `s.isPalindrome()`
-// still is, as is `isOdd` where the extension, local to `f`, isn't.
+=== a visible @extension answers to its name, where it's visible
+// `s.isPal()` calls `stringIsPal(s)` where `@extension("isPal")` is
+// visible; `s.isPalindrome()` is still "No member", as is `isOdd`
+// where the extension, local to `f`, isn't visible.
 @extension("isPal")
 let stringIsPal(s: String): Boolean { s == "aba" }
 let f(s: String): Boolean {
@@ -2610,12 +2715,184 @@ let g(s: String): Boolean { s.isOdd() }
       (Block
         (Let ^stringIsOdd:5 (Fn (Let ^t:6 String) Boolean (Block true)))
         (If
-          (Call (Call . s:4 \isOdd))
-          (If
-            (Call (Call . s:4 \isPal))
-            (Call (Call . s:4 \isPalindrome))
-            #false)
+          (Call stringIsOdd:5 s:4)
+          (If (Call stringIsPal:0 s:4) (Call (Call . s:4 \isPalindrome)) #false)
           #false))))
   (Let ^g:2 (Fn (Let ^s:7 String) Boolean (Block (Call (Call . s:7 \isOdd))))))
-error 404..418: No member isPalindrome in String
-error 451..458: No member isOdd in String
+error 383..397: No member isPalindrome in String
+error 430..437: No member isOdd in String
+
+=== instance extensions' errors, as Kotlin Temper reports them
+// A lone extension that doesn't take the receiver is called anyway, so
+// the argument's error shows; among several, none fitting, or two
+// fitting as well, is "No callee matches" (Kotlin calls the first of
+// equals). An extension isn't a property, nor a static member.
+@extension("half") let intHalf(x: Int): Int { x / 2 }
+@extension("d") let d1(x: Int): String { "1" }
+@extension("d") let d2(x: Int): String { "2" }
+@extension("k") let k1(x: Int): String { "1" }
+@extension("k") let k2(x: String): String { "2" }
+interface I {}
+@extension("f") let iF(i: I): Int { 1 }
+let a = "x".half();
+let b = 1.d();
+let c = true.k();
+let e = 84.half;
+let f = I.f();
+let g = 84.half("extra");
+--- settled
+(Block
+  (Let ^intHalf:0 (Fn (Let ^x:13 Int) Int (Block (Call / x:13 2))))
+  (Let ^d1:1 (Fn (Let ^x:14 Int) String (Block "1")))
+  (Let ^d2:2 (Fn (Let ^x:15 Int) String (Block "2")))
+  (Let ^k1:3 (Fn (Let ^x:16 Int) String (Block "1")))
+  (Let ^k2:4 (Fn (Let ^x:17 String) String (Block "2")))
+  (Interface ^I:5)
+  (Let ^iF:6 (Fn (Let ^i:19 I:5) Int (Block 1)))
+  (Let ^a:7 (Call intHalf:0 "x"))
+  (Let ^b:8 (Call (Call . 1 \d)))
+  (Let ^c:9 (Call (Call . true \k)))
+  (Let ^e:10 (Call . 84 \half))
+  (Let ^f:11 (Call (Call . I:5 \f)))
+  (Let ^g:12 (Call intHalf:0 84 "extra"))
+  #void)
+error 581..584: Expected subtype of Int32, but got String
+error 601..606: No callee matches inputs [Int32] among [fn (Int32): String, fn (Int32): String]
+error 616..624: No callee matches inputs [Boolean] among [fn (Int32): String, fn (String): String]
+error 666..682: Wrong number of arguments.  Expected 1
+error 634..641: No member half in Int32
+error 651..654: No member f in I
+Failed: Can't apply / to these arguments
+
+=== core's non-generic classes as declared types, as Kotlin Temper reports them
+let a: StringBuilder = 5;
+let b: StringBuilder = null;
+let i: StringIndex = "x";
+let d: DenseBitVector = 1;
+let e: StringIndexOption = "x";
+let g: NoStringIndex = String.begin;
+let f(n: Int): String {
+  var sbOrNull: StringBuilder = null;
+  if (n % 2 == 0) {
+    let sb = sbOrNull ?? new StringBuilder();
+    sb.append("${n}");
+    sbOrNull = sb;
+  }
+  let finalSb = sbOrNull;
+  if (finalSb == null) { "" } else { finalSb.toString() }
+}
+// Still fine: a subtype, a nullable, and narrowing.
+let s = "ab";
+let o: StringIndexOption = s.next(String.begin);
+let n: StringIndexOption? = null;
+let j: StringIndex = if (o is StringIndex) { o } else { String.begin };
+let k: AnyValue = new StringBuilder();
+console.log(f(4));
+--- settled
+(Block
+  (Let ^a:0 StringBuilder 5)
+  (Let ^b:1 StringBuilder null)
+  (Let ^i:2 StringIndex "x")
+  (Let ^d:3 DenseBitVector 1)
+  (Let ^e:4 StringIndexOption "x")
+  (Let ^g:5 NoStringIndex (Call . String \begin))
+  (Let
+    ^f:6
+    (Fn
+      (Let ^n:12 Int)
+      String
+      (Block
+        (Var ^sbOrNull:13 StringBuilder null)
+        (If
+          (Call == (Call % n:12 2) 0)
+          (Block
+            (Let
+              ^sb:15
+              (Block
+                (If
+                  (Call == sbOrNull:13 #null)
+                  (Call new StringBuilder)
+                  sbOrNull:13)))
+            (Call (Call . sb:15 \append) (Call cat n:12))
+            (Assign sbOrNull:13 sb:15)
+            #void)
+          (Block))
+        (Let ^finalSb:14 sbOrNull:13)
+        (If
+          (Call == finalSb:14 null)
+          (Block "")
+          (Block (Call (Call . finalSb:14 \toString)))))))
+  (Let ^s:7 "ab")
+  (Let ^o:8 StringIndexOption (Call (Call . s:7 \next) (Call . String \begin)))
+  (Let ^n:9 (Call ? StringIndexOption) null)
+  (Let
+    ^j:10
+    StringIndex
+    (If (Call is o:8 StringIndex) (Block o:8) (Block (Call . String \begin))))
+  (Let ^k:11 AnyValue (Call new StringBuilder))
+  (Call (Call . console \log) (Call f:6 4))
+  #void)
+error 23..24: Cannot assign to StringBuilder from Int32
+error 49..53: Expected subtype of StringBuilder, but got StringBuilder?
+error 76..79: Cannot assign to StringIndex from String
+error 105..106: Cannot assign to DenseBitVector from Int32
+error 135..138: Cannot assign to StringIndexOption from String
+error 163..175: Cannot assign to NoStringIndex from StringIndex
+error 233..237: Expected subtype of StringBuilder, but got StringBuilder?
+log 4
+
+=== calling a function value that may be null, as Kotlin Temper reports it
+export let hi(i: Int, act: (fn (Int): Void)?): Void {
+  if (i == 0 || act != null) {
+    // `||` means act could be null here.
+    act(i);
+  }
+  if (act != null) {
+    act(i);
+  }
+}
+@fun interface Act(i: Int): Void;
+let ho(act: Act?): Void {
+  act(1);
+  act?.apply(1);
+}
+hi(1, fn (i: Int): Void { console.log("hi ${i}"); });
+hi(0, null);
+--- settled
+(Block
+  (Let
+    ^hi:0
+    (Fn
+      (Let ^i:3 Int)
+      (Let ^act:4 (Call ? (Call FnType Int Void)))
+      Void
+      (Block
+        (If
+          (If (Call == i:3 0) #true (Call != act:4 null))
+          (Block (Call act:4 i:3) #void)
+          (Block))
+        (If (Call != act:4 null) (Block (Call act:4 i:3) #void) (Block)))))
+  (Interface ^Act:1 (Method ^apply:6 (Signature (Let ^i:7 Int) Void)))
+  (Let
+    ^ho:2
+    (Fn
+      (Let ^act:8 (Call ? Act:1))
+      Void
+      (Block
+        (Call act:8 1)
+        (Block (If (Call == act:8 #null) #null (Call (Call . act:8 \apply) 1)))
+        #void)))
+  (Call
+    hi:0
+    1
+    (Fn
+      (Let ^i:9 Int)
+      Void
+      (Block (Call (Call . console \log) (Call cat "hi " i:9)) #void)))
+  (Call hi:0 0 null)
+  #void)
+error 131..134: Expected subtype of fn (Int32): Void, but got (fn (Int32): Void)?
+error 244..247: Expected subtype of Act, but got Act?
+log hi 1
+log hi 1
+Failed: Null is not a function

@@ -249,6 +249,25 @@ pub const IMPORTED: &[&str] = &[
     "string_to_int64",
 ];
 
+/// The builtins the translator prints in a class body, as decorators
+/// (`@property`, `@staticmethod`) and in annotations, which Python
+/// evaluates there (`-> int`), as do type checkers: a method or property
+/// of the same name defined earlier in the body would hide them. Other
+/// builtins are free for members, as Kotlin's (`map`, `hash`, `format`),
+/// since an attribute hides nothing. Sorted.
+pub const CLASS_BODY: &[&str] = &[
+    "bool",
+    "dict",
+    "float",
+    "int",
+    "list",
+    "object",
+    "property",
+    "staticmethod",
+    "str",
+    "tuple",
+];
+
 fn case(kind: DeclKind, _exported: bool) -> Case {
     match kind {
         DeclKind::Class | DeclKind::Interface => Case::Keep,
@@ -263,6 +282,7 @@ fn identifier(c: char, first: bool) -> bool {
 /// The first variant's rules.
 pub const RULES: NamingRules = NamingRules {
     reserved: &[KEYWORDS, BUILTINS, IMPORTED],
+    member_reserved: &[KEYWORDS, CLASS_BODY],
     case,
     private_prefix: "_",
     escape_suffix: "_",
@@ -271,10 +291,12 @@ pub const RULES: NamingRules = NamingRules {
     identifier,
     block_scoped: false,
     same_type_shares: true,
+    hoists_block_values: true,
     init_literals_avoid_module: false,
     members_prefixed: true,
     fields_apart: false,
     types_apart: false,
+    modules_share_names: false,
 };
 
 /// The standard library's top-level modules (`sys.stdlib_module_names`,
@@ -510,6 +532,23 @@ pub fn package_name(name: &str) -> String {
         .collect();
     if KEYWORDS.contains(&out.as_str()) {
         out.push('_');
+    }
+    out
+}
+
+/// A project's name as pyproject.toml gives it, normalized as Python's
+/// packaging does and Kotlin's writes it: lowercase, each run of `-`, `_`,
+/// and `.` a `-` (`Geometry_Py` gives `geometry-py`).
+pub fn project_name(name: &str) -> String {
+    let mut out = String::new();
+    for c in name.chars() {
+        if matches!(c, '-' | '_' | '.') {
+            if !out.ends_with('-') {
+                out.push('-');
+            }
+        } else {
+            out.extend(c.to_lowercase());
+        }
     }
     out
 }

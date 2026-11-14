@@ -218,13 +218,13 @@ impl<'a> Translator<'a> {
         let p = self.p;
         let d = p.decls.get(module);
         if d.kind == DeclKind::Library {
-            return crate::names::library_package(&library_name(p.name(module)));
+            return crate::names::library_package(&library_name(p, p.name(module)));
         }
         if !d.owner.is_none() {
-            let package = crate::names::library_package(&library_name(p.name(d.owner)));
+            let package = crate::names::library_package(&library_name(p, p.name(d.owner)));
             return dotted(&package, p.name(module));
         }
-        let package = crate::names::library_package(&library_name(&p.library.name));
+        let package = crate::names::library_package(&library_name(p, &p.library.name));
         let path = p.modules.iter().find(|m| m.decl == module);
         match path.map(|m| m.path.as_str()) {
             None | Some("") => format!("{package}.{package}"),
@@ -1968,7 +1968,10 @@ impl<'a> Translator<'a> {
                         }
                     }
                 }
-                let mut stmts = Vec::new();
+                // After what's hoisted already, which a statement's own
+                // hoisted statements would otherwise join after it:
+                // `p.n++ + q.n++` reads `p.n` first.
+                let mut stmts = std::mem::take(&mut self.pre);
                 for &s in list {
                     self.stmt(s, &mut stmts)?;
                 }
@@ -2286,11 +2289,17 @@ pub(crate) fn present(mut args: Vec<Option<Expr>>) -> R<Vec<Expr>> {
 }
 
 /// A library's name as its Python package is named: std's is
-/// `temper-std`, as Kotlin's.
-pub fn library_name(name: &str) -> String {
+/// `temper-std`, as Kotlin's, and another's is its config's `pyName`, or
+/// else its own.
+pub fn library_name(p: &Program, name: &str) -> String {
+    py_name(name, p.metadata_of(name))
+}
+
+/// [`library_name`], given what the library's config says.
+pub fn py_name(name: &str, metadata: &temper_tmpl::Metadata) -> String {
     match name {
         "std" => "temper-std".into(),
-        _ => name.into(),
+        _ => metadata.get("pyName").unwrap_or(name).into(),
     }
 }
 

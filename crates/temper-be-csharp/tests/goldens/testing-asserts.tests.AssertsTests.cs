@@ -56,4 +56,31 @@ public class AssertsTests
             test.SoftFailToHard();
         }
     }
+
+    [TestMethod]
+    public void ModuleValues()
+    {
+        Test test = new Test();
+        try
+        {
+            {
+                int length = AssertsGlobal.unitVecs.Count;
+                int i = 0;
+                while (i < length)
+                {
+                    Vec2 vec = AssertsGlobal.unitVecs[i];
+                    i = i + 1;
+                    {
+                        double actual = AssertsGlobal.NormSquared(vec);
+                        double expected = 1.0;
+                        test.Assert(Float64.Compare(actual, expected) == 0, () => "expected normSquared(vec) == (" + AssertsGlobal.FormatFloat64(expected) + ") not (" + AssertsGlobal.FormatFloat64(actual) + ")");
+                    }
+                }
+            }
+        }
+        finally
+        {
+            test.SoftFailToHard();
+        }
+    }
 }

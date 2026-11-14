@@ -65,6 +65,7 @@ pub mod tree;
 use std::fmt;
 use temper_tmpl::coroutines::CoroutineStrategy;
 use temper_tmpl::naming::{NamingRules, assign_checked};
+use temper_tmpl::version::{self, Spelling};
 use temper_tmpl::{Features, Profile, Program};
 
 /// A named set of translation choices for Lua.
@@ -74,10 +75,8 @@ pub struct Variant {
     /// What it handles natively, which lowering and validation read.
     pub profile: Profile,
     pub rules: NamingRules,
-    /// The `temper-core` version its output depends on.
-    pub runtime_version: &'static str,
     /// The oldest Lua its rockspec accepts, as Kotlin's says (`lua >=
-    /// 5.1`), though `goto` needs 5.2 or LuaJIT, and exact `Int64`s 5.3.
+    /// 5.1`), though `goto` needs 5.2 or LuaJIT.
     pub lua_version: &'static str,
 }
 
@@ -91,7 +90,6 @@ pub static LUA: Variant = Variant {
         coroutines: CoroutineStrategy::TranslateToGenerator,
     },
     rules: names::RULES,
-    runtime_version: "0.6.0",
     lua_version: "5.1",
 };
 
@@ -123,6 +121,7 @@ pub const BACKEND: temper_tmpl::Backend = temper_tmpl::Backend {
     } else {
         runtime::FILES
     },
+    runtime_version: &runtime::VERSION,
     rules: &LUA.rules,
     translate: |p, _| translate(p, &LUA).map_err(|e| e.to_string()),
     default: true,
@@ -132,13 +131,13 @@ pub const BACKEND: temper_tmpl::Backend = temper_tmpl::Backend {
     tools: None,
 };
 
-/// The rockspec's version: the library's, or `dev` for one that doesn't
-/// set it (the frontend gives it `0.0.0`), with rockspec revision 1, as
-/// Kotlin's.
+/// The rockspec's version: the library's, in LuaRocks' spelling, or
+/// `dev` for one that doesn't set it (the frontend gives it `0.0.0`),
+/// with rockspec revision 1, as Kotlin's.
 pub fn rock_version(p: &Program) -> String {
     let version = match p.library.version.as_str() {
-        "0.0.0" | "" => "dev",
-        v => v,
+        "0.0.0" | "" => "dev".to_string(),
+        v => version::respell(v, Spelling::LuaRocks),
     };
     format!("{version}-1")
 }
@@ -157,7 +156,7 @@ pub fn rock_version(p: &Program) -> String {
 /// A library with no root module (only `src/a/…` and `src/b/…`) gets an
 /// `init.lua` that requires each module, as Kotlin's, and has no
 /// `init-test.lua`: each module's tests are in their own file, which
-/// `tempest test` runs in turn.
+/// `temper test` runs in turn.
 ///
 /// Kotlin also zips the library beside the rockspec, for LuaRocks, whose
 /// `source.url` names the zip by its absolute path; this names it
@@ -202,7 +201,7 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
     }
     // A library without a root module still gets an `init.lua`, as
     // Kotlin's, which requires each module, so `require("LIBRARY")` (and
-    // `tempest run`) loads them all; it exports nothing.
+    // `temper run`) loads them all; it exports nothing.
     if !p.modules.iter().any(|m| m.path.is_empty()) {
         let require = |m: &temper_tmpl::Module| {
             let path = translate::require_path(p, m.decl);
@@ -234,7 +233,7 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
 version = {version_q}
 rockspec_format = '3.0'
 description = {{
-}}
+{description}}}
 build = {{
     type = 'builtin',
     copy_directories = {{'.'}},
@@ -250,14 +249,33 @@ source = {{
 ",
         package = quoted(library),
         version_q = quoted(&version),
+        // The config's metadata, as Kotlin's: the description as the
+        // summary, and the authors, for want of a field, in `detailed`;
+        // the homepage, or else the repository; and the license.
+        description = {
+            let meta = p.metadata();
+            let detailed = meta.get("authors").map(|a| format!("Authors: {a}"));
+            [
+                ("summary", meta.get("description")),
+                ("detailed", detailed.as_deref()),
+                ("homepage", meta.get("homepage").or(meta.get("repository"))),
+                ("license", meta.get("license")),
+            ]
+            .iter()
+            .filter_map(|(key, value)| value.map(|v| format!("    {key} = {},\n", quoted(v))))
+            .collect::<String>()
+        },
         lua = variant.lua_version,
-        runtime = variant.runtime_version,
+        runtime = version::current().spell(Spelling::LuaRocks),
         // Each library used, as Kotlin writes them, with its version where
         // it sets one.
         dependencies = (p.dependencies().iter())
             .map(|(name, version)| match *version {
                 "0.0.0" | "" => format!("    {},\n", quoted(name)),
-                v => format!("    {},\n", quoted(&format!("{name} == {v}"))),
+                v => {
+                    let v = version::respell(v, Spelling::LuaRocks);
+                    format!("    {},\n", quoted(&format!("{name} == {v}")))
+                }
             })
             .collect::<Vec<_>>()
             .concat(),

@@ -9,8 +9,8 @@
 //! under `--no-connected` (`CONNECTED`), and with divisions that can't
 //! fail and maps (`DIVISIONS`), and with labeled loops' jumps and classes
 //! declared in functions (`LOOPS_AND_CLASSES`), and with generators,
-//! `async`, and `await`, as iterators (`ASYNC`), from the vendored copy
-//! (`temper-funtests`), and on the shared programs
+//! `async`, and `await`, as iterators (`ASYNC`), in `temper-funtests`'s
+//! `cases/`, and on the shared programs
 //! (`crates/temper-be-testkit/programs/`), which cover operators,
 //! jumps, module state, string order, several modules, imports, tests,
 //! classes, and nullables beyond those tests.
@@ -24,8 +24,8 @@
 //!   `testing.tests.TestingTests.cs`). To accept new or changed output,
 //!   run with `UPDATE_SNAPSHOTS=1` and review the diff.
 //! - `runs`: without MSBuild or NuGet, Roslyn's `csc` (from the SDK that
-//!   `dotnet` finds, or `DOTNET`) compiles the vendored `TemperLang.Core`
-//!   (`vendor/temper/be-csharp/temper-core`) once, for .NET 6 as its
+//!   `dotnet` finds, or `DOTNET`) compiles `TemperLang.Core`
+//!   (`crates/temper-be-csharp/runtime/temper-core`) once, for .NET 6 as its
 //!   `.csproj` says, into `CARGO_TARGET_TMPDIR`, reused until its sources
 //!   or the SDK change; then every generated library's sources in one more
 //!   `csc` run, with nullable reference types on, every warning, and every
@@ -47,7 +47,7 @@
 //!   MSTest's framework from NuGet's cache, and runs by reflection
 //!   ([`RUN_TESTS`]), its failures compared with its `expectedFailures`.
 //!   Skipped, with a message, without `dotnet`, the .NET 6 targeting pack,
-//!   or those packages; with `TEMPEST_REQUIRE_CHECKERS` set, as in CI,
+//!   or those packages; with `TEMPER_REQUIRE_CHECKERS` set, as in CI,
 //!   any of them missing fails it instead.
 
 use std::path::{Path, PathBuf};
@@ -221,8 +221,8 @@ fn generate(case: &Case) -> Vec<OutFile> {
         .unwrap_or_else(|e| panic!("{}: {e}", case.key))
 }
 
-fn vendored() -> PathBuf {
-    kit::vendored("be-csharp")
+fn runtime_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("runtime")
 }
 
 #[test]
@@ -230,7 +230,8 @@ fn goldens() {
     kit::with_stack(|| {
         let mut goldens = Goldens::new(env!("CARGO_MANIFEST_DIR"));
         let template = |name: &str| {
-            let text = fs::read_to_string(vendored().join("library-template").join(name)).unwrap();
+            let text =
+                fs::read_to_string(runtime_dir().join("library-template").join(name)).unwrap();
             text.trim_start_matches('\u{feff}').to_string()
         };
         let program_template = template("Program.cs");
@@ -328,8 +329,8 @@ fn missing_host_code() {
 
 #[test]
 fn logging_template_is_kotlins() {
-    let vendored = fs::read_to_string(vendored().join("library-template/Logging.cs")).unwrap();
-    assert_eq!(LOGGING_TEMPLATE, vendored.trim_start_matches('\u{feff}'));
+    let template = fs::read_to_string(runtime_dir().join("library-template/Logging.cs")).unwrap();
+    assert_eq!(LOGGING_TEMPLATE, template.trim_start_matches('\u{feff}'));
 }
 
 /// What compiling and running C# needs, from the .NET SDK and NuGet's
@@ -459,7 +460,7 @@ fn find_dotnet() -> Result<Dotnet, String> {
         if !dll.is_file() {
             return Err(format!(
                 "no {id} 8.0.0 in NuGet's cache ({}); `dotnet restore` of \
-                 vendor/temper/be-csharp/temper-core's project, copied elsewhere, puts it there",
+                 crates/temper-be-csharp/runtime/temper-core's project, copied elsewhere, puts it there",
                 cache.display()
             ));
         }
@@ -481,7 +482,9 @@ fn find_dotnet() -> Result<Dotnet, String> {
 const DEFINES: &str = "TRACE;RELEASE;NET;NET6_0;NETCOREAPP;NET5_0_OR_GREATER;NET6_0_OR_GREATER";
 
 impl Dotnet {
-    /// `csc` with the references and the options given.
+    /// `csc` with the references and the options given, its sources named
+    /// in a response file beside its output (`-out:`), since a command
+    /// line naming them all can be more than Windows takes.
     fn csc(&self, options: &[String], extra: &[&Path], sources: &[PathBuf]) -> Output {
         let mut command = Command::new(&self.dotnet);
         command
@@ -504,7 +507,20 @@ impl Dotnet {
         for r in extra {
             command.arg(format!("-r:{}", r.display()));
         }
-        command.args(sources).output().unwrap()
+        let out = (options.iter())
+            .find_map(|o| o.strip_prefix("-out:"))
+            .expect("csc's -out:");
+        let rsp = PathBuf::from(format!("{out}.sources.rsp"));
+        // One quoted path to a line; a `"` can't be in a Windows path.
+        let lines: Vec<String> = (sources.iter())
+            .map(|s| format!("\"{}\"\n", s.display()))
+            .collect();
+        fs::create_dir_all(rsp.parent().unwrap()).unwrap();
+        fs::write(&rsp, lines.concat()).unwrap();
+        command.arg(format!("@{}", rsp.display()));
+        command
+            .output()
+            .unwrap_or_else(|e| panic!("csc, {} files in {}: {e}", sources.len(), rsp.display()))
     }
 }
 
@@ -516,7 +532,7 @@ fn runtime_assembly(dotnet: &Dotnet) -> PathBuf {
     let root = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("be-csharp-runtime");
     let dll = root.join("TemperLang.Core.dll");
     let mut sources = Vec::new();
-    kit::files_with(&vendored().join("temper-core"), "cs", &mut sources);
+    kit::files_with(&runtime_dir().join("temper-core"), "cs", &mut sources);
     let options = vec![
         "-target:library".to_string(),
         "-optimize+".into(),
@@ -545,6 +561,19 @@ fn analyzer_config() -> String {
     config
 }
 
+/// A file's path as a global analyzer config's section names it: absolute,
+/// with `/` between its parts on every system, as Roslyn wants section
+/// names, which are `.editorconfig` paths; on Windows, as `D:/a/b.cs`,
+/// which Roslyn matches with the file csc is given as `D:\a\b.cs`, its
+/// separators made `/`.
+fn section_path(path: &Path) -> String {
+    let path = path.display().to_string();
+    match cfg!(windows) {
+        true => path.replace('\\', "/"),
+        false => path,
+    }
+}
+
 /// The options that compile std's output, written in `dir`, to `dll`:
 /// `strict`'s, with [`analyzer_config`]'s rules off for std's support
 /// code, Kotlin's own C# (`RegexSupport.cs`), in a configuration of its
@@ -560,7 +589,7 @@ fn std_options(
         if (temper_be_csharp::STD_SUPPORT.iter()).any(|(_, name, _)| file.path.ends_with(name)) {
             config.push_str(&format!(
                 "\n[{}]\ndotnet_analyzer_diagnostic.severity = none\n",
-                dir.join(&file.path).display()
+                section_path(&dir.join(&file.path))
             ));
         }
     }
@@ -763,10 +792,14 @@ fn runs() {
         if let Some(mstest) = &mstest {
             let options = std_options(&strict, &std_dll, &std, &std_root);
             let build = dotnet.csc(&options, &[&runtime, mstest], &std_sources);
+            // The configuration too, whose sections, for std's support
+            // code, csc may not have matched with its files.
             assert!(
                 build.status.success(),
-                "csc, std (nullable, every warning and analyzer an error):\n{}",
-                String::from_utf8_lossy(&build.stdout)
+                "csc, std (nullable, every warning and analyzer an error):\n{}\n{}:\n{}",
+                String::from_utf8_lossy(&build.stdout),
+                std_root.join("std.globalconfig").display(),
+                fs::read_to_string(std_root.join("std.globalconfig")).unwrap_or_default()
             );
             fs::copy(mstest, bin.join(mstest.file_name().unwrap())).unwrap();
         }

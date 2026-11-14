@@ -51,7 +51,7 @@ use temper_tmpl::{
 type R<T> = Result<T, NotYet>;
 
 fn not_yet<T>(what: impl Into<String>) -> R<T> {
-    Err(NotYet { what: what.into() })
+    Err(NotYet::new(what))
 }
 
 /// What a place wants of the value written there.
@@ -223,7 +223,7 @@ impl<'a> Translator<'a> {
         let p = self.p;
         let d = p.decls.get(module);
         if d.kind == DeclKind::Library {
-            return (library_of(p, module) != "core").then(|| library_crate(p.name(module)));
+            return (library_of(p, module) != "core").then(|| library_crate(p, p.name(module)));
         }
         let (start, path) = if d.owner.is_none() {
             let path = p.modules.iter().find(|m| m.decl == module)?.path.as_str();
@@ -232,7 +232,7 @@ impl<'a> Translator<'a> {
             }
             ("crate".to_string(), path)
         } else {
-            (library_crate(p.name(d.owner)), p.name(module))
+            (library_crate(p, p.name(d.owner)), p.name(module))
         };
         let mut out = start;
         for part in path.split('/').filter(|s| !s.is_empty()) {
@@ -1360,7 +1360,23 @@ impl<'a> Translator<'a> {
             && matches!(p.nodes.get(right), Node::Null {})
     }
 
+    /// A not-yet error from translating `id`, given `id`'s place unless
+    /// a node inside it gave its own.
+    fn placed<T>(&self, id: NodeId, made: R<T>) -> R<T> {
+        made.map_err(|mut e| {
+            if e.at.is_none() {
+                e.at = self.p.location(self.p.nodes.span(id));
+            }
+            e
+        })
+    }
+
     fn stmt(&mut self, id: NodeId, out: &mut Vec<Stmt>) -> R<()> {
+        let made = self.stmt_of(id, out);
+        self.placed(id, made)
+    }
+
+    fn stmt_of(&mut self, id: NodeId, out: &mut Vec<Stmt>) -> R<()> {
         let p = self.p;
         match p.nodes.get(id) {
             Node::Block { .. } => {
@@ -1906,6 +1922,11 @@ impl<'a> Translator<'a> {
     }
 
     pub(crate) fn expr(&mut self, id: NodeId, want: Want) -> R<Expr> {
+        let made = self.expr_of(id, want);
+        self.placed(id, made)
+    }
+
+    fn expr_of(&mut self, id: NodeId, want: Want) -> R<Expr> {
         let p = self.p;
         let ty = p.nodes.ty(id);
         let e = match p.nodes.get(id) {
@@ -2502,12 +2523,18 @@ fn continues(p: &Program, id: NodeId, label: DeclId) -> bool {
     found
 }
 
-/// A library's crate: std's is `temper_std`, as Kotlin's; others' their
-/// package's name with `_` for `-`.
-pub fn library_crate(name: &str) -> String {
+/// A library's crate: its package's name ([`rust_name`]) with `_` for
+/// `-`, as cargo names it (std's `temper_std`).
+pub fn library_crate(p: &Program, name: &str) -> String {
+    crate::names::crate_name(&rust_name(name, p.metadata_of(name)))
+}
+
+/// A library's package name: std's is `temper-std`, as Kotlin's, and
+/// another's is its config's `rustName`, or else its own name.
+pub fn rust_name(name: &str, metadata: &temper_tmpl::Metadata) -> String {
     match name {
-        "std" => "temper_std".into(),
-        _ => crate::names::crate_name(name),
+        "std" => "temper-std".into(),
+        _ => metadata.get("rustName").unwrap_or(name).into(),
     }
 }
 

@@ -26,7 +26,8 @@
 //!   each backend takes from it;
 //! - [`source_map`], Source Map v3 files from spans, for backends;
 //! - shared lowerings that backends pick by their profiles:
-//!   [`coroutines`], [`errors`], [`spill`], and [`switches`].
+//!   [`coroutines`], [`errors`], [`spill`], and [`switches`];
+//! - [`version`], Temper's version and its spelling in each ecosystem.
 
 pub mod analysis;
 mod backend;
@@ -55,6 +56,7 @@ pub mod text;
 pub mod tools;
 mod types;
 pub mod validate;
+pub mod version;
 
 pub use backend::{Backend, OutFile, Run, TestResults, Tested, Tools};
 pub use builder::Builder;
@@ -83,6 +85,67 @@ pub fn version_or_default(version: &str) -> &str {
         v => v,
     }
 }
+
+/// What a library's config file says about it besides its name and
+/// version, for package files: the string values it exports, by key, as
+/// `license`, `description`, `authors`, `homepage`, and `repository`, and
+/// each backend's names for it (`pyName`, `javaPackage`, …). Given by the
+/// build; not in tmpl's text, and not compared.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Metadata {
+    pub exports: Vec<(String, String)>,
+}
+
+impl Metadata {
+    /// A value the config sets, if it sets one that isn't blank.
+    pub fn get(&self, key: &str) -> Option<&str> {
+        (self.exports.iter())
+            .find(|(k, v)| k == key && !v.trim().is_empty())
+            .map(|(_, v)| v.as_str())
+    }
+}
+
+/// A string quoted for JSON, which is also a TOML basic string: `"`,
+/// `\\`, and control characters escaped.
+pub fn json_string(s: &str) -> String {
+    let mut out = String::from('"');
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\t' => out.push_str("\\t"),
+            '\r' => out.push_str("\\r"),
+            c if (c as u32) < 0x20 || c == '\u{7f}' => {
+                out.push_str(&format!("\\u{:04x}", c as u32))
+            }
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
+/// Text escaped for XML's text and attribute values.
+pub fn xml_text(s: &str) -> String {
+    let mut out = String::new();
+    for c in s.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&apos;"),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+/// No metadata, for a library whose config the build didn't give.
+static NO_METADATA: Metadata = Metadata {
+    exports: Vec::new(),
+};
 
 /// A library this one uses: its declaration, of kind
 /// [`DeclKind::Library`], which owns the external declarations used from
@@ -140,6 +203,10 @@ pub struct Program {
     /// given by the build: what the naming pass names their declarations
     /// ([`naming::Interface`]). Not in tmpl's text, and not compared.
     pub interfaces: Vec<naming::Interface>,
+    /// What the configs of the library and of each library it uses say,
+    /// by library name ([`Metadata`]); given by the build, not in tmpl's
+    /// text, and not compared.
+    pub metadata: Vec<(String, Metadata)>,
 }
 
 impl Program {
@@ -156,11 +223,34 @@ impl Program {
         found
     }
 
+    /// Where a span starts, as `path:line:column`, both from 1, the column
+    /// in UTF-16 units, as source maps count it; just the path without
+    /// its file's text; `None` for an unknown span.
+    pub fn location(&self, span: Span) -> Option<String> {
+        let file = self.files.get(span.file.index())?;
+        Some(match file.position(span.start) {
+            Some((line, column)) => format!("{}:{}:{}", file.path, line + 1, column + 1),
+            None => file.path.clone(),
+        })
+    }
+
     /// The library's version, or Kotlin's default, `0.0.1`, where it sets
     /// none (`0.0.0`, as the frontend gives it), for the package files
     /// that always name one.
     pub fn version_or_default(&self) -> &str {
         version_or_default(&self.library.version)
+    }
+
+    /// What the library's config says ([`Metadata`]).
+    pub fn metadata(&self) -> &Metadata {
+        self.metadata_of(&self.library.name)
+    }
+
+    /// What a library's config says, this one's or one it uses.
+    pub fn metadata_of(&self, library: &str) -> &Metadata {
+        (self.metadata.iter())
+            .find(|(name, _)| name == library)
+            .map_or(&NO_METADATA, |(_, m)| m)
     }
 
     /// A declaration's name.

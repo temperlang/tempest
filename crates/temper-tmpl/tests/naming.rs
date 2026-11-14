@@ -61,6 +61,7 @@ fn identifier(c: char, first: bool) -> bool {
 
 const RULES: NamingRules = NamingRules {
     reserved: &[&["if", "str", "min"]],
+    member_reserved: &[&["if"]],
     case,
     private_prefix: "_",
     escape_suffix: "_",
@@ -69,10 +70,12 @@ const RULES: NamingRules = NamingRules {
     identifier,
     block_scoped: false,
     same_type_shares: false,
+    hoists_block_values: false,
     init_literals_avoid_module: false,
     members_prefixed: false,
     fields_apart: false,
     types_apart: false,
+    modules_share_names: false,
 };
 
 const PROGRAM: &str = "tmpl 1 model 1 library t 0.0.0
@@ -215,6 +218,42 @@ module t#0 {
     assert_eq!((name(2), name(3)), ("x", "x"));
     // Lifetimes apart, but a `Boolean` can't take a `String`'s name.
     assert_eq!((name(4), name(5), name(6)), ("s", "s2", "s"));
+}
+
+#[test]
+fn hoisted_block_values_keep_their_values_apart() {
+    // `x++ + y++`: hoisted before the `let`, the first block's `t` is
+    // read after the second's is assigned.
+    let p = text::read(
+        "tmpl 1 model 1 library t 0.0.0
+
+module t#0 {
+  fn f#1(): Int32 {
+    var x#2: Int32 = 1;
+    var y#3: Int32 = 10;
+    let s#4: Int32 = %Int32.add((value { let t#5: Int32 = x#2; x#2 = %Int32.add(t#5, 1); t#5 }): Int32, (value { let t#6: Int32 = y#3; y#3 = %Int32.add(t#6, 1); t#6 }): Int32);
+    let t#7: Int32 = s#4;
+    return t#7;
+  }
+
+  init {
+  }
+}
+",
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+    let names = |hoists_block_values| {
+        let rules = NamingRules {
+            hoists_block_values,
+            ..RULES
+        };
+        let names = assign(&p, &rules);
+        [5, 6, 7].map(|d| names.get(DeclId(d)).to_string())
+    };
+    // Block expressions end each `t` in its block.
+    assert_eq!(names(false), ["t", "t", "t"]);
+    // Hoisted, both live until the `let` reads them, but no further.
+    assert_eq!(names(true), ["t", "t2", "t"]);
 }
 
 /// A library whose naming changes its exports' names: `if` is reserved,

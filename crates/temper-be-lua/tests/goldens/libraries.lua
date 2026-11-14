@@ -78,10 +78,12 @@ end
 ---@field name string
 ---@field eq fun(self: libraries.Casing, other: libraries.Casing): boolean
 ---@field toString fun(self: libraries.Casing): string
+---@field marked string
 
 ---@class libraries.Casing.type: temper.Type
 ---@field first libraries.Casing
 ---@field last libraries.Casing
+---@field mark string
 ---@operator call: libraries.Casing
 local Casing = temper.type("libraries.Casing")
 
@@ -108,6 +110,12 @@ end
 ---@return libraries.Casing
 function Casing.named(name)
   return Casing(name)
+end
+
+---@param this libraries.Casing
+---@return string
+function Casing.get.marked(this)
+  return Casing.mark .. this.name
 end
 
 with_tostring(Casing)
@@ -908,6 +916,7 @@ end
 
 Casing.first = Casing("first")
 Casing.last = Casing.named("last")
+Casing.mark = "#"
 ticks = 0
 extras = { 1 }
 local grid = Grid(2, { 1.0, 2.0, 3.0, 4.0 })
@@ -941,7 +950,7 @@ print(tickIf(true) .. " " .. tickIf(false) .. " " .. tostring(ticked()) .. " " .
 local string = shapeName(shapeOf(1)) .. " " .. shapeName(shapeOf(2)) .. " " .. temper.list_length(sizes(shapeOf(1))) .. " " .. temper.list_length(sizes(shapeOf(2))) .. " "
 local part4 = Dot(1).grown
 local part5 = Dot(3).grown
-print(string .. (temper.is_null(part4) and "null" or tostring(part4 --[[@as integer]])) .. " " .. (temper.is_null(part5) and "null" or tostring(part5 --[[@as integer]])) .. " " .. Casing.last:toString())
+print(string .. (temper.is_null(part4) and "null" or tostring(part4 --[[@as integer]])) .. " " .. (temper.is_null(part5) and "null" or tostring(part5 --[[@as integer]])) .. " " .. Casing.last:toString() .. " " .. Casing.first.marked)
 local carry = Carry(3)
 local value = tostring(carry.carrying) .. " " .. carry.state .. " " .. tostring(Carry(0).carrying) .. " "
 local part6 = tagged().label

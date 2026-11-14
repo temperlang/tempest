@@ -55,8 +55,6 @@ pub struct Variant {
     /// What it handles natively, which lowering and validation read.
     pub profile: Profile,
     pub rules: NamingRules,
-    /// The `temper-core` version its output depends on.
-    pub runtime_version: &'static str,
     /// The Java release its output targets, as `javac --release` and
     /// Maven's compiler plugin take it.
     pub java_release: &'static str,
@@ -73,7 +71,6 @@ pub static JAVA: Variant = Variant {
         coroutines: CoroutineStrategy::TranslateToRegularFunction,
     },
     rules: names::RULES,
-    runtime_version: "0.6.0",
     java_release: "17",
 };
 
@@ -105,6 +102,7 @@ pub const BACKEND: temper_tmpl::Backend = temper_tmpl::Backend {
     } else {
         runtime::FILES
     },
+    runtime_version: &runtime::VERSION,
     rules: &JAVA.rules,
     translate: |p, _| translate(p, &JAVA).map_err(|e| e.to_string()),
     default: true,
@@ -142,17 +140,17 @@ pub const BACKEND: temper_tmpl::Backend = temper_tmpl::Backend {
 /// The package takes the library's name, with `_` for `-`
 /// ([`names::package`]), and a module's path after it; the classes take
 /// the package's last part in Pascal case. Kotlin also copies
-/// `temper-core` beside the package; `tempest build` does too
+/// `temper-core` beside the package; `temper build` does too
 /// ([`runtime`]).
 /// std's modules with support code, as Kotlin's Java backend writes it
 /// into std's output: each module's path, and its support class's file
-/// (vendored from Kotlin's), in the module's package, whose static
+/// (begun as Kotlin's, in `runtime/std/`), in the module's package, whose static
 /// methods its connected members call
 /// ([`connected::Connection::StdStatic`]).
 pub const STD_SUPPORT: &[(&str, &str, &str)] = &[(
     "regex",
     "Core.java",
-    include_str!("../../../vendor/temper/be-java/temper-std/regex/Core.java"),
+    include_str!("../runtime/std/regex/Core.java"),
 )];
 
 pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet> {
@@ -241,7 +239,7 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
         let package = match p.modules.iter().find(|m| m.path == dir) {
             Some(m) => translate::module_package(p, m.decl),
             None => (dir.split('/').filter(|s| !s.is_empty()))
-                .fold(translate::library_package(library), |out, part| {
+                .fold(translate::library_package(p, library), |out, part| {
                     format!("{out}.{}", names::package(part))
                 }),
         };
@@ -329,15 +327,53 @@ public final class {main} {{
     )
 }
 
-/// A library's Maven group and artifact: its name as Java names a
-/// package, and its name, as Kotlin's default configuration has them, but
-/// for std's, which its Java configuration sets (`dev.temperlang` and
-/// `temper-std`).
-fn coordinates(library: &str) -> (String, &str) {
+/// A library's Maven group and artifact, as Kotlin's configuration has
+/// them: its config's `javaGroup`, or else its `javaPackage`, or else its
+/// Java name (its `javaName`, or else its own) as Java names a package;
+/// and its `javaArtifact`, or else its Java name. std's Java
+/// configuration sets them (`dev.temperlang` and `temper-std`).
+fn coordinates(p: &Program, library: &str) -> (String, String) {
+    let meta = p.metadata_of(library);
+    let name = meta.get("javaName").unwrap_or(library);
     match library {
-        "std" => ("dev.temperlang".to_string(), "temper-std"),
-        _ => (names::package(library), library),
+        "std" => ("dev.temperlang".to_string(), "temper-std".to_string()),
+        _ => (
+            (meta.get("javaGroup").or(meta.get("javaPackage")))
+                .map_or_else(|| names::package(name), temper_tmpl::xml_text),
+            temper_tmpl::xml_text(meta.get("javaArtifact").unwrap_or(name)),
+        ),
     }
+}
+
+/// The config's metadata, as Kotlin's `pomXml` writes it after the name:
+/// the description, which Maven Central requires, so the library's name
+/// where there's none; then the authors as the developer, the homepage
+/// (or else the repository) as the URL, the license, and the repository
+/// as the source's URL, for those set.
+fn pom_metadata(p: &Program, library: &str) -> String {
+    let meta = p.metadata();
+    let xml = temper_tmpl::xml_text;
+    let description = meta.get("description").unwrap_or(library);
+    let mut out = format!("  <description>{}</description>\n", xml(description));
+    if let Some(authors) = meta.get("authors") {
+        out.push_str(&format!(
+            "  <developers>\n    <developer>\n      <name>{}</name>\n    </developer>\n  </developers>\n",
+            xml(authors)
+        ));
+    }
+    if let Some(url) = meta.get("homepage").or(meta.get("repository")) {
+        out.push_str(&format!("  <url>{}</url>\n", xml(url)));
+    }
+    if let Some(license) = meta.get("license") {
+        out.push_str(&format!(
+            "  <licenses>\n    <license>\n      <name>{}</name>\n    </license>\n  </licenses>\n",
+            xml(license)
+        ));
+    }
+    if let Some(url) = meta.get("repository") {
+        out.push_str(&format!("  <scm>\n    <url>{}</url>\n  </scm>\n", xml(url)));
+    }
+    out
 }
 
 /// The package description, as Kotlin's `pomXml` writes it for a library
@@ -352,13 +388,13 @@ fn pom(
     variant: &Variant,
 ) -> String {
     let version = p.version_or_default();
-    let (group, artifact) = coordinates(library);
+    let (group, artifact) = coordinates(p, library);
     // Each library used, by its coordinates; for the tests alone, in
     // their scope.
     let in_code = libraries_in_code(p);
     let mut dependencies = (p.dependencies().iter())
         .map(|&(name, version)| {
-            let (group, artifact) = coordinates(name);
+            let (group, artifact) = coordinates(p, name);
             let scope = if in_code.iter().any(|l| l == name) {
                 "compile"
             } else {
@@ -447,8 +483,9 @@ fn pom(
       </plugin>"#
         )
     };
-    let runtime = variant.runtime_version;
+    let runtime = temper_tmpl::version::current();
     let release = variant.java_release;
+    let metadata = pom_metadata(p, library);
     format!(
         r#"<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
@@ -456,8 +493,7 @@ fn pom(
   <artifactId>{artifact}</artifactId>
   <version>{version}</version>
   <name>{library}</name>
-  <description>{library}</description>
-  <properties>
+{metadata}  <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
   </properties>

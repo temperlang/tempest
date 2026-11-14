@@ -1,5 +1,5 @@
 //! Tests of the translation into tmpl ([`temper_frontend::to_tmpl`]) on
-//! Kotlin Temper's functional tests, from the vendored copy.
+//! Kotlin Temper's functional tests, in `temper-funtests`'s `cases/`.
 //!
 //! - `subset_a_goldens`: each test that subset A covers, and those with
 //!   classes, nullable types, generics, function values, parameters'
@@ -8,7 +8,9 @@
 //!   translates, the validator finds no problems, the text round trips
 //!   (with its spans), and its canonical text, without spans, matches the
 //!   golden in `tests/to_tmpl/`, named for the test's path
-//!   (`algos-fibonacci.tmpl`).
+//!   (`algos-fibonacci.tmpl`), with Temper's version as the sentinel
+//!   `0.0.0-alpha.0.0` (`temper_tmpl::version::sentinel`;
+//!   `std_library`'s `std.tmpl` names it as it is).
 //!   To accept new or changed output, run with `UPDATE_SNAPSHOTS=1` and
 //!   review the diff.
 //! - `every_functional_test_translates_or_says_why`: no functional test
@@ -23,6 +25,7 @@ use temper_frontend::sources::Sources;
 use temper_frontend::to_tmpl::{NotYet, gaps, to_tmpl};
 use temper_syntax::lex::SourceKind;
 use temper_tmpl::coroutines::{CoroutineStrategy, lower};
+use temper_tmpl::version::current_as_sentinel;
 use temper_tmpl::{Node, Profile, Program, difference, text, validate};
 
 /// The functional tests subset A covers, by their paths.
@@ -266,6 +269,9 @@ fn subset_a_goldens() {
                 outputs.push((".state-machine".into(), text::write(&plain)));
             }
             for (suffix, canonical) in outputs {
+                // Temper's version as the sentinel, so a release changes
+                // only `std.tmpl` of these (`std_library`).
+                let canonical = current_as_sentinel(&canonical);
                 let name = format!("{}{suffix}.tmpl", test.replace('/', "-"));
                 let path = goldens.join(name);
                 let expected = fs::read_to_string(&path).unwrap_or_default();

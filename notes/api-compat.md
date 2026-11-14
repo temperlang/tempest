@@ -111,7 +111,8 @@ effects. File names keep Temper's directory names.
 - Interfaces: classes too; implementers use `extends type(I, J)`, which copies
   default methods; `instanceof` works.
 - Statics: `static g()`, static properties as private static field plus
-  `static get`.
+  `static get`, so assigning one throws. (Tempest stores the value in a
+  module `let`, `Class$name`, which the init block outside the class sets.)
 - Generics only in JSDoc; nullable is `T | null`; failure is `throw`;
   promises are native; async uses the runtime's adapter.
 
@@ -361,8 +362,7 @@ Ordered by value; each needs the team's sign-off.
    - **Async, as built (2026-11-05):** `temper_core::Promise<T>`
      implements `std::future::Future<Output = Result<T>>`, polled with
      only `std::task`: wakers kept beside the waiters and woken on
-     resolve (vendored patch `0003-rust-promise-future.patch`, to offer
-     upstream). It adds no bounds, so `Send` follows the contents, as an
+     resolve (runtime [change 0003](../docs/internals/detail/06-backends.md#changes-from-kotlin-tempers-runtimes)). It adds no bounds, so `Send` follows the contents, as an
      actor model would want ([actors.md](actors.md)): a `Promise<T>` is
      `Send + 'static` and `Unpin` when `T` is, which today's `Arc` output
      makes it, and a `Promise<Rc<i32>>` still awaits on one thread

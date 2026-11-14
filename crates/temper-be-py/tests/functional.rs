@@ -1,6 +1,6 @@
 //! The Python backend on Kotlin Temper's functional tests that tmpl's
-//! translation covers so far, from the vendored copy
-//! (`temper-funtests`), and on the shared programs
+//! translation covers so far, in `temper-funtests`'s
+//! `cases/`, and on the shared programs
 //! (`crates/temper-be-testkit/programs/`) that it covers so far:
 //! `string-order`, which every backend runs; `modules`,
 //! `imports-library`, and `testing`, for modules, imports, and tests;
@@ -29,8 +29,8 @@
 //!   (`modules.helpers.deep.py`, `testing.tests.test_testing.py`). To
 //!   accept new or changed output, run with `UPDATE_SNAPSHOTS=1` and
 //!   review the diff.
-//! - `runs`: each test's generated Python runs, against the vendored
-//!   `temper_core` runtime (`vendor/temper/be-py/temper-core`), and logs
+//! - `runs`: each test's generated Python runs, against the
+//!   `temper_core` runtime (`crates/temper-be-py/runtime/temper-core`), and logs
 //!   what the test expects of Kotlin's `py` backend; and type checkers
 //!   find no problems in it, in strict mode: mypy and pyright, each where
 //!   installed (on `PATH`, or named by `MYPY` or `PYRIGHT`), except for
@@ -39,7 +39,7 @@
 //!   once per case; a case it finds problems in is checked again alone,
 //!   and that message reported (`check_types`). Skipped, with
 //!   a message, without Python 3.11 or later (`python3`, or `PYTHON`);
-//!   with `TEMPEST_REQUIRE_CHECKERS` set, as in CI, a missing Python or
+//!   with `TEMPER_REQUIRE_CHECKERS` set, as in CI, a missing Python or
 //!   checker fails it instead. A library that imports another
 //!   (`imports-library`) runs with it beside it. `python -m py_compile`
 //!   checks each tests file; a test that runs as tests
@@ -51,7 +51,7 @@
 //!   (`tests/module_names.py`). The cases that log run in one
 //!   interpreter (`tests/bulk_runner.py`), and any that doesn't log what
 //!   it expects runs again alone, whose result counts; with
-//!   `TEMPEST_PY_BULK=0`, each runs alone (notes/test-speed.md,
+//!   `TEMPER_PY_BULK=0`, each runs alone (notes/test-speed.md,
 //!   "Python's functional tests in bulk").
 
 use std::path::{Path, PathBuf};
@@ -61,7 +61,7 @@ use temper_be_py::{OutFile, PY, translate};
 use temper_be_testkit::{self as kit, Case, Goldens};
 
 /// The shared programs that Python's translation covers so far.
-const PROGRAMS: [&str; 14] = [
+const PROGRAMS: [&str; 15] = [
     "classes",
     "nullables",
     "generics",
@@ -76,6 +76,7 @@ const PROGRAMS: [&str; 14] = [
     "errors",
     "triple",
     "content-tags",
+    "json-adapters",
 ];
 
 fn cases() -> Vec<Case> {
@@ -169,6 +170,15 @@ fn python() -> Option<String> {
     })
 }
 
+/// Python in UTF-8 mode (`PYTHONUTF8=1`), as `temper run -b py` runs it:
+/// else, on Windows, its standard streams and files are in the system's
+/// code page, which can't write what cases log, as `✅`.
+fn python_command(python: &str) -> Command {
+    let mut command = Command::new(python);
+    command.env("PYTHONUTF8", "1");
+    command
+}
+
 /// A library's modules among its generated files: the `.py` files in its
 /// package but the package's own `__init__.py` (which star-imports the
 /// root module's exports and names its modules) and copies of host files.
@@ -194,7 +204,7 @@ fn library_modules<'f>(
 /// `_`.
 fn check_module_names(python: &str, modules: &[PathBuf], failures: &mut Vec<String>) {
     let script = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/module_names.py");
-    let check = Command::new(python)
+    let check = python_command(python)
         .arg("-B")
         .arg(&script)
         .args(modules)
@@ -225,8 +235,8 @@ fn run_alone(
          with top_level_turn():\n    import {package}\n\
          await_safe_to_exit()\n"
     );
-    // -B: write no bytecode into the vendored runtime.
-    Command::new(python)
+    // -B: write no bytecode into the runtime.
+    python_command(python)
         .args(["-B", "-c", &script])
         .env("PYTHONPATH", env::join_paths(projects).unwrap())
         .current_dir(root)
@@ -282,7 +292,7 @@ fn run_batch(python: &str, batch: &[Logged], failures: &mut Vec<String>) {
         })
         .collect();
     let script = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/bulk_runner.py");
-    let mut child = Command::new(python)
+    let mut child = python_command(python)
         .arg("-B")
         .arg(&script)
         .env("PYTHONPATH", &runtime)
@@ -533,7 +543,8 @@ fn trace<'o>(stdout: &'o str, cases: &[&Checked]) -> Vec<Vec<&'o str>> {
 fn checks_traced_to_cases() {
     let case = |key: &str| Checked {
         key: key.to_string(),
-        root: PathBuf::from("/out").join(key),
+        // With `/` on every platform, as the lines below have it.
+        root: PathBuf::from(format!("/out/{key}")),
         projects: Vec::new(),
         library: "lib".to_string(),
         package: "lib".to_string(),
@@ -665,7 +676,7 @@ fn check_types(
 }
 
 fn runtime() -> PathBuf {
-    kit::vendored("be-py/temper-core")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("runtime/temper-core")
 }
 
 #[test]
@@ -687,8 +698,8 @@ fn runs() {
         let out = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("be-py");
         let mut failures = Vec::new();
         // The cases that log run in one interpreter after the others
-        // (`run_batch`), unless `TEMPEST_PY_BULK=0`.
-        let bulk = env::var("TEMPEST_PY_BULK").map_or(true, |v| v != "0");
+        // (`run_batch`), unless `TEMPER_PY_BULK=0`.
+        let bulk = env::var("TEMPER_PY_BULK").map_or(true, |v| v != "0");
         let mut batch = Vec::new();
         // Every library module generated, for `check_module_names`.
         let mut modules = Vec::new();
@@ -732,7 +743,7 @@ fn runs() {
             if tests.exists() {
                 let mut files = Vec::new();
                 kit::files_with(&tests, "py", &mut files);
-                let compile = Command::new(&python)
+                let compile = python_command(&python)
                     .args(["-B", "-m", "py_compile"])
                     .args(&files)
                     .output()
@@ -747,7 +758,7 @@ fn runs() {
             if case.tests.is_some() {
                 // As Kotlin's `RunPython`: `temper_core.testing` runs the
                 // project's tests and writes their JUnit XML.
-                let run = Command::new(&python)
+                let run = python_command(&python)
                     .args(["-B", "-m", "temper_core.testing", "result.xml"])
                     .env("PYTHONPATH", &path_var)
                     .current_dir(&project)
@@ -851,7 +862,7 @@ fn host_interop(
             ));
         }
     }
-    let run = Command::new(python)
+    let run = python_command(python)
         .arg("-B")
         .arg(&script)
         .env("PYTHONPATH", env::join_paths(projects).unwrap())

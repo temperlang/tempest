@@ -53,13 +53,19 @@ export class Shape extends type() {
   }
 }
 
+/** @type {Rect} */
+let Rect$unit;
+
 export class Rect extends type(Shape) {
   /** @type {number} */
   #w;
   /** @type {number} */
   #h;
-  /** @type {Rect} */
-  static unit;
+
+  /** @returns {Rect} */
+  static get unit() {
+    return Rect$unit;
+  }
 
   /**
    * @param {{ w: number, h: number }} props
@@ -159,6 +165,11 @@ class Counter extends type() {
   /** @param {number} value */
   set doubled(value) {
     this.#count = (value - this.#count) | 0;
+  }
+
+  /** @param {number} value */
+  set added(value) {
+    this.#count = (this.#count + value) | 0;
   }
 
   /** @returns {Counter} */
@@ -351,6 +362,60 @@ class Version extends type() {
   }
 }
 
+class Stock extends type() {
+  /** @type {number} */
+  #count;
+  /** @type {readonly number[]} */
+  #itemsVar;
+  /** @type {number} */
+  #size;
+
+  /**
+   * @param {{ items: readonly number[], count?: number | null }} props
+   * @returns {Stock}
+   */
+  static new(props) {
+    return new Stock(props.items, props.count);
+  }
+
+  /**
+   * @param {readonly number[]} items
+   * @param {number | null} [count]
+   */
+  constructor(items, count) {
+    super();
+    count ??= items.length;
+    this.#count = count;
+    this.#itemsVar = items;
+    this.#size = items.length;
+  }
+
+  /** @returns {number} */
+  get count() {
+    return this.#count;
+  }
+
+  /** @returns {number} */
+  get size() {
+    return this.#size;
+  }
+
+  /** @returns {readonly number[]} */
+  get items() {
+    return this.#itemsVar;
+  }
+
+  /** @param {readonly number[]} value */
+  set items(value) {
+    this.#itemsVar = value;
+  }
+
+  /** @returns {number} */
+  sizeNow() {
+    return this.items.length;
+  }
+}
+
 class Sql extends type() {
   /** @type {string[]} */
   #parts;
@@ -391,7 +456,7 @@ class Sql extends type() {
   }
 }
 
-Rect.unit = new Rect(1, 1);
+Rect$unit = new Rect(1, 1);
 const r = new Rect(2, 3);
 console.log(r.toString());
 console.log(r.area.toString());
@@ -408,6 +473,23 @@ console.log(c.count.toString());
 c.doubled = 10;
 console.log(c.doubled.toString());
 console.log(c.same(new Counter().bump().bump()).toString());
+c.added = 5;
+/** @type {number} */
+let t$0;
+{
+  /** @type {number} */
+  let t$1;
+  {
+    const t = 2;
+    c.added = t;
+    t$1 = t;
+  }
+  const t2 = t$1;
+  c.added = t2;
+  t$0 = t2;
+}
+const added = t$0;
+console.log(`${added} ${c.count}`);
 console.log(`${new Point(1, 2).eq(new Point(1, 2))} ${!new Point(1, 2).eq(new Point(2, 1))}`);
 console.log(new Holder(new Loose(3), "a").eq(new Holder(new Loose(-3), "a")).toString());
 console.log(`${new Version(1, 2).compareTo(new Version(1, 3)) < 0} ${new Version(2, 0).compareTo(new Version(1, 9)) >= 0}`);
@@ -417,6 +499,9 @@ console.log(sq.area.toString());
 if (s instanceof Rect) {
   console.log(/** @type {Rect} */ (/** @type {unknown} */ (s)).w.toString());
 }
+const st = new Stock(Object.freeze([4, 5]));
+st.items = Object.freeze([1, 2, 3]);
+console.log(`${st.count} ${st.size} ${st.sizeNow()} ${st.items.length}`);
 const favorite = same("bigint");
 let named = 0;
 {
@@ -437,7 +522,7 @@ sql.appendRect(new Rect(1, 2));
 console.log(sql.accumulated);
 const seven = 7;
 /** @type {string} */
-let t$0;
+let t$2;
 {
   const accumulator = new Sql();
   {
@@ -448,6 +533,6 @@ let t$0;
     accumulator.appendSafe(" FROM ");
     accumulator.appendRect(new Rect(2, 2));
   }
-  t$0 = accumulator.accumulated;
+  t$2 = accumulator.accumulated;
 }
-console.log(t$0);
+console.log(t$2);

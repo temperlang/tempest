@@ -84,6 +84,13 @@ pub struct Translator<'a> {
     /// The `doAwait` parameters of the generators being translated,
     /// innermost last, which an `await` yields a call of.
     awaiters: Vec<String>,
+    /// The `let`s holding the static fields of the class being written,
+    /// which go before it.
+    static_lets: Vec<Stmt>,
+    /// Type parameters written as other types: a generic supertype's,
+    /// as the interface being written supplies them, while it declares
+    /// that supertype's members again.
+    type_args: HashMap<DeclId, String>,
 }
 
 /// What a module's tests use of it that it doesn't export: its private
@@ -182,6 +189,8 @@ impl<'a> Translator<'a> {
             host: None,
             uses_host: false,
             awaiters: Vec::new(),
+            static_lets: Vec::new(),
+            type_args: HashMap::new(),
         }
     }
 
@@ -204,9 +213,9 @@ impl<'a> Translator<'a> {
         }
         let d = p.decls.get(module);
         let specifier = if d.kind == DeclKind::Library {
-            package_of(p.name(module))
+            package_of(p, p.name(module))
         } else if !d.owner.is_none() {
-            let package = package_of(p.name(d.owner));
+            let package = package_of(p, p.name(d.owner));
             match p.name(module) {
                 "" => package,
                 path => format!("{package}/{path}"),
@@ -446,8 +455,25 @@ impl<'a> Translator<'a> {
                 }
             }
             TypeData::Function { .. } => self.fn_type(ty)?,
-            TypeData::Nullable(inner) => format!("{} | null", self.ty(inner)?),
-            TypeData::TypeParam { decl } => self.p.name(decl).to_string(),
+            // A function type's `=>` would take the `| null`.
+            TypeData::Nullable(inner) => {
+                let text = self.ty(inner)?;
+                let function = match self.p.types.get(inner) {
+                    TypeData::Function { .. } => true,
+                    TypeData::Nominal { decl, .. } => {
+                        self.p.decls.get(decl).facts.contains(Facts::FUN)
+                    }
+                    _ => false,
+                };
+                match function {
+                    true => format!("({text}) | null"),
+                    false => format!("{text} | null"),
+                }
+            }
+            TypeData::TypeParam { decl } => match self.type_args.get(&decl) {
+                Some(text) => text.clone(),
+                None => self.p.name(decl).to_string(),
+            },
         })
     }
 
@@ -1335,12 +1361,15 @@ impl<'a> Translator<'a> {
                 out.push(Stmt::Assign { target, value });
             }
             Node::InitStatic { target, value } => {
-                let class = self.class_ref(p.decls.get(target).owner);
+                let target = match self.static_storage(target) {
+                    Some(storage) => Expr::name(storage),
+                    None => {
+                        let class = self.class_ref(p.decls.get(target).owner);
+                        class.member(self.name(target))
+                    }
+                };
                 let value = self.expr(value)?;
-                out.push(Stmt::Assign {
-                    target: class.member(self.member_name(target)),
-                    value,
-                });
+                out.push(Stmt::Assign { target, value });
             }
             Node::Yield { value } => {
                 let value = match value {
@@ -1881,10 +1910,7 @@ impl<'a> Translator<'a> {
                 // `String.begin`, `Float64.pi`, and the like.
                 self.connected(target, &[])?
             }
-            Node::GetStatic { target } => {
-                let class = self.class_ref(p.decls.get(target).owner);
-                class.member(self.member_name(target))
-            }
+            Node::GetStatic { target } => self.static_read(target),
             Node::New { ctor, args, .. }
                 if is_external(p, ctor) && library_of(p, ctor) == "core"
                     || by_connection(p, ctor, crate::connected::connects_std) =>
@@ -2086,11 +2112,18 @@ fn is_constant(e: &Expr) -> bool {
     )
 }
 
-/// A library's package, as imports name it: std's is `@temperlang/std`.
-pub fn package_of(library: &str) -> String {
+/// A library's npm package, as imports name it: std's is
+/// `@temperlang/std`, as Kotlin's, and another's is its config's
+/// `jsName`, or else its own name.
+pub fn package_of(p: &Program, library: &str) -> String {
+    js_name(library, p.metadata_of(library))
+}
+
+/// [`package_of`], given what the library's config says.
+pub fn js_name(library: &str, metadata: &temper_tmpl::Metadata) -> String {
     match library {
         "std" => "@temperlang/std".into(),
-        _ => library.into(),
+        _ => metadata.get("jsName").unwrap_or(library).into(),
     }
 }
 
