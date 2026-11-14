@@ -14,10 +14,16 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// The repository's root directory.
+/// The repository's root directory: two up from this crate's. Not
+/// canonicalized, which on Windows gives a `\\?\` path that the
+/// frontend's `/`-joined paths can't hold.
 fn repo() -> PathBuf {
-    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    fs::canonicalize(&dir).unwrap_or(dir)
+    let crate_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    crate_dir
+        .ancestors()
+        .nth(2)
+        .unwrap_or(crate_dir)
+        .to_path_buf()
 }
 
 /// The functional tests' root directory, this crate's `cases/`.

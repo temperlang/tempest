@@ -506,9 +506,16 @@ pub fn source_kind(path: &str) -> SourceKind {
     }
 }
 
-/// A path with `/` between its parts, on Windows too.
+/// A path with `/` between its parts, on Windows too, where a verbatim
+/// prefix (`\\?\C:\…`, as `fs::canonicalize` gives) is dropped
+/// (`\\?\UNC\server\…` is `//server/…`).
 pub fn slashed(path: &str) -> String {
     if cfg!(windows) {
+        let path = match (path.strip_prefix(r"\\?\UNC\"), path.strip_prefix(r"\\?\")) {
+            (Some(unc), _) => format!(r"\\{unc}"),
+            (None, Some(local)) => local.to_string(),
+            (None, None) => path.to_string(),
+        };
         path.replace('\\', "/")
     } else {
         path.to_string()
