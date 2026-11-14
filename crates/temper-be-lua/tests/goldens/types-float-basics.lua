@@ -1,4 +1,8 @@
 local temper = require("temper-core")
+local int64_2147483647 = temper.int64_constructor(2147483647)
+local int64_neg2147483648 = temper.int64_constructor(-2147483648)
+local int64_9007199254740992 = temper.int64_constructor(2097152, 0)
+local int64_1 = temper.int64_constructor(1)
 
 ---@param a number
 ---@param b number
@@ -171,12 +175,12 @@ end) then
 end
 print("NaN to int: " .. t_1)
 local oneInt64 = temper.float64_toint64unsafe(one)
-local notSoBig = 2147483647 * oneInt64
-local notSoSmall = -2147483648 * oneInt64
+local notSoBig = int64_2147483647 * oneInt64
+local notSoSmall = int64_neg2147483648 * oneInt64
 local slightlyBigger = temper.float64_toint64unsafe(temper.int64_tofloat64unsafe(notSoBig) + 1.5)
 local slightlySmaller = temper.float64_toint64unsafe(temper.int64_tofloat64unsafe(notSoSmall) - 1.5)
-local tooBigForFloat64 = 9007199254740992 * temper.float64_toint64(one)
-local okToConvert64 = temper.int64_tofloat64unsafe(tooBigForFloat64 - 1)
+local tooBigForFloat64 = int64_9007199254740992 * temper.float64_toint64(one)
+local okToConvert64 = temper.int64_tofloat64unsafe(tooBigForFloat64 - int64_1)
 local sneakyBig = okToConvert64 + 1.0
 print("Bigger to Int64: " .. temper.int64_tostring(slightlyBigger))
 print("Smaller to Int64: " .. temper.int64_tostring(slightlySmaller))

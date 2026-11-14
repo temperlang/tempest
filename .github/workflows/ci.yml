@@ -289,12 +289,15 @@ jobs:
       # Generated Lua again under LuaJIT 2.1 (Neovim's and OpenResty's
       # Lua), which has no integers, so temper-core's fallbacks are used.
       # LuaJIT is a rolling release with no binaries: built from a pinned
-      # commit of its v2.1 branch.
+      # commit of its v2.1 branch, 63c8f1a9 (2026-11-11), which has
+      # 3a658cac: b310887b (2026-10-29) let x64 GC64 table stores of
+      # constants and GC values clobber their own fused address register
+      # under register pressure, which crashed; don't pin between them.
       - name: Lua under LuaJIT
         if: ${{ !cancelled() && contains(matrix.backends, 'lua') }}
         run: |
           git clone -q https://github.com/LuaJIT/LuaJIT.git "$RUNNER_TEMP/luajit-src"
-          git -C "$RUNNER_TEMP/luajit-src" checkout -q 8ca76297
+          git -C "$RUNNER_TEMP/luajit-src" checkout -q 63c8f1a9
           make -C "$RUNNER_TEMP/luajit-src" -j4 -s PREFIX="$RUNNER_TEMP/luajit"
           make -C "$RUNNER_TEMP/luajit-src" -s install PREFIX="$RUNNER_TEMP/luajit"
           LUA="$RUNNER_TEMP/luajit/bin/luajit" cargo test --locked -p temper-be-lua --test functional runs

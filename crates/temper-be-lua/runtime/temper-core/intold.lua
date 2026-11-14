@@ -1,26 +1,31 @@
-local bitops
-
 -- TODO Deal better with bnot(0) or other differences between these.
--- TODO Bit ops for int64.
 local bitops = bit or bit32
 
 if bitops == nil then
+    -- Plain Lua 5.1: arithmetic in place of LuaJIT's `bit`, taking any
+    -- number mod 2^32 and giving signed 32-bit results, as `bit` does.
     bitops = {}
     local OR, XOR, AND = 1, 3, 4
+
+    local function tobit(a)
+        a = a % 0x100000000
+        if a >= 0x80000000 then
+            a = a - 0x100000000
+        end
+        return a
+    end
 
     -- Changed from here: https://stackoverflow.com/a/32389020/2748187
     local function bitwise(op)
         return function(a, b)
-            -- This still doesn't handle all cases, including lacking support
-            -- for negatives.
-            -- TODO A better fallback for lua 5.1.
+            a, b = a % 0x100000000, b % 0x100000000
             local r, m = 0, 2 ^ 31
             repeat
                 local s = a + b + m
                 a, b = a % m, b % m
                 r, m = r + m * op % (s - a - b), m / 2
             until m < 1
-            return r
+            return tobit(r)
         end
     end
 
@@ -28,16 +33,20 @@ if bitops == nil then
     bitops.bxor = bitwise(XOR)
     bitops.bor = bitwise(OR)
     function bitops.bnot(a)
-        return bitops.bxor(a, -1)
+        return tobit(-1 - a)
     end
+    -- Shifts by a count mod 32, keeping the bits that stay, so doubles
+    -- hold each step exactly.
     function bitops.lshift(a, b)
-        -- math.pow(2, 63) returns the right value, not -1
-        return math.trunc(a * math.pow(2, b))
+        b = b % 32
+        return tobit(a % 2 ^ (32 - b) * 2 ^ b)
     end
     function bitops.rshift(a, b)
-        return math.trunc(a / math.pow(2, b))
+        return tobit(math.floor(a % 0x100000000 / 2 ^ (b % 32)))
     end
-
+    function bitops.arshift(a, b)
+        return tobit(math.floor(tobit(a) / 2 ^ (b % 32)))
+    end
 end
 
 local temper = {}
@@ -169,9 +178,18 @@ local function trunc(x)
     return result
 end
 
+-- Integer division by zero fails, as `//` does on integers in Lua 5.3+,
+-- where floats would give inf or nan.
+local function nonzero(b)
+    if b == 0 then
+        error("attempt to perform 'n//0'")
+    end
+    return b
+end
+
 -- Simple int floor div.
 function temper.int_div(a, b)
-    return math.floor(a / b)
+    return math.floor(a / nonzero(b))
 end
 
 -- Int32
@@ -181,14 +199,19 @@ function temper.int32_add(a, b)
 end
 
 function temper.int32_div(a, b)
-    return to_int32(trunc(a / b))
+    return to_int32(trunc(a / nonzero(b)))
 end
 
 temper.int32_max = math.max
 temper.int32_min = math.min
 
 function temper.int32_mod(a, b)
-    return trunc(math.fmod(a, b))
+    local result = trunc(math.fmod(a, nonzero(b)))
+    if result == 0 then
+        -- Not `-0`, as `fmod` gives for a negative dividend.
+        return 0
+    end
+    return result
 end
 
 function temper.int32_unm(a)
@@ -223,6 +246,14 @@ function temper.float64_toint64(x)
 end
 
 function temper.float64_toint64unsafe(x)
+    -- Out of range saturates, and NaN gives 0, as `intnew.lua`'s.
+    if x ~= x then
+        return int64.new(0, 0)
+    elseif x >= 2 ^ 63 then
+        return temper.int64_maxvalue
+    elseif x < -2 ^ 63 then
+        return temper.int64_minvalue
+    end
     x = trunc(x)
     local hi = math.floor(x / int32_over)
     local lo = x - hi * int32_over
@@ -232,7 +263,7 @@ end
 function int64.new(hi, lo)
     -- print(string.format("int64_constructor %s %s", hi, lo))
     if lo == nil then
-        if type(hi) == string then
+        if type(hi) == "string" then
             -- Allow full convenient digits as a string.
             return temper.string_toint64(hi)
         elseif frac(hi) == 0 then
@@ -275,8 +306,10 @@ function int64:__lt(other)
 end
 
 function temper.int64_tofloat64(x)
-    if math.abs(x) <= mantissa_max then
-        return temper.int64_tofloat64unsafe(x)
+    -- Rounding can't bring a value past the mantissa back within it.
+    local result = temper.int64_tofloat64unsafe(x)
+    if math.abs(result) <= mantissa_max then
+        return result
     end
     error("out of range")
 end
@@ -290,18 +323,16 @@ function temper.int64_tofloat64unsafe(x)
     return sign * (x.hi * int32_over + x.lo)
 end
 
-function temper.int64_toint32(x)
-    if math.abs(x) <= mantissa_max then
-        return temper.int64_toint32unsafe(x)
-    end
-    error("out of range")
-end
-
+-- The low 32 bits, signed.
 function temper.int64_toint32unsafe(x)
-    return x.lo
+    local lo = x.lo
+    if lo >= uint32_halfmax then
+        lo = lo - int32_over
+    end
+    return lo
 end
 
-local all_digits = "0123456789abcdefghijklmnopqrstuvwzyz"
+local all_digits = "0123456789abcdefghijklmnopqrstuvwxyz"
 
 function temper.int64_tostring(a, base)
     base = base or 10
@@ -330,6 +361,7 @@ function temper.int64_tostring(a, base)
         return qh, ql, rem
     end
     while hi ~= 0 or lo ~= 0 do
+        local rem
         hi, lo, rem = divmod64(hi, lo, base)
         -- rem is 0..base-1; lua string indices are 1-based
         table.insert(digits, 1, string.sub(all_digits, rem + 1, rem + 1))
@@ -350,7 +382,7 @@ function int64:__add(other)
 end
 
 function temper.int64_div(a, b)
-    if a.hi == 0 and b.hi == 0 then
+    if a.hi == 0 and b.hi == 0 and b.lo ~= 0 then
         -- Fast path for small ints. TODO Also for small negative or other?
         return int64.new(trunc(a.lo / b.lo))
     end
@@ -359,7 +391,7 @@ function temper.int64_div(a, b)
 end
 
 function temper.int64_mod(a, b)
-    if a.hi == 0 and b.hi == 0 then
+    if a.hi == 0 and b.hi == 0 and b.lo ~= 0 then
         -- Fast path for small ints. TODO Also for small negative or other?
         return int64.new(trunc(math.fmod(a.lo, b.lo)))
     end
@@ -420,6 +452,60 @@ end
 
 function temper.int64_unm(a)
     return -a
+end
+
+-- Bitwise operators, on `Int32`s by the bit library, and on `Int64`s by
+-- halves.
+
+local function halves(op)
+    return function(a, b)
+        if type(a) == "table" then
+            return int64.new(op(a.hi, b.hi), op(a.lo, b.lo))
+        end
+        return op(a, b)
+    end
+end
+
+temper.band = halves(bitops.band)
+temper.bor = halves(bitops.bor)
+temper.bxor = halves(bitops.bxor)
+
+function temper.bnot(a)
+    if type(a) == "table" then
+        return int64.new(uint32_maxvalue - a.hi, uint32_maxvalue - a.lo)
+    end
+    return bitops.bnot(a)
+end
+
+-- Shifts of `Int64`s, by a count taken mod 64, by arithmetic on the
+-- halves, each kept below 2^32 so doubles hold every bit.
+
+function temper.shl64(a, n)
+    n = n % 64
+    if n >= 32 then
+        return int64.new(a.lo % 2 ^ (64 - n) * 2 ^ (n - 32), 0)
+    end
+    local lo_keep = 2 ^ (32 - n)
+    local hi = a.hi % lo_keep * 2 ^ n + math.floor(a.lo / lo_keep)
+    return int64.new(hi, a.lo % lo_keep * 2 ^ n)
+end
+
+function temper.ushr64(a, n)
+    n = n % 64
+    if n >= 32 then
+        return int64.new(0, math.floor(a.hi / 2 ^ (n - 32)))
+    end
+    local unit = 2 ^ n
+    local lo = math.floor(a.lo / unit) + a.hi % unit * 2 ^ (32 - n)
+    return int64.new(math.floor(a.hi / unit), lo)
+end
+
+function temper.shr64(a, n)
+    if a.hi >= uint32_halfmax then
+        -- Shift the complement in zeros, and complement back to ones.
+        return temper.bnot(temper.ushr64(temper.bnot(a), n))
+    end
+    return temper.ushr64(a, n)
 end
 
 return {

@@ -8,7 +8,12 @@
 //! the innermost local declared before it in the text, so the chunk is
 //! laid out as:
 //!
-//! 1. `local temper = require("temper-core")`, if it uses the runtime;
+//! 1. `local temper = require("temper-core")`, if it uses the runtime,
+//!    and then its `Int64` constants, each made once by the runtime's
+//!    `int64_constructor` (`local int64_5 =
+//!    temper.int64_constructor(5)`), which literals name, so a loop
+//!    doesn't call it each time (past [`INT64_LOCALS`] of them, they're
+//!    one table's fields, `int64s.int64_5`);
 //! 2. `local exports = {}`, if an exported `var` is written by functions
 //!    (below);
 //! 3. module `let`s and `var`s that functions or members use, or that the
@@ -123,6 +128,31 @@ pub const MODULE_TABLE: &str = "module";
 /// The table of exports, declared first when it holds live `var`s.
 pub const EXPORTS: &str = "exports";
 
+/// The most distinct `Int64` constants a chunk declares as locals; past
+/// it, they're all fields of one table, [`INT64S`], so they cost the
+/// chunk one local, and a function one upvalue (of the 60 that Lua 5.1
+/// and LuaJIT allow).
+pub const INT64_LOCALS: usize = 32;
+
+/// The table that holds a chunk's `Int64` constants past
+/// [`INT64_LOCALS`].
+pub const INT64S: &str = "int64s";
+
+/// A chunk's `Int64` constants, each made once, before anything that can
+/// use it runs, by the runtime's `int64_constructor` (a call, which on
+/// Lua 5.3 and later gives an integer, and on 5.1 and LuaJIT a table,
+/// which nothing changes in place), and named for its value:
+/// `int64_5`, `int64_neg1`.
+#[derive(Debug, Default)]
+struct Int64s {
+    /// Whether they're [`INT64S`]'s fields instead of locals.
+    table: Option<String>,
+    /// Their names, by value, in order of first use.
+    names: Vec<(i64, String)>,
+    /// Names they mustn't take: the program's and host code's.
+    taken: HashSet<String>,
+}
+
 /// Labels a loop needs, by what jumps to it.
 #[derive(Clone, Debug, Default)]
 struct Labels {
@@ -180,6 +210,8 @@ pub struct Translator<'a> {
     temps: usize,
     /// Every name the naming pass gave, which temporaries avoid.
     taken: HashSet<String>,
+    /// The chunk's `Int64` constants.
+    int64s: Int64s,
 }
 
 /// An `orelse` body, which `temper.pcall` runs as a function of its own,
@@ -360,6 +392,7 @@ impl<'a> Translator<'a> {
             forward: HashSet::new(),
             temps: 0,
             taken: p.decls.ids().map(|d| names.get(d).to_string()).collect(),
+            int64s: Int64s::default(),
         }
     }
 
@@ -668,9 +701,15 @@ impl<'a> Translator<'a> {
             }
         }
         let live = !self.fields.is_empty();
+        // `Int64` constants, as locals or one table's fields.
+        let host_words = host.as_ref().map(|h| identifiers(&h.text));
+        let roots: Vec<NodeId> = (module.items.iter().copied())
+            .chain([module.init])
+            .collect();
+        let consts = self.plan_int64s(&roots, &host_words.unwrap_or_default());
         // Past the threshold, those after the first few are a table's.
         let init_locals = max_locals(p, module.init) + imports.len() + 2 * access.vars.len();
-        let locals = declared.len() + init_locals + 3;
+        let locals = declared.len() + init_locals + consts + 3;
         let overflow = locals > MODULE_LOCALS;
         if overflow {
             for &(_, decl) in declared.iter().skip(KEPT_LOCALS) {
@@ -681,7 +720,7 @@ impl<'a> Translator<'a> {
             .iter()
             .filter(|(_, d)| !self.fields.contains_key(d))
             .count();
-        if kept + init_locals + 3 > MAX_LOCALS {
+        if kept + init_locals + consts + 3 > MAX_LOCALS {
             return not_yet(format!(
                 "a module whose init block has {init_locals} locals alive at once"
             ));
@@ -951,6 +990,7 @@ impl<'a> Translator<'a> {
                 value: Some(Expr::name("require").call(vec![Expr::Str("temper-core".into())])),
             });
         }
+        body.extend(self.int64_decls());
         body.extend(imports);
         body.extend(head);
         if !lets.is_empty() || !forward.is_empty() {
@@ -994,6 +1034,7 @@ impl<'a> Translator<'a> {
         self.here = DeclId::NONE;
         self.tested = module.decl;
         self.uses_temper = true;
+        self.plan_int64s(&module.tests, &HashSet::new());
         let mut used = Vec::new();
         let mut tests = Vec::new();
         for &test in &module.tests {
@@ -1028,6 +1069,7 @@ impl<'a> Translator<'a> {
             ty: None,
             value: Some(require("temper-core".into())),
         }];
+        body.extend(self.int64_decls());
         body.push(Stmt::Local {
             name: "tested".into(),
             ty: None,
@@ -1957,12 +1999,105 @@ impl<'a> Translator<'a> {
         self.effects.node(self.p, id).any() || classes::classy(self.p, id, &self.classy)
     }
 
+    /// An `Int64` literal: the chunk's constant for it ([`Int64s`]).
+    fn int64(&mut self, value: i64) -> Expr {
+        self.uses_temper = true;
+        let consts = &mut self.int64s;
+        let name = match consts.names.iter().find(|(v, _)| *v == value) {
+            Some((_, name)) => name.clone(),
+            None => {
+                let base = match value {
+                    v if v < 0 => format!("int64_neg{}", v.unsigned_abs()),
+                    v => format!("int64_{v}"),
+                };
+                let name = fresh(&base, &consts.taken);
+                consts.taken.insert(name.clone());
+                consts.names.push((value, name.clone()));
+                name
+            }
+        };
+        match &consts.table {
+            Some(table) => Expr::name(table).member(name),
+            None => Expr::name(name),
+        }
+    }
+
+    /// Starts a chunk's `Int64` constants, for the literals in `roots`,
+    /// avoiding `host`'s names; gives how many locals they'll take.
+    fn plan_int64s(&mut self, roots: &[NodeId], host: &HashSet<&str>) -> usize {
+        let p = self.p;
+        let mut values = HashSet::new();
+        let mut negated = HashSet::new();
+        for &root in roots {
+            walk(p, root, &mut |id| match p.nodes.get(id) {
+                // A negated literal is the negation's constant.
+                Node::Op { op, args, .. }
+                    if ops::spelling(op) == Some(Spelling::Helper("int64_unm")) =>
+                {
+                    if let [arg] = p.nodes.list(args)[..] {
+                        if let Node::Int64Lit { value } = p.nodes.get(arg) {
+                            negated.insert(arg);
+                            values.insert(value.wrapping_neg());
+                        }
+                    }
+                }
+                Node::Int64Lit { value } if !negated.contains(&id) => {
+                    values.insert(value);
+                }
+                _ => {}
+            });
+        }
+        let mut taken = self.taken.clone();
+        taken.extend(host.iter().map(|w| w.to_string()));
+        let table = (values.len() > INT64_LOCALS).then(|| fresh(INT64S, &taken));
+        let locals = if table.is_some() { 1 } else { values.len() };
+        self.int64s = Int64s {
+            table,
+            names: Vec::new(),
+            taken,
+        };
+        locals
+    }
+
+    /// The declarations of the chunk's `Int64` constants used: a local
+    /// each, or one table of them all.
+    fn int64_decls(&self) -> Vec<Stmt> {
+        let consts = &self.int64s;
+        let made = |value: i64| {
+            let args = match i32::try_from(value) {
+                Ok(small) => vec![Expr::Int(small.into())],
+                // Its high (signed) and low 32 bits, as doubles hold them.
+                Err(_) => vec![Expr::Int(value >> 32), Expr::Int(value & 0xffff_ffff)],
+            };
+            ops::temper().method("int64_constructor", args)
+        };
+        match &consts.table {
+            _ if consts.names.is_empty() => Vec::new(),
+            Some(table) => vec![Stmt::Local {
+                name: table.clone(),
+                ty: None,
+                value: Some(Expr::Table(
+                    (consts.names.iter())
+                        .map(|(v, name)| (name.clone(), made(*v)))
+                        .collect(),
+                )),
+            }],
+            None => (consts.names.iter())
+                .map(|(v, name)| Stmt::Local {
+                    name: name.clone(),
+                    ty: None,
+                    value: Some(made(*v)),
+                })
+                .collect(),
+        }
+    }
+
     pub(crate) fn expr(&mut self, id: NodeId) -> R<Expr> {
         let p = self.p;
         Ok(match p.nodes.get(id) {
             Node::BoolLit { value } => Expr::Bool(value),
             Node::Int32Lit { value } => Expr::Int(value.into()),
-            Node::Int64Lit { value } => Expr::Int(value),
+            Node::Int64Lit { value } => self.int64(value),
             Node::Float64Lit { value } => Expr::Float(value),
             Node::StringLit { value } => Expr::Str(p.strings.get(value).to_string()),
             Node::VoidLit {} => Expr::Nil,
@@ -2032,7 +2167,7 @@ impl<'a> Translator<'a> {
                             return Ok(Expr::Int(value.wrapping_neg().into()));
                         }
                         (Spelling::Helper("int64_unm"), Node::Int64Lit { value }) => {
-                            return Ok(Expr::Int(value.wrapping_neg()));
+                            return Ok(self.int64(value.wrapping_neg()));
                         }
                         (Spelling::Unary(tree::Unary::Neg), Node::Float64Lit { value }) => {
                             return Ok(Expr::Float(-value));
@@ -2693,6 +2828,18 @@ pub fn host_path(module: &Module) -> String {
 fn host_file<'p>(p: &'p Program, module: &Module) -> Option<&'p HostFile> {
     let path = host_path(module);
     p.host.files.iter().find(|f| f.path == path)
+}
+
+/// `base`, or if `taken` has it, `base` with the first number after it
+/// (`base_1`) that `taken` hasn't.
+fn fresh(base: &str, taken: &HashSet<String>) -> String {
+    if !taken.contains(base) {
+        return base.to_string();
+    }
+    (1..)
+        .map(|n| format!("{base}_{n}"))
+        .find(|name| !taken.contains(name))
+        .expect("a free name")
 }
 
 /// The name-like words in Lua code that may refer to a local: each not

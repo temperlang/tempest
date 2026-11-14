@@ -76,7 +76,7 @@ pub struct Variant {
     pub profile: Profile,
     pub rules: NamingRules,
     /// The oldest Lua its rockspec accepts, as Kotlin's says (`lua >=
-    /// 5.1`), though `goto` needs 5.2 or LuaJIT, and exact `Int64`s 5.3.
+    /// 5.1`), though `goto` needs 5.2 or LuaJIT.
     pub lua_version: &'static str,
 }
 

@@ -166,6 +166,32 @@ end
 
 temper.int64_toint32unsafe = int64_toint32unsafe
 
+-- Bitwise operators, on `Int32`s and `Int64`s alike.
+
+temper.band = bitops.band
+temper.bor = bitops.bor
+temper.bxor = bitops.bxor
+temper.bnot = bitops.bnot
+
+-- Shifts of `Int64`s, by a count taken mod 64.
+
+function temper.shl64(a, n)
+    return a << (n % 64)
+end
+
+function temper.shr64(a, n)
+    n = n % 64
+    if a < 0 then
+        -- Shift the complement in zeros, and complement back to ones.
+        return ~(~a >> n)
+    end
+    return a >> n
+end
+
+function temper.ushr64(a, n)
+    return a >> (n % 64)
+end
+
 function temper.string_toint64(str, radix)
     if radix == nil then
         radix = 10

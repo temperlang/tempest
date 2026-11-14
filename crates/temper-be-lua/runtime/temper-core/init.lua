@@ -153,7 +153,9 @@ else
         temper.bubble("temper_utf8.char > 0x10FFFF")
     end
 
-    function temper_utf8.len(str)
+    -- Counts the bytes from `i` to `j` that start a character.
+    function temper_utf8.len(str, i, j)
+        str = string.sub(str, i or 1, j or -1)
         return select(2, string.gsub(str, "[^\128-\193]", ""))
     end
 
@@ -1317,6 +1319,15 @@ end
 
 temper.int32_toint64 = temper.int64_constructor
 
+-- Checked by the way back, so it works on either half's `Int64`s.
+function temper.int64_toint32(n)
+    local result = temper.int64_toint32unsafe(n)
+    if temper.int32_toint64(result) == n then
+        return result
+    end
+    return temper.bubble("core.type Int64.toInt32() failed")
+end
+
 function temper.int32_tofloat64(n)
     return n
 end
@@ -1333,21 +1344,13 @@ function temper.bool_not(a)
     return not a
 end
 
-temper.bor = temper_bit.bor
-temper.band = temper_bit.band
-temper.bnot = temper_bit.bnot
-temper.bxor = temper_bit.bxor
+-- `band`, `bor`, `bxor`, `bnot`, and the `Int64` shifts are the integer
+-- half's (`intnew.lua` or `intold.lua`), as `Int64`s are.
+
 function temper.shl32(a, b)
     b = b % 32
     local x = temper_bit.band(temper_bit.lshift(a, b), 0xFFFFFFFF)
     if x >= 0x80000000 then x = x - 0x100000000 end
-    return x
-end
-function temper.shl64(a, b)
-    b = b % 64
-    -- TODO: is this safe against floaty precision problems
-    local x = temper_bit.band(temper_bit.lshift(a, b), 0xFFFFFFFFFFFFFFFF)
-    if x >= 0x8000000000000000 then x = x - 0x10000000000000000 end
     return x
 end
 function temper.shr32(a, b)
@@ -1361,29 +1364,12 @@ function temper.shr32(a, b)
     end
     return x
 end
-function temper.shr64(a, b)
-    b = b % 64
-    local x = temper_bit.arshift(a, b)
-    if (a < 0) then
-        local high_bits = temper_bit.bnot(temper_bit.arshift(-1, b))
-        x = temper_bit.bor(x, high_bits)
-    end
-    return x
-end
 function temper.ushr32(a, b)
     b = b % 32
     if b == 0 then return a end
     return temper_bit.band(
         temper_bit.rshift(a, b),
         temper_bit.rshift(0x7FFFFFFF, b - 1)
-    )
-end
-function temper.ushr64(a, b)
-    b = b % 64
-    if b == 0 then return a end
-    return temper_bit.band(
-        temper_bit.rshift(a, b),
-        temper_bit.rshift(0x7FFFFFFFFFFFFFFF, b - 1)
     )
 end
 
@@ -1545,7 +1531,7 @@ function temper.is_null(a)
 end
 
 do
-    local digits = "0123456789abcdefghijklmnopqrstuvwzyz"
+    local digits = "0123456789abcdefghijklmnopqrstuvwxyz"
 
     local function temper_tostring(num, base)
         if num < 0 then

@@ -91,6 +91,7 @@ fn helpers_are_the_runtimes_and_typed() {
     helpers.extend([
         "bubble",
         "int32_tostring",
+        "int64_constructor",
         "type",
         "instance_of",
         "cast_to",

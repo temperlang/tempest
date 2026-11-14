@@ -13,8 +13,8 @@
 //! as coroutines (`kit::ASYNC`), the tests run as tests (`kit::TESTS`),
 //! and those importing std's `regex`, `json`, and `temporal`
 //! (`kit::WITH_STD`, each beside std's output, under `timeout`;
-//! `regex/zero-advance` gives what Kotlin's issue 166 expects, and only
-//! `types/date` runs on LuaJIT, which lacks `utf8` and 64-bit integers),
+//! `regex/zero-advance` gives what Kotlin's issue 166 expects, and
+//! `regex`'s don't run on LuaJIT, which lacks `utf8`),
 //! std `net`'s (`kit::NET`), through LuaSocket under a Lua that loads it
 //! by LuaRocks' paths or its own (the `LUA` that runs the rest, or else
 //! `lua`),
@@ -58,6 +58,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::{env, fs};
+use temper_be_lua::translate::INT64_LOCALS;
 use temper_be_lua::{LUA, OutFile, translate};
 use temper_be_testkit::{self as kit, Case, Goldens};
 
@@ -293,8 +294,9 @@ const MEMBERS_LOG: [&str; 3] = ["2 4 1", "false 2 7", "rex"];
 const MANY: usize = 220;
 
 /// A library with more module-level declarations than Lua allows a chunk
-/// locals, so those past the first 100 are fields of a table, and a
-/// function that uses the first and the last.
+/// locals, so those past the first 100 are fields of a table, a
+/// function that uses the first and the last, and one with more `Int64`
+/// constants than a chunk declares as locals.
 fn locals() -> (String, Vec<String>) {
     let mut text = String::from("# Locals\n\n");
     for i in 0..MANY / 2 {
@@ -306,7 +308,16 @@ fn locals() -> (String, Vec<String>) {
         "    export let sum(): Int {{ f0(1) + f{last}(v{last}) }}\n"
     ));
     text.push_str("    console.log(sum().toString());\n");
-    (text, vec![format!("{}", 1 + 2 * last)])
+    // More `Int64` constants than a chunk declares as locals, so they're
+    // a table's, one of them twice, one negated, and one of two halves.
+    let terms: Vec<String> = (0..=INT64_LOCALS).map(|i| format!("{i}i64")).collect();
+    text.push_str(&format!(
+        "    let sum64(): Int64 {{ {} - 1i64 + -2i64 + 0x1_0000_0000_i64 }}\n",
+        terms.join(" + ")
+    ));
+    text.push_str("    console.log(sum64().toString());\n");
+    let sum64 = INT64_LOCALS * (INT64_LOCALS + 1) / 2 - 3 + (1 << 32);
+    (text, vec![format!("{}", 1 + 2 * last), sum64.to_string()])
 }
 
 fn cases() -> Vec<Case> {
@@ -538,28 +549,12 @@ fn luarc(libraries: &[&Path]) -> String {
     )
 }
 
-/// Tests whose `Int64`s need Lua 5.3's 64-bit integers, which LuaJIT
-/// lacks: this backend writes `Int64`s as Lua integers, where Kotlin's
-/// makes them with the runtime's `int64_constructor`, which LuaJIT's
-/// half of the runtime (`intold.lua`) keeps as tables. `types/int/limits`
-/// also finds LuaJIT's `int32_mod` giving `-0` for `-2147483648 % -1`,
-/// and `types/int/shifty`, which counts with `countBetween` too (below).
-/// std's json reads numbers into `Int64`s (`types/json-syntax-tree`).
-const NEEDS_INTEGERS: [&str; 4] = [
-    "types-float-basics",
-    "types-int-limits",
-    "types-int-shifty",
-    "types-json-syntax-tree",
-];
-
 /// Tests that the runtime gets wrong on LuaJIT (and Lua 5.1), Kotlin's
-/// bugs, which these run on Lua 5.4 to show: without Lua 5.3's `utf8`,
-/// its stand-in `len` ignores the range, so `countBetween` and
-/// `hasAtLeast` count the whole string (`types/string/read`); LuaJIT's
-/// `tonumber(s, 10)` takes `"2.0"` and `"0x10"` (`String.toInt32()`,
-/// also `types/string/read`); and `float64_max` and `float64_min` check
-/// only their second argument for NaN, where LuaJIT's `math.max(nan, 2)`
-/// gives 2 (`types/float/ops`).
+/// bugs, which these run on Lua 5.4 to show: LuaJIT's `tonumber(s, 10)`
+/// takes `"2.0"` and `"0x10"` (`String.toInt32()`, `types/string/read`);
+/// and `float64_max` and `float64_min` check only their second argument
+/// for NaN, where LuaJIT's `math.max(nan, 2)` gives 2
+/// (`types/float/ops`).
 /// The runtime's regex engine needs Lua 5.3's `utf8` too (`regex/match`
 /// and `regex/zero-advance`).
 const NEEDS_LUA53: [&str; 4] = [
@@ -620,9 +615,7 @@ fn runs() {
             kit::without_net(&mut cases);
         }
         if jit {
-            cases.retain(|c| {
-                !NEEDS_INTEGERS.contains(&c.key.as_str()) && !NEEDS_LUA53.contains(&c.key.as_str())
-            });
+            cases.retain(|c| !NEEDS_LUA53.contains(&c.key.as_str()));
         }
         let mut generated = Vec::new();
         // A library named as one before it (`types/int/basics` and

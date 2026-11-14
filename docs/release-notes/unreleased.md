@@ -16,6 +16,7 @@
 - [Extension methods](#extension-methods)
 - [Generated packages need the matching runtimes](#generated-packages-need-the-matching-runtimes)
 - [Fixes for code Temper 0.6.0 accepted](#fixes-for-code-temper-060-accepted)
+- [Lua: `Int64` on LuaJIT and Lua 5.1](#lua-int64-on-luajit-and-lua-51)
 - [`temper` and its `TEMPER_*` settings](#temper-and-its-temper_-settings)
 - [Fixes on Windows](#fixes-on-windows)
 
@@ -391,6 +392,18 @@ writes them, or from a release's packages
   as a parameter of an undeclared type, fails where it runs when it's
   in a string template or has a method called, instead of keeping the
   module from being translated.
+
+## Lua: `Int64` on LuaJIT and Lua 5.1
+
+`Int64` works on LuaJIT and Lua 5.1, as in earlier releases, and more
+of it does there: bitwise operators and shifts, `toFloat64()`, and
+`toInt32Unsafe()` of a negative value. Integer division by zero fails
+there, as on Lua 5.3 and later, instead of giving NaN or an infinity;
+`Int32`'s `%` gives `0`, not `-0`; and `String.countBetween` and
+`hasAtLeast` count only their range. On every Lua, `Int64.toInt32()`
+works, and base 36 writes `x`. Each `Int64` constant is made once, as
+its module loads, so a loop's `Int64` literals don't call the runtime
+each time round.
 
 ## `temper` and its `TEMPER_*` settings
 

@@ -1,4 +1,5 @@
 local temper = require("temper-core")
+local int64_123456789012 = temper.int64_constructor(28, 3197704724)
 local JsonAdapter = require("std/json").JsonAdapter
 local JsonProducer = require("std/json").JsonProducer
 local JsonSyntaxTree = require("std/json").JsonSyntaxTree
@@ -670,7 +671,7 @@ local function roundTrip(adapter, value)
 end
 
 roundTrip(Point.jsonAdapter(), Point(1, -2))
-roundTrip(Record.jsonAdapter(), Record("Ada", true, 1.5, 123456789012, temper.null, { Point(3, 4) }))
+roundTrip(Record.jsonAdapter(), Record("Ada", true, 1.5, int64_123456789012, temper.null, { Point(3, 4) }))
 local shapes = { Circle(2), Rect(3, 4) }
 roundTrip(listJsonAdapter(Shape.jsonAdapter()), shapes)
 local messages = { Hello("hi"), Bye("so long") }

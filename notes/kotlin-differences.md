@@ -1904,6 +1904,15 @@ copied Kotlin's:
   names the zip relative, as Kotlin does when it has no path, and makes
   none.
   Test: temper-be-lua/tests/goldens/.
+- **Lua `Int64` constants:** Kotlin's Lua writes each `Int64` literal
+  as a call where it's used (`temper.int64_constructor(1)`), so a loop
+  calls the runtime for each literal each time round, several times as
+  slow on Lua 5.4 and twice as slow on LuaJIT. Tempest's makes each
+  distinct constant once, first in the chunk (`local int64_1 =
+  temper.int64_constructor(1)`; past 32 of them, fields of one `int64s`
+  table), and uses its name.
+  Test: temper-be-lua/tests/goldens/ (`types-int-shifty`),
+  functional.rs, `runs` (`locals`, for the table).
 - **Stale files in `temper.out`** after renames break builds; record the
   files each backend writes and delete only those no longer written. Tempest empties a library's directory before writing it
   (2026-10-30), which also drops what builds and test runs left there.
@@ -2058,8 +2067,11 @@ copied Kotlin's:
     Test: programs/nullables.temper.md (`stops`), on every backend.
   - **Lua `Int64.toInt32()`** calls a runtime function only Lua before
     5.3 has, so on 5.4 `x.toInt32() orelse -1` silently gives -1;
-    tempest uses the range-checked Float64 conversion.
-    Test: funtest types/int/limits (`Actually big: no`) on Lua 5.4.
+    tempest's runtime defines it for every Lua, checked by converting
+    back, and its `toInt32Unsafe()` on LuaJIT and 5.1 gives the low 32
+    bits signed, where Kotlin's gives them unsigned.
+    Test: funtest types/int/limits (`Actually big: no`) on Lua 5.4 and
+    LuaJIT.
   - **C# numbers by the invariant culture,** formatting and parsing
     (`Float64.toString`, `String.toFloat64`), where Kotlin's runtime
     under `sv-SE` logs `1.5` as `1,5.0` and fails to parse `"1.5"` (#641
@@ -2173,10 +2185,12 @@ copied Kotlin's:
     `Omitted` in tmpl, and each connection writes the language's null
     there, as Kotlin's output does.
   - Not fixed: Java's `round` is `Math.round`, which saturates and
-    makes NaN 0, and Python's rounds half to even; Kotlin's Lua runtime
-    miscounts and misparses on LuaJIT and Lua 5.1 without `utf8`, so
-    `types/float/ops` and `types/string/read` run only on Lua 5.3 or
-    later.
+    makes NaN 0, and Python's rounds half to even; on LuaJIT and Lua
+    5.1, Kotlin's Lua runtime misparses (`tonumber(s, 10)` takes
+    `"2.0"`) and lets `float64_max` miss a NaN, so `types/string/read`
+    and `types/float/ops` run only on Lua 5.3 or later. (Its miscount
+    there, `countBetween` of the whole string without `utf8`, tempest's
+    runtime fixes.)
 - **Divisions that can't fail, and maps, in the backends** (2026-11-03):
   `/` by an integer constant other than 0, and `%` by a positive one, is
   tmpl's `divSafe` or `modSafe`, as Kotlin's `DivIntIntSafe` and the
@@ -2210,10 +2224,12 @@ copied Kotlin's:
   - **Java** reduces to another kind than the items' through Core's
     reducers (`listedReduceIntToObj`), as Kotlin's; to another object
     type, not yet. Java, C#, and C++ drop `orelse void`'s `void`.
-  - **Lua** runs `types/int/shifty` only on Lua 5.3 or later: it needs
-    64-bit integers and `countBetween`, which Kotlin's runtime gets
-    wrong on LuaJIT. Rust's clippy allows `map`'s unused locals, which
-    the test declares on purpose.
+  - **Lua** runs `types/int/shifty` on Lua 5.4 and LuaJIT: tempest's
+    runtime does `Int64`'s bitwise operators and shifts on LuaJIT's
+    tables of halves, and counts only `countBetween`'s range without
+    `utf8`, both of which Kotlin's runtime gets wrong there. Rust's
+    clippy allows `map`'s unused locals, which the test declares on
+    purpose.
 - **Running tests with std's `testing`, in the backends** (2026-11-03):
   std's `Test.bail()` is each backend's connection, as Kotlin's, and its
   private method isn't declared: Python's `assert False,
