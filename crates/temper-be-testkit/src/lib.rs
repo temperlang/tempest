@@ -520,9 +520,19 @@ pub fn program(case: &Case) -> Program {
             return program;
         }
     }
-    let library = load(case);
-    let mut program =
-        to_tmpl(&settle(library), &case.library).unwrap_or_else(|e| panic!("{key}: {e}"));
+    let settled = settle(load(case));
+    // Shown only if the test fails: what the frontend loaded and said,
+    // for failures on a platform you can't run locally.
+    if !settled.library.diagnostics.is_empty() {
+        let dirs: Vec<&str> = (settled.library.modules.iter())
+            .map(|m| m.dir.as_str())
+            .collect();
+        eprintln!("{key}: modules {dirs:?}");
+        for d in settled.library.diagnostics.iter().take(5) {
+            eprintln!("{key}: {d:?}");
+        }
+    }
+    let mut program = to_tmpl(&settled, &case.library).unwrap_or_else(|e| panic!("{key}: {e}"));
     let problems = validate(&program, &Profile::full());
     assert!(problems.is_empty(), "{key}: {problems:#?}");
     program.host = Host {

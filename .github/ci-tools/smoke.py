@@ -50,26 +50,45 @@ def expect(what: str, text: str, want: str) -> None:
 
 
 def interactive_repl(temper: Path) -> None:
-    """A REPL session on a pseudo-terminal: two inputs, then Ctrl-D."""
+    """A REPL session on a pseudo-terminal: two inputs, then Ctrl-D.
+
+    Answers the line editor's cursor-position queries, as a terminal
+    would, and on any timeout kills the REPL and shows what it wrote,
+    rather than hang.
+    """
     import pty
     import select
+    import signal
 
     print("+ temper repl (on a terminal)", flush=True)
     pid, fd = pty.fork()
     if pid == 0:
-        os.execv(temper, [str(temper), "repl"])
+        os.execve(temper, [str(temper), "repl"], {**os.environ, "TERM": "xterm-256color"})
+    seen = b""
 
-    def read_until(want: bytes) -> bytes:
-        seen, end = b"", time.monotonic() + TIMEOUT
+    def fail(why: str) -> None:
+        os.kill(pid, signal.SIGKILL)
+        os.waitpid(pid, 0)
+        sys.exit(f"smoke: interactive REPL: {why}; it wrote {seen!r}")
+
+    def read_until(want: bytes) -> None:
+        nonlocal seen
+        end = time.monotonic() + TIMEOUT
         while time.monotonic() < end:
             if select.select([fd], [], [], 0.2)[0]:
                 try:
-                    seen += os.read(fd, 4096)
+                    chunk = os.read(fd, 4096)
                 except OSError:
                     break
+                if not chunk:
+                    break
+                seen += chunk
+                # A cursor-position query (DSR): answer row 1, column 1.
+                for _ in range(chunk.count(b"\x1b[6n")):
+                    os.write(fd, b"\x1b[1;1R")
                 if want in ANSI.sub(b"", seen):
-                    return seen
-        sys.exit(f"smoke: interactive REPL: expected {want!r} in {ANSI.sub(b'', seen)!r}")
+                    return
+        fail(f"expected {want!r}")
 
     read_until(b"$ ")
     os.write(fd, b"let x = 20;\r")
@@ -77,7 +96,19 @@ def interactive_repl(temper: Path) -> None:
     os.write(fd, b"x + 22\r")
     read_until(b"interactive#1: 42")
     os.write(fd, b"\x04")
-    _, status = os.waitpid(pid, 0)
+    end = time.monotonic() + TIMEOUT
+    while time.monotonic() < end:
+        done, status = os.waitpid(pid, os.WNOHANG)
+        if done:
+            break
+        # Keep reading, so the REPL never blocks writing to a full pty.
+        if select.select([fd], [], [], 0.2)[0]:
+            try:
+                seen += os.read(fd, 4096)
+            except OSError:
+                pass
+    else:
+        fail("still running after Ctrl-D")
     if os.waitstatus_to_exitcode(status) != 0:
         sys.exit(f"smoke: interactive REPL exited {os.waitstatus_to_exitcode(status)}")
     print("interactive REPL: ok", flush=True)

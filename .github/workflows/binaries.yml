@@ -176,6 +176,7 @@ jobs:
   # is built on x64, so this is the first time it runs.
   smoke:
     needs: build
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:

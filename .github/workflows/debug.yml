@@ -1,0 +1,53 @@
+# Temporary: narrows two platform failures quickly, on each push to the
+# transition branch. Delete once both are fixed.
+# - Windows: the functional tests with imports fail in every backend's
+#   goldens; the test kit prints the modules and diagnostics.
+# - macOS: the smoke test's interactive REPL session hung.
+name: Debug
+
+on:
+  push:
+    branches: [rfc-657-transition]
+
+permissions:
+  contents: read
+
+jobs:
+  windows-goldens:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Line ends as committed
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@cfcaf53ba4c621917ec7f78a66bff7a8848ddad4 # 1.85.0 branch, 2026-10-16
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Python goldens
+        run: cargo test --locked -p temper-be-py --test functional goldens -- --nocapture
+        env:
+          TEMPER_CASES: imports,object-literals
+
+  macos-smoke:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@cfcaf53ba4c621917ec7f78a66bff7a8848ddad4 # 1.85.0 branch, 2026-10-16
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.5"
+      - name: Build and package as binaries.yml does
+        run: |
+          cargo build --locked --profile small -p tempest
+          name=temper-aarch64-apple-darwin
+          mkdir "$name"
+          cp target/small/temper COPYRIGHT LICENSE-APACHE LICENSE-MIT NOTICE "$name/"
+          tar czf "$name.tar.gz" "$name"
+      - name: Smoke test
+        run: uv run .github/ci-tools/smoke.py temper-aarch64-apple-darwin.tar.gz
