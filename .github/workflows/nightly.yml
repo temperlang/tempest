@@ -343,6 +343,11 @@ jobs:
       - name: All of the CLI's tests, without backends
         if: ${{ !cancelled() }}
         run: cargo test --locked -p tempest --no-default-features
+      # The language server's tests, on this platform's paths and URIs
+      # (on Windows, `file:///c%3A/...` as VS Code sends them).
+      - name: Language server
+        if: ${{ !cancelled() }}
+        run: cargo test --locked -p temper-lsp
 
   # Weekly, and on demand, `platforms`: the same, then every backend's
   # tests, with its toolchain set up as on Linux
@@ -461,6 +466,11 @@ jobs:
       - name: All of the CLI's tests, without backends
         if: ${{ !cancelled() }}
         run: cargo test --locked -p tempest --no-default-features
+      # The language server's tests, on this platform's paths and URIs
+      # (on Windows, `file:///c%3A/...` as VS Code sends them).
+      - name: Language server
+        if: ${{ !cancelled() }}
+        run: cargo test --locked -p temper-lsp
       - name: Toolchains
         if: ${{ !cancelled() }}
         uses: ./.github/actions/toolchains

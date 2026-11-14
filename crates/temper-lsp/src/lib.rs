@@ -946,9 +946,14 @@ pub fn uri_to_path(uri: &str) -> String {
         }
     }
     let path = String::from_utf8_lossy(&bytes).into_owned();
-    // `/c:/x` on Windows is `c:/x`.
+    // `/c:/x` on Windows is `C:/x`: the drive in upper case, as the
+    // frontend keeps paths (VS Code sends it lower).
     let windows = path.len() > 2 && path.as_bytes()[2] == b':';
-    let path = if windows { path[1..].to_string() } else { path };
+    let path = if windows {
+        temper_frontend::project::upper_drive(&path[1..])
+    } else {
+        path
+    };
     normalized(&path)
 }
 
@@ -1024,7 +1029,8 @@ mod tests {
             uri_to_path("file:///home/a%20b/x.temper"),
             "/home/a b/x.temper"
         );
-        assert_eq!(uri_to_path("file:///c%3A/x/../y.temper"), "c:/y.temper");
+        assert_eq!(uri_to_path("file:///c%3A/x/../y.temper"), "C:/y.temper");
+        assert_eq!(uri_to_path("file:///C:/y.temper"), "C:/y.temper");
         assert_eq!(
             path_to_uri("/home/a b/x.temper"),
             "file:///home/a%20b/x.temper"

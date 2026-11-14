@@ -981,6 +981,36 @@ fn library_without_root_module(backend: &str) {
     });
 }
 
+/// A library whose path has a space and non-ASCII letters, with modules
+/// that import each other: found, built, tested, and run, as anywhere.
+#[test]
+fn paths_with_spaces_and_unicode() {
+    let files = [
+        ("x/x.temper", "export let one = 1;\n"),
+        (
+            "y/y.temper",
+            "let { one } = import(\"../x\");\nconsole.log(\"y ${(one + 1).toString()}\");\n\
+             test(\"y\") { assert(one + 1 == 2) }\n",
+        ),
+    ];
+    with_library("Zoë's Lib", &files, |dir| {
+        let (code, out, err) = tempest(&["test", "-b", "interp", dir]);
+        assert_eq!((code, out.as_str()), (0, "Tests passed: 1 of 1\n"), "{err}");
+        let (code, out, err) = tempest(&["run", "-w", dir, "--library", "a", "-b", "interp"]);
+        assert_eq!(
+            (code, out.replace("\r\n", "\n").as_str()),
+            (0, "y 2\n"),
+            "{err}"
+        );
+        let (code, _, err) = tempest(&["build", "-w", dir]);
+        assert_eq!(code, 0, "{err}");
+        for backend in ["js", "py"].into_iter().filter(|b| built_in(b)) {
+            let out = Path::new(dir).join("temper.out").join(backend).join("a");
+            assert!(out.is_dir(), "{backend}");
+        }
+    });
+}
+
 #[test]
 fn library_without_root_module_interp() {
     library_without_root_module("interp");
