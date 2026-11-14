@@ -219,6 +219,10 @@ suffer the [singly evaluated default expression pitfall][default-pitfall].
 Names translate to Python's conventions: `snake_case` for functions,
 methods, and properties, and a leading `_` for what isn't exported.
 
+On Windows, before Python 3.15, logging characters outside the
+system's code page (as `✅`) to a pipe or file needs Python's UTF-8
+mode (`PYTHONUTF8=1`), which `temper run` and `temper test` set.
+
 [python-3.11.0]: https://docs.python.org/release/3.11.0/
 [default-pitfall]: https://towardsdatascience.com/python-pitfall-mutable-default-arguments-9385e8265422
 

@@ -223,11 +223,21 @@ fn javac(
     // fails internally (as when out of memory); keep those out of the
     // crate.
     command.current_dir(env!("CARGO_TARGET_TMPDIR"));
+    command.arg(tools::ARGFILE_ENCODING);
     command.args(options).arg("-d").arg(out);
     if let Some(cp) = classpath {
         command.arg("-cp").arg(cp);
     }
-    command.args(files).output().unwrap()
+    // The files in an argument file beside `out`, as `temper test -b
+    // java` names them, since a command line naming them all can be
+    // more than Windows takes.
+    let list = out.with_extension("args");
+    let sources =
+        tools::argfile(&list, files).unwrap_or_else(|e| panic!("{}: {e}", list.display()));
+    command
+        .arg(sources)
+        .output()
+        .unwrap_or_else(|e| panic!("javac, {} files in {}: {e}", files.len(), list.display()))
 }
 
 /// The runtime's classes, compiled once and kept under

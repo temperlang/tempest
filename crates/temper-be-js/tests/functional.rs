@@ -587,27 +587,60 @@ for (const query of queries) {
         )];
     }
     let mut failures = Vec::new();
+    let dir = module.parent().unwrap();
     for ((query, s), answer) in queries.iter().zip(&answers) {
         let source = &map.sources[s.source as usize];
-        let file = source.rsplit('/').next().unwrap();
-        let path = answer[1].strip_prefix("file://").unwrap_or(answer[1]);
         let name = s.name.map_or("-", |n| map.names[n as usize].as_str());
         let expected = [
             s.source_line.to_string(),
             s.source_column.to_string(),
             name.into(),
         ];
-        if !path.ends_with(&format!("/{file}"))
-            || !Path::new(path).exists()
-            || answer[2..] != expected
-        {
+        // Node's source, a URL resolved against the map's, is the file
+        // the map names relative to the module.
+        let same = match (fs::canonicalize(file_url_path(answer[1]))).ok() {
+            Some(read) => fs::canonicalize(dir.join(source)).is_ok_and(|s| s == read),
+            None => false,
+        };
+        if !same || answer[2..] != expected {
             failures.push(format!(
-                "{}: at {query}, Node reads {answer:?}, not {source} {expected:?}",
-                case.key
+                "{}: at {query}, Node reads {answer:?}, not {source} {expected:?} (from {})",
+                case.key,
+                dir.display()
             ));
         }
     }
     failures
+}
+
+/// The path a `file:` URL names: `file:///D:/a%20b` is `D:/a b` on
+/// Windows, and `file:///a%20b` is `/a b` elsewhere. Anything else is
+/// taken as a path.
+fn file_url_path(url: &str) -> PathBuf {
+    let Some(path) = url.strip_prefix("file://") else {
+        return PathBuf::from(url);
+    };
+    // A drive's path, `/D:/…`, without its first `/`.
+    let path = match path.as_bytes() {
+        [b'/', drive, b':', ..] if cfg!(windows) && drive.is_ascii_alphabetic() => &path[1..],
+        _ => path,
+    };
+    let mut bytes = Vec::new();
+    let mut rest = path.as_bytes();
+    while let Some((&b, after)) = rest.split_first() {
+        let hex = |i: usize| (after.get(i).and_then(|h| (*h as char).to_digit(16)));
+        match (b, hex(0), hex(1)) {
+            (b'%', Some(high), Some(low)) => {
+                bytes.push((high * 16 + low) as u8);
+                rest = &after[2..];
+            }
+            _ => {
+                bytes.push(b);
+                rest = after;
+            }
+        }
+    }
+    PathBuf::from(String::from_utf8_lossy(&bytes).into_owned())
 }
 
 /// An error thrown in generated code, from a call with a value Temper
@@ -650,7 +683,8 @@ fn stack_trace(node: &str, out: &Path) -> Vec<String> {
     let frame = stdout
         .lines()
         .find(|l| l.trim_start().starts_with("at twice "));
-    match frame {
+    // Node names the source by its path, with `\` on Windows.
+    match frame.map(|f| f.replace('\\', "/")) {
         Some(frame) if frame.contains("/traces-src/traces.temper.md:4:7)") => Vec::new(),
         _ => vec![format!(
             "the stack trace doesn't point at traces.temper.md:4:7:\n{stdout}{}",
@@ -659,20 +693,49 @@ fn stack_trace(node: &str, out: &Path) -> Vec<String> {
     }
 }
 
-/// TypeScript's options for checking generated code: strict, as ES
-/// modules under Node's rules, with the runtime's declarations taken as
-/// given (`--skipLibCheck`), since they don't all check themselves.
-const TSC_CHECK: &[&str] = &[
-    "--checkJs",
-    "--allowJs",
-    "--noEmit",
-    "--strict",
-    "--skipLibCheck",
-    "--module",
-    "nodenext",
-    "--target",
-    "es2022",
-];
+/// TypeScript's options for checking generated code, as a tsconfig's
+/// `compilerOptions`: strict, as ES modules under Node's rules, with the
+/// runtime's declarations taken as given (`skipLibCheck`), since they
+/// don't all check themselves.
+const TSC_CHECK: &str = r#"{
+    "checkJs": true,
+    "allowJs": true,
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "module": "nodenext",
+    "target": "es2022"
+  }"#;
+
+/// A tsconfig, `tsconfig.check.json` in `dir`, that checks `files` with
+/// [`TSC_CHECK`]; tsc reads it with `-p`, since a command line naming
+/// the files can be more than Windows takes (8K for `tsc.cmd`).
+fn tsc_check_config(dir: &Path, files: &[PathBuf]) -> PathBuf {
+    let quoted: Vec<String> = (files.iter())
+        .map(|f| {
+            let mut out = String::from("\"");
+            for c in f.to_string_lossy().chars() {
+                match c {
+                    '"' | '\\' => {
+                        out.push('\\');
+                        out.push(c);
+                    }
+                    c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+                    c => out.push(c),
+                }
+            }
+            out.push('"');
+            out
+        })
+        .collect();
+    let path = dir.join("tsconfig.check.json");
+    let text = format!(
+        "{{\n  \"compilerOptions\": {TSC_CHECK},\n  \"files\": [\n    {}\n  ]\n}}\n",
+        quoted.join(",\n    ")
+    );
+    fs::write(&path, text).unwrap();
+    path
+}
 
 /// `tests/host/interop.mjs`, host code that uses `async-turns` the
 /// standard way, beside its package in `root`: it `await`s a generated
@@ -869,8 +932,8 @@ fn runs() {
                 ));
             } else {
                 let check = Command::new(tsc)
-                    .args(TSC_CHECK)
-                    .args(&checked)
+                    .arg("-p")
+                    .arg(tsc_check_config(&out, &checked))
                     .current_dir(&out)
                     .output()
                     .unwrap();

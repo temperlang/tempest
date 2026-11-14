@@ -65,22 +65,29 @@ fn lints(strict: bool) -> &'static [&'static str] {
     }
 }
 
-/// `javac` on `files` into a directory, against a class path.
+/// `javac` on `files` into a directory, against a class path; the files
+/// are named in an argument file beside the directory ([`argfile`]).
 fn javac(
     into: &Path,
     classpath: &std::ffi::OsStr,
     files: &[PathBuf],
     strict: bool,
 ) -> Result<(), String> {
+    let list = into.with_extension("args");
+    let sources = (list.parent())
+        .map_or(Ok(()), std::fs::create_dir_all)
+        .and_then(|()| argfile(&list, files))
+        .map_err(|e| format!("{}: {e}", list.display()))?;
     let built = output(
         Command::new(tool("JAVAC", "javac"))
+            .arg(ARGFILE_ENCODING)
             .args(["-encoding", "UTF-8"])
             .args(lints(strict))
             .arg("-d")
             .arg(into)
             .arg("-cp")
             .arg(classpath)
-            .args(files),
+            .arg(sources),
         "javac",
     )?;
     match built.status.success() {
@@ -88,6 +95,37 @@ fn javac(
         false => Err(format!("javac failed\n{}", tool_output(&built))),
     }
 }
+
+/// Writes `args` to `path` as a javac argument file, one to a line,
+/// quoted, with `\` and `"` escaped as javac reads them, and gives
+/// javac's argument naming it, `@path`. A library's sources, std's, and
+/// the runtime's, named on the command line, can be more than Windows
+/// takes (32K characters).
+pub fn argfile(path: &Path, args: &[PathBuf]) -> std::io::Result<std::ffi::OsString> {
+    let mut text = String::new();
+    for arg in args {
+        text.push('"');
+        for c in arg.to_string_lossy().chars() {
+            match c {
+                '\\' => text.push_str("\\\\"),
+                '"' => text.push_str("\\\""),
+                '\n' => text.push_str("\\n"),
+                '\r' => text.push_str("\\r"),
+                c => text.push(c),
+            }
+        }
+        text.push_str("\"\n");
+    }
+    std::fs::write(path, text)?;
+    let mut at = std::ffi::OsString::from("@");
+    at.push(path);
+    Ok(at)
+}
+
+/// javac's option that has it read an argument file ([`argfile`]) as
+/// UTF-8, as written; JDK 18 and later read it so by default, and
+/// earlier ones by the system's code page.
+pub const ARGFILE_ENCODING: &str = "-J-Dfile.encoding=UTF-8";
 
 /// Compiles as [`test`] does, without JUnit, into
 /// `temper.out/java/LIBRARY/target/temper/classes`, and runs the

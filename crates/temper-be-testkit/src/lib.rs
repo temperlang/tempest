@@ -31,11 +31,12 @@
 //!   tests ([`NET`]), whose `testServerPort` is its port, any free one,
 //!   as Kotlin's suite picks; goldens show it as [`TEST_SERVER_PORT`].
 //! - **Runs:** [`check_log`] compares what a program logged with what's
-//!   expected, and [`check_case`] also that a run expected to fail does,
-//!   and [`threads_expected`] is what `module-state` from 8
-//!   threads logs; for a test that runs as tests ([`TESTS`]),
-//!   [`check_tests`] compares its failures, as a backend's runner reports
-//!   them ([`junit_failures`] for JUnit XML), with its `expectedFailures`.
+//!   expected, its line ends as on Linux ([`printed`]), and
+//!   [`check_case`] also that a run expected to fail does, and
+//!   [`threads_expected`] is what `module-state` from 8 threads logs;
+//!   for a test that runs as tests ([`TESTS`]), [`check_tests`] compares
+//!   its failures, as a backend's runner reports them
+//!   ([`junit_failures`] for JUnit XML), with its `expectedFailures`.
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -992,10 +993,22 @@ pub fn cached(
     fs::write(stamp_path, stamp).unwrap();
 }
 
+/// What a program printed, as text: on Windows, with the `\r\n` that a
+/// text-mode stream (Lua's, Python's, Java's `println`) writes for `\n`
+/// as `\n`, so its lines compare as they do elsewhere; a `\r` it prints
+/// itself, but for one just before a newline, is kept.
+pub fn printed(bytes: &[u8]) -> String {
+    let text = String::from_utf8_lossy(bytes);
+    match cfg!(windows) {
+        true => text.replace("\r\n", "\n"),
+        false => text.into_owned(),
+    }
+}
+
 /// Compares what a program logged with what's expected, adding a failure
 /// if it differs or the program failed.
 pub fn check_log(failures: &mut Vec<String>, name: &str, out: &Output, expected: &[String]) {
-    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stdout = printed(&out.stdout);
     let actual: Vec<&str> = stdout.lines().collect();
     if !out.status.success() || actual != expected {
         failures.push(format!(
@@ -1011,7 +1024,7 @@ pub fn check_case(failures: &mut Vec<String>, name: &str, out: &Output, case: &C
     if !case.fails {
         return check_log(failures, name, out, &case.expected);
     }
-    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stdout = printed(&out.stdout);
     let actual: Vec<&str> = stdout.lines().collect();
     if out.status.success() || actual != case.expected {
         failures.push(format!(
@@ -1084,13 +1097,7 @@ pub fn check_tests(
 ) {
     let key = &case.key;
     let expected = case.tests.as_deref().unwrap_or_default();
-    let output = || {
-        format!(
-            "{}{}",
-            String::from_utf8_lossy(&out.stdout),
-            String::from_utf8_lossy(&out.stderr)
-        )
-    };
+    let output = || format!("{}{}", printed(&out.stdout), printed(&out.stderr));
     let Some(actual) = actual else {
         failures.push(format!("{key}: no test results\n{}", output()));
         return;

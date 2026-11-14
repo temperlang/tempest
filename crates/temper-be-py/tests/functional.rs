@@ -170,6 +170,15 @@ fn python() -> Option<String> {
     })
 }
 
+/// Python in UTF-8 mode (`PYTHONUTF8=1`), as `temper run -b py` runs it:
+/// else, on Windows, its standard streams and files are in the system's
+/// code page, which can't write what cases log, as `✅`.
+fn python_command(python: &str) -> Command {
+    let mut command = Command::new(python);
+    command.env("PYTHONUTF8", "1");
+    command
+}
+
 /// A library's modules among its generated files: the `.py` files in its
 /// package but the package's own `__init__.py` (which star-imports the
 /// root module's exports and names its modules) and copies of host files.
@@ -195,7 +204,7 @@ fn library_modules<'f>(
 /// `_`.
 fn check_module_names(python: &str, modules: &[PathBuf], failures: &mut Vec<String>) {
     let script = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/module_names.py");
-    let check = Command::new(python)
+    let check = python_command(python)
         .arg("-B")
         .arg(&script)
         .args(modules)
@@ -227,7 +236,7 @@ fn run_alone(
          await_safe_to_exit()\n"
     );
     // -B: write no bytecode into the runtime.
-    Command::new(python)
+    python_command(python)
         .args(["-B", "-c", &script])
         .env("PYTHONPATH", env::join_paths(projects).unwrap())
         .current_dir(root)
@@ -283,7 +292,7 @@ fn run_batch(python: &str, batch: &[Logged], failures: &mut Vec<String>) {
         })
         .collect();
     let script = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/bulk_runner.py");
-    let mut child = Command::new(python)
+    let mut child = python_command(python)
         .arg("-B")
         .arg(&script)
         .env("PYTHONPATH", &runtime)
@@ -734,7 +743,7 @@ fn runs() {
             if tests.exists() {
                 let mut files = Vec::new();
                 kit::files_with(&tests, "py", &mut files);
-                let compile = Command::new(&python)
+                let compile = python_command(&python)
                     .args(["-B", "-m", "py_compile"])
                     .args(&files)
                     .output()
@@ -749,7 +758,7 @@ fn runs() {
             if case.tests.is_some() {
                 // As Kotlin's `RunPython`: `temper_core.testing` runs the
                 // project's tests and writes their JUnit XML.
-                let run = Command::new(&python)
+                let run = python_command(&python)
                     .args(["-B", "-m", "temper_core.testing", "result.xml"])
                     .env("PYTHONPATH", &path_var)
                     .current_dir(&project)
@@ -853,7 +862,7 @@ fn host_interop(
             ));
         }
     }
-    let run = Command::new(python)
+    let run = python_command(python)
         .arg("-B")
         .arg(&script)
         .env("PYTHONPATH", env::join_paths(projects).unwrap())

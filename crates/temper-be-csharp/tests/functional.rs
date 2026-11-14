@@ -482,7 +482,9 @@ fn find_dotnet() -> Result<Dotnet, String> {
 const DEFINES: &str = "TRACE;RELEASE;NET;NET6_0;NETCOREAPP;NET5_0_OR_GREATER;NET6_0_OR_GREATER";
 
 impl Dotnet {
-    /// `csc` with the references and the options given.
+    /// `csc` with the references and the options given, its sources named
+    /// in a response file beside its output (`-out:`), since a command
+    /// line naming them all can be more than Windows takes.
     fn csc(&self, options: &[String], extra: &[&Path], sources: &[PathBuf]) -> Output {
         let mut command = Command::new(&self.dotnet);
         command
@@ -505,7 +507,20 @@ impl Dotnet {
         for r in extra {
             command.arg(format!("-r:{}", r.display()));
         }
-        command.args(sources).output().unwrap()
+        let out = (options.iter())
+            .find_map(|o| o.strip_prefix("-out:"))
+            .expect("csc's -out:");
+        let rsp = PathBuf::from(format!("{out}.sources.rsp"));
+        // One quoted path to a line; a `"` can't be in a Windows path.
+        let lines: Vec<String> = (sources.iter())
+            .map(|s| format!("\"{}\"\n", s.display()))
+            .collect();
+        fs::create_dir_all(rsp.parent().unwrap()).unwrap();
+        fs::write(&rsp, lines.concat()).unwrap();
+        command.arg(format!("@{}", rsp.display()));
+        command
+            .output()
+            .unwrap_or_else(|e| panic!("csc, {} files in {}: {e}", sources.len(), rsp.display()))
     }
 }
 
@@ -546,6 +561,19 @@ fn analyzer_config() -> String {
     config
 }
 
+/// A file's path as a global analyzer config's section names it: absolute,
+/// with `/` between its parts on every system, as Roslyn wants section
+/// names, which are `.editorconfig` paths; on Windows, as `D:/a/b.cs`,
+/// which Roslyn matches with the file csc is given as `D:\a\b.cs`, its
+/// separators made `/`.
+fn section_path(path: &Path) -> String {
+    let path = path.display().to_string();
+    match cfg!(windows) {
+        true => path.replace('\\', "/"),
+        false => path,
+    }
+}
+
 /// The options that compile std's output, written in `dir`, to `dll`:
 /// `strict`'s, with [`analyzer_config`]'s rules off for std's support
 /// code, Kotlin's own C# (`RegexSupport.cs`), in a configuration of its
@@ -561,7 +589,7 @@ fn std_options(
         if (temper_be_csharp::STD_SUPPORT.iter()).any(|(_, name, _)| file.path.ends_with(name)) {
             config.push_str(&format!(
                 "\n[{}]\ndotnet_analyzer_diagnostic.severity = none\n",
-                dir.join(&file.path).display()
+                section_path(&dir.join(&file.path))
             ));
         }
     }
@@ -764,10 +792,14 @@ fn runs() {
         if let Some(mstest) = &mstest {
             let options = std_options(&strict, &std_dll, &std, &std_root);
             let build = dotnet.csc(&options, &[&runtime, mstest], &std_sources);
+            // The configuration too, whose sections, for std's support
+            // code, csc may not have matched with its files.
             assert!(
                 build.status.success(),
-                "csc, std (nullable, every warning and analyzer an error):\n{}",
-                String::from_utf8_lossy(&build.stdout)
+                "csc, std (nullable, every warning and analyzer an error):\n{}\n{}:\n{}",
+                String::from_utf8_lossy(&build.stdout),
+                std_root.join("std.globalconfig").display(),
+                fs::read_to_string(std_root.join("std.globalconfig")).unwrap_or_default()
             );
             fs::copy(mstest, bin.join(mstest.file_name().unwrap())).unwrap();
         }

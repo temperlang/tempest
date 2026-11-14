@@ -17,6 +17,7 @@
 - [Generated packages need the matching runtimes](#generated-packages-need-the-matching-runtimes)
 - [Fixes for code Temper 0.6.0 accepted](#fixes-for-code-temper-060-accepted)
 - [`temper` and its `TEMPER_*` settings](#temper-and-its-temper_-settings)
+- [Fixes on Windows](#fixes-on-windows)
 
 ## 🚨Breaking change: Rest parameter syntax removed.
 
@@ -401,3 +402,14 @@ Windows). The environment variables it reads are named `TEMPER_*`:
 ([the command line](../tools/cli.md#what-tools-start)). Development
 builds before this used other names for both, so scripts written for
 them need the new ones.
+
+## Fixes on Windows
+
+- `temper run -b java` and `temper test -b java` give javac its sources
+  in an argument file, so a large library, with std and the runtime, no
+  longer runs past Windows' command line limit.
+- `temper run -b py` and `temper test -b py` run Python in UTF-8 mode
+  (`PYTHONUTF8=1`), so what a program logs isn't lost to the system's
+  code page.
+- `temper build`'s JavaScript source maps name sources on another drive
+  than `temper.out` by `file:` URL.

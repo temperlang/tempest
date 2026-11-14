@@ -751,7 +751,7 @@ fn runs() {
                 .current_dir(here)
                 .output()
                 .unwrap();
-            let stdout = String::from_utf8_lossy(&run.stdout);
+            let stdout = kit::printed(&run.stdout);
             let mut log: Vec<&str> = stdout.lines().skip(1).collect();
             // A run expected to fail (`semantics/broken`) ends with the
             // runner's line for the error.
@@ -778,7 +778,7 @@ fn runs() {
             .env("LUA_PATH", LUA_PATH)
             .output()
             .unwrap();
-        let stdout = String::from_utf8_lossy(&run.stdout);
+        let stdout = kit::printed(&run.stdout);
         // In LuaUnit's order, by name: `runs` is 0 + 2 + 4, then that
         // plus `twice(2)` and 10.
         let expected = "init 2\n\
@@ -799,7 +799,7 @@ fn runs() {
             .env("LUA_PATH", LUA_PATH)
             .output()
             .unwrap();
-        let stdout = String::from_utf8_lossy(&run.stdout);
+        let stdout = kit::printed(&run.stdout);
         let mut logs: Vec<(String, Vec<String>)> = Vec::new();
         for line in stdout.split('\n') {
             match line.strip_prefix("==> ") {
@@ -839,7 +839,7 @@ fn runs() {
             .output()
             .unwrap();
         let expected = &cases[0].expected;
-        let stdout = String::from_utf8_lossy(&alone.stdout);
+        let stdout = kit::printed(&alone.stdout);
         if !alone.status.success() || stdout.lines().collect::<Vec<_>>() != *expected {
             failures.push(format!(
                 "lua fibonacci/init.lua: expected {expected:?}, got:\n{stdout}{}",
@@ -855,7 +855,7 @@ fn runs() {
             .env("LUA_PATH", LUA_PATH)
             .output()
             .unwrap();
-        let stdout = String::from_utf8_lossy(&read.stdout);
+        let stdout = kit::printed(&read.stdout);
         let expected = "hi 1 of 3 11\nhi 2 of 3 13\nlocal 4\n2\t13\thi\tnil\n";
         if !read.status.success() || stdout != expected {
             failures.push(format!(
@@ -872,7 +872,7 @@ fn runs() {
             .env("LUA_PATH", LUA_PATH)
             .output()
             .unwrap();
-        let stdout = String::from_utf8_lossy(&read.stdout);
+        let stdout = kit::printed(&read.stdout);
         let expected = "2 4 1\nfalse 2 7\nrex\n2\t7\tx\tBox(5)\n3\n";
         if !read.status.success() || stdout != expected {
             failures.push(format!(

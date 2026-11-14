@@ -147,7 +147,8 @@ pub fn translate(
 
 /// The relative path, with `/` after each part, from a package's
 /// directory to the directory of a library's first file, for a source
-/// map's `sources`; or that directory's absolute path where there's none.
+/// map's `sources`; or, where there's none, as on another drive on
+/// Windows, that directory as a `file:` URL, since `sources` are URLs.
 pub fn sources_prefix(package: &Path, first: &str) -> String {
     let absolute = |p: &Path| std::path::absolute(p).unwrap_or_else(|_| p.to_path_buf());
     let normal = |p: &Path| {
@@ -166,14 +167,44 @@ pub fn sources_prefix(package: &Path, first: &str) -> String {
     let source = Path::new(first).parent().unwrap_or(Path::new(""));
     let (from, to) = (normal(package), normal(source));
     let common = from.iter().zip(&to).take_while(|(a, b)| a == b).count();
-    let mut prefix = if common == 0 {
-        String::new()
-    } else {
-        "../".repeat(from.len() - common)
-    };
+    if common == 0 {
+        let dir: std::path::PathBuf = to.iter().collect();
+        return dir_url(&temper_frontend::project::slashed(&dir.to_string_lossy()));
+    }
+    let mut prefix = "../".repeat(from.len() - common);
     for part in &to[common..] {
         prefix.push_str(part.trim_end_matches(['/', '\\']));
         prefix.push('/');
     }
     prefix
+}
+
+/// An absolute directory, `/`-separated (`D:/a`, `//server/share/a`, or
+/// `/a`), as a `file:` URL with a `/` after it.
+fn dir_url(dir: &str) -> String {
+    let dir = dir.trim_end_matches('/');
+    match dir.strip_prefix("//") {
+        Some(unc) => format!("file://{unc}/"),
+        None => format!("file:///{}/", dir.trim_start_matches('/')),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dir_urls() {
+        assert_eq!(dir_url("D:/a/b"), "file:///D:/a/b/");
+        assert_eq!(dir_url("D:/"), "file:///D:/");
+        assert_eq!(dir_url("//server/share/a"), "file://server/share/a/");
+        assert_eq!(dir_url("/a/b/"), "file:///a/b/");
+    }
+
+    #[test]
+    fn sources_prefixes_are_relative() {
+        let package = Path::new("/w/temper.out/js/lib");
+        assert_eq!(sources_prefix(package, "/w/src/x.temper"), "../../../src/");
+        assert_eq!(sources_prefix(package, "/w/temper.out/js/lib/x"), "");
+    }
 }

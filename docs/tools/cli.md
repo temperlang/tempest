@@ -177,6 +177,9 @@ What `test -b` and `run -b` start (`lua`, `python3`, Node and Mocha,
   JVM, .NET, and Node reserve far more of than they use, so they, and
   the compilers, have none.
 
+Python runs in UTF-8 mode (`PYTHONUTF8=1`), so what it logs reads the
+same on every system.
+
 On Windows, a command that runs over is killed, but not what it
 started, and nothing dies with `temper` yet. A program run in its own
 group isn't in the terminal's foreground, so one that read the
